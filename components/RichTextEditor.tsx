@@ -12,7 +12,8 @@ import type {
   ClipboardEvent as ReactClipboardEvent,
   KeyboardEvent as ReactKeyboardEvent
 } from 'react'
-import DOMPurify, { Config } from 'dompurify'
+import DOMPurify from 'dompurify'
+import type { Config } from 'dompurify'
 import { X, Search, Link as LinkIcon, Type, List, CheckSquare, Quote, Code, Minus } from 'lucide-react'
 import {
   applyInlineStyle,
@@ -126,7 +127,7 @@ const RichTextEditor = forwardRef<RichTextEditorHandle, RichTextEditorProps>(
     const historyManagerRef = useRef<HistoryManager | null>(null)
     const debouncedCaptureRef = useRef<(() => void) | null>(null)
     const mutationObserverRef = useRef<MutationObserver | null>(null)
-    const checklistNormalizationTimerRef = useRef<NodeJS.Timeout | null>(null)
+    const checklistNormalizationTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
     const [showSlashMenu, setShowSlashMenu] = useState(false)
     const [slashMenuPosition, setSlashMenuPosition] = useState({ top: 0, left: 0 })
     const [slashMenuFilter, setSlashMenuFilter] = useState('')
@@ -218,7 +219,11 @@ const RichTextEditor = forwardRef<RichTextEditorHandle, RichTextEditorProps>(
       )
 
     const sanitize = useCallback(
-      (html: string) => DOMPurify.sanitize(html, SANITIZE_CONFIG) as string,
+      (html: string) => {
+        // DOMPurify needs window to be available (should always be in browser context)
+        if (typeof window === 'undefined') return html
+        return DOMPurify.sanitize(html, SANITIZE_CONFIG) as string
+      },
       []
     )
 
@@ -949,12 +954,15 @@ const RichTextEditor = forwardRef<RichTextEditorHandle, RichTextEditorProps>(
           // If the container is no longer in the document, walk up to a parent that is
           const editorElement = editorRef.current
           if (collapseContainer && editorElement) {
-            if ('isConnected' in collapseContainer && !(collapseContainer as any).isConnected) {
+            // Check if node is still in the document using contains() which is more reliable
+            const isInDocument = editorElement.contains(collapseContainer)
+            
+            if (!isInDocument) {
               // Walk up the tree to find a connected ancestor inside the editor
               let parent: Node | null = collapseContainer.parentNode
               let found = false
               while (parent) {
-                if ('isConnected' in parent && (parent as any).isConnected && editorElement.contains(parent)) {
+                if (editorElement.contains(parent)) {
                   const index = Array.prototype.indexOf.call(parent.childNodes, collapseContainer)
                   collapseOffset = index >= 0 ? index : parent.childNodes.length
                   collapseContainer = parent
@@ -968,9 +976,6 @@ const RichTextEditor = forwardRef<RichTextEditorHandle, RichTextEditorProps>(
                 collapseContainer = editorElement
                 collapseOffset = editorElement.childNodes.length
               }
-            } else if (!editorElement.contains(collapseContainer)) {
-              collapseContainer = editorElement
-              collapseOffset = editorElement.childNodes.length
             }
           }
 
@@ -1056,7 +1061,10 @@ const RichTextEditor = forwardRef<RichTextEditorHandle, RichTextEditorProps>(
       if (!editorRef.current || !headingId) return
       
       // Escape special characters in the ID for use in querySelector
-      const escapedId = CSS.escape(headingId)
+      // Fallback for browsers without CSS.escape
+      const escapedId = typeof CSS !== 'undefined' && CSS.escape 
+        ? CSS.escape(headingId)
+        : headingId.replace(/[!"#$%&'()*+,.\/:;<=>?@[\\\]^`{|}~]/g, '\\$&')
       const heading = editorRef.current.querySelector(`#${escapedId}`)
       if (heading && heading instanceof HTMLElement) {
         // Calculate the position of the heading relative to the editor container
@@ -1104,8 +1112,18 @@ const RichTextEditor = forwardRef<RichTextEditorHandle, RichTextEditorProps>(
                 return !!element?.closest('s, strike')
               case 'code':
                 return !!element?.closest('code')
+              case 'insertUnorderedList':
+                return !!element?.closest('ul')
+              case 'insertOrderedList':
+                return !!element?.closest('ol')
               default:
-                return document.queryCommandState(command)
+                // Use document.queryCommandState as fallback, but avoid it in WebView
+                // where it might not be reliable
+                try {
+                  return document.queryCommandState?.(command) ?? false
+                } catch {
+                  return false
+                }
             }
           } catch {
             return false

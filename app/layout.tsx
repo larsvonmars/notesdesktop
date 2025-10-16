@@ -1,6 +1,7 @@
 import type { Metadata } from 'next'
 import './globals.css'
 import { AuthProvider } from '@/lib/auth-context'
+import { WebViewPolyfillsInitializer } from '@/components/WebViewPolyfillsInitializer'
 
 export const metadata: Metadata = {
   title: 'Notes Desktop',
@@ -15,6 +16,7 @@ export default function RootLayout({
   return (
     <html lang="en">
       <body>
+        <WebViewPolyfillsInitializer />
         <AuthProvider>{children}</AuthProvider>
       </body>
     </html>

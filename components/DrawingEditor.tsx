@@ -1024,8 +1024,9 @@ const DrawingEditor = forwardRef<DrawingEditorHandle, DrawingEditorProps>(
                   onPointerDown={handlePointerDown}
                   onPointerMove={handlePointerMove}
                   onPointerUp={handlePointerUp}
+                  onPointerCancel={handlePointerUp}
                   className="absolute inset-0 rounded-lg cursor-crosshair touch-none"
-                  style={{ width: '100%', height: '100%', touchAction: 'none' }}
+                  style={{ width: '100%', height: '100%', touchAction: 'none', WebkitUserSelect: 'none', userSelect: 'none' }}
                 />
               </div>
             </div>
