@@ -138,59 +138,69 @@ export default function UnifiedPanel({
     setExpandedFolders(newExpanded)
   }
 
-  const renderFolderWithNotes = (folder: FolderNode, level: number = 0) => {
+  const renderFolder = (folder: FolderNode, level: number = 0) => {
     const isExpanded = expandedFolders.has(folder.id)
     const isSelected = selectedFolderId === folder.id
     const hasChildren = folder.children.length > 0
     
-    // Get notes for this folder
-    const folderNotes = selectedFolderId === folder.id ? notes : []
-    const noteCount = folderNotes.length
+    // Get notes for this folder (only when selected)
+    const folderNotes = isSelected ? notes : []
+    const noteCount = isSelected ? folderNotes.length : 0
 
     return (
       <div key={folder.id}>
-        <div className="space-y-1">
+        <div className="space-y-0.5">
           {/* Folder Header */}
           <div
-            className={`flex items-center gap-2 px-2 py-2 cursor-pointer rounded-lg transition-colors ${
+            className={`flex items-center gap-1.5 px-2 py-1.5 cursor-pointer rounded-md transition-colors ${
               isSelected ? 'bg-blue-50 text-blue-700 font-medium' : 'hover:bg-gray-50 text-gray-700'
             }`}
-            style={{ paddingLeft: `${level * 16 + 8}px` }}
-          >
-            {/* Expand/Collapse button */}
-            <button
-              onClick={(e) => {
-                e.stopPropagation()
+            style={{ paddingLeft: `${level * 12 + 8}px` }}
+            onClick={() => {
+              // Clicking folder selects it and auto-expands to show notes
+              onSelectFolder(folder.id)
+              if (!isExpanded) {
                 toggleFolder(folder.id)
-              }}
-              className="p-0.5 hover:bg-white/50 rounded"
-            >
-              <ChevronRight
-                size={14}
-                className={`transition-transform ${isExpanded ? 'rotate-90' : ''}`}
-              />
-            </button>
+              }
+            }}
+          >
+            {/* Expand/Collapse chevron */}
+            {(hasChildren || isSelected) && (
+              <button
+                onClick={(e) => {
+                  e.stopPropagation()
+                  toggleFolder(folder.id)
+                }}
+                className="p-0.5 hover:bg-white/50 rounded flex-shrink-0"
+                aria-label={isExpanded ? 'Collapse' : 'Expand'}
+              >
+                <ChevronRight
+                  size={14}
+                  className={`transition-transform ${isExpanded ? 'rotate-90' : ''}`}
+                />
+              </button>
+            )}
+            {!hasChildren && !isSelected && <div className="w-5 flex-shrink-0" />}
             
-            {/* Folder name - clicking selects the folder */}
-            <div
-              onClick={() => onSelectFolder(folder.id)}
-              className="flex items-center gap-2 flex-1 min-w-0"
-            >
-              <FolderTreeIcon size={16} className="flex-shrink-0" />
-              <span className="text-sm truncate flex-1">{folder.name}</span>
-              {noteCount > 0 && (
-                <span className="text-xs bg-blue-100 text-blue-700 px-2 py-0.5 rounded-full font-semibold">
-                  {noteCount}
-                </span>
-              )}
-            </div>
+            {/* Folder icon and name */}
+            <FolderTreeIcon size={14} className="flex-shrink-0" />
+            <span className="text-sm truncate flex-1">{folder.name}</span>
+            
+            {/* Note count badge */}
+            {noteCount > 0 && (
+              <span className="text-xs bg-blue-100 text-blue-700 px-1.5 py-0.5 rounded-full font-semibold flex-shrink-0">
+                {noteCount}
+              </span>
+            )}
           </div>
 
-          {/* Notes in this folder (shown when folder is selected) */}
-          {isSelected && folderNotes.length > 0 && (
-            <div className="ml-8 space-y-1 border-l-2 border-blue-200 pl-3">
+          {/* Notes in this folder (shown when folder is selected and expanded) */}
+          {isSelected && isExpanded && (
+            <div className="ml-6 space-y-0.5 border-l border-blue-200 pl-2">
               {isLoadingNotes ? (
-                <div className="text-xs text-gray-500 py-2">Loading...</div>
+                <div className="text-xs text-gray-500 py-1.5 px-2">Loading notes...</div>
+              ) : folderNotes.length === 0 ? (
+                <div className="text-xs text-gray-400 italic py-1.5 px-2">No notes in this folder</div>
               ) : (
                 folderNotes.map((n) => (
                   <button
@@ -199,14 +209,14 @@ export default function UnifiedPanel({
                       onSelectNote(n)
                       setIsOpen(false)
                     }}
-                    className={`w-full text-left px-2 py-2 rounded transition-colors ${
+                    className={`w-full text-left px-2 py-1.5 rounded-md transition-colors ${
                       selectedNoteId === n.id
-                        ? 'bg-blue-100 text-blue-700'
+                        ? 'bg-blue-100 text-blue-700 font-medium'
                         : 'hover:bg-gray-100 text-gray-700'
                     }`}
                   >
-                    <div className="text-sm font-medium truncate">{n.title}</div>
-                    <div className="text-xs text-gray-500 truncate mt-0.5">
+                    <div className="text-sm truncate">{n.title || 'Untitled'}</div>
+                    <div className="text-xs text-gray-500 mt-0.5">
                       {new Date(n.updated_at).toLocaleDateString()}
                     </div>
                   </button>
@@ -217,49 +227,11 @@ export default function UnifiedPanel({
 
           {/* Child folders (shown when expanded) */}
           {isExpanded && hasChildren && (
-            <div>
-              {folder.children.map((child) => renderFolderWithNotes(child, level + 1))}
+            <div className="space-y-0.5">
+              {folder.children.map((child) => renderFolder(child, level + 1))}
             </div>
           )}
         </div>
-      </div>
-    )
-  }
-
-  const renderFolder = (folder: FolderNode, level: number = 0) => {
-    const isExpanded = expandedFolders.has(folder.id)
-    const isSelected = selectedFolderId === folder.id
-    const hasChildren = folder.children.length > 0
-
-    return (
-      <div key={folder.id}>
-        <div
-          className={`flex items-center gap-2 px-2 py-1.5 cursor-pointer rounded transition-colors ${
-            isSelected ? 'bg-blue-50 text-blue-700' : 'hover:bg-gray-50'
-          }`}
-          style={{ paddingLeft: `${level * 16 + 8}px` }}
-          onClick={() => onSelectFolder(folder.id)}
-        >
-          {hasChildren && (
-            <button
-              onClick={(e) => {
-                e.stopPropagation()
-                toggleFolder(folder.id)
-              }}
-              className="p-0.5"
-            >
-              <ChevronRight
-                size={14}
-                className={`transition-transform ${isExpanded ? 'rotate-90' : ''}`}
-              />
-            </button>
-          )}
-          {!hasChildren && <div className="w-5" />}
-          <span className="text-sm truncate flex-1">{folder.name}</span>
-        </div>
-        {isExpanded && hasChildren && (
-          <div>{folder.children.map((child) => renderFolder(child, level + 1))}</div>
-        )}
       </div>
     )
   }
@@ -284,42 +256,42 @@ export default function UnifiedPanel({
         >
           {/* User Info & Sign Out */}
           {userEmail && onSignOut && (
-            <div className="p-3 border-b border-gray-200 bg-gray-50">
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-2 text-sm text-gray-700 truncate flex-1">
-                  <User size={14} className="text-gray-500 flex-shrink-0" />
+            <div className="p-2.5 border-b border-gray-200 bg-gray-50">
+              <div className="flex items-center justify-between gap-2">
+                <div className="flex items-center gap-2 text-xs text-gray-700 truncate flex-1 min-w-0">
+                  <User size={13} className="text-gray-500 flex-shrink-0" />
                   <span className="truncate">{userEmail}</span>
                 </div>
                 <button
                   onClick={onSignOut}
-                  className="ml-2 inline-flex items-center gap-1.5 px-2.5 py-1.5 text-xs font-medium text-red-600 hover:bg-red-50 rounded-md transition-colors"
+                  className="inline-flex items-center gap-1 px-2 py-1 text-xs font-medium text-red-600 hover:bg-red-50 rounded transition-colors flex-shrink-0"
                   title="Sign Out"
                 >
-                  <LogOut size={14} />
-                  Sign Out
+                  <LogOut size={13} />
+                  <span>Sign Out</span>
                 </button>
               </div>
             </div>
           )}
 
           {/* Title & Actions */}
-          <div className="p-4 border-b border-gray-200 bg-gradient-to-br from-gray-50 to-white">
+          <div className="p-3 border-b border-gray-200 bg-gradient-to-br from-gray-50 to-white">
             <input
               type="text"
               value={title}
               onChange={(e) => onTitleChange(e.target.value)}
               placeholder="Note title..."
-              className="w-full px-3 py-2 text-lg font-semibold border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent mb-3"
+              className="w-full px-2.5 py-1.5 text-base font-semibold border border-gray-200 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-transparent mb-2"
               disabled={isSaving || isDeleting}
             />
             
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-1.5">
               <button
                 onClick={onSave}
                 disabled={isSaving || isDeleting || !hasChanges}
-                className="flex-1 inline-flex items-center justify-center gap-2 px-3 py-2 bg-blue-600 text-white text-sm font-medium rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                className="flex-1 inline-flex items-center justify-center gap-1.5 px-3 py-1.5 bg-blue-600 text-white text-sm font-medium rounded-md hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
               >
-                <Save size={16} />
+                <Save size={14} />
                 {isSaving ? 'Saving...' : 'Save'}
               </button>
               
@@ -327,23 +299,25 @@ export default function UnifiedPanel({
                 <button
                   onClick={onDelete}
                   disabled={isDeleting}
-                  className="px-3 py-2 border border-red-200 text-red-600 text-sm font-medium rounded-lg hover:bg-red-50 disabled:opacity-50 transition-colors"
+                  className="px-2.5 py-1.5 border border-red-200 text-red-600 text-sm font-medium rounded-md hover:bg-red-50 disabled:opacity-50 transition-colors"
+                  title="Delete note"
                 >
-                  <Trash2 size={16} />
+                  <Trash2 size={14} />
                 </button>
               )}
               
               <button
                 onClick={onCancel}
                 disabled={isSaving || isDeleting}
-                className="px-3 py-2 border border-gray-200 text-gray-600 text-sm font-medium rounded-lg hover:bg-gray-50 disabled:opacity-50 transition-colors"
+                className="px-2.5 py-1.5 border border-gray-200 text-gray-600 text-sm font-medium rounded-md hover:bg-gray-50 disabled:opacity-50 transition-colors"
+                title="Cancel"
               >
-                <X size={16} />
+                <X size={14} />
               </button>
             </div>
 
             {hasChanges && (
-              <div className="mt-2 text-xs text-amber-600 flex items-center gap-1">
+              <div className="mt-1.5 text-xs text-amber-600 flex items-center gap-1">
                 <span className="w-1.5 h-1.5 bg-amber-500 rounded-full" />
                 Unsaved changes
               </div>
@@ -354,28 +328,28 @@ export default function UnifiedPanel({
           <div className="flex border-b border-gray-200 bg-gray-50">
             <button
               onClick={() => setActiveTab('browse')}
-              className={`flex-1 px-4 py-3 text-sm font-medium transition-colors flex items-center justify-center gap-2 ${
+              className={`flex-1 px-3 py-2 text-sm font-medium transition-colors flex items-center justify-center gap-1.5 ${
                 activeTab === 'browse'
                   ? 'text-blue-600 border-b-2 border-blue-600 bg-white'
                   : 'text-gray-600 hover:text-gray-800 hover:bg-gray-100'
               }`}
             >
-              <FileText size={16} />
-              Browse Notes
+              <FileText size={15} />
+              Browse
             </button>
             <button
               onClick={() => setActiveTab('toc')}
-              className={`flex-1 px-4 py-3 text-sm font-medium transition-colors flex items-center justify-center gap-2 ${
+              className={`flex-1 px-3 py-2 text-sm font-medium transition-colors flex items-center justify-center gap-1.5 ${
                 activeTab === 'toc'
                   ? 'text-blue-600 border-b-2 border-blue-600 bg-white'
                   : 'text-gray-600 hover:text-gray-800 hover:bg-gray-100'
               }`}
               disabled={headings.length === 0}
             >
-              <ListTree size={16} />
+              <ListTree size={15} />
               Contents
               {headings.length > 0 && (
-                <span className="ml-1 px-1.5 py-0.5 text-xs bg-blue-100 text-blue-600 rounded-full">
+                <span className="px-1.5 py-0.5 text-xs bg-blue-100 text-blue-600 rounded-full font-semibold">
                   {headings.length}
                 </span>
               )}
@@ -383,12 +357,12 @@ export default function UnifiedPanel({
           </div>
 
           {/* Content */}
-          <div className="flex-1 overflow-y-auto p-4">
+          <div className="flex-1 overflow-y-auto p-3">
             {activeTab === 'browse' && (
-              <div className="space-y-4">
-                {/* New Note Buttons - More prominent */}
-                <div className="space-y-2">
-                  <div className="text-xs font-semibold text-gray-500 uppercase tracking-wide px-2 mb-2">
+              <div className="space-y-3">
+                {/* New Note Buttons - More compact */}
+                <div className="space-y-1.5">
+                  <div className="text-xs font-semibold text-gray-500 uppercase tracking-wide px-2 mb-1">
                     Create New
                   </div>
                   <button
@@ -396,20 +370,20 @@ export default function UnifiedPanel({
                       onNewNote('rich-text')
                       setIsOpen(false)
                     }}
-                    className="w-full px-4 py-3 bg-blue-600 text-white text-sm font-medium rounded-lg hover:bg-blue-700 transition-colors flex items-center gap-3 shadow-sm hover:shadow"
+                    className="w-full px-3 py-2 bg-blue-600 text-white text-sm font-medium rounded-md hover:bg-blue-700 transition-colors flex items-center gap-2.5 shadow-sm hover:shadow"
                   >
-                    <FileText size={18} />
+                    <FileText size={16} />
                     <span>Text Note</span>
                   </button>
-                  <div className="grid grid-cols-2 gap-2">
+                  <div className="grid grid-cols-2 gap-1.5">
                     <button
                       onClick={() => {
                         onNewNote('drawing')
                         setIsOpen(false)
                       }}
-                      className="px-3 py-2.5 bg-purple-600 text-white text-sm font-medium rounded-lg hover:bg-purple-700 transition-colors flex items-center justify-center gap-2"
+                      className="px-2.5 py-2 bg-purple-600 text-white text-sm font-medium rounded-md hover:bg-purple-700 transition-colors flex items-center justify-center gap-1.5"
                     >
-                      <PenTool size={16} />
+                      <PenTool size={14} />
                       <span>Drawing</span>
                     </button>
                     <button
@@ -417,34 +391,31 @@ export default function UnifiedPanel({
                         onNewNote('mindmap')
                         setIsOpen(false)
                       }}
-                      className="px-3 py-2.5 bg-green-600 text-white text-sm font-medium rounded-lg hover:bg-green-700 transition-colors flex items-center justify-center gap-2"
+                      className="px-2.5 py-2 bg-green-600 text-white text-sm font-medium rounded-md hover:bg-green-700 transition-colors flex items-center justify-center gap-1.5"
                     >
-                      <Network size={16} />
+                      <Network size={14} />
                       <span>Mindmap</span>
                     </button>
                   </div>
                 </div>
 
                 {/* All Notes Folder */}
-                <div className="border-t border-gray-200 pt-3">
-                  <div className="text-xs font-semibold text-gray-500 uppercase tracking-wide px-2 mb-2">
+                <div className="border-t border-gray-200 pt-2.5">
+                  <div className="text-xs font-semibold text-gray-500 uppercase tracking-wide px-2 mb-1.5">
                     Your Notes
                   </div>
                   <button
                     onClick={() => {
                       onSelectFolder(null)
-                      if (selectedFolderId === null && notes.length === 0) {
-                        // Don't close panel if viewing empty "All Notes"
-                      }
                     }}
-                    className={`w-full text-left px-3 py-2.5 rounded-lg mb-2 text-sm font-medium transition-colors flex items-center gap-2.5 ${
+                    className={`w-full text-left px-2 py-1.5 rounded-md mb-1.5 text-sm font-medium transition-colors flex items-center gap-2 ${
                       selectedFolderId === null ? 'bg-blue-50 text-blue-700' : 'hover:bg-gray-50 text-gray-700'
                     }`}
                   >
-                    <FolderTreeIcon size={18} />
+                    <FolderTreeIcon size={16} />
                     <span className="flex-1">All Notes</span>
                     {selectedFolderId === null && notes.length > 0 && (
-                      <span className="text-xs bg-blue-100 text-blue-700 px-2 py-0.5 rounded-full font-semibold">
+                      <span className="text-xs bg-blue-100 text-blue-700 px-1.5 py-0.5 rounded-full font-semibold">
                         {notes.length}
                       </span>
                     )}
@@ -452,11 +423,11 @@ export default function UnifiedPanel({
 
                   {/* Show notes when All Notes is selected */}
                   {selectedFolderId === null && (
-                    <div className="ml-4 space-y-1 border-l-2 border-blue-200 pl-3 mb-3">
+                    <div className="ml-4 space-y-0.5 border-l border-blue-200 pl-2 mb-2">
                       {isLoadingNotes ? (
-                        <div className="text-xs text-gray-500 py-2">Loading...</div>
+                        <div className="text-xs text-gray-500 py-1.5 px-2">Loading notes...</div>
                       ) : notes.length === 0 ? (
-                        <div className="text-xs text-gray-500 py-2 italic">No notes yet</div>
+                        <div className="text-xs text-gray-400 italic py-1.5 px-2">No notes yet</div>
                       ) : (
                         notes.map((n) => (
                           <button
@@ -465,14 +436,14 @@ export default function UnifiedPanel({
                               onSelectNote(n)
                               setIsOpen(false)
                             }}
-                            className={`w-full text-left px-2 py-2 rounded transition-colors ${
+                            className={`w-full text-left px-2 py-1.5 rounded-md transition-colors ${
                               selectedNoteId === n.id
-                                ? 'bg-blue-100 text-blue-700'
+                                ? 'bg-blue-100 text-blue-700 font-medium'
                                 : 'hover:bg-gray-100 text-gray-700'
                             }`}
                           >
-                            <div className="text-sm font-medium truncate">{n.title}</div>
-                            <div className="text-xs text-gray-500 truncate mt-0.5">
+                            <div className="text-sm truncate">{n.title || 'Untitled'}</div>
+                            <div className="text-xs text-gray-500 mt-0.5">
                               {new Date(n.updated_at).toLocaleDateString()}
                             </div>
                           </button>
@@ -484,17 +455,19 @@ export default function UnifiedPanel({
 
                 {/* Folder Tree with Notes */}
                 <div>
-                  <div className="text-xs font-semibold text-gray-500 uppercase tracking-wide px-2 mb-2">
+                  <div className="text-xs font-semibold text-gray-500 uppercase tracking-wide px-2 mb-1.5">
                     Folders
                   </div>
                   {folders.length === 0 ? (
-                    <div className="text-xs text-gray-500 py-2 px-2 italic">No folders yet</div>
+                    <div className="text-xs text-gray-400 italic py-1.5 px-2">No folders yet</div>
                   ) : (
-                    folders.map((folder) => renderFolderWithNotes(folder))
+                    <div className="space-y-0.5">
+                      {folders.map((folder) => renderFolder(folder))}
+                    </div>
                   )}
                   <button
                     onClick={() => onCreateFolder(null)}
-                    className="w-full mt-3 px-3 py-2 text-sm text-gray-600 border border-dashed border-gray-300 rounded-lg hover:border-blue-400 hover:bg-blue-50 hover:text-blue-600 transition-colors font-medium"
+                    className="w-full mt-2 px-3 py-1.5 text-sm text-gray-600 border border-dashed border-gray-300 rounded-md hover:border-blue-400 hover:bg-blue-50 hover:text-blue-600 transition-colors font-medium"
                   >
                     + New Folder
                   </button>
@@ -505,17 +478,17 @@ export default function UnifiedPanel({
             {activeTab === 'toc' && (
               <div>
                 {headings.length === 0 ? (
-                  <div className="text-center py-12 px-4">
-                    <ListTree size={48} className="mx-auto text-gray-300 mb-3" />
+                  <div className="text-center py-10 px-4">
+                    <ListTree size={40} className="mx-auto text-gray-300 mb-2" />
                     <p className="text-sm text-gray-500">
                       No headings in this note yet
                     </p>
-                    <p className="text-xs text-gray-400 mt-2">
+                    <p className="text-xs text-gray-400 mt-1.5">
                       Use H1, H2, or H3 to create headings
                     </p>
                   </div>
                 ) : (
-                  <div className="space-y-1">
+                  <div className="space-y-0.5">
                     {headings.map((heading, index) => (
                       <button
                         key={heading.id || `${heading.level}-${index}`}
@@ -523,8 +496,8 @@ export default function UnifiedPanel({
                           onScrollToHeading(heading.id)
                           setIsOpen(false)
                         }}
-                        className="w-full text-left block px-3 py-2 text-sm hover:bg-blue-50 hover:text-blue-700 rounded-lg transition-colors"
-                        style={{ paddingLeft: `${(heading.level - 1) * 12 + 12}px` }}
+                        className="w-full text-left block px-2.5 py-1.5 text-sm hover:bg-blue-50 hover:text-blue-700 rounded-md transition-colors"
+                        style={{ paddingLeft: `${(heading.level - 1) * 12 + 10}px` }}
                       >
                         <span className="truncate block">{heading.text}</span>
                       </button>
@@ -536,7 +509,7 @@ export default function UnifiedPanel({
           </div>
 
           {/* Footer with search & stats */}
-          <div className="border-t border-gray-200 p-3 bg-gray-50">
+          <div className="border-t border-gray-200 p-2.5 bg-gray-50">
             {note && (
               <>
                 <button
@@ -544,13 +517,13 @@ export default function UnifiedPanel({
                     onSearch()
                     setIsOpen(false)
                   }}
-                  className="w-full mb-3 px-3 py-2 text-sm text-gray-700 bg-white border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors flex items-center gap-2 font-medium"
+                  className="w-full mb-2 px-2.5 py-1.5 text-sm text-gray-700 bg-white border border-gray-200 rounded-md hover:bg-gray-50 transition-colors flex items-center gap-2 font-medium"
                 >
-                  <Search size={16} />
+                  <Search size={14} />
                   Find & Replace
                 </button>
                 <div className="flex justify-between items-center text-xs text-gray-500 px-1">
-                  <div className="flex items-center gap-3">
+                  <div className="flex items-center gap-2.5">
                     <span>{stats.words} words</span>
                     <span className="text-gray-300">•</span>
                     <span>{stats.characters} chars</span>
@@ -560,7 +533,7 @@ export default function UnifiedPanel({
               </>
             )}
             {!note && (
-              <div className="text-center text-xs text-gray-400 py-1">
+              <div className="text-center text-xs text-gray-400 py-0.5">
                 Press <kbd className="px-1.5 py-0.5 bg-white border border-gray-300 rounded text-gray-600">⌘\</kbd> to toggle menu
               </div>
             )}
