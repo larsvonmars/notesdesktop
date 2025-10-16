@@ -1,3 +1,134 @@
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
+
+/* RichTextEditor Styles */
+@layer utilities {
+  /* Placeholder styling */
+  [data-placeholder]:empty:before {
+    content: attr(data-placeholder);
+    @apply text-gray-400 pointer-events-none block;
+  }
+
+  /* ContentEditable focus styling */
+  [contenteditable='true']:focus {
+    @apply outline-none;
+  }
+
+  /* Checkbox styling in contenteditable */
+  [contenteditable='true'] input[type='checkbox'] {
+    @apply mr-2 cursor-pointer;
+  }
+
+  /* List styling */
+  [contenteditable='true'] ul,
+  [contenteditable='true'] ol {
+    margin: 1em 0 !important;
+    padding-left: 2em !important;
+    display: block !important;
+  }
+
+  [contenteditable='true'] ul {
+    list-style-type: disc !important;
+  }
+
+  [contenteditable='true'] ol {
+    list-style-type: decimal !important;
+  }
+
+  /* Checklist styling */
+  [contenteditable='true'] .checklist-list,
+  [contenteditable='true'] [data-checklist='true'] {
+    list-style: none !important;
+    padding-left: 1.75em !important;
+    margin-left: 0 !important;
+  }
+
+  /* List item styling */
+  [contenteditable='true'] li {
+    margin: 0.5em 0 !important;
+    display: list-item !important;
+  }
+
+  [contenteditable='true'] ul li {
+    list-style-type: disc !important;
+  }
+
+  [contenteditable='true'] ol li {
+    list-style-type: decimal !important;
+  }
+
+  [contenteditable='true'] li.checklist-item {
+    list-style: none !important;
+    display: flex !important;
+    align-items: flex-start !important;
+  }
+
+  [contenteditable='true'] li.checklist-item .checklist-checkbox {
+    @apply mt-0.5 shrink-0;
+  }
+
+  /* Heading styles */
+  [contenteditable='true'] h1 {
+    font-size: 2.5em !important;
+    @apply font-extrabold text-gray-900;
+    margin-top: 0.67em !important;
+    margin-bottom: 0.67em !important;
+    line-height: 1.2 !important;
+    scroll-margin-top: 2rem !important;
+    display: block !important;
+  }
+
+  [contenteditable='true'] h2 {
+    font-size: 2em !important;
+    @apply font-bold text-gray-800;
+    margin-top: 0.83em !important;
+    margin-bottom: 0.83em !important;
+    line-height: 1.3 !important;
+    scroll-margin-top: 2rem !important;
+    display: block !important;
+  }
+
+  [contenteditable='true'] h3 {
+    font-size: 1.5em !important;
+    @apply font-bold text-gray-700;
+    margin-top: 1em !important;
+    margin-bottom: 1em !important;
+    line-height: 1.4 !important;
+    scroll-margin-top: 2rem !important;
+    display: block !important;
+  }
+
+  /* Blockquote styling */
+  [contenteditable='true'] blockquote {
+    @apply border-l-4 border-gray-200 pl-4 ml-0 text-gray-500 italic;
+    display: block !important;
+  }
+
+  /* Inline code styling */
+  [contenteditable='true'] code {
+    @apply bg-gray-100 rounded font-mono text-sm;
+    padding: 0.125rem 0.25rem !important;
+  }
+
+  /* Link styling */
+  [contenteditable='true'] a {
+    @apply text-blue-600 underline cursor-pointer;
+  }
+
+  [contenteditable='true'] a:hover {
+    @apply text-blue-800;
+  }
+
+  /* Horizontal rule styling */
+  [contenteditable='true'] hr {
+    border: none !important;
+    @apply border-t-2 border-gray-200 my-6;
+  }
+
+  /* Mark/highlight styling */
+  [contenteditable='true'] mark {
+    @apply bg-yellow-200;
+    padding: 0.125rem 0 !important;
+  }
+}
