@@ -33,7 +33,7 @@ Handles inline and block formatting through manual DOM manipulation:
 Maintains a clean, predictable DOM structure:
 
 **Operations:**
-- Merges adjacent identical inline elements (`<strong>text</strong><strong>more</strong>` → `<strong>textmore</strong>`)
+- Merges adjacent identical inline elements (`<strong>text</strong><strong> more</strong>` → `<strong>text more</strong>`)
 - Removes empty inline elements (`<strong></strong>` → removed)
 - Unwraps redundant nested tags (`<strong><strong>text</strong></strong>` → `<strong>text</strong>`)
 - Merges adjacent text nodes
