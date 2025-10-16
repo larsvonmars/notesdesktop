@@ -375,11 +375,6 @@ const RichTextEditor = forwardRef<RichTextEditorHandle, RichTextEditorProps>(
       (command: string, valueArg?: string) => {
         if (disabled || !editorRef.current) return
         
-        // Normalize before command
-        if (editorRef.current) {
-          normalizeEditorContent(editorRef.current)
-        }
-        
         const selection = window.getSelection()
         if (selection && selection.rangeCount > 0) {
           const range = selection.getRangeAt(0)
@@ -442,9 +437,6 @@ const RichTextEditor = forwardRef<RichTextEditorHandle, RichTextEditorProps>(
     const toggleChecklist = useCallback(() => {
       if (disabled || !editorRef.current) return
       
-      // Normalize before
-      normalizeEditorContent(editorRef.current)
-      
       toggleChecklistState(editorRef.current)
       
       // Normalize after
@@ -457,9 +449,6 @@ const RichTextEditor = forwardRef<RichTextEditorHandle, RichTextEditorProps>(
     const applyHeading = useCallback(
       (level: 1 | 2 | 3) => {
         if (disabled || !editorRef.current) return
-        
-        // Normalize before
-        normalizeEditorContent(editorRef.current)
         
         const selection = window.getSelection()
         if (!selection || selection.rangeCount === 0) return
@@ -1029,9 +1018,10 @@ const RichTextEditor = forwardRef<RichTextEditorHandle, RichTextEditorProps>(
     // Initialize history manager
     useEffect(() => {
       if (editorRef.current && !historyManagerRef.current) {
-        historyManagerRef.current = new HistoryManager(editorRef.current)
-        historyManagerRef.current.initialize()
-        debouncedCaptureRef.current = createDebouncedCapture(historyManagerRef.current)
+        const manager = new HistoryManager(editorRef.current)
+        manager.initialize()
+        historyManagerRef.current = manager
+        debouncedCaptureRef.current = createDebouncedCapture(manager)
       }
     }, [])
 
@@ -1041,7 +1031,7 @@ const RichTextEditor = forwardRef<RichTextEditorHandle, RichTextEditorProps>(
       if (sanitize(content) !== value) {
         editorRef.current.innerHTML = value || ''
         // Initialize history after setting initial content
-        if (historyManagerRef.current && value) {
+        if (historyManagerRef.current) {
           historyManagerRef.current.capture()
         }
       }
