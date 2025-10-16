@@ -16,6 +16,11 @@ import {
   LogOut,
   User,
   Loader2,
+  Edit2,
+  FolderPlus,
+  Copy,
+  FolderInput,
+  MoreVertical,
 } from 'lucide-react'
 import { Note } from './NoteEditor'
 import { FolderNode } from '@/lib/folders'
@@ -55,8 +60,13 @@ interface UnifiedPanelProps {
   selectedNoteId?: string
   onSelectNote: (note: Note) => void
   onNewNote: (noteType?: 'rich-text' | 'drawing' | 'mindmap') => void
+  onDuplicateNote?: (note: Note) => void
+  onMoveNote?: (noteId: string, newFolderId: string | null) => void
   isLoadingNotes: boolean
   currentFolderName?: string
+  
+  // Folder operations
+  onMoveFolder?: (folderId: string, newParentId: string | null) => void
 
   // Stats
   stats: { characters: number; words: number }
@@ -91,8 +101,11 @@ export default function UnifiedPanel({
   selectedNoteId,
   onSelectNote,
   onNewNote,
+  onDuplicateNote,
+  onMoveNote,
   isLoadingNotes,
   currentFolderName,
+  onMoveFolder,
   stats,
   userEmail,
   onSignOut,
@@ -114,6 +127,19 @@ export default function UnifiedPanel({
   const panelRef = useRef<HTMLDivElement>(null)
   const normalizedQuery = searchQuery.trim().toLowerCase()
   const hasSearch = normalizedQuery.length > 0
+  const [contextMenu, setContextMenu] = useState<{ 
+    x: number; 
+    y: number; 
+    type: 'folder' | 'note'; 
+    id: string;
+    name: string;
+  } | null>(null)
+  const [showDeleteModal, setShowDeleteModal] = useState<{
+    type: 'folder' | 'note';
+    id: string;
+    name: string;
+  } | null>(null)
+  const [notesSortBy, setNotesSortBy] = useState<'updated' | 'created' | 'title'>('updated')
 
   const matchesNote = useCallback(
     (note: Note) => {
@@ -124,18 +150,50 @@ export default function UnifiedPanel({
     [hasSearch, normalizedQuery]
   )
 
-  // Keyboard shortcut to toggle panel (Cmd/Ctrl + \)
+  // Keyboard shortcuts
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
+      // Toggle panel (Cmd/Ctrl + \)
       if ((e.metaKey || e.ctrlKey) && e.key === '\\') {
         e.preventDefault()
         setIsOpen(prev => !prev)
+      }
+      
+      // Only handle these shortcuts when panel is open
+      if (isOpen && !e.metaKey && !e.ctrlKey && !e.shiftKey && !e.altKey) {
+        // Check if we're not in an input field
+        const target = e.target as HTMLElement
+        if (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.isContentEditable) {
+          return
+        }
+
+        switch (e.key.toLowerCase()) {
+          case 'n':
+            e.preventDefault()
+            onNewNote('rich-text')
+            setIsOpen(false)
+            break
+          case 'd':
+            e.preventDefault()
+            onNewNote('drawing')
+            setIsOpen(false)
+            break
+          case 'm':
+            e.preventDefault()
+            onNewNote('mindmap')
+            setIsOpen(false)
+            break
+          case 'f':
+            e.preventDefault()
+            onCreateFolder(null)
+            break
+        }
       }
     }
 
     window.addEventListener('keydown', handleKeyDown)
     return () => window.removeEventListener('keydown', handleKeyDown)
-  }, [])
+  }, [isOpen, onNewNote])
 
   // Close on click outside
   useEffect(() => {
@@ -150,6 +208,18 @@ export default function UnifiedPanel({
     document.addEventListener('mousedown', handleClickOutside)
     return () => document.removeEventListener('mousedown', handleClickOutside)
   }, [isOpen])
+
+  // Close context menu on click outside
+  useEffect(() => {
+    if (!contextMenu) return
+
+    const handleClickOutside = () => {
+      setContextMenu(null)
+    }
+
+    document.addEventListener('mousedown', handleClickOutside)
+    return () => document.removeEventListener('mousedown', handleClickOutside)
+  }, [contextMenu])
 
   useEffect(() => {
     setFolderNotesData((prev) => ({
@@ -398,6 +468,21 @@ export default function UnifiedPanel({
     }
   }, [getFolderPathKeys, selectedFolderId])
 
+  // Sort notes based on selected option
+  const sortNotes = useCallback((notesToSort: Note[]) => {
+    return [...notesToSort].sort((a, b) => {
+      switch (notesSortBy) {
+        case 'title':
+          return (a.title || 'Untitled').localeCompare(b.title || 'Untitled')
+        case 'created':
+          return new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
+        case 'updated':
+        default:
+          return new Date(b.updated_at).getTime() - new Date(a.updated_at).getTime()
+      }
+    })
+  }, [notesSortBy])
+
   const renderFolder = (folder: FolderNode, level: number = 0) => {
     const key = folderKey(folder.id)
     const isExpanded = hasSearch ? true : expandedFolders.has(key)
@@ -405,7 +490,8 @@ export default function UnifiedPanel({
     const hasChildren = folder.children.length > 0
     const folderEntry = folderNotesData[key]
     const folderNotes = folderEntry?.notes ?? []
-    const visibleNotes = hasSearch ? folderNotes.filter(matchesNote) : folderNotes
+    const filteredNotes = hasSearch ? folderNotes.filter(matchesNote) : folderNotes
+    const visibleNotes = sortNotes(filteredNotes)
     const noteCount = visibleNotes.length
     const isLoadingFolder = folderEntry?.isLoading ?? (isExpanded && !folderEntry)
     const folderError = folderEntry?.error
@@ -418,13 +504,14 @@ export default function UnifiedPanel({
             role="button"
             tabIndex={0}
             onClick={() => handleFolderToggle(folder.id)}
+            onContextMenu={(e) => handleFolderContextMenu(e, folder.id, folder.name)}
             onKeyDown={(event) => {
               if (event.key === 'Enter' || event.key === ' ') {
                 event.preventDefault()
                 handleFolderToggle(folder.id)
               }
             }}
-            className={`flex items-center gap-1.5 px-2 py-1.5 rounded-md transition-colors focus:outline-none focus:ring-2 focus:ring-offset-1 focus:ring-blue-500 ${
+            className={`group flex items-center gap-1.5 px-2 py-1.5 rounded-md transition-colors focus:outline-none focus:ring-2 focus:ring-offset-1 focus:ring-blue-500 ${
               isSelected ? 'bg-blue-50 text-blue-700 font-medium' : 'hover:bg-gray-50 text-gray-700'
             }`}
             style={{ paddingLeft: `${level * 12 + 8}px` }}
@@ -441,6 +528,16 @@ export default function UnifiedPanel({
                 {noteCount}
               </span>
             )}
+            <button
+              onClick={(e) => {
+                e.stopPropagation()
+                handleFolderContextMenu(e, folder.id, folder.name)
+              }}
+              className="hidden group-hover:flex p-1 hover:bg-gray-200 rounded transition-colors"
+              title="Folder options"
+            >
+              <MoreVertical size={14} />
+            </button>
           </div>
 
           {/* Notes in this folder (shown when folder is selected and expanded) */}
@@ -464,16 +561,38 @@ export default function UnifiedPanel({
                       onSelectNote(n)
                       setIsOpen(false)
                     }}
-                    className={`w-full text-left px-2 py-1.5 rounded-md transition-colors ${
+                    onContextMenu={(e) => handleNoteContextMenu(e, n)}
+                    className={`group w-full text-left px-2 py-1.5 rounded-md transition-colors flex items-start justify-between ${
                       selectedNoteId === n.id
                         ? 'bg-blue-100 text-blue-700 font-medium'
                         : 'hover:bg-gray-100 text-gray-700'
                     }`}
                   >
-                    <div className="text-sm truncate">{n.title || 'Untitled'}</div>
-                    <div className="text-xs text-gray-500 mt-0.5">
-                      {new Date(n.updated_at).toLocaleDateString()}
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-1.5">
+                        {n.note_type === 'drawing' ? (
+                          <PenTool size={12} className="text-purple-500 flex-shrink-0" />
+                        ) : n.note_type === 'mindmap' ? (
+                          <Network size={12} className="text-green-500 flex-shrink-0" />
+                        ) : (
+                          <FileText size={12} className="text-blue-500 flex-shrink-0" />
+                        )}
+                        <div className="text-sm truncate">{n.title || 'Untitled'}</div>
+                      </div>
+                      <div className="text-xs text-gray-500 mt-0.5">
+                        {new Date(n.updated_at).toLocaleDateString()}
+                      </div>
                     </div>
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation()
+                        handleNoteContextMenu(e, n)
+                      }}
+                      className="hidden group-hover:flex p-0.5 hover:bg-gray-200 rounded transition-colors flex-shrink-0"
+                      title="Note options"
+                    >
+                      <MoreVertical size={12} />
+                    </button>
                   </button>
                 ))
               )}
@@ -496,8 +615,92 @@ export default function UnifiedPanel({
   const shouldShowAllNotes = hasSearch || isAllExpanded
   const isAllLoading = allNotesEntry?.isLoading ?? (shouldShowAllNotes && !allNotesEntry)
   const allNotes = allNotesEntry?.notes ?? []
-  const displayedAllNotes = hasSearch ? allNotes.filter(matchesNote) : allNotes
+  const filteredAllNotes = hasSearch ? allNotes.filter(matchesNote) : allNotes
+  const displayedAllNotes = sortNotes(filteredAllNotes)
   const allError = allNotesEntry?.error
+
+  // Context menu handlers
+  const handleFolderContextMenu = (e: React.MouseEvent, folderId: string, folderName: string) => {
+    e.preventDefault()
+    e.stopPropagation()
+    setContextMenu({
+      x: e.clientX,
+      y: e.clientY,
+      type: 'folder',
+      id: folderId,
+      name: folderName,
+    })
+  }
+
+  const handleNoteContextMenu = (e: React.MouseEvent, note: Note) => {
+    e.preventDefault()
+    e.stopPropagation()
+    setContextMenu({
+      x: e.clientX,
+      y: e.clientY,
+      type: 'note',
+      id: note.id,
+      name: note.title || 'Untitled',
+    })
+  }
+
+  const handleRenameFromContext = () => {
+    if (!contextMenu) return
+    if (contextMenu.type === 'folder') {
+      const newName = prompt('Rename folder:', contextMenu.name)
+      if (newName && newName.trim()) {
+        onRenameFolder(contextMenu.id, newName.trim())
+      }
+    }
+    setContextMenu(null)
+  }
+
+  const handleDeleteFromContext = () => {
+    if (!contextMenu) return
+    setShowDeleteModal({
+      type: contextMenu.type,
+      id: contextMenu.id,
+      name: contextMenu.name,
+    })
+    setContextMenu(null)
+  }
+
+  const handleConfirmDelete = async () => {
+    if (!showDeleteModal) return
+    if (showDeleteModal.type === 'folder') {
+      onDeleteFolder(showDeleteModal.id)
+    } else {
+      // For notes, we need to trigger deletion through the appropriate handler
+      // If it's the currently selected note, use onDelete
+      if (note?.id === showDeleteModal.id && onDelete) {
+        onDelete()
+      }
+    }
+    setShowDeleteModal(null)
+    setIsOpen(false)
+  }
+
+  const handleDuplicateNote = (note: Note) => {
+    if (onDuplicateNote) {
+      onDuplicateNote(note)
+    }
+    setContextMenu(null)
+    setIsOpen(false)
+  }
+
+  const handleMoveNoteToFolder = (noteId: string, targetFolderId: string | null) => {
+    if (onMoveNote) {
+      onMoveNote(noteId, targetFolderId)
+    }
+    setContextMenu(null)
+  }
+
+  const handleMoveFolderToParent = (folderId: string, newParentId: string | null) => {
+    if (onMoveFolder) {
+      onMoveFolder(folderId, newParentId)
+    }
+    setContextMenu(null)
+  }
 
   return (
     <>
@@ -633,10 +836,14 @@ export default function UnifiedPanel({
                       onNewNote('rich-text')
                       setIsOpen(false)
                     }}
-                    className="w-full px-3 py-2 bg-blue-600 text-white text-sm font-medium rounded-md hover:bg-blue-700 transition-colors flex items-center gap-2.5 shadow-sm hover:shadow"
+                    className="w-full px-3 py-2 bg-blue-600 text-white text-sm font-medium rounded-md hover:bg-blue-700 transition-colors flex items-center justify-between gap-2.5 shadow-sm hover:shadow"
+                    title="Create a new text note"
                   >
-                    <FileText size={16} />
-                    <span>Text Note</span>
+                    <div className="flex items-center gap-2.5">
+                      <FileText size={16} />
+                      <span>Text Note</span>
+                    </div>
+                    <kbd className="text-[10px] px-1.5 py-0.5 bg-blue-700/50 rounded">N</kbd>
                   </button>
                   <div className="grid grid-cols-2 gap-1.5">
                     <button
@@ -644,20 +851,28 @@ export default function UnifiedPanel({
                         onNewNote('drawing')
                         setIsOpen(false)
                       }}
-                      className="px-2.5 py-2 bg-purple-600 text-white text-sm font-medium rounded-md hover:bg-purple-700 transition-colors flex items-center justify-center gap-1.5"
+                      className="px-2.5 py-2 bg-purple-600 text-white text-sm font-medium rounded-md hover:bg-purple-700 transition-colors flex flex-col items-center justify-center gap-1"
+                      title="Create a new drawing note"
                     >
-                      <PenTool size={14} />
-                      <span>Drawing</span>
+                      <div className="flex items-center gap-1.5">
+                        <PenTool size={14} />
+                        <span>Drawing</span>
+                      </div>
+                      <kbd className="text-[9px] px-1 py-0.5 bg-purple-700/50 rounded">D</kbd>
                     </button>
                     <button
                       onClick={() => {
                         onNewNote('mindmap')
                         setIsOpen(false)
                       }}
-                      className="px-2.5 py-2 bg-green-600 text-white text-sm font-medium rounded-md hover:bg-green-700 transition-colors flex items-center justify-center gap-1.5"
+                      className="px-2.5 py-2 bg-green-600 text-white text-sm font-medium rounded-md hover:bg-green-700 transition-colors flex flex-col items-center justify-center gap-1"
+                      title="Create a new mindmap"
                     >
-                      <Network size={14} />
-                      <span>Mindmap</span>
+                      <div className="flex items-center gap-1.5">
+                        <Network size={14} />
+                        <span>Mindmap</span>
+                      </div>
+                      <kbd className="text-[9px] px-1 py-0.5 bg-green-700/50 rounded">M</kbd>
                     </button>
                   </div>
                 </div>
@@ -775,8 +990,20 @@ export default function UnifiedPanel({
 
                 {/* All Notes Folder */}
                 <div className="border-t border-gray-200 pt-2.5">
-                  <div className="text-xs font-semibold text-gray-500 uppercase tracking-wide px-2 mb-1.5">
-                    Your Notes
+                  <div className="flex items-center justify-between px-2 mb-1.5">
+                    <div className="text-xs font-semibold text-gray-500 uppercase tracking-wide">
+                      Your Notes
+                    </div>
+                    <select
+                      value={notesSortBy}
+                      onChange={(e) => setNotesSortBy(e.target.value as 'updated' | 'created' | 'title')}
+                      className="text-[10px] px-1.5 py-0.5 border border-gray-200 rounded text-gray-600 bg-white hover:border-gray-300 focus:outline-none focus:ring-1 focus:ring-blue-500"
+                      title="Sort notes by"
+                    >
+                      <option value="updated">Last Updated</option>
+                      <option value="created">Date Created</option>
+                      <option value="title">Title (A-Z)</option>
+                    </select>
                   </div>
                   <div
                     role="button"
@@ -832,16 +1059,38 @@ export default function UnifiedPanel({
                               onSelectNote(n)
                               setIsOpen(false)
                             }}
-                            className={`w-full text-left px-2 py-1.5 rounded-md transition-colors ${
+                            onContextMenu={(e) => handleNoteContextMenu(e, n)}
+                            className={`group w-full text-left px-2 py-1.5 rounded-md transition-colors flex items-start justify-between ${
                               selectedNoteId === n.id
                                 ? 'bg-blue-100 text-blue-700 font-medium'
                                 : 'hover:bg-gray-100 text-gray-700'
                             }`}
                           >
-                            <div className="text-sm truncate">{n.title || 'Untitled'}</div>
-                            <div className="text-xs text-gray-500 mt-0.5">
-                              {new Date(n.updated_at).toLocaleDateString()}
+                            <div className="flex-1 min-w-0">
+                              <div className="flex items-center gap-1.5">
+                                {n.note_type === 'drawing' ? (
+                                  <PenTool size={12} className="text-purple-500 flex-shrink-0" />
+                                ) : n.note_type === 'mindmap' ? (
+                                  <Network size={12} className="text-green-500 flex-shrink-0" />
+                                ) : (
+                                  <FileText size={12} className="text-blue-500 flex-shrink-0" />
+                                )}
+                                <div className="text-sm truncate">{n.title || 'Untitled'}</div>
+                              </div>
+                              <div className="text-xs text-gray-500 mt-0.5">
+                                {new Date(n.updated_at).toLocaleDateString()}
+                              </div>
                             </div>
+                            <button
+                              onClick={(e) => {
+                                e.stopPropagation()
+                                handleNoteContextMenu(e, n)
+                              }}
+                              className="hidden group-hover:flex p-0.5 hover:bg-gray-200 rounded transition-colors flex-shrink-0"
+                              title="Note options"
+                            >
+                              <MoreVertical size={12} />
+                            </button>
                           </button>
                         ))
                       )}
@@ -867,9 +1116,11 @@ export default function UnifiedPanel({
                   )}
                   <button
                     onClick={() => onCreateFolder(null)}
-                    className="w-full mt-2 px-3 py-1.5 text-sm text-gray-600 border border-dashed border-gray-300 rounded-md hover:border-blue-400 hover:bg-blue-50 hover:text-blue-600 transition-colors font-medium"
+                    className="w-full mt-2 px-3 py-1.5 text-sm text-gray-600 border border-dashed border-gray-300 rounded-md hover:border-blue-400 hover:bg-blue-50 hover:text-blue-600 transition-colors font-medium flex items-center justify-center gap-2"
+                    title="Create a new folder (F)"
                   >
-                    + New Folder
+                    <FolderPlus size={14} />
+                    <span>New Folder</span>
                   </button>
                 </div>
               </div>
@@ -937,6 +1188,164 @@ export default function UnifiedPanel({
                 Press <kbd className="px-1.5 py-0.5 bg-white border border-gray-300 rounded text-gray-600">⌘\</kbd> to toggle menu
               </div>
             )}
+          </div>
+        </div>
+      )}
+
+      {/* Context Menu */}
+      {contextMenu && (
+        <>
+          <div
+            className="fixed inset-0 z-50"
+            onClick={() => setContextMenu(null)}
+          />
+          <div
+            className="fixed z-[60] bg-white rounded-lg shadow-2xl border border-gray-200 py-1 min-w-[200px]"
+            style={{ left: contextMenu.x, top: contextMenu.y }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            {contextMenu.type === 'folder' ? (
+              <>
+                <button
+                  onClick={handleRenameFromContext}
+                  className="w-full px-3 py-2 text-sm text-left hover:bg-gray-50 flex items-center gap-2 text-gray-700 transition-colors"
+                >
+                  <Edit2 size={16} />
+                  <span className="font-medium">Rename Folder</span>
+                </button>
+                <button
+                  onClick={() => {
+                    onCreateFolder(contextMenu.id)
+                    setContextMenu(null)
+                  }}
+                  className="w-full px-3 py-2 text-sm text-left hover:bg-gray-50 flex items-center gap-2 text-gray-700 transition-colors"
+                >
+                  <FolderPlus size={16} />
+                  <span className="font-medium">New Subfolder</span>
+                </button>
+                {onMoveFolder && folders.length > 0 && (
+                  <div className="border-t border-gray-200 my-1">
+                    <div className="px-3 py-1.5 text-xs font-semibold text-gray-500 uppercase">
+                      Move to
+                    </div>
+                    <button
+                      onClick={() => handleMoveFolderToParent(contextMenu.id, null)}
+                      className="w-full px-3 py-2 text-sm text-left hover:bg-gray-50 flex items-center gap-2 text-gray-700 transition-colors"
+                    >
+                      <FolderTreeIcon size={16} />
+                      <span>Root Level</span>
+                    </button>
+                    {folders.filter(f => f.id !== contextMenu.id).map((folder) => (
+                      <button
+                        key={folder.id}
+                        onClick={() => handleMoveFolderToParent(contextMenu.id, folder.id)}
+                        className="w-full px-3 py-2 text-sm text-left hover:bg-gray-50 flex items-center gap-2 text-gray-700 transition-colors"
+                      >
+                        <FolderTreeIcon size={16} />
+                        <span className="truncate">{folder.name}</span>
+                      </button>
+                    ))}
+                  </div>
+                )}
+                <div className="border-t border-gray-200 my-1" />
+                <button
+                  onClick={handleDeleteFromContext}
+                  className="w-full px-3 py-2 text-sm text-left hover:bg-red-50 text-red-600 flex items-center gap-2 transition-colors"
+                >
+                  <Trash2 size={16} />
+                  <span className="font-medium">Delete Folder</span>
+                </button>
+              </>
+            ) : (
+              <>
+                {onDuplicateNote && (
+                  <button
+                    onClick={() => {
+                      const note = notes.find(n => n.id === contextMenu.id) || 
+                                   searchResults.find(n => n.id === contextMenu.id)
+                      if (note) handleDuplicateNote(note)
+                    }}
+                    className="w-full px-3 py-2 text-sm text-left hover:bg-gray-50 flex items-center gap-2 text-gray-700 transition-colors"
+                  >
+                    <Copy size={16} />
+                    <span className="font-medium">Duplicate Note</span>
+                  </button>
+                )}
+                {onMoveNote && folders.length > 0 && (
+                  <div className="border-t border-gray-200 my-1">
+                    <div className="px-3 py-1.5 text-xs font-semibold text-gray-500 uppercase">
+                      Move to folder
+                    </div>
+                    <button
+                      onClick={() => handleMoveNoteToFolder(contextMenu.id, null)}
+                      className="w-full px-3 py-2 text-sm text-left hover:bg-gray-50 flex items-center gap-2 text-gray-700 transition-colors"
+                    >
+                      <FileText size={16} />
+                      <span>All Notes (Root)</span>
+                    </button>
+                    {folders.map((folder) => (
+                      <button
+                        key={folder.id}
+                        onClick={() => handleMoveNoteToFolder(contextMenu.id, folder.id)}
+                        className="w-full px-3 py-2 text-sm text-left hover:bg-gray-50 flex items-center gap-2 text-gray-700 transition-colors"
+                      >
+                        <FolderTreeIcon size={16} />
+                        <span className="truncate">{folder.name}</span>
+                      </button>
+                    ))}
+                  </div>
+                )}
+                <div className="border-t border-gray-200 my-1" />
+                <button
+                  onClick={handleDeleteFromContext}
+                  className="w-full px-3 py-2 text-sm text-left hover:bg-red-50 text-red-600 flex items-center gap-2 transition-colors"
+                >
+                  <Trash2 size={16} />
+                  <span className="font-medium">Delete Note</span>
+                </button>
+              </>
+            )}
+          </div>
+        </>
+      )}
+
+      {/* Delete Confirmation Modal */}
+      {showDeleteModal && (
+        <div className="fixed inset-0 z-[70] flex items-center justify-center p-4 bg-black/50">
+          <div className="bg-white rounded-xl shadow-2xl border border-gray-200 max-w-md w-full p-6">
+            <div className="flex items-start gap-4 mb-4">
+              <div className="flex-shrink-0 w-12 h-12 rounded-full bg-red-100 flex items-center justify-center">
+                <Trash2 size={24} className="text-red-600" />
+              </div>
+              <div className="flex-1">
+                <h3 className="text-lg font-semibold text-gray-900 mb-1">
+                  Delete {showDeleteModal.type === 'folder' ? 'Folder' : 'Note'}?
+                </h3>
+                <p className="text-sm text-gray-600">
+                  Are you sure you want to delete &quot;{showDeleteModal.name}&quot;?
+                  {showDeleteModal.type === 'folder' && (
+                    <span className="block mt-1 text-gray-500">
+                      Notes inside will be moved to the root level.
+                    </span>
+                  )}
+                  {' '}This action cannot be undone.
+                </p>
+              </div>
+            </div>
+            <div className="flex items-center justify-end gap-2">
+              <button
+                onClick={() => setShowDeleteModal(null)}
+                className="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleConfirmDelete}
+                className="px-4 py-2 text-sm font-medium text-white bg-red-600 rounded-lg hover:bg-red-700 transition-colors"
+              >
+                Delete {showDeleteModal.type === 'folder' ? 'Folder' : 'Note'}
+              </button>
+            </div>
           </div>
         </div>
       )}

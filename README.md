@@ -66,6 +66,15 @@ The built application will be available in `src-tauri/target/release/bundle/`.
 - ✅ Login and signup pages
 - ✅ Protected routes
 - ✅ Responsive UI with Tailwind CSS
+- ✅ **Complete folder management** (create, rename, move, delete, nested folders)
+- ✅ **Complete note management** (create, duplicate, move, delete, sort)
+- ✅ **Multiple note types** (text, drawing, mindmap)
+- ✅ **Context menus** for quick actions on folders and notes
+- ✅ **Advanced search** across notes and folders
+- ✅ **Keyboard shortcuts** for efficient workflow
+- ✅ **Note sorting** (by updated date, created date, or title)
+- ✅ **Delete confirmations** with safety warnings
+- ✅ **Real-time synchronization** with Supabase
 
 ## Project Structure
 
@@ -87,13 +96,23 @@ The built application will be available in `src-tauri/target/release/bundle/`.
 └── package.json        # Node dependencies
 ```
 
-## Next Steps
+## Documentation
 
-1. Add notes database schema in Supabase
-2. Implement CRUD operations for notes
-3. Add real-time synchronization
-4. Implement note categories/tags
-5. Add search functionality
+- [Folder and Notes Management Guide](./FOLDER_AND_NOTES_MANAGEMENT.md) - Complete guide to all folder and note management features
+- [Project Summary](./PROJECT_SUMMARY.md) - Overview of the entire project
+- [Database Schema](./DATABASE_SCHEMA.md) - Database structure and relationships
+
+## Keyboard Shortcuts
+
+| Shortcut | Action |
+|----------|--------|
+| `⌘\` / `Ctrl+\` | Toggle unified panel |
+| `N` (in panel) | Create new text note |
+| `D` (in panel) | Create new drawing |
+| `M` (in panel) | Create new mindmap |
+| `F` (in panel) | Create new folder |
+
+Right-click (or use ⋮ button) on folders and notes for more options!
 
 ## License
 
