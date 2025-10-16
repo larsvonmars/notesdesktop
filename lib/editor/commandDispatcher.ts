@@ -257,11 +257,31 @@ export function applyBlockFormat(
     newBlock.appendChild(block.firstChild)
   }
   
-  // Replace the old block with the new one
-  block.parentNode?.replaceChild(newBlock, block)
+  // If the new block is empty, add a <br> to make it editable
+  if (newBlock.childNodes.length === 0 || newBlock.textContent?.trim() === '') {
+    if (newBlock.childNodes.length === 0) {
+      newBlock.appendChild(document.createElement('br'))
+    }
+  }
   
-  // Restore selection
-  restoreOffsetWithinBlock(newBlock, offset, selection)
+  // Replace the old block with the new one
+  const parent = block.parentNode
+  if (parent) {
+    parent.replaceChild(newBlock, block)
+    
+    // Restore selection
+    try {
+      restoreOffsetWithinBlock(newBlock, offset, selection)
+    } catch (error) {
+      console.warn('Failed to restore selection after block format:', error)
+      // Fallback: place cursor at start of block
+      const fallbackRange = document.createRange()
+      fallbackRange.setStart(newBlock, 0)
+      fallbackRange.collapse(true)
+      selection.removeAllRanges()
+      selection.addRange(fallbackRange)
+    }
+  }
 }
 
 /**
@@ -303,10 +323,25 @@ function restoreOffsetWithinBlock(block: HTMLElement, offset: number, selection:
     currentOffset += nodeLength
   }
   
-  // If we couldn't find the exact position, set at the end
+  // If we couldn't find the exact position (e.g., block is empty or has only <br>)
+  // Place cursor at the start of the block
   const range = document.createRange()
-  range.selectNodeContents(block)
-  range.collapse(false)
+  
+  // Check if block is empty or only has a <br> element
+  if (block.childNodes.length === 0) {
+    // Empty block - set cursor at start
+    range.setStart(block, 0)
+    range.collapse(true)
+  } else if (block.childNodes.length === 1 && block.firstChild?.nodeName === 'BR') {
+    // Only has <br> - set cursor before it
+    range.setStart(block, 0)
+    range.collapse(true)
+  } else {
+    // Has content but no text nodes were found - set at the end
+    range.selectNodeContents(block)
+    range.collapse(false)
+  }
+  
   selection.removeAllRanges()
   selection.addRange(range)
 }
