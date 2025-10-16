@@ -105,6 +105,20 @@ interface SearchMatch {
   text: string
 }
 
+const splitLinesToFragment = (text: string): DocumentFragment => {
+  const fragment = document.createDocumentFragment()
+  const lines = text.split(/\r?\n|\r/g)
+
+  lines.forEach((line, index) => {
+    fragment.appendChild(document.createTextNode(line))
+    if (index < lines.length - 1) {
+      fragment.appendChild(document.createElement('br'))
+    }
+  })
+
+  return fragment
+}
+
 const RichTextEditor = forwardRef<RichTextEditorHandle, RichTextEditorProps>(
   ({ value, onChange, disabled, placeholder }, ref) => {
     const editorRef = useRef<HTMLDivElement | null>(null)
@@ -128,6 +142,80 @@ const RichTextEditor = forwardRef<RichTextEditorHandle, RichTextEditorProps>(
     const [caseSensitive, setCaseSensitive] = useState(false)
     const savedSelectionRef = useRef<Range | null>(null)
     const slashPositionRef = useRef<{ container: Node; offset: number } | null>(null)
+
+    const insertFragmentAtSelection = useCallback(
+        (fragment: DocumentFragment) => {
+          if (!editorRef.current) return false
+
+          let selection = window.getSelection()
+          if (!selection || selection.rangeCount === 0) {
+            editorRef.current.focus()
+            selection = window.getSelection()
+          }
+
+          if (!selection || selection.rangeCount === 0) {
+            return false
+          }
+
+          const range = selection.getRangeAt(0)
+
+          range.deleteContents()
+
+          const nodes = Array.from(fragment.childNodes)
+
+          if (nodes.length === 0) {
+            range.collapse(true)
+            selection.removeAllRanges()
+            selection.addRange(range)
+            return true
+          }
+
+          range.insertNode(fragment)
+
+          const lastNode = nodes[nodes.length - 1]
+          const newRange = document.createRange()
+
+          if (lastNode.nodeType === Node.TEXT_NODE) {
+            newRange.setStart(lastNode, lastNode.textContent?.length ?? 0)
+          } else if (lastNode.childNodes.length > 0) {
+            newRange.setStart(lastNode, lastNode.childNodes.length)
+          } else {
+            newRange.setStartAfter(lastNode)
+          }
+
+          newRange.collapse(true)
+          selection.removeAllRanges()
+          selection.addRange(newRange)
+          return true
+        },
+        [editorRef]
+      )
+
+    const insertHTMLAtSelection = useCallback(
+        (html: string) => {
+          const fragment = document.createDocumentFragment()
+
+          if (html) {
+            const template = document.createElement('template')
+            template.innerHTML = html
+
+            while (template.content.firstChild) {
+              fragment.appendChild(template.content.firstChild)
+            }
+          }
+
+          return insertFragmentAtSelection(fragment)
+        },
+        [insertFragmentAtSelection]
+      )
+
+    const insertPlainTextAtSelection = useCallback(
+        (text: string) => {
+          const fragment = splitLinesToFragment(text)
+          return insertFragmentAtSelection(fragment)
+        },
+        [insertFragmentAtSelection]
+      )
 
     const sanitize = useCallback(
       (html: string) => DOMPurify.sanitize(html, SANITIZE_CONFIG) as string,
@@ -442,8 +530,7 @@ const RichTextEditor = forwardRef<RichTextEditorHandle, RichTextEditorProps>(
             toggleListType('ol', editorRef.current)
             break
           default:
-            // Fallback to native execCommand for other commands
-            document.execCommand(command, false, valueArg)
+            console.warn(`Unsupported rich text command: ${command}`)
         }
         
         // Normalize after command
@@ -695,11 +782,17 @@ const RichTextEditor = forwardRef<RichTextEditorHandle, RichTextEditorProps>(
       if (searchMatches.length === 0 || !editorRef.current) return
       
       highlightMatch(currentMatchIndex)
-      document.execCommand('insertText', false, replaceQuery)
+      const replaced = insertPlainTextAtSelection(replaceQuery)
+
+      if (replaced) {
+        normalizeEditorContent(editorRef.current)
+        mergeAdjacentLists(editorRef.current)
+        scheduleChecklistNormalization()
+      }
       
       emitChange()
       performSearch() // Re-search after replace
-    }, [currentMatchIndex, replaceQuery, searchMatches, highlightMatch, emitChange, performSearch])
+    }, [currentMatchIndex, replaceQuery, searchMatches, highlightMatch, insertPlainTextAtSelection, emitChange, performSearch, scheduleChecklistNormalization])
 
     const replaceAllMatches = useCallback(() => {
       if (!editorRef.current || !searchQuery) return
@@ -710,9 +803,12 @@ const RichTextEditor = forwardRef<RichTextEditorHandle, RichTextEditorProps>(
       const newContent = content.replace(regex, replaceQuery)
       
       editorRef.current.innerHTML = newContent
+      normalizeEditorContent(editorRef.current)
+      mergeAdjacentLists(editorRef.current)
+      scheduleChecklistNormalization()
       emitChange()
       performSearch()
-    }, [searchQuery, replaceQuery, caseSensitive, emitChange, performSearch])
+    }, [searchQuery, replaceQuery, caseSensitive, emitChange, performSearch, scheduleChecklistNormalization])
 
     // Horizontal rule
     const insertHorizontalRule = useCallback(() => {
@@ -846,9 +942,46 @@ const RichTextEditor = forwardRef<RichTextEditorHandle, RichTextEditorProps>(
           range.setEnd(selection.getRangeAt(0).endContainer, selection.getRangeAt(0).endOffset)
           range.deleteContents()
           
-          // Restore cursor position
+          // Restore cursor position with WebKit-friendly collapse handling
+          let collapseContainer: Node | null = range.startContainer
+          let collapseOffset = range.startOffset
+
+          // If the container is no longer in the document, walk up to a parent that is
+          const editorElement = editorRef.current
+          if (collapseContainer && editorElement) {
+            if ('isConnected' in collapseContainer && !(collapseContainer as any).isConnected) {
+              // Walk up the tree to find a connected ancestor inside the editor
+              let parent: Node | null = collapseContainer.parentNode
+              let found = false
+              while (parent) {
+                if ('isConnected' in parent && (parent as any).isConnected && editorElement.contains(parent)) {
+                  const index = Array.prototype.indexOf.call(parent.childNodes, collapseContainer)
+                  collapseOffset = index >= 0 ? index : parent.childNodes.length
+                  collapseContainer = parent
+                  found = true
+                  break
+                }
+                parent = parent.parentNode
+              }
+
+              if (!found) {
+                collapseContainer = editorElement
+                collapseOffset = editorElement.childNodes.length
+              }
+            } else if (!editorElement.contains(collapseContainer)) {
+              collapseContainer = editorElement
+              collapseOffset = editorElement.childNodes.length
+            }
+          }
+
           selection.removeAllRanges()
-          selection.addRange(range)
+          try {
+            selection.collapse(collapseContainer, collapseOffset)
+          } catch (_collapseError) {
+            if (editorElement) {
+              selection.collapse(editorElement, editorElement.childNodes.length)
+            }
+          }
         } catch (e) {
           console.warn('Failed to delete slash character:', e)
         }
@@ -1345,64 +1478,98 @@ const RichTextEditor = forwardRef<RichTextEditorHandle, RichTextEditorProps>(
       }
     }
 
-  const handlePaste = (event: ReactClipboardEvent<HTMLDivElement>) => {
+    const handlePaste = (event: ReactClipboardEvent<HTMLDivElement>) => {
       if (disabled) return
       event.preventDefault()
-      
-      // Try to get HTML content first
+
+      const finalizeInsertion = () => {
+        if (editorRef.current) {
+          normalizeEditorContent(editorRef.current)
+          mergeAdjacentLists(editorRef.current)
+        }
+        scheduleChecklistNormalization()
+        emitChange()
+      }
+
       const html = event.clipboardData.getData('text/html')
       const text = event.clipboardData.getData('text/plain')
-      
+
       if (html) {
-        // Sanitize and insert HTML
         const sanitized = sanitize(html)
-        document.execCommand('insertHTML', false, sanitized)
-      } else if (text) {
-        // Check if text looks like markdown
-        if (looksLikeMarkdown(text)) {
-          // Convert markdown to HTML
-          markdownToHtml(text).then(convertedHtml => {
-            const sanitized = sanitize(convertedHtml)
-            document.execCommand('insertHTML', false, sanitized)
-            
-            // Schedule checklist normalization after insertion
-            setTimeout(() => {
-              scheduleChecklistNormalization()
-              emitChange()
-            }, 0)
-          })
+        if (insertHTMLAtSelection(sanitized)) {
+          finalizeInsertion()
+        }
+        return
+      }
+
+      if (!text) {
+        return
+      }
+
+      if (looksLikeMarkdown(text)) {
+        const selectionSnapshot = saveSelectionUtil()
+        markdownToHtml(text).then((convertedHtml) => {
+          if (selectionSnapshot) {
+            restoreSelectionUtil(selectionSnapshot)
+          }
+
+          const sanitized = sanitize(convertedHtml)
+          if (insertHTMLAtSelection(sanitized)) {
+            finalizeInsertion()
+          }
+        })
+        return
+      }
+
+      const trimmed = text.trim()
+      const urlPattern = /^https?:\/\/.+/i
+
+      if (urlPattern.test(trimmed)) {
+        const selection = window.getSelection()
+        const selectedText = selection?.toString()
+
+        if (selectedText && selectedText.length > 0 && selection && selection.rangeCount > 0) {
+          const link = document.createElement('a')
+          link.href = trimmed
+          link.target = '_blank'
+          link.rel = 'noopener noreferrer'
+          link.textContent = selectedText
+
+          const range = selection.getRangeAt(0)
+          range.deleteContents()
+          range.insertNode(link)
+
+          const newRange = document.createRange()
+          if (link.childNodes.length > 0) {
+            newRange.setStart(link, link.childNodes.length)
+          } else {
+            newRange.setStartAfter(link)
+          }
+          newRange.collapse(true)
+          selection.removeAllRanges()
+          selection.addRange(newRange)
+
+          finalizeInsertion()
           return
         }
-        
-        // Check if text is a URL and auto-create link
-        const urlPattern = /^https?:\/\/.+/i
-        if (urlPattern.test(text.trim())) {
-          const selection = window.getSelection()
-          const selectedText = selection?.toString()
-          
-          if (selectedText && selectedText.length > 0 && selection && selection.rangeCount > 0) {
-            // Create link with selected text
-            const link = document.createElement('a')
-            link.href = text.trim()
-            link.target = '_blank'
-            link.rel = 'noopener noreferrer'
-            link.textContent = selectedText
-            
-            const range = selection.getRangeAt(0)
-            range.deleteContents()
-            range.insertNode(link)
-          } else {
-            // Insert as plain link
-            document.execCommand('insertHTML', false, 
-              `<a href="${text.trim()}" target="_blank" rel="noopener noreferrer">${text.trim()}</a>`)
-          }
-        } else {
-          // Plain text
-          document.execCommand('insertText', false, text)
+
+        const fragment = document.createDocumentFragment()
+        const anchor = document.createElement('a')
+        anchor.href = trimmed
+        anchor.target = '_blank'
+        anchor.rel = 'noopener noreferrer'
+        anchor.textContent = trimmed
+        fragment.appendChild(anchor)
+
+        if (insertFragmentAtSelection(fragment)) {
+          finalizeInsertion()
         }
+        return
       }
-      
-      emitChange()
+
+      if (insertPlainTextAtSelection(text)) {
+        finalizeInsertion()
+      }
     }
 
     return (

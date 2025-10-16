@@ -193,7 +193,7 @@ export default function UnifiedPanel({
 
     window.addEventListener('keydown', handleKeyDown)
     return () => window.removeEventListener('keydown', handleKeyDown)
-  }, [isOpen, onNewNote])
+  }, [isOpen, onCreateFolder, onNewNote])
 
   // Close on click outside
   useEffect(() => {
@@ -707,7 +707,7 @@ export default function UnifiedPanel({
       {/* Floating Menu Button */}
       <button
         onClick={() => setIsOpen(!isOpen)}
-        className="fixed top-4 left-4 z-50 p-3 bg-white border-2 border-gray-200 rounded-full shadow-lg hover:shadow-xl hover:scale-105 transition-all duration-200"
+        className="fixed top-14 right-6 z-50 p-3 bg-white border-2 border-gray-200 rounded-full shadow-lg hover:shadow-xl hover:scale-105 transition-all duration-200"
         aria-label={isOpen ? 'Close menu' : 'Open menu (⌘\\)'}
         title={isOpen ? 'Close menu' : 'Open menu (⌘\\)'}
       >
@@ -718,7 +718,7 @@ export default function UnifiedPanel({
       {isOpen && (
         <div
           ref={panelRef}
-          className="fixed top-20 left-4 z-40 w-80 max-h-[calc(100vh-6rem)] bg-white rounded-xl shadow-2xl border border-gray-200 flex flex-col overflow-hidden"
+          className="fixed top-24 right-6 z-40 w-80 max-h-[calc(100vh-6rem)] bg-white rounded-xl shadow-2xl border border-gray-200 flex flex-col overflow-hidden"
         >
           {/* User Info & Sign Out */}
           {userEmail && onSignOut && (

@@ -104,6 +104,8 @@ const SIZES = [
   { name: 'Very Thick', value: 6 }
 ]
 
+const MAX_CANVAS_DISPLAY_WIDTH = 1200
+
 const DrawingEditor = forwardRef<DrawingEditorHandle, DrawingEditorProps>(
   ({ value, onChange, disabled = false }, ref) => {
     const canvasRef = useRef<HTMLCanvasElement>(null)
@@ -203,6 +205,11 @@ const DrawingEditor = forwardRef<DrawingEditorHandle, DrawingEditorProps>(
       return drawingData.pages[currentPageIndex] || { strokes: [], background: 'none' }
     }, [drawingData, currentPageIndex])
 
+    const canvasAspectPercentage = useMemo(() => {
+      if (!drawingData.width) return 75
+      return (drawingData.height / drawingData.width) * 100
+    }, [drawingData.height, drawingData.width])
+
     // Render the canvas
     const render = useCallback(() => {
       const canvas = canvasRef.current
@@ -299,9 +306,12 @@ const DrawingEditor = forwardRef<DrawingEditorHandle, DrawingEditorProps>(
       if (!canvas) return { x: 0, y: 0, pressure: 0.5 }
 
       const rect = canvas.getBoundingClientRect()
+      const scaleX = rect.width ? canvas.width / rect.width : 1
+      const scaleY = rect.height ? canvas.height / rect.height : 1
+
       return {
-        x: e.clientX - rect.left,
-        y: e.clientY - rect.top,
+        x: (e.clientX - rect.left) * scaleX,
+        y: (e.clientY - rect.top) * scaleY,
         pressure: e.pressure || 0.5
       }
     }, [])
@@ -693,7 +703,7 @@ const DrawingEditor = forwardRef<DrawingEditorHandle, DrawingEditorProps>(
     return (
       <div className="flex flex-col h-full bg-white">
         {/* Compact Toolbar */}
-  <div className="flex items-center gap-2 px-2.5 py-1.5 border-b border-gray-200 bg-gray-50">
+        <div className="flex items-center gap-2 px-2.5 py-1.5 border-b border-gray-200 bg-gray-50">
           {/* Tools */}
           <div className="flex items-center gap-0.5">
             <button
@@ -988,28 +998,36 @@ const DrawingEditor = forwardRef<DrawingEditorHandle, DrawingEditorProps>(
         </div>
 
         {/* Canvas */}
-        <div className="flex-1 overflow-auto bg-gray-100 p-4">
-          <div className="w-full h-full flex items-center justify-center">
-            <div className="relative">
-              {/* Background Canvas (for grid/lines/dots) */}
-              <canvas
-                ref={backgroundCanvasRef}
-                width={drawingData.width}
-                height={drawingData.height}
-                className="absolute top-0 left-0 bg-white shadow-lg rounded pointer-events-none"
-                style={{ maxWidth: '100%', maxHeight: '100%' }}
-              />
-              {/* Drawing Canvas */}
-              <canvas
-                ref={canvasRef}
-                width={drawingData.width}
-                height={drawingData.height}
-                onPointerDown={handlePointerDown}
-                onPointerMove={handlePointerMove}
-                onPointerUp={handlePointerUp}
-                className="relative shadow-lg rounded cursor-crosshair touch-none"
-                style={{ maxWidth: '100%', maxHeight: '100%', touchAction: 'none' }}
-              />
+        <div className="flex-1 overflow-auto bg-gray-100 px-3 py-4 sm:px-6">
+          <div className="flex h-full w-full items-center justify-center">
+            <div
+              className="relative w-full max-w-full rounded-lg shadow-lg bg-white overflow-hidden"
+              style={{ maxWidth: MAX_CANVAS_DISPLAY_WIDTH }}
+            >
+              <div
+                className="relative w-full"
+                style={{ paddingBottom: `${canvasAspectPercentage}%` }}
+              >
+                {/* Background Canvas (for grid/lines/dots) */}
+                <canvas
+                  ref={backgroundCanvasRef}
+                  width={drawingData.width}
+                  height={drawingData.height}
+                  className="absolute inset-0 rounded-lg bg-white pointer-events-none"
+                  style={{ width: '100%', height: '100%' }}
+                />
+                {/* Drawing Canvas */}
+                <canvas
+                  ref={canvasRef}
+                  width={drawingData.width}
+                  height={drawingData.height}
+                  onPointerDown={handlePointerDown}
+                  onPointerMove={handlePointerMove}
+                  onPointerUp={handlePointerUp}
+                  className="absolute inset-0 rounded-lg cursor-crosshair touch-none"
+                  style={{ width: '100%', height: '100%', touchAction: 'none' }}
+                />
+              </div>
             </div>
           </div>
         </div>
