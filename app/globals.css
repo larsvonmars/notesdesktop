@@ -65,8 +65,7 @@
   }
 
   [contenteditable='true'] li.checklist-item .checklist-checkbox {
-    margin-top: 0.2em;
-    flex-shrink: 0;
+    @apply mt-0.5 shrink-0;
   }
 
   /* Heading styles */
