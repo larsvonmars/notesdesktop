@@ -15,6 +15,27 @@ import type {
 import DOMPurify, { Config } from 'dompurify'
 import { marked } from 'marked'
 import { X, Search, Link as LinkIcon, Type, List, CheckSquare, Quote, Code, Minus } from 'lucide-react'
+import {
+  applyInlineStyle,
+  applyBlockFormat,
+  generateHeadingId,
+  saveSelection as saveSelectionUtil,
+  restoreSelection as restoreSelectionUtil
+} from '@/lib/editor/commandDispatcher'
+import {
+  normalizeInlineNodes,
+  normalizeEditorContent,
+  sanitizeInlineNodes
+} from '@/lib/editor/domNormalizer'
+import {
+  toggleListType,
+  toggleChecklistState,
+  addCheckboxToListItem,
+  removeCheckboxFromListItem,
+  getClosestListItem,
+  mergeAdjacentLists
+} from '@/lib/editor/listHandler'
+import { HistoryManager, createDebouncedCapture } from '@/lib/editor/historyManager'
 
 export type RichTextCommand =
   | 'bold'
@@ -101,6 +122,8 @@ const RichTextEditor = forwardRef<RichTextEditorHandle, RichTextEditorProps>(
   ({ value, onChange, disabled, placeholder }, ref) => {
     const editorRef = useRef<HTMLDivElement | null>(null)
     const slashMenuRef = useRef<HTMLDivElement | null>(null)
+    const historyManagerRef = useRef<HistoryManager | null>(null)
+    const debouncedCaptureRef = useRef<(() => void) | null>(null)
     const [showSlashMenu, setShowSlashMenu] = useState(false)
     const [slashMenuPosition, setSlashMenuPosition] = useState({ top: 0, left: 0 })
     const [slashMenuFilter, setSlashMenuFilter] = useState('')
@@ -191,6 +214,10 @@ const RichTextEditor = forwardRef<RichTextEditorHandle, RichTextEditorProps>(
       const sanitized = sanitize(editorRef.current.innerHTML)
       if (sanitized !== value) {
         onChange(sanitized)
+        // Capture history after change
+        if (debouncedCaptureRef.current) {
+          debouncedCaptureRef.current()
+        }
       }
     }, [onChange, sanitize, value])
 
@@ -344,104 +371,100 @@ const RichTextEditor = forwardRef<RichTextEditorHandle, RichTextEditorProps>(
       })
     }, [ensureTextNode, markChecklistItem, markChecklistList])
 
-    const execDocumentCommand = useCallback(
+    const execCommand = useCallback(
       (command: string, valueArg?: string) => {
-        if (disabled) return
-        document.execCommand(command, false, valueArg)
+        if (disabled || !editorRef.current) return
+        
+        // Normalize before command
+        if (editorRef.current) {
+          normalizeEditorContent(editorRef.current)
+        }
+        
+        const selection = window.getSelection()
+        if (selection && selection.rangeCount > 0) {
+          const range = selection.getRangeAt(0)
+          sanitizeInlineNodes(range)
+        }
+        
+        // Execute command based on type
+        switch (command) {
+          case 'bold':
+            applyInlineStyle('strong')
+            break
+          case 'italic':
+            applyInlineStyle('em')
+            break
+          case 'underline':
+            applyInlineStyle('u')
+            break
+          case 'strikeThrough':
+            applyInlineStyle('s')
+            break
+          case 'formatBlock':
+            if (valueArg) {
+              const tag = valueArg.toLowerCase().replace(/[<>]/g, '')
+              if (['p', 'h1', 'h2', 'h3', 'blockquote'].includes(tag)) {
+                applyBlockFormat(tag as 'p' | 'h1' | 'h2' | 'h3' | 'blockquote', editorRef.current)
+              }
+            }
+            break
+          case 'insertUnorderedList':
+            toggleListType('ul', editorRef.current)
+            break
+          case 'insertOrderedList':
+            toggleListType('ol', editorRef.current)
+            break
+          default:
+            // Fallback to native execCommand for other commands
+            document.execCommand(command, false, valueArg)
+        }
+        
+        // Normalize after command
+        if (editorRef.current) {
+          normalizeEditorContent(editorRef.current)
+          mergeAdjacentLists(editorRef.current)
+        }
+        
         emitChange()
       },
       [disabled, emitChange]
     )
 
-    const applyInlineCode = useCallback(() => {
+    const applyCode = useCallback(() => {
       if (disabled) return
-      const selection = window.getSelection()
-      if (!selection || selection.rangeCount === 0) return
-
-      const range = selection.getRangeAt(0)
-      const code = document.createElement('code')
-
-      if (range.collapsed) {
-        // No selection - insert placeholder
-        const textNode = document.createTextNode('code')
-        code.appendChild(textNode)
-        range.insertNode(code)
-        
-        // Select the text inside the code element
-        const newRange = document.createRange()
-        newRange.setStart(textNode, 0)
-        newRange.setEnd(textNode, textNode.length)
-        selection.removeAllRanges()
-        selection.addRange(newRange)
-      } else {
-        // Has selection - wrap it
-        const contents = range.extractContents()
-        code.appendChild(contents)
-        range.insertNode(code)
-        
-        // Select the code element contents
-        selection.removeAllRanges()
-        const newRange = document.createRange()
-        newRange.selectNodeContents(code)
-        selection.addRange(newRange)
+      applyInlineStyle('code')
+      if (editorRef.current) {
+        normalizeEditorContent(editorRef.current)
       }
-
       emitChange()
     }, [disabled, emitChange])
 
-    const closestListItem = (node: Node | null): HTMLLIElement | null => {
-      while (node) {
-        if (node instanceof HTMLLIElement) return node
-        node = node.parentNode
-      }
-      return null
-    }
-
     const toggleChecklist = useCallback(() => {
-      if (disabled) return
-
-      const selection = window.getSelection()
-      if (!selection || selection.rangeCount === 0) return
-
-      const currentListItem = closestListItem(selection.anchorNode)
-
-      if (!currentListItem) {
-        execDocumentCommand('insertUnorderedList')
-        setTimeout(() => {
-          const updatedSelection = window.getSelection()
-          const newListItem = closestListItem(updatedSelection?.anchorNode ?? null)
-          const list = newListItem?.parentElement as HTMLUListElement | HTMLOListElement | null
-          if (!list) {
-            emitChange()
-            return
-          }
-          convertListToChecklist(list)
-          emitChange()
-        }, 0)
-        return
-      }
-
-      const list = currentListItem.parentElement as HTMLUListElement | HTMLOListElement | null
-      if (!list) return
-
-      const hasCheckbox = !!list.querySelector('input[type="checkbox"]')
-
-      if (hasCheckbox) {
-        convertListToRegular(list)
-      } else {
-        convertListToChecklist(list)
-      }
-
+      if (disabled || !editorRef.current) return
+      
+      // Normalize before
+      normalizeEditorContent(editorRef.current)
+      
+      toggleChecklistState(editorRef.current)
+      
+      // Normalize after
+      normalizeEditorContent(editorRef.current)
+      mergeAdjacentLists(editorRef.current)
+      
       emitChange()
-    }, [convertListToChecklist, convertListToRegular, disabled, emitChange, execDocumentCommand])
+    }, [disabled, emitChange])
 
     const applyHeading = useCallback(
       (level: 1 | 2 | 3) => {
-        if (disabled) return
+        if (disabled || !editorRef.current) return
+        
+        // Normalize before
+        normalizeEditorContent(editorRef.current)
+        
         const selection = window.getSelection()
         if (!selection || selection.rangeCount === 0) return
 
-        execDocumentCommand('formatBlock', `h${level}`)
+        applyBlockFormat(`h${level}` as 'h1' | 'h2' | 'h3', editorRef.current)
         
         // Generate ID for the heading for TOC links
         setTimeout(() => {
@@ -450,17 +473,17 @@ const RichTextEditor = forwardRef<RichTextEditorHandle, RichTextEditorProps>(
           headings.forEach((heading) => {
             if (!heading.id) {
               const text = heading.textContent || ''
-              const id = text
-                .toLowerCase()
-                .replace(/[^a-z0-9]+/g, '-')
-                .replace(/^-|-$/g, '')
-              heading.id = id || `heading-${Date.now()}`
+              heading.id = generateHeadingId(text)
             }
           })
+          
+          // Normalize after
+          normalizeEditorContent(editorRef.current!)
+          
           emitChange()
         }, 0)
       },
-      [disabled, emitChange, execDocumentCommand]
+      [disabled, emitChange]
     )
 
     const getHeadings = useCallback(() => {
@@ -473,12 +496,11 @@ const RichTextEditor = forwardRef<RichTextEditorHandle, RichTextEditorProps>(
       }))
     }, [])
 
-
     // Save current selection
     const saveSelection = useCallback(() => {
       const selection = window.getSelection()
       if (selection && selection.rangeCount > 0) {
-        savedSelectionRef.current = selection.getRangeAt(0)
+        savedSelectionRef.current = selection.getRangeAt(0).cloneRange()
       }
     }, [])
 
@@ -674,7 +696,26 @@ const RichTextEditor = forwardRef<RichTextEditorHandle, RichTextEditorProps>(
     // Horizontal rule
     const insertHorizontalRule = useCallback(() => {
       if (disabled) return
-      document.execCommand('insertHorizontalRule')
+      
+      const selection = window.getSelection()
+      if (!selection || selection.rangeCount === 0) return
+      
+      const range = selection.getRangeAt(0)
+      const hr = document.createElement('hr')
+      range.insertNode(hr)
+      
+      // Insert a paragraph after the hr for continued editing
+      const p = document.createElement('p')
+      p.appendChild(document.createElement('br'))
+      hr.parentNode?.insertBefore(p, hr.nextSibling)
+      
+      // Move cursor to the new paragraph
+      const newRange = document.createRange()
+      newRange.setStart(p, 0)
+      newRange.collapse(true)
+      selection.removeAllRanges()
+      selection.addRange(newRange)
+      
       emitChange()
     }, [disabled, emitChange])
 
@@ -812,28 +853,28 @@ const RichTextEditor = forwardRef<RichTextEditorHandle, RichTextEditorProps>(
           const execFn = (cmd: RichTextCommand) => {
             switch (cmd) {
               case 'bold':
-                execDocumentCommand('bold')
+                execCommand('bold')
                 break
               case 'italic':
-                execDocumentCommand('italic')
+                execCommand('italic')
                 break
               case 'underline':
-                execDocumentCommand('underline')
+                execCommand('underline')
                 break
               case 'strike':
-                execDocumentCommand('strikeThrough')
+                execCommand('strikeThrough')
                 break
               case 'code':
-                applyInlineCode()
+                applyCode()
                 break
               case 'unordered-list':
-                execDocumentCommand('insertUnorderedList')
+                execCommand('insertUnorderedList')
                 break
               case 'ordered-list':
-                execDocumentCommand('insertOrderedList')
+                execCommand('insertOrderedList')
                 break
               case 'blockquote':
-                execDocumentCommand('formatBlock', 'blockquote')
+                execCommand('formatBlock', 'blockquote')
                 break
               case 'checklist':
                 toggleChecklist()
@@ -861,7 +902,7 @@ const RichTextEditor = forwardRef<RichTextEditorHandle, RichTextEditorProps>(
         // Focus back on editor
         editorRef.current?.focus()
       }, 10)
-    }, [slashMenuFilter, execDocumentCommand, applyInlineCode, toggleChecklist, applyHeading, insertHorizontalRule, insertLink])
+    }, [slashMenuFilter, execCommand, applyCode, toggleChecklist, applyHeading, insertHorizontalRule, insertLink])
 
     const scrollToHeading = useCallback((headingId: string) => {
       if (!editorRef.current || !headingId) return
@@ -895,7 +936,28 @@ const RichTextEditor = forwardRef<RichTextEditorHandle, RichTextEditorProps>(
         scrollToHeading,
         queryCommandState: (command: string) => {
           try {
-            return document.queryCommandState(command)
+            // For our custom commands, check the DOM directly
+            const selection = window.getSelection()
+            if (!selection || selection.rangeCount === 0) return false
+            
+            const range = selection.getRangeAt(0)
+            const node = range.commonAncestorContainer
+            const element = node.nodeType === Node.TEXT_NODE ? node.parentElement : (node as Element)
+            
+            switch (command) {
+              case 'bold':
+                return !!element?.closest('strong, b')
+              case 'italic':
+                return !!element?.closest('em, i')
+              case 'underline':
+                return !!element?.closest('u')
+              case 'strikeThrough':
+                return !!element?.closest('s, strike')
+              case 'code':
+                return !!element?.closest('code')
+              default:
+                return document.queryCommandState(command)
+            }
           } catch {
             return false
           }
@@ -909,28 +971,28 @@ const RichTextEditor = forwardRef<RichTextEditorHandle, RichTextEditorProps>(
         exec: (command: RichTextCommand) => {
           switch (command) {
             case 'bold':
-              execDocumentCommand('bold')
+              execCommand('bold')
               break
             case 'italic':
-              execDocumentCommand('italic')
+              execCommand('italic')
               break
             case 'underline':
-              execDocumentCommand('underline')
+              execCommand('underline')
               break
             case 'strike':
-              execDocumentCommand('strikeThrough')
+              execCommand('strikeThrough')
               break
             case 'code':
-              applyInlineCode()
+              applyCode()
               break
             case 'unordered-list':
-              execDocumentCommand('insertUnorderedList')
+              execCommand('insertUnorderedList')
               break
             case 'ordered-list':
-              execDocumentCommand('insertOrderedList')
+              execCommand('insertOrderedList')
               break
             case 'blockquote':
-              execDocumentCommand('formatBlock', 'blockquote')
+              execCommand('formatBlock', 'blockquote')
               break
             case 'checklist':
               toggleChecklist()
@@ -951,24 +1013,37 @@ const RichTextEditor = forwardRef<RichTextEditorHandle, RichTextEditorProps>(
               insertLink()
               break
             case 'undo':
-              execDocumentCommand('undo')
+              historyManagerRef.current?.undo()
               break
             case 'redo':
-              execDocumentCommand('redo')
+              historyManagerRef.current?.redo()
               break
             default:
               break
           }
         }
       }),
-      [applyInlineCode, execDocumentCommand, sanitize, toggleChecklist, applyHeading, getHeadings, insertLink, insertHorizontalRule, scrollToHeading]
+      [applyCode, execCommand, sanitize, toggleChecklist, applyHeading, getHeadings, insertLink, insertHorizontalRule, scrollToHeading]
     )
+
+    // Initialize history manager
+    useEffect(() => {
+      if (editorRef.current && !historyManagerRef.current) {
+        historyManagerRef.current = new HistoryManager(editorRef.current)
+        historyManagerRef.current.initialize()
+        debouncedCaptureRef.current = createDebouncedCapture(historyManagerRef.current)
+      }
+    }, [])
 
     useEffect(() => {
       if (!editorRef.current) return
       const content = editorRef.current.innerHTML
       if (sanitize(content) !== value) {
         editorRef.current.innerHTML = value || ''
+        // Initialize history after setting initial content
+        if (historyManagerRef.current && value) {
+          historyManagerRef.current.capture()
+        }
       }
       normalizeChecklistItems()
     }, [normalizeChecklistItems, sanitize, value])
@@ -1067,7 +1142,7 @@ const RichTextEditor = forwardRef<RichTextEditorHandle, RichTextEditorProps>(
 
       if (event.key === 'Enter' && !event.shiftKey) {
         const selection = window.getSelection()
-        const currentListItem = closestListItem(selection?.anchorNode ?? null)
+        const currentListItem = getClosestListItem(selection?.anchorNode ?? null)
         if (currentListItem) {
           const hasCheckbox = !!currentListItem.querySelector('input[type="checkbox"]')
           const isChecklist =
@@ -1113,7 +1188,7 @@ const RichTextEditor = forwardRef<RichTextEditorHandle, RichTextEditorProps>(
 
               setTimeout(() => {
                 const postSelection = window.getSelection()
-                const newListItem = closestListItem(postSelection?.anchorNode ?? null)
+                const newListItem = getClosestListItem(postSelection?.anchorNode ?? null)
                 if (!newListItem || newListItem === currentListItem) {
                   return
                 }
@@ -1201,28 +1276,28 @@ const RichTextEditor = forwardRef<RichTextEditorHandle, RichTextEditorProps>(
 
       if (key === 'b' && !event.shiftKey) {
         event.preventDefault()
-        execDocumentCommand('bold')
+        execCommand('bold')
       } else if (key === 'i') {
         event.preventDefault()
-        execDocumentCommand('italic')
+        execCommand('italic')
       } else if (key === 'u') {
         event.preventDefault()
-        execDocumentCommand('underline')
+        execCommand('underline')
       } else if (event.shiftKey && key === 'x') {
         event.preventDefault()
-        execDocumentCommand('strikeThrough')
+        execCommand('strikeThrough')
       } else if (event.shiftKey && key === 'c') {
         event.preventDefault()
         toggleChecklist()
       } else if (event.shiftKey && key === 'b') {
         event.preventDefault()
-        execDocumentCommand('formatBlock', 'blockquote')
+        execCommand('formatBlock', 'blockquote')
       } else if (event.shiftKey && key === 'l') {
         event.preventDefault()
-        execDocumentCommand('insertUnorderedList')
+        execCommand('insertUnorderedList')
       } else if (event.shiftKey && key === 'o') {
         event.preventDefault()
-        execDocumentCommand('insertOrderedList')
+        execCommand('insertOrderedList')
       } else if (event.altKey && key === '1') {
         event.preventDefault()
         applyHeading(1)
@@ -1234,7 +1309,7 @@ const RichTextEditor = forwardRef<RichTextEditorHandle, RichTextEditorProps>(
         applyHeading(3)
       } else if (key === '`') {
         event.preventDefault()
-        applyInlineCode()
+        applyCode()
       } else if (key === 'k') {
         // Cmd/Ctrl+K for link
         event.preventDefault()
@@ -1245,7 +1320,11 @@ const RichTextEditor = forwardRef<RichTextEditorHandle, RichTextEditorProps>(
         setShowSearchDialog(true)
       } else if (key === 'z') {
         event.preventDefault()
-        execDocumentCommand(event.shiftKey ? 'redo' : 'undo')
+        if (event.shiftKey) {
+          historyManagerRef.current?.redo()
+        } else {
+          historyManagerRef.current?.undo()
+        }
       }
     }
 
