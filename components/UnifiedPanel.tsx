@@ -139,6 +139,7 @@ export default function UnifiedPanel({
     id: string;
     name: string;
   } | null>(null)
+  const [notesSortBy, setNotesSortBy] = useState<'updated' | 'created' | 'title'>('updated')
 
   const matchesNote = useCallback(
     (note: Note) => {
@@ -149,18 +150,50 @@ export default function UnifiedPanel({
     [hasSearch, normalizedQuery]
   )
 
-  // Keyboard shortcut to toggle panel (Cmd/Ctrl + \)
+  // Keyboard shortcuts
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
+      // Toggle panel (Cmd/Ctrl + \)
       if ((e.metaKey || e.ctrlKey) && e.key === '\\') {
         e.preventDefault()
         setIsOpen(prev => !prev)
+      }
+      
+      // Only handle these shortcuts when panel is open
+      if (isOpen && !e.metaKey && !e.ctrlKey && !e.shiftKey && !e.altKey) {
+        // Check if we're not in an input field
+        const target = e.target as HTMLElement
+        if (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.isContentEditable) {
+          return
+        }
+
+        switch (e.key.toLowerCase()) {
+          case 'n':
+            e.preventDefault()
+            onNewNote('rich-text')
+            setIsOpen(false)
+            break
+          case 'd':
+            e.preventDefault()
+            onNewNote('drawing')
+            setIsOpen(false)
+            break
+          case 'm':
+            e.preventDefault()
+            onNewNote('mindmap')
+            setIsOpen(false)
+            break
+          case 'f':
+            e.preventDefault()
+            onCreateFolder(null)
+            break
+        }
       }
     }
 
     window.addEventListener('keydown', handleKeyDown)
     return () => window.removeEventListener('keydown', handleKeyDown)
-  }, [])
+  }, [isOpen, onNewNote])
 
   // Close on click outside
   useEffect(() => {
@@ -435,6 +468,21 @@ export default function UnifiedPanel({
     }
   }, [getFolderPathKeys, selectedFolderId])
 
+  // Sort notes based on selected option
+  const sortNotes = useCallback((notesToSort: Note[]) => {
+    return [...notesToSort].sort((a, b) => {
+      switch (notesSortBy) {
+        case 'title':
+          return (a.title || 'Untitled').localeCompare(b.title || 'Untitled')
+        case 'created':
+          return new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
+        case 'updated':
+        default:
+          return new Date(b.updated_at).getTime() - new Date(a.updated_at).getTime()
+      }
+    })
+  }, [notesSortBy])
+
   const renderFolder = (folder: FolderNode, level: number = 0) => {
     const key = folderKey(folder.id)
     const isExpanded = hasSearch ? true : expandedFolders.has(key)
@@ -442,7 +490,8 @@ export default function UnifiedPanel({
     const hasChildren = folder.children.length > 0
     const folderEntry = folderNotesData[key]
     const folderNotes = folderEntry?.notes ?? []
-    const visibleNotes = hasSearch ? folderNotes.filter(matchesNote) : folderNotes
+    const filteredNotes = hasSearch ? folderNotes.filter(matchesNote) : folderNotes
+    const visibleNotes = sortNotes(filteredNotes)
     const noteCount = visibleNotes.length
     const isLoadingFolder = folderEntry?.isLoading ?? (isExpanded && !folderEntry)
     const folderError = folderEntry?.error
@@ -520,7 +569,16 @@ export default function UnifiedPanel({
                     }`}
                   >
                     <div className="flex-1 min-w-0">
-                      <div className="text-sm truncate">{n.title || 'Untitled'}</div>
+                      <div className="flex items-center gap-1.5">
+                        {n.note_type === 'drawing' ? (
+                          <PenTool size={12} className="text-purple-500 flex-shrink-0" />
+                        ) : n.note_type === 'mindmap' ? (
+                          <Network size={12} className="text-green-500 flex-shrink-0" />
+                        ) : (
+                          <FileText size={12} className="text-blue-500 flex-shrink-0" />
+                        )}
+                        <div className="text-sm truncate">{n.title || 'Untitled'}</div>
+                      </div>
                       <div className="text-xs text-gray-500 mt-0.5">
                         {new Date(n.updated_at).toLocaleDateString()}
                       </div>
@@ -557,7 +615,8 @@ export default function UnifiedPanel({
   const shouldShowAllNotes = hasSearch || isAllExpanded
   const isAllLoading = allNotesEntry?.isLoading ?? (shouldShowAllNotes && !allNotesEntry)
   const allNotes = allNotesEntry?.notes ?? []
-  const displayedAllNotes = hasSearch ? allNotes.filter(matchesNote) : allNotes
+  const filteredAllNotes = hasSearch ? allNotes.filter(matchesNote) : allNotes
+  const displayedAllNotes = sortNotes(filteredAllNotes)
   const allError = allNotesEntry?.error
 
   // Context menu handlers
@@ -777,10 +836,14 @@ export default function UnifiedPanel({
                       onNewNote('rich-text')
                       setIsOpen(false)
                     }}
-                    className="w-full px-3 py-2 bg-blue-600 text-white text-sm font-medium rounded-md hover:bg-blue-700 transition-colors flex items-center gap-2.5 shadow-sm hover:shadow"
+                    className="w-full px-3 py-2 bg-blue-600 text-white text-sm font-medium rounded-md hover:bg-blue-700 transition-colors flex items-center justify-between gap-2.5 shadow-sm hover:shadow"
+                    title="Create a new text note"
                   >
-                    <FileText size={16} />
-                    <span>Text Note</span>
+                    <div className="flex items-center gap-2.5">
+                      <FileText size={16} />
+                      <span>Text Note</span>
+                    </div>
+                    <kbd className="text-[10px] px-1.5 py-0.5 bg-blue-700/50 rounded">N</kbd>
                   </button>
                   <div className="grid grid-cols-2 gap-1.5">
                     <button
@@ -788,20 +851,28 @@ export default function UnifiedPanel({
                         onNewNote('drawing')
                         setIsOpen(false)
                       }}
-                      className="px-2.5 py-2 bg-purple-600 text-white text-sm font-medium rounded-md hover:bg-purple-700 transition-colors flex items-center justify-center gap-1.5"
+                      className="px-2.5 py-2 bg-purple-600 text-white text-sm font-medium rounded-md hover:bg-purple-700 transition-colors flex flex-col items-center justify-center gap-1"
+                      title="Create a new drawing note"
                     >
-                      <PenTool size={14} />
-                      <span>Drawing</span>
+                      <div className="flex items-center gap-1.5">
+                        <PenTool size={14} />
+                        <span>Drawing</span>
+                      </div>
+                      <kbd className="text-[9px] px-1 py-0.5 bg-purple-700/50 rounded">D</kbd>
                     </button>
                     <button
                       onClick={() => {
                         onNewNote('mindmap')
                         setIsOpen(false)
                       }}
-                      className="px-2.5 py-2 bg-green-600 text-white text-sm font-medium rounded-md hover:bg-green-700 transition-colors flex items-center justify-center gap-1.5"
+                      className="px-2.5 py-2 bg-green-600 text-white text-sm font-medium rounded-md hover:bg-green-700 transition-colors flex flex-col items-center justify-center gap-1"
+                      title="Create a new mindmap"
                     >
-                      <Network size={14} />
-                      <span>Mindmap</span>
+                      <div className="flex items-center gap-1.5">
+                        <Network size={14} />
+                        <span>Mindmap</span>
+                      </div>
+                      <kbd className="text-[9px] px-1 py-0.5 bg-green-700/50 rounded">M</kbd>
                     </button>
                   </div>
                 </div>
@@ -919,8 +990,20 @@ export default function UnifiedPanel({
 
                 {/* All Notes Folder */}
                 <div className="border-t border-gray-200 pt-2.5">
-                  <div className="text-xs font-semibold text-gray-500 uppercase tracking-wide px-2 mb-1.5">
-                    Your Notes
+                  <div className="flex items-center justify-between px-2 mb-1.5">
+                    <div className="text-xs font-semibold text-gray-500 uppercase tracking-wide">
+                      Your Notes
+                    </div>
+                    <select
+                      value={notesSortBy}
+                      onChange={(e) => setNotesSortBy(e.target.value as 'updated' | 'created' | 'title')}
+                      className="text-[10px] px-1.5 py-0.5 border border-gray-200 rounded text-gray-600 bg-white hover:border-gray-300 focus:outline-none focus:ring-1 focus:ring-blue-500"
+                      title="Sort notes by"
+                    >
+                      <option value="updated">Last Updated</option>
+                      <option value="created">Date Created</option>
+                      <option value="title">Title (A-Z)</option>
+                    </select>
                   </div>
                   <div
                     role="button"
@@ -984,7 +1067,16 @@ export default function UnifiedPanel({
                             }`}
                           >
                             <div className="flex-1 min-w-0">
-                              <div className="text-sm truncate">{n.title || 'Untitled'}</div>
+                              <div className="flex items-center gap-1.5">
+                                {n.note_type === 'drawing' ? (
+                                  <PenTool size={12} className="text-purple-500 flex-shrink-0" />
+                                ) : n.note_type === 'mindmap' ? (
+                                  <Network size={12} className="text-green-500 flex-shrink-0" />
+                                ) : (
+                                  <FileText size={12} className="text-blue-500 flex-shrink-0" />
+                                )}
+                                <div className="text-sm truncate">{n.title || 'Untitled'}</div>
+                              </div>
                               <div className="text-xs text-gray-500 mt-0.5">
                                 {new Date(n.updated_at).toLocaleDateString()}
                               </div>
@@ -1024,9 +1116,11 @@ export default function UnifiedPanel({
                   )}
                   <button
                     onClick={() => onCreateFolder(null)}
-                    className="w-full mt-2 px-3 py-1.5 text-sm text-gray-600 border border-dashed border-gray-300 rounded-md hover:border-blue-400 hover:bg-blue-50 hover:text-blue-600 transition-colors font-medium"
+                    className="w-full mt-2 px-3 py-1.5 text-sm text-gray-600 border border-dashed border-gray-300 rounded-md hover:border-blue-400 hover:bg-blue-50 hover:text-blue-600 transition-colors font-medium flex items-center justify-center gap-2"
+                    title="Create a new folder (F)"
                   >
-                    + New Folder
+                    <FolderPlus size={14} />
+                    <span>New Folder</span>
                   </button>
                 </div>
               </div>
