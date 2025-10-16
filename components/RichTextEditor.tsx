@@ -135,61 +135,60 @@ const RichTextEditor = forwardRef<RichTextEditorHandle, RichTextEditorProps>(
     )
 
     // Debounced checklist normalization to avoid synchronous DOM walks on every keystroke
+    const normalizeChecklistItemsInline = useCallback(() => {
+      if (!editorRef.current) return
+
+      const listItems = editorRef.current.querySelectorAll('li')
+      listItems.forEach((item) => {
+        const li = item as HTMLLIElement
+        const checkbox = li.querySelector('input[type="checkbox"]') as HTMLInputElement | null
+
+        if (checkbox) {
+          if (!checkbox.classList.contains('checklist-checkbox')) {
+            checkbox.classList.add('checklist-checkbox', 'align-middle', 'mr-2')
+          }
+          if (!checkbox.hasAttribute('data-checked')) {
+            checkbox.setAttribute('data-checked', checkbox.checked ? 'true' : 'false')
+          }
+          // Mark checklist item
+          li.classList.add('checklist-item')
+          li.setAttribute('data-checklist', 'true')
+          // Ensure text node
+          const existingTextNode = Array.from(li.childNodes).find(
+            (node): node is Text => node.nodeType === Node.TEXT_NODE
+          )
+          if (!existingTextNode) {
+            const textNode = document.createTextNode('')
+            li.appendChild(textNode)
+          }
+        } else if (li.classList.contains('checklist-item') || li.getAttribute('data-checklist') === 'true') {
+          li.classList.remove('checklist-item')
+          li.removeAttribute('data-checklist')
+        }
+      })
+
+      const lists = editorRef.current.querySelectorAll('ul, ol')
+      lists.forEach((list) => {
+        const hasCheckbox = !!list.querySelector('input[type="checkbox"]')
+        if (hasCheckbox) {
+          list.classList.add('checklist-list')
+          list.setAttribute('data-checklist', 'true')
+        } else {
+          list.classList.remove('checklist-list')
+          list.removeAttribute('data-checklist')
+        }
+      })
+    }, [])
+
     const scheduleChecklistNormalization = useCallback(() => {
       if (checklistNormalizationTimerRef.current) {
         clearTimeout(checklistNormalizationTimerRef.current)
       }
       
       checklistNormalizationTimerRef.current = setTimeout(() => {
-        if (!editorRef.current) return
-
-        const listItems = editorRef.current.querySelectorAll('li')
-        listItems.forEach((item) => {
-          const li = item as HTMLLIElement
-          const checkbox = li.querySelector('input[type="checkbox"]') as HTMLInputElement | null
-
-          if (checkbox) {
-            if (!checkbox.classList.contains('checklist-checkbox')) {
-              checkbox.classList.add('checklist-checkbox', 'align-middle', 'mr-2')
-            }
-            if (!checkbox.hasAttribute('data-checked')) {
-              checkbox.setAttribute('data-checked', checkbox.checked ? 'true' : 'false')
-            }
-            // Inline mark checklist item
-            if (checkbox) {
-              li.classList.add('checklist-item')
-              li.setAttribute('data-checklist', 'true')
-            } else {
-              li.classList.remove('checklist-item')
-              li.removeAttribute('data-checklist')
-            }
-            // Ensure text node
-            const existingTextNode = Array.from(li.childNodes).find(
-              (node): node is Text => node.nodeType === Node.TEXT_NODE
-            )
-            if (!existingTextNode) {
-              const textNode = document.createTextNode('')
-              li.appendChild(textNode)
-            }
-          } else if (li.classList.contains('checklist-item') || li.getAttribute('data-checklist') === 'true') {
-            li.classList.remove('checklist-item')
-            li.removeAttribute('data-checklist')
-          }
-        })
-
-        const lists = editorRef.current.querySelectorAll('ul, ol')
-        lists.forEach((list) => {
-          const hasCheckbox = !!list.querySelector('input[type="checkbox"]')
-          if (hasCheckbox) {
-            list.classList.add('checklist-list')
-            list.setAttribute('data-checklist', 'true')
-          } else {
-            list.classList.remove('checklist-list')
-            list.removeAttribute('data-checklist')
-          }
-        })
+        normalizeChecklistItemsInline()
       }, 150) // Debounce by 150ms
-    }, [])
+    }, [normalizeChecklistItemsInline])
 
     const emitChange = useCallback(() => {
       if (!editorRef.current) return
@@ -609,72 +608,6 @@ const RichTextEditor = forwardRef<RichTextEditorHandle, RichTextEditorProps>(
     }, [linkUrl, linkText, restoreSelection, emitChange])
 
     // Search functionality
-    const performSearch = useCallback(() => {
-      if (!editorRef.current || !searchQuery) {
-        setSearchMatches([])
-        return
-      }
-
-      const content = editorRef.current.textContent || ''
-      const query = caseSensitive ? searchQuery : searchQuery.toLowerCase()
-      const searchIn = caseSensitive ? content : content.toLowerCase()
-      
-      const matches: SearchMatch[] = []
-      let index = searchIn.indexOf(query)
-      
-      while (index !== -1) {
-        matches.push({
-          index,
-          length: searchQuery.length,
-          text: content.substr(index, searchQuery.length)
-        })
-        index = searchIn.indexOf(query, index + 1)
-      }
-
-      setSearchMatches(matches)
-      setCurrentMatchIndex(0)
-      
-      if (matches.length > 0) {
-        // Inline highlight logic
-        if (!editorRef.current || 0 < 0 || 0 >= matches.length) return
-
-        const match = matches[0]
-        const range = document.createRange()
-        const selection = window.getSelection()
-        
-        // Find text node and position
-        const walker = document.createTreeWalker(
-          editorRef.current,
-          NodeFilter.SHOW_TEXT,
-          null
-        )
-
-        let currentPos = 0
-        let node = walker.nextNode()
-
-        while (node) {
-          const nodeLength = node.textContent?.length || 0
-          if (currentPos + nodeLength > match.index) {
-            const offset = match.index - currentPos
-            range.setStart(node, offset)
-            range.setEnd(node, offset + match.length)
-            break
-          }
-          currentPos += nodeLength
-          node = walker.nextNode()
-        }
-
-        selection?.removeAllRanges()
-        selection?.addRange(range)
-        
-        // Scroll into view
-        range.startContainer.parentElement?.scrollIntoView({
-          behavior: 'smooth',
-          block: 'center'
-        })
-      }
-    }, [searchQuery, caseSensitive])
-
     const highlightMatch = useCallback((matchIndex: number) => {
       if (!editorRef.current || matchIndex < 0 || matchIndex >= searchMatches.length) return
 
@@ -713,6 +646,36 @@ const RichTextEditor = forwardRef<RichTextEditorHandle, RichTextEditorProps>(
         block: 'center'
       })
     }, [searchMatches])
+
+    const performSearch = useCallback(() => {
+      if (!editorRef.current || !searchQuery) {
+        setSearchMatches([])
+        return
+      }
+
+      const content = editorRef.current.textContent || ''
+      const query = caseSensitive ? searchQuery : searchQuery.toLowerCase()
+      const searchIn = caseSensitive ? content : content.toLowerCase()
+      
+      const matches: SearchMatch[] = []
+      let index = searchIn.indexOf(query)
+      
+      while (index !== -1) {
+        matches.push({
+          index,
+          length: searchQuery.length,
+          text: content.substr(index, searchQuery.length)
+        })
+        index = searchIn.indexOf(query, index + 1)
+      }
+
+      setSearchMatches(matches)
+      setCurrentMatchIndex(0)
+      
+      if (matches.length > 0) {
+        highlightMatch(0)
+      }
+    }, [searchQuery, caseSensitive, highlightMatch])
 
     const nextMatch = useCallback(() => {
       if (searchMatches.length === 0) return
