@@ -13,7 +13,6 @@ import type {
   KeyboardEvent as ReactKeyboardEvent
 } from 'react'
 import DOMPurify, { Config } from 'dompurify'
-import { marked } from 'marked'
 import { X, Search, Link as LinkIcon, Type, List, CheckSquare, Quote, Code, Minus } from 'lucide-react'
 import {
   applyInlineStyle,
@@ -36,29 +35,25 @@ import {
   mergeAdjacentLists
 } from '@/lib/editor/listHandler'
 import { HistoryManager, createDebouncedCapture } from '@/lib/editor/historyManager'
+import {
+  looksLikeMarkdown,
+  markdownToHtml,
+  htmlToMarkdown
+} from '@/lib/editor/markdownHelpers'
+import {
+  getSlashCommands,
+  filterSlashCommands,
+  type SlashCommand,
+  type RichTextCommand
+} from '@/lib/editor/slashCommands'
 
-export type RichTextCommand =
-  | 'bold'
-  | 'italic'
-  | 'underline'
-  | 'strike'
-  | 'code'
-  | 'unordered-list'
-  | 'ordered-list'
-  | 'blockquote'
-  | 'checklist'
-  | 'heading1'
-  | 'heading2'
-  | 'heading3'
-  | 'undo'
-  | 'redo'
-  | 'link'
-  | 'horizontal-rule'
+export type { RichTextCommand }
 
 export interface RichTextEditorHandle {
   focus: () => void
   exec: (command: RichTextCommand) => void
   getHTML: () => string
+  getMarkdown: () => string
   getHeadings: () => Array<{ id: string; level: number; text: string }>
   queryCommandState: (command: string) => boolean
   showLinkDialog: () => void
@@ -104,14 +99,6 @@ const SANITIZE_CONFIG: Config = {
   ALLOW_DATA_ATTR: true
 }
 
-interface SlashCommand {
-  id: string
-  label: string
-  icon: React.ReactNode
-  command: RichTextCommand | (() => void)
-  description: string
-}
-
 interface SearchMatch {
   index: number
   length: number
@@ -124,6 +111,8 @@ const RichTextEditor = forwardRef<RichTextEditorHandle, RichTextEditorProps>(
     const slashMenuRef = useRef<HTMLDivElement | null>(null)
     const historyManagerRef = useRef<HistoryManager | null>(null)
     const debouncedCaptureRef = useRef<(() => void) | null>(null)
+    const mutationObserverRef = useRef<MutationObserver | null>(null)
+    const checklistNormalizationTimerRef = useRef<NodeJS.Timeout | null>(null)
     const [showSlashMenu, setShowSlashMenu] = useState(false)
     const [slashMenuPosition, setSlashMenuPosition] = useState({ top: 0, left: 0 })
     const [slashMenuFilter, setSlashMenuFilter] = useState('')
@@ -145,69 +134,61 @@ const RichTextEditor = forwardRef<RichTextEditorHandle, RichTextEditorProps>(
       []
     )
 
-    // Configure marked for our editor
-    useEffect(() => {
-      marked.setOptions({
-        gfm: true, // GitHub Flavored Markdown
-        breaks: true, // Convert \n to <br>
+    // Debounced checklist normalization to avoid synchronous DOM walks on every keystroke
+    const normalizeChecklistItemsInline = useCallback(() => {
+      if (!editorRef.current) return
+
+      const listItems = editorRef.current.querySelectorAll('li')
+      listItems.forEach((item) => {
+        const li = item as HTMLLIElement
+        const checkbox = li.querySelector('input[type="checkbox"]') as HTMLInputElement | null
+
+        if (checkbox) {
+          if (!checkbox.classList.contains('checklist-checkbox')) {
+            checkbox.classList.add('checklist-checkbox', 'align-middle', 'mr-2')
+          }
+          if (!checkbox.hasAttribute('data-checked')) {
+            checkbox.setAttribute('data-checked', checkbox.checked ? 'true' : 'false')
+          }
+          // Mark checklist item
+          li.classList.add('checklist-item')
+          li.setAttribute('data-checklist', 'true')
+          // Ensure text node
+          const existingTextNode = Array.from(li.childNodes).find(
+            (node): node is Text => node.nodeType === Node.TEXT_NODE
+          )
+          if (!existingTextNode) {
+            const textNode = document.createTextNode('')
+            li.appendChild(textNode)
+          }
+        } else if (li.classList.contains('checklist-item') || li.getAttribute('data-checklist') === 'true') {
+          li.classList.remove('checklist-item')
+          li.removeAttribute('data-checklist')
+        }
+      })
+
+      const lists = editorRef.current.querySelectorAll('ul, ol')
+      lists.forEach((list) => {
+        const hasCheckbox = !!list.querySelector('input[type="checkbox"]')
+        if (hasCheckbox) {
+          list.classList.add('checklist-list')
+          list.setAttribute('data-checklist', 'true')
+        } else {
+          list.classList.remove('checklist-list')
+          list.removeAttribute('data-checklist')
+        }
       })
     }, [])
 
-    // Detect if text looks like markdown
-    const looksLikeMarkdown = useCallback((text: string): boolean => {
-      const markdownPatterns = [
-        /^#{1,6}\s/m, // Headers
-        /^\* |\*\*|__/, // Bold/italic
-        /^\- |\+ |\* /m, // Lists
-        /^\d+\. /m, // Numbered lists
-        /^\[.+\]\(.+\)/, // Links
-        /^```/m, // Code blocks
-        /^> /m, // Blockquotes
-        /^\[[ x]\]/m, // Checkboxes
-        /!\[.+\]\(.+\)/, // Images
-      ]
-      
-      return markdownPatterns.some(pattern => pattern.test(text))
-    }, [])
-
-    // Convert markdown to HTML
-    const markdownToHtml = useCallback(async (markdown: string): Promise<string> => {
-      try {
-        let html = await marked.parse(markdown)
-        
-        // Convert GFM task lists to our checklist format
-        html = html.replace(
-          /<li>\s*<input[^>]*type="checkbox"[^>]*(?:checked)?[^>]*>\s*([^<]*(?:<[^\/].*?<\/[^>]+>)*[^<]*)<\/li>/gi,
-          (match, content) => {
-            const isChecked = /checked/i.test(match)
-            return `<li class="checklist-item" data-checklist="true"><input type="checkbox" class="checklist-checkbox align-middle mr-2" data-checked="${isChecked}"${isChecked ? ' checked' : ''}>${content}</li>`
-          }
-        )
-        
-        // Mark lists containing checkboxes as checklist-list
-        html = html.replace(
-          /(<ul>)([\s\S]*?<li class="checklist-item"[\s\S]*?)(<\/ul>)/gi,
-          '$1<ul class="checklist-list" data-checklist="true">$2</ul>$3'
-        )
-        
-        // Add IDs to headings for TOC
-        html = html.replace(
-          /<(h[1-3])>([^<]+)<\/h[1-3]>/gi,
-          (match, tag, text) => {
-            const id = text
-              .toLowerCase()
-              .replace(/[^a-z0-9]+/g, '-')
-              .replace(/^-|-$/g, '')
-            return `<${tag} id="${id || `heading-${Date.now()}`}">${text}</${tag}>`
-          }
-        )
-        
-        return html
-      } catch (error) {
-        console.error('Failed to parse markdown:', error)
-        return markdown
+    const scheduleChecklistNormalization = useCallback(() => {
+      if (checklistNormalizationTimerRef.current) {
+        clearTimeout(checklistNormalizationTimerRef.current)
       }
-    }, [])
+      
+      checklistNormalizationTimerRef.current = setTimeout(() => {
+        normalizeChecklistItemsInline()
+      }, 150) // Debounce by 150ms
+    }, [normalizeChecklistItemsInline])
 
     const emitChange = useCallback(() => {
       if (!editorRef.current) return
@@ -370,6 +351,57 @@ const RichTextEditor = forwardRef<RichTextEditorHandle, RichTextEditorProps>(
         markChecklistList(list as HTMLUListElement | HTMLOListElement, hasCheckbox)
       })
     }, [ensureTextNode, markChecklistItem, markChecklistList])
+
+    // Setup mutation observer for checklist normalization
+    useEffect(() => {
+      if (!editorRef.current) return
+      
+      // Create mutation observer to watch for DOM changes
+      const observer = new MutationObserver((mutations) => {
+        // Check if any mutations involve list items or checkboxes
+        const hasRelevantChanges = mutations.some(mutation => {
+          // Check if target is or contains a list item
+          if (mutation.target instanceof HTMLElement) {
+            const target = mutation.target
+            if (target.tagName === 'LI' || target.closest('li') || target.querySelector('li')) {
+              return true
+            }
+          }
+          
+          // Check added nodes
+          for (const node of Array.from(mutation.addedNodes)) {
+            if (node instanceof HTMLElement) {
+              if (node.tagName === 'LI' || node.querySelector('li') || node.querySelector('input[type="checkbox"]')) {
+                return true
+              }
+            }
+          }
+          
+          return false
+        })
+        
+        if (hasRelevantChanges) {
+          scheduleChecklistNormalization()
+        }
+      })
+      
+      // Observe the editor for changes
+      observer.observe(editorRef.current, {
+        childList: true,
+        subtree: true,
+        attributes: true,
+        attributeFilter: ['checked', 'data-checked']
+      })
+      
+      mutationObserverRef.current = observer
+      
+      return () => {
+        observer.disconnect()
+        if (checklistNormalizationTimerRef.current) {
+          clearTimeout(checklistNormalizationTimerRef.current)
+        }
+      }
+    }, [scheduleChecklistNormalization])
 
     const execCommand = useCallback(
       (command: string, valueArg?: string) => {
@@ -576,36 +608,6 @@ const RichTextEditor = forwardRef<RichTextEditorHandle, RichTextEditorProps>(
     }, [linkUrl, linkText, restoreSelection, emitChange])
 
     // Search functionality
-    const performSearch = useCallback(() => {
-      if (!editorRef.current || !searchQuery) {
-        setSearchMatches([])
-        return
-      }
-
-      const content = editorRef.current.textContent || ''
-      const query = caseSensitive ? searchQuery : searchQuery.toLowerCase()
-      const searchIn = caseSensitive ? content : content.toLowerCase()
-      
-      const matches: SearchMatch[] = []
-      let index = searchIn.indexOf(query)
-      
-      while (index !== -1) {
-        matches.push({
-          index,
-          length: searchQuery.length,
-          text: content.substr(index, searchQuery.length)
-        })
-        index = searchIn.indexOf(query, index + 1)
-      }
-
-      setSearchMatches(matches)
-      setCurrentMatchIndex(0)
-      
-      if (matches.length > 0) {
-        highlightMatch(0)
-      }
-    }, [searchQuery, caseSensitive])
-
     const highlightMatch = useCallback((matchIndex: number) => {
       if (!editorRef.current || matchIndex < 0 || matchIndex >= searchMatches.length) return
 
@@ -644,6 +646,36 @@ const RichTextEditor = forwardRef<RichTextEditorHandle, RichTextEditorProps>(
         block: 'center'
       })
     }, [searchMatches])
+
+    const performSearch = useCallback(() => {
+      if (!editorRef.current || !searchQuery) {
+        setSearchMatches([])
+        return
+      }
+
+      const content = editorRef.current.textContent || ''
+      const query = caseSensitive ? searchQuery : searchQuery.toLowerCase()
+      const searchIn = caseSensitive ? content : content.toLowerCase()
+      
+      const matches: SearchMatch[] = []
+      let index = searchIn.indexOf(query)
+      
+      while (index !== -1) {
+        matches.push({
+          index,
+          length: searchQuery.length,
+          text: content.substr(index, searchQuery.length)
+        })
+        index = searchIn.indexOf(query, index + 1)
+      }
+
+      setSearchMatches(matches)
+      setCurrentMatchIndex(0)
+      
+      if (matches.length > 0) {
+        highlightMatch(0)
+      }
+    }, [searchQuery, caseSensitive, highlightMatch])
 
     const nextMatch = useCallback(() => {
       if (searchMatches.length === 0) return
@@ -709,23 +741,17 @@ const RichTextEditor = forwardRef<RichTextEditorHandle, RichTextEditorProps>(
     }, [disabled, emitChange])
 
     // Slash commands menu
-    const slashCommands: SlashCommand[] = [
-      { id: 'h1', label: 'Heading 1', icon: <Type size={16} />, command: 'heading1', description: 'Large heading' },
-      { id: 'h2', label: 'Heading 2', icon: <Type size={16} />, command: 'heading2', description: 'Medium heading' },
-      { id: 'h3', label: 'Heading 3', icon: <Type size={16} />, command: 'heading3', description: 'Small heading' },
-      { id: 'ul', label: 'Bullet List', icon: <List size={16} />, command: 'unordered-list', description: 'Create a bullet list' },
-      { id: 'ol', label: 'Numbered List', icon: <List size={16} />, command: 'ordered-list', description: 'Create a numbered list' },
-      { id: 'check', label: 'Checklist', icon: <CheckSquare size={16} />, command: 'checklist', description: 'Create a checklist' },
-      { id: 'quote', label: 'Quote', icon: <Quote size={16} />, command: 'blockquote', description: 'Insert a quote' },
-      { id: 'code', label: 'Code', icon: <Code size={16} />, command: 'code', description: 'Inline code' },
-      { id: 'hr', label: 'Divider', icon: <Minus size={16} />, command: 'horizontal-rule', description: 'Insert horizontal rule' },
-      { id: 'link', label: 'Link', icon: <LinkIcon size={16} />, command: insertLink, description: 'Insert a link' },
-    ]
+    const slashCommands = getSlashCommands({
+      Type: <Type size={16} />,
+      List: <List size={16} />,
+      CheckSquare: <CheckSquare size={16} />,
+      Quote: <Quote size={16} />,
+      Code: <Code size={16} />,
+      Minus: <Minus size={16} />,
+      Link: <LinkIcon size={16} />
+    })
 
-    const filteredSlashCommands = slashCommands.filter(cmd =>
-      cmd.label.toLowerCase().includes(slashMenuFilter.toLowerCase()) ||
-      cmd.description.toLowerCase().includes(slashMenuFilter.toLowerCase())
-    )
+    const filteredSlashCommands = filterSlashCommands(slashCommands, slashMenuFilter)
 
     // Update menu position based on caret and viewport boundaries
     const updateSlashMenuPosition = useCallback(() => {
@@ -891,7 +917,7 @@ const RichTextEditor = forwardRef<RichTextEditorHandle, RichTextEditorProps>(
         // Focus back on editor
         editorRef.current?.focus()
       }, 10)
-    }, [slashMenuFilter, execCommand, applyCode, toggleChecklist, applyHeading, insertHorizontalRule, insertLink])
+    }, [execCommand, applyCode, toggleChecklist, applyHeading, insertHorizontalRule, insertLink])
 
     const scrollToHeading = useCallback((headingId: string) => {
       if (!editorRef.current || !headingId) return
@@ -920,6 +946,7 @@ const RichTextEditor = forwardRef<RichTextEditorHandle, RichTextEditorProps>(
       () => ({
         focus: () => editorRef.current?.focus(),
         getHTML: () => sanitize(editorRef.current?.innerHTML ?? ''),
+        getMarkdown: () => htmlToMarkdown(editorRef.current?.innerHTML ?? ''),
         getHeadings,
         getRootElement: () => editorRef.current,
         scrollToHeading,
@@ -1035,8 +1062,8 @@ const RichTextEditor = forwardRef<RichTextEditorHandle, RichTextEditorProps>(
           historyManagerRef.current.capture()
         }
       }
-      normalizeChecklistItems()
-    }, [normalizeChecklistItems, sanitize, value])
+      scheduleChecklistNormalization()
+    }, [sanitize, value, scheduleChecklistNormalization])
 
     useEffect(() => {
       if (!editorRef.current) return
@@ -1338,9 +1365,9 @@ const RichTextEditor = forwardRef<RichTextEditorHandle, RichTextEditorProps>(
             const sanitized = sanitize(convertedHtml)
             document.execCommand('insertHTML', false, sanitized)
             
-            // Normalize checklist items after insertion
+            // Schedule checklist normalization after insertion
             setTimeout(() => {
-              normalizeChecklistItems()
+              scheduleChecklistNormalization()
               emitChange()
             }, 0)
           })
@@ -1441,7 +1468,7 @@ const RichTextEditor = forwardRef<RichTextEditorHandle, RichTextEditorProps>(
                 <div className="px-3 py-6 text-sm text-center text-gray-500">
                   <div className="mb-1 font-medium">No commands found</div>
                   {slashMenuFilter && (
-                    <div className="text-xs">for "{slashMenuFilter}"</div>
+                    <div className="text-xs">for &quot;{slashMenuFilter}&quot;</div>
                   )}
                 </div>
               )}
