@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useRef, useEffect } from 'react'
+import { useState, useRef, useEffect, useCallback, useMemo } from 'react'
 import {
   Menu,
   X,
@@ -10,15 +10,16 @@ import {
   ListTree,
   FolderTree as FolderTreeIcon,
   FileText,
-  ChevronDown,
   ChevronRight,
   PenTool,
   Network,
   LogOut,
   User,
+  Loader2,
 } from 'lucide-react'
 import { Note } from './NoteEditor'
 import { FolderNode } from '@/lib/folders'
+import { getNotesByFolder, searchNotes } from '@/lib/notes'
 
 interface UnifiedPanelProps {
   // Note controls
@@ -82,7 +83,7 @@ export default function UnifiedPanel({
   onSearch,
   folders,
   selectedFolderId,
-  onSelectFolder,
+  onSelectFolder: _onSelectFolder,
   onCreateFolder,
   onRenameFolder,
   onDeleteFolder,
@@ -98,8 +99,30 @@ export default function UnifiedPanel({
 }: UnifiedPanelProps) {
   const [isOpen, setIsOpen] = useState(false)
   const [activeTab, setActiveTab] = useState<'browse' | 'toc'>('browse')
-  const [expandedFolders, setExpandedFolders] = useState<Set<string>>(new Set())
+  const ALL_FOLDER_KEY = '__ALL__'
+  const folderKey = (folderId: string | null) => folderId ?? ALL_FOLDER_KEY
+  const [expandedFolders, setExpandedFolders] = useState<Set<string>>(
+    () => new Set([ALL_FOLDER_KEY])
+  )
+  const [folderNotesData, setFolderNotesData] = useState<
+    Record<string, { notes: Note[]; isLoading: boolean; error?: string }>
+  >({})
+  const [searchQuery, setSearchQuery] = useState('')
+  const [isSearching, setIsSearching] = useState(false)
+  const [searchResults, setSearchResults] = useState<Note[]>([])
+  const [searchError, setSearchError] = useState<string | undefined>(undefined)
   const panelRef = useRef<HTMLDivElement>(null)
+  const normalizedQuery = searchQuery.trim().toLowerCase()
+  const hasSearch = normalizedQuery.length > 0
+
+  const matchesNote = useCallback(
+    (note: Note) => {
+      if (!hasSearch) return true
+      const title = (note.title ?? '').toLowerCase()
+      return title.includes(normalizedQuery)
+    },
+    [hasSearch, normalizedQuery]
+  )
 
   // Keyboard shortcut to toggle panel (Cmd/Ctrl + \)
   useEffect(() => {
@@ -128,66 +151,292 @@ export default function UnifiedPanel({
     return () => document.removeEventListener('mousedown', handleClickOutside)
   }, [isOpen])
 
-  const toggleFolder = (folderId: string) => {
-    const newExpanded = new Set(expandedFolders)
-    if (newExpanded.has(folderId)) {
-      newExpanded.delete(folderId)
-    } else {
-      newExpanded.add(folderId)
+  useEffect(() => {
+    setFolderNotesData((prev) => ({
+      ...prev,
+      [folderKey(selectedFolderId ?? null)]: {
+        notes,
+        isLoading: isLoadingNotes,
+        error: undefined,
+      },
+    }))
+  }, [notes, selectedFolderId, isLoadingNotes])
+
+  useEffect(() => {
+    let isActive = true
+
+    if (!hasSearch) {
+      setSearchResults([])
+      setSearchError(undefined)
+      setIsSearching(false)
+      return
     }
-    setExpandedFolders(newExpanded)
+
+    const query = searchQuery.trim()
+    if (!query) {
+      setSearchResults([])
+      setSearchError(undefined)
+      setIsSearching(false)
+      return
+    }
+
+    setIsSearching(true)
+    setSearchError(undefined)
+
+    const timeoutId = window.setTimeout(async () => {
+      try {
+        const results = await searchNotes(query)
+        if (!isActive) return
+        setSearchResults(results)
+        setSearchError(undefined)
+      } catch (error) {
+        console.error('Failed to search notes', error)
+        if (!isActive) return
+        setSearchError(error instanceof Error ? error.message : 'Unable to search notes')
+      } finally {
+        if (isActive) {
+          setIsSearching(false)
+        }
+      }
+    }, 300)
+
+    return () => {
+      isActive = false
+      window.clearTimeout(timeoutId)
+    }
+  }, [hasSearch, searchQuery])
+
+  const loadFolderNotes = useCallback(
+    async (targetFolderId: string | null) => {
+      const key = folderKey(targetFolderId)
+      const existing = folderNotesData[key]
+      if (existing?.isLoading) return
+
+      setFolderNotesData((prev) => ({
+        ...prev,
+        [key]: {
+          notes: existing?.notes ?? [],
+          isLoading: true,
+          error: undefined,
+        },
+      }))
+
+      try {
+        const fetched =
+          targetFolderId === selectedFolderId ? notes : await getNotesByFolder(targetFolderId)
+
+        setFolderNotesData((prev) => ({
+          ...prev,
+          [key]: {
+            notes: fetched,
+            isLoading: false,
+            error: undefined,
+          },
+        }))
+      } catch (error) {
+        console.error('Failed to load folder notes', error)
+        setFolderNotesData((prev) => ({
+          ...prev,
+          [key]: {
+            notes: existing?.notes ?? [],
+            isLoading: false,
+            error: error instanceof Error ? error.message : 'Unable to load notes',
+          },
+        }))
+      }
+    },
+    [folderNotesData, notes, selectedFolderId]
+  )
+
+  const handleFolderToggle = (targetFolderId: string | null) => {
+    const key = folderKey(targetFolderId)
+    const isExpanded = expandedFolders.has(key)
+    setExpandedFolders((prev) => {
+      const updated = new Set(prev)
+      if (isExpanded) {
+        updated.delete(key)
+      } else {
+        updated.add(key)
+      }
+      return updated
+    })
+
+    if (!isExpanded) {
+      loadFolderNotes(targetFolderId)
+    }
   }
 
+  const getFolderPathKeys = useCallback(
+    (targetId: string): string[] | null => {
+      const traverse = (nodes: FolderNode[]): string[] | null => {
+        for (const node of nodes) {
+          if (node.id === targetId) {
+            return [folderKey(node.id)]
+          }
+          const childPath = traverse(node.children)
+          if (childPath) {
+            return [folderKey(node.id), ...childPath]
+          }
+        }
+        return null
+      }
+
+      return traverse(folders)
+    },
+    [folders]
+  )
+
+  const getFolderPathNames = useCallback(
+    (targetId: string | null): string[] => {
+      if (targetId === null) return ['All Notes']
+
+      const traverse = (nodes: FolderNode[], ancestors: string[]): string[] | null => {
+        for (const node of nodes) {
+          const nextAncestors = [...ancestors, node.name]
+          if (node.id === targetId) {
+            return nextAncestors
+          }
+          const childPath = traverse(node.children, nextAncestors)
+          if (childPath) {
+            return childPath
+          }
+        }
+        return null
+      }
+
+      return traverse(folders, []) ?? []
+    },
+    [folders]
+  )
+
+  const expandToFolder = useCallback(
+    (targetFolderId: string | null) => {
+      if (targetFolderId === null) {
+        setExpandedFolders((prev) => {
+          const updated = new Set(prev)
+          updated.add(ALL_FOLDER_KEY)
+          return updated
+        })
+        loadFolderNotes(null)
+        return
+      }
+
+      const path = getFolderPathKeys(targetFolderId)
+      if (path) {
+        setExpandedFolders((prev) => {
+          const updated = new Set(prev)
+          path.forEach((id) => updated.add(id))
+          return updated
+        })
+      }
+
+      loadFolderNotes(targetFolderId)
+    },
+    [getFolderPathKeys, loadFolderNotes]
+  )
+
+  const displayedFolders = useMemo(() => {
+    if (!hasSearch) return folders
+
+    const traverse = (nodes: FolderNode[]): FolderNode[] => {
+      return nodes.reduce<FolderNode[]>((acc, node) => {
+        const filteredChildren = traverse(node.children)
+        const key = folderKey(node.id)
+        const folderEntry = folderNotesData[key]
+        const folderNotes = folderEntry?.notes ?? []
+        const visibleNotes = folderNotes.filter(matchesNote)
+        const folderMatches = node.name.toLowerCase().includes(normalizedQuery)
+
+        if (folderMatches || filteredChildren.length > 0 || visibleNotes.length > 0) {
+          acc.push({
+            ...node,
+            children: filteredChildren,
+          })
+        }
+
+        return acc
+      }, [])
+    }
+
+    return traverse(folders)
+  }, [folders, folderNotesData, hasSearch, matchesNote, normalizedQuery])
+
+  const folderSearchResults = useMemo(() => {
+    if (!hasSearch) return []
+
+    const results: Array<{ id: string; name: string; path: string[] }> = []
+
+    const traverse = (nodes: FolderNode[], ancestors: string[]) => {
+      nodes.forEach((node) => {
+        const nextPath = [...ancestors, node.name]
+        if (node.name.toLowerCase().includes(normalizedQuery)) {
+          results.push({ id: node.id, name: node.name, path: nextPath })
+        }
+        traverse(node.children, nextPath)
+      })
+    }
+
+    traverse(folders, [])
+    return results
+  }, [folders, hasSearch, normalizedQuery])
+
+  useEffect(() => {
+    if ((expandedFolders.has(ALL_FOLDER_KEY) || hasSearch) && !folderNotesData[ALL_FOLDER_KEY]) {
+      loadFolderNotes(null)
+    }
+  }, [expandedFolders, folderNotesData, hasSearch, loadFolderNotes])
+
+  useEffect(() => {
+    if (!selectedFolderId) return
+    const path = getFolderPathKeys(selectedFolderId)
+    if (path) {
+      setExpandedFolders((prev) => {
+        const updated = new Set(prev)
+        path.forEach((id) => updated.add(id))
+        return updated
+      })
+    }
+  }, [getFolderPathKeys, selectedFolderId])
+
   const renderFolder = (folder: FolderNode, level: number = 0) => {
-    const isExpanded = expandedFolders.has(folder.id)
+    const key = folderKey(folder.id)
+    const isExpanded = hasSearch ? true : expandedFolders.has(key)
     const isSelected = selectedFolderId === folder.id
     const hasChildren = folder.children.length > 0
-    
-    // Get notes for this folder (only when selected)
-    const folderNotes = isSelected ? notes : []
-    const noteCount = isSelected ? folderNotes.length : 0
+    const folderEntry = folderNotesData[key]
+    const folderNotes = folderEntry?.notes ?? []
+    const visibleNotes = hasSearch ? folderNotes.filter(matchesNote) : folderNotes
+    const noteCount = visibleNotes.length
+    const isLoadingFolder = folderEntry?.isLoading ?? (isExpanded && !folderEntry)
+    const folderError = folderEntry?.error
 
     return (
       <div key={folder.id}>
         <div className="space-y-0.5">
           {/* Folder Header */}
           <div
-            className={`flex items-center gap-1.5 px-2 py-1.5 cursor-pointer rounded-md transition-colors ${
+            role="button"
+            tabIndex={0}
+            onClick={() => handleFolderToggle(folder.id)}
+            onKeyDown={(event) => {
+              if (event.key === 'Enter' || event.key === ' ') {
+                event.preventDefault()
+                handleFolderToggle(folder.id)
+              }
+            }}
+            className={`flex items-center gap-1.5 px-2 py-1.5 rounded-md transition-colors focus:outline-none focus:ring-2 focus:ring-offset-1 focus:ring-blue-500 ${
               isSelected ? 'bg-blue-50 text-blue-700 font-medium' : 'hover:bg-gray-50 text-gray-700'
             }`}
             style={{ paddingLeft: `${level * 12 + 8}px` }}
-            onClick={() => {
-              // Clicking folder selects it and auto-expands to show notes
-              onSelectFolder(folder.id)
-              if (!isExpanded) {
-                toggleFolder(folder.id)
-              }
-            }}
           >
-            {/* Expand/Collapse chevron */}
-            {(hasChildren || isSelected) && (
-              <button
-                onClick={(e) => {
-                  e.stopPropagation()
-                  toggleFolder(folder.id)
-                }}
-                className="p-0.5 hover:bg-white/50 rounded flex-shrink-0"
-                aria-label={isExpanded ? 'Collapse' : 'Expand'}
-              >
-                <ChevronRight
-                  size={14}
-                  className={`transition-transform ${isExpanded ? 'rotate-90' : ''}`}
-                />
-              </button>
-            )}
-            {!hasChildren && !isSelected && <div className="w-5 flex-shrink-0" />}
-            
-            {/* Folder icon and name */}
+            <ChevronRight
+              size={14}
+              className={`flex-shrink-0 transition-transform ${isExpanded ? 'rotate-90' : ''}`}
+            />
             <FolderTreeIcon size={14} className="flex-shrink-0" />
             <span className="text-sm truncate flex-1">{folder.name}</span>
-            
-            {/* Note count badge */}
-            {noteCount > 0 && (
+            {isLoadingFolder && <span className="text-xs text-gray-400">Loading...</span>}
+            {noteCount > 0 && !isLoadingFolder && (
               <span className="text-xs bg-blue-100 text-blue-700 px-1.5 py-0.5 rounded-full font-semibold flex-shrink-0">
                 {noteCount}
               </span>
@@ -195,14 +444,20 @@ export default function UnifiedPanel({
           </div>
 
           {/* Notes in this folder (shown when folder is selected and expanded) */}
-          {isSelected && isExpanded && (
+          {isExpanded && (
             <div className="ml-6 space-y-0.5 border-l border-blue-200 pl-2">
-              {isLoadingNotes ? (
+              {isLoadingFolder ? (
                 <div className="text-xs text-gray-500 py-1.5 px-2">Loading notes...</div>
-              ) : folderNotes.length === 0 ? (
-                <div className="text-xs text-gray-400 italic py-1.5 px-2">No notes in this folder</div>
+              ) : folderError ? (
+                <div className="text-xs text-red-500 py-1.5 px-2">
+                  {folderError}
+                </div>
+              ) : visibleNotes.length === 0 ? (
+                <div className="text-xs text-gray-400 italic py-1.5 px-2">
+                  {hasSearch ? 'No matching notes in this folder' : 'No notes in this folder'}
+                </div>
               ) : (
-                folderNotes.map((n) => (
+                visibleNotes.map((n) => (
                   <button
                     key={n.id}
                     onClick={() => {
@@ -235,6 +490,14 @@ export default function UnifiedPanel({
       </div>
     )
   }
+
+  const allNotesEntry = folderNotesData[ALL_FOLDER_KEY]
+  const isAllExpanded = expandedFolders.has(ALL_FOLDER_KEY)
+  const shouldShowAllNotes = hasSearch || isAllExpanded
+  const isAllLoading = allNotesEntry?.isLoading ?? (shouldShowAllNotes && !allNotesEntry)
+  const allNotes = allNotesEntry?.notes ?? []
+  const displayedAllNotes = hasSearch ? allNotes.filter(matchesNote) : allNotes
+  const allError = allNotesEntry?.error
 
   return (
     <>
@@ -399,37 +662,170 @@ export default function UnifiedPanel({
                   </div>
                 </div>
 
+                {/* Search */}
+                <div className="border-t border-gray-200 pt-2.5">
+                  <div className="text-xs font-semibold text-gray-500 uppercase tracking-wide px-2 mb-1.5">
+                    Search
+                  </div>
+                  <div className="relative">
+                    <Search size={14} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-gray-400" />
+                    <input
+                      type="text"
+                      value={searchQuery}
+                      onChange={(event) => setSearchQuery(event.target.value)}
+                      placeholder="Search notes and folders..."
+                      className="w-full pl-8 pr-8 py-1.5 text-sm border border-gray-200 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                    />
+                    {searchQuery && (
+                      <button
+                        onClick={() => setSearchQuery('')}
+                        className="absolute right-2 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
+                        aria-label="Clear search"
+                      >
+                        <X size={14} />
+                      </button>
+                    )}
+                  </div>
+
+                  {hasSearch && (
+                    <div className="mt-2 space-y-3">
+                      <div>
+                        <div className="text-xs font-semibold text-gray-500 uppercase tracking-wide px-1 mb-1">Notes</div>
+                        {isSearching ? (
+                          <div className="text-xs text-gray-500 flex items-center gap-1.5 px-2 py-1.5">
+                            <Loader2 size={14} className="animate-spin" />
+                            Searching notes...
+                          </div>
+                        ) : searchError ? (
+                          <div className="text-xs text-red-500 px-2 py-1.5">{searchError}</div>
+                        ) : searchResults.length === 0 ? (
+                          <div className="text-xs text-gray-400 italic px-2 py-1.5">No matching notes</div>
+                        ) : (
+                          <div className="space-y-1">
+                            {searchResults.slice(0, 15).map((result) => {
+                              const pathNames = getFolderPathNames(result.folder_id)
+                              const pathLabel = pathNames.length > 0 ? pathNames.join(' / ') : 'Unknown folder'
+                              const noteIcon =
+                                result.note_type === 'drawing' ? (
+                                  <PenTool size={14} className="text-purple-500" />
+                                ) : result.note_type === 'mindmap' ? (
+                                  <Network size={14} className="text-green-500" />
+                                ) : (
+                                  <FileText size={14} className="text-blue-600" />
+                                )
+
+                              return (
+                                <button
+                                  key={result.id}
+                                  onClick={() => {
+                                    expandToFolder(result.folder_id)
+                                    onSelectNote(result)
+                                    setIsOpen(false)
+                                  }}
+                                  className="w-full text-left px-2.5 py-1.5 rounded-md hover:bg-blue-50 transition-colors"
+                                >
+                                  <div className="flex items-start gap-2">
+                                    {noteIcon}
+                                    <div className="flex-1 min-w-0">
+                                      <div className="text-sm font-medium text-gray-800 truncate">
+                                        {result.title || 'Untitled note'}
+                                      </div>
+                                      <div className="text-[11px] text-gray-500 truncate">
+                                        {pathLabel || 'No folder'}
+                                      </div>
+                                    </div>
+                                    <span className="text-[10px] text-gray-400 flex-shrink-0">
+                                      {new Date(result.updated_at).toLocaleDateString()}
+                                    </span>
+                                  </div>
+                                </button>
+                              )
+                            })}
+                          </div>
+                        )}
+                      </div>
+
+                      <div>
+                        <div className="text-xs font-semibold text-gray-500 uppercase tracking-wide px-1 mb-1">Folders</div>
+                        {folderSearchResults.length === 0 ? (
+                          <div className="text-xs text-gray-400 italic px-2 py-1.5">No matching folders</div>
+                        ) : (
+                          <div className="space-y-1">
+                            {folderSearchResults.slice(0, 15).map((folderResult) => (
+                              <button
+                                key={folderResult.id}
+                                onClick={() => expandToFolder(folderResult.id)}
+                                className="w-full text-left px-2.5 py-1.5 rounded-md hover:bg-gray-100 transition-colors flex items-start gap-2"
+                              >
+                                <FolderTreeIcon size={14} className="text-amber-500 flex-shrink-0" />
+                                <div className="flex-1 min-w-0">
+                                  <div className="text-sm text-gray-800 truncate">{folderResult.name}</div>
+                                  <div className="text-[11px] text-gray-500 truncate">
+                                    {folderResult.path.join(' / ')}
+                                  </div>
+                                </div>
+                              </button>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  )}
+                </div>
+
                 {/* All Notes Folder */}
                 <div className="border-t border-gray-200 pt-2.5">
                   <div className="text-xs font-semibold text-gray-500 uppercase tracking-wide px-2 mb-1.5">
                     Your Notes
                   </div>
-                  <button
-                    onClick={() => {
-                      onSelectFolder(null)
+                  <div
+                    role="button"
+                    tabIndex={0}
+                    onClick={() => handleFolderToggle(null)}
+                    onKeyDown={(event) => {
+                      if (event.key === 'Enter' || event.key === ' ') {
+                        event.preventDefault()
+                        handleFolderToggle(null)
+                      }
                     }}
-                    className={`w-full text-left px-2 py-1.5 rounded-md mb-1.5 text-sm font-medium transition-colors flex items-center gap-2 ${
+                    className={`w-full text-left px-2 py-1.5 rounded-md mb-1.5 text-sm font-medium transition-colors flex items-center gap-2 focus:outline-none focus:ring-2 focus:ring-offset-1 focus:ring-blue-500 ${
                       selectedFolderId === null ? 'bg-blue-50 text-blue-700' : 'hover:bg-gray-50 text-gray-700'
                     }`}
                   >
+                    <ChevronRight
+                      size={15}
+                      className={`flex-shrink-0 transition-transform ${
+                        shouldShowAllNotes ? 'rotate-90' : ''
+                      }`}
+                    />
                     <FolderTreeIcon size={16} />
                     <span className="flex-1">All Notes</span>
-                    {selectedFolderId === null && notes.length > 0 && (
+                    {isAllLoading && (
+                      <span className="text-xs text-gray-400">Loading...</span>
+                    )}
+                    {displayedAllNotes.length > 0 && !isAllLoading && (
                       <span className="text-xs bg-blue-100 text-blue-700 px-1.5 py-0.5 rounded-full font-semibold">
-                        {notes.length}
+                        {displayedAllNotes.length}
                       </span>
                     )}
-                  </button>
+                  </div>
 
-                  {/* Show notes when All Notes is selected */}
-                  {selectedFolderId === null && (
+                  {shouldShowAllNotes && (
                     <div className="ml-4 space-y-0.5 border-l border-blue-200 pl-2 mb-2">
-                      {isLoadingNotes ? (
+                      {!allNotesEntry ? (
                         <div className="text-xs text-gray-500 py-1.5 px-2">Loading notes...</div>
-                      ) : notes.length === 0 ? (
-                        <div className="text-xs text-gray-400 italic py-1.5 px-2">No notes yet</div>
+                      ) : isAllLoading ? (
+                        <div className="text-xs text-gray-500 py-1.5 px-2">Loading notes...</div>
+                      ) : allError ? (
+                        <div className="text-xs text-red-500 py-1.5 px-2">
+                          {allError}
+                        </div>
+                      ) : displayedAllNotes.length === 0 ? (
+                        <div className="text-xs text-gray-400 italic py-1.5 px-2">
+                          {hasSearch ? 'No matching notes found' : 'No notes yet'}
+                        </div>
                       ) : (
-                        notes.map((n) => (
+                        displayedAllNotes.map((n) => (
                           <button
                             key={n.id}
                             onClick={() => {
@@ -461,9 +857,13 @@ export default function UnifiedPanel({
                   {folders.length === 0 ? (
                     <div className="text-xs text-gray-400 italic py-1.5 px-2">No folders yet</div>
                   ) : (
-                    <div className="space-y-0.5">
-                      {folders.map((folder) => renderFolder(folder))}
-                    </div>
+                    hasSearch && displayedFolders.length === 0 ? (
+                      <div className="text-xs text-gray-400 italic py-1.5 px-2">No matching folders</div>
+                    ) : (
+                      <div className="space-y-0.5">
+                        {displayedFolders.map((folder) => renderFolder(folder))}
+                      </div>
+                    )
                   )}
                   <button
                     onClick={() => onCreateFolder(null)}
