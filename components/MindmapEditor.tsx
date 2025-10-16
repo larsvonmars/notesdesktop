@@ -400,7 +400,9 @@ const MindmapEditor = forwardRef<MindmapEditorHandle, MindmapEditorProps>(
           return
         }
 
-  const devicePixelRatio = typeof window !== 'undefined' ? window.devicePixelRatio || 1 : 1
+  const devicePixelRatio = typeof window !== 'undefined' && typeof window.devicePixelRatio === 'number' 
+        ? window.devicePixelRatio 
+        : 1
         const requiredWidth = Math.max(1, Math.round(styleWidth * devicePixelRatio))
         const requiredHeight = Math.max(1, Math.round(styleHeight * devicePixelRatio))
 
@@ -1328,7 +1330,12 @@ const MindmapEditor = forwardRef<MindmapEditorHandle, MindmapEditorProps>(
           onContextMenu={(e) => e.preventDefault()}
           onWheel={handleWheel}
           className="w-full h-full cursor-move touch-none"
-          style={{ cursor: draggingNodeId ? 'grabbing' : isPanning ? 'grabbing' : 'default', touchAction: 'none' }}
+          style={{ 
+            cursor: draggingNodeId ? 'grabbing' : isPanning ? 'grabbing' : 'default', 
+            touchAction: 'none',
+            WebkitUserSelect: 'none',
+            userSelect: 'none'
+          }}
         />
 
         {breadcrumbPath.length > 0 && (

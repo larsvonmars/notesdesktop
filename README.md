@@ -48,6 +48,16 @@ npm run tauri:dev
 
 This will start both the Next.js dev server and the Tauri application.
 
+### WebView Compatibility Check
+
+To verify WebView compatibility:
+
+```bash
+npm run check:webview
+```
+
+This checks for common WebView compatibility issues. See [WEBVIEW_COMPATIBILITY.md](./WEBVIEW_COMPATIBILITY.md) for detailed information about WebView support.
+
 ## Build
 
 Build the application for production:
@@ -75,6 +85,7 @@ The built application will be available in `src-tauri/target/release/bundle/`.
 - ✅ **Note sorting** (by updated date, created date, or title)
 - ✅ **Delete confirmations** with safety warnings
 - ✅ **Real-time synchronization** with Supabase
+- ✅ **100% WebView and Tauri compatible** - All editors work seamlessly across platforms
 
 ## Project Structure
 
@@ -101,6 +112,7 @@ The built application will be available in `src-tauri/target/release/bundle/`.
 - [Folder and Notes Management Guide](./FOLDER_AND_NOTES_MANAGEMENT.md) - Complete guide to all folder and note management features
 - [Project Summary](./PROJECT_SUMMARY.md) - Overview of the entire project
 - [Database Schema](./DATABASE_SCHEMA.md) - Database structure and relationships
+- [WebView Compatibility Guide](./WEBVIEW_COMPATIBILITY.md) - Information about WebView and Tauri compatibility
 
 ## Keyboard Shortcuts
 
