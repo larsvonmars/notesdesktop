@@ -579,9 +579,11 @@ const RichTextEditor = forwardRef<RichTextEditorHandle, RichTextEditorProps>(
 
         applyBlockFormat(`h${level}` as 'h1' | 'h2' | 'h3', editorRef.current)
         
-        // Generate ID for the heading for TOC links
+        // Generate ID for the heading for TOC links and normalize
+        // Use setTimeout to allow DOM to settle after block format change
         setTimeout(() => {
           if (!editorRef.current) return
+          
           const headings = editorRef.current.querySelectorAll('h1, h2, h3')
           headings.forEach((heading) => {
             if (!heading.id) {
@@ -590,9 +592,10 @@ const RichTextEditor = forwardRef<RichTextEditorHandle, RichTextEditorProps>(
             }
           })
           
-          // Normalize after
+          // Normalize content to ensure consistent DOM structure
           normalizeEditorContent(editorRef.current!)
           
+          // Emit change to notify parent component
           emitChange()
         }, 0)
       },
