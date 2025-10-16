@@ -4,9 +4,7 @@ import { useAuth } from '@/lib/auth-context'
 import { useRouter } from 'next/navigation'
 import { useEffect, useState } from 'react'
 import NoteEditor, { Note } from '@/components/NoteEditor'
-import NotesList from '@/components/NotesList'
-import FolderTree from '@/components/FolderTree'
-import { LogOut, Loader2, FileEdit, Sparkles, FolderTree as FolderTreeIcon, FileText } from 'lucide-react'
+import { Loader2, FileEdit, Sparkles } from 'lucide-react'
 import {
   getNotesByFolder,
   createNote,
@@ -37,8 +35,6 @@ export default function Dashboard() {
   const [isLoadingFolders, setIsLoadingFolders] = useState(true)
   const [isCreatingNew, setIsCreatingNew] = useState(false)
   const [newNoteType, setNewNoteType] = useState<'rich-text' | 'drawing' | 'mindmap'>('rich-text')
-  const [showFoldersPanel, setShowFoldersPanel] = useState(true)
-  const [showNotesPanel, setShowNotesPanel] = useState(true)
 
   useEffect(() => {
     if (!loading && !user) {
@@ -212,7 +208,7 @@ export default function Dashboard() {
 
   if (loading) {
     return (
-      <div className="flex items-center justify-center min-h-screen bg-gradient-to-br from-gray-50 to-gray-100">
+      <div className="flex items-center justify-center min-h-screen bg-white">
         <div className="text-center">
           <Loader2 className="w-12 h-12 text-blue-600 animate-spin mx-auto mb-4" />
           <div className="text-lg text-gray-700 font-medium">Loading your workspace...</div>
@@ -226,148 +222,58 @@ export default function Dashboard() {
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-gray-50 to-gray-100 flex flex-col">
-      <nav className="bg-white border-b border-gray-200 shadow-sm">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="flex justify-between h-16 items-center">
-            <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:gap-3">
-              <div className="flex items-center gap-2">
-                <Sparkles className="w-6 h-6 text-blue-600" />
-                <h1 className="text-xl font-bold bg-gradient-to-r from-gray-800 to-gray-600 bg-clip-text text-transparent">
-                  Notes Desktop
-                </h1>
+    <div className="min-h-screen bg-white flex flex-col">
+      {/* Main content area - completely clean */}
+      <main className="flex-1 w-full h-screen overflow-hidden">
+        {selectedNote || isCreatingNew ? (
+          <NoteEditor
+            note={isCreatingNew ? null : selectedNote}
+            initialNoteType={newNoteType}
+            onSave={handleSaveNote}
+            onCancel={handleCancel}
+            onDelete={selectedNote ? handleDeleteNote : undefined}
+            folders={folderTree}
+            selectedFolderId={selectedFolderId}
+            onSelectFolder={handleSelectFolder}
+            onCreateFolder={handleCreateFolder}
+            onRenameFolder={handleRenameFolder}
+            onDeleteFolder={handleDeleteFolder}
+            notes={notes}
+            onSelectNote={handleSelectNote}
+            onNewNote={handleNewNote}
+            isLoadingNotes={isLoadingNotes}
+            currentFolderName={getCurrentFolderName()}
+            onSignOut={handleSignOut}
+            userEmail={user.email}
+          />
+        ) : (
+          <div className="flex items-center justify-center h-full">
+            <div className="text-center p-8 max-w-md">
+              <div className="relative mb-8">
+                <div className="absolute inset-0 bg-blue-100 rounded-full blur-3xl opacity-40"></div>
+                <FileEdit className="relative w-24 h-24 text-blue-500 mx-auto" strokeWidth={1.5} />
               </div>
-              <div className="flex items-center gap-2">
+              <h1 className="text-3xl font-bold text-gray-900 mb-3">
+                Welcome to Notes Desktop
+              </h1>
+              <p className="text-lg text-gray-600 mb-8">
+                A distraction-free writing space designed for your thoughts
+              </p>
+              <div className="space-y-3">
                 <button
-                  type="button"
-                  onClick={() => setShowFoldersPanel((prev) => !prev)}
-                  aria-pressed={showFoldersPanel}
-                  aria-label={showFoldersPanel ? 'Hide folders panel' : 'Show folders panel'}
-                  title={showFoldersPanel ? 'Hide folders panel' : 'Show folders panel'}
-                  className={`inline-flex items-center gap-2 rounded-lg border px-3 py-1.5 text-xs font-semibold transition-all duration-150 shadow-sm ${
-                    showFoldersPanel
-                      ? 'border-blue-200 bg-blue-50 text-blue-700 hover:border-blue-300 hover:bg-blue-100'
-                      : 'border-gray-200 bg-white text-gray-600 hover:border-gray-300 hover:bg-gray-100'
-                  }`}
+                  onClick={() => handleNewNote('rich-text')}
+                  className="w-full inline-flex items-center justify-center gap-3 px-6 py-3 bg-blue-600 text-white font-medium rounded-lg hover:bg-blue-700 transition-all duration-150 shadow-sm hover:shadow active:scale-95"
                 >
-                  <FolderTreeIcon size={16} />
-                  
+                  <Sparkles size={20} />
+                  Start Writing
                 </button>
-                <button
-                  type="button"
-                  onClick={() => setShowNotesPanel((prev) => !prev)}
-                  aria-pressed={showNotesPanel}
-                  aria-label={showNotesPanel ? 'Hide notes panel' : 'Show notes panel'}
-                  title={showNotesPanel ? 'Hide notes panel' : 'Show notes panel'}
-                  className={`inline-flex items-center gap-2 rounded-lg border px-3 py-1.5 text-xs font-semibold transition-all duration-150 shadow-sm ${
-                    showNotesPanel
-                      ? 'border-blue-200 bg-blue-50 text-blue-700 hover:border-blue-300 hover:bg-blue-100'
-                      : 'border-gray-200 bg-white text-gray-600 hover:border-gray-300 hover:bg-gray-100'
-                  }`}
-                >
-                  <FileText size={16} />
-                  
-                </button>
+                <p className="text-sm text-gray-500">
+                  Click the menu button (top-left) to browse your notes
+                </p>
               </div>
-            </div>
-            <div className="flex items-center gap-4">
-              <span className="text-sm text-gray-600 font-medium">{user.email}</span>
-              <button
-                onClick={handleSignOut}
-                className="inline-flex items-center gap-2 bg-red-600 text-white px-4 py-2 rounded-lg hover:bg-red-700 transition-all duration-150 shadow-sm hover:shadow active:scale-95"
-              >
-                <LogOut size={16} />
-                <span className="hidden sm:inline">Sign Out</span>
-              </button>
             </div>
           </div>
-        </div>
-      </nav>
-
-      <main className="flex-1 max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 w-full">
-  <div className="flex flex-col lg:flex-row gap-6 min-h-[calc(100vh-12rem)]">
-          {/* Folder Tree - Left sidebar */}
-          {showFoldersPanel && (
-            <div className="w-full lg:w-72 flex-shrink-0 h-full overflow-hidden">
-              <div className="bg-white rounded-xl border border-gray-200 shadow-sm p-4 h-full overflow-y-auto">
-                <div className="flex items-center justify-between mb-4">
-                  <div className="flex items-center gap-2">
-                    <span className="w-1 h-5 bg-blue-600 rounded-full"></span>
-                    <h2 className="text-base font-semibold text-gray-800">Folders</h2>
-                  </div>
-                </div>
-                <FolderTree
-                  folders={folderTree}
-                  selectedFolderId={selectedFolderId}
-                  onSelectFolder={handleSelectFolder}
-                  onCreateFolder={handleCreateFolder}
-                  onRenameFolder={handleRenameFolder}
-                  onDeleteFolder={handleDeleteFolder}
-                />
-              </div>
-            </div>
-          )}
-
-          {/* Notes List - Middle sidebar */}
-          {showNotesPanel && (
-            <div className="w-full lg:w-80 flex-shrink-0 h-full">
-              <NotesList
-                notes={notes}
-                selectedNoteId={selectedNote?.id}
-                onSelectNote={handleSelectNote}
-                onNewNote={handleNewNote}
-                isLoading={isLoadingNotes}
-                currentFolderName={getCurrentFolderName()}
-              />
-            </div>
-          )}
-
-          {/* Note Editor - Main area (Full screen when note is selected) */}
-          <div className={`${(selectedNote || isCreatingNew) ? 'fixed inset-0 z-30' : 'flex-1 h-full min-w-0'}`}>
-            {selectedNote || isCreatingNew ? (
-              <NoteEditor
-                note={isCreatingNew ? null : selectedNote}
-                initialNoteType={newNoteType}
-                onSave={handleSaveNote}
-                onCancel={handleCancel}
-                onDelete={selectedNote ? handleDeleteNote : undefined}
-                folders={folderTree}
-                selectedFolderId={selectedFolderId}
-                onSelectFolder={handleSelectFolder}
-                onCreateFolder={handleCreateFolder}
-                onRenameFolder={handleRenameFolder}
-                onDeleteFolder={handleDeleteFolder}
-                notes={notes}
-                onSelectNote={handleSelectNote}
-                onNewNote={handleNewNote}
-                isLoadingNotes={isLoadingNotes}
-                currentFolderName={getCurrentFolderName()}
-              />
-            ) : (
-              <div className="flex items-center justify-center h-full bg-white rounded-xl border border-gray-200 shadow-sm">
-                <div className="text-center p-8">
-                  <div className="relative mb-6">
-                    <div className="absolute inset-0 bg-blue-100 rounded-full blur-2xl opacity-30"></div>
-                    <FileEdit className="relative w-20 h-20 text-gray-300 mx-auto" strokeWidth={1.5} />
-                  </div>
-                  <h3 className="text-xl font-semibold text-gray-700 mb-2">
-                    Select a note to edit
-                  </h3>
-                  <p className="text-gray-500 mb-6 max-w-sm">
-                    Choose a note from the list or create a new one to get started
-                  </p>
-                  <button
-                    onClick={() => handleNewNote('rich-text')}
-                    className="inline-flex items-center gap-2 px-5 py-2.5 bg-blue-600 text-white font-medium rounded-lg hover:bg-blue-700 transition-all duration-150 shadow-sm hover:shadow active:scale-95"
-                  >
-                    <Sparkles size={18} />
-                    Create New Note
-                  </button>
-                </div>
-              </div>
-            )}
-          </div>
-        </div>
+        )}
       </main>
     </div>
   )

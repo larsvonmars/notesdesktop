@@ -82,6 +82,8 @@ interface NoteEditorWithPanelProps extends NoteEditorProps {
   onNewNote?: () => void
   isLoadingNotes?: boolean
   currentFolderName?: string
+  userEmail?: string
+  onSignOut?: () => void
 }
 
 export default function NoteEditor({ 
@@ -101,6 +103,8 @@ export default function NoteEditor({
   onNewNote = () => {},
   isLoadingNotes = false,
   currentFolderName,
+  userEmail,
+  onSignOut,
 }: NoteEditorWithPanelProps) {
   const [title, setTitle] = useState('')
   const [content, setContent] = useState('')
@@ -614,13 +618,15 @@ export default function NoteEditor({
         isLoadingNotes={isLoadingNotes}
         currentFolderName={currentFolderName}
         stats={stats}
+        userEmail={userEmail}
+        onSignOut={onSignOut}
       />
 
       {/* Clean Editor Area */}
-      <div className="flex flex-col h-screen bg-gradient-to-br from-gray-50 to-gray-100 pl-20">
+      <div className="flex flex-col h-screen bg-white pl-20">
         <div className="flex-1 p-6 overflow-hidden">
           <div className="max-w-4xl mx-auto h-full">
-            <div className="relative rounded-xl border border-gray-200 bg-white shadow-lg h-full overflow-hidden flex flex-col">
+            <div className="relative rounded-xl border border-gray-200 bg-white shadow-sm h-full overflow-hidden flex flex-col">
               {noteType === 'drawing' ? (
                 <DrawingEditor
                   ref={drawingEditorRef}

@@ -14,6 +14,8 @@ import {
   ChevronRight,
   PenTool,
   Network,
+  LogOut,
+  User,
 } from 'lucide-react'
 import { Note } from './NoteEditor'
 import { FolderNode } from '@/lib/folders'
@@ -57,6 +59,10 @@ interface UnifiedPanelProps {
 
   // Stats
   stats: { characters: number; words: number }
+  
+  // User info
+  userEmail?: string
+  onSignOut?: () => void
 }
 
 export default function UnifiedPanel({
@@ -87,11 +93,26 @@ export default function UnifiedPanel({
   isLoadingNotes,
   currentFolderName,
   stats,
+  userEmail,
+  onSignOut,
 }: UnifiedPanelProps) {
   const [isOpen, setIsOpen] = useState(false)
   const [activeTab, setActiveTab] = useState<'browse' | 'toc'>('browse')
   const [expandedFolders, setExpandedFolders] = useState<Set<string>>(new Set())
   const panelRef = useRef<HTMLDivElement>(null)
+
+  // Keyboard shortcut to toggle panel (Cmd/Ctrl + \)
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if ((e.metaKey || e.ctrlKey) && e.key === '\\') {
+        e.preventDefault()
+        setIsOpen(prev => !prev)
+      }
+    }
+
+    window.addEventListener('keydown', handleKeyDown)
+    return () => window.removeEventListener('keydown', handleKeyDown)
+  }, [])
 
   // Close on click outside
   useEffect(() => {
@@ -246,7 +267,8 @@ export default function UnifiedPanel({
       <button
         onClick={() => setIsOpen(!isOpen)}
         className="fixed top-4 left-4 z-50 p-3 bg-white border-2 border-gray-200 rounded-full shadow-lg hover:shadow-xl hover:scale-105 transition-all duration-200"
-        aria-label="Toggle menu"
+        aria-label={isOpen ? 'Close menu' : 'Open menu (⌘\\)'}
+        title={isOpen ? 'Close menu' : 'Open menu (⌘\\)'}
       >
         {isOpen ? <X size={20} /> : <Menu size={20} />}
       </button>
@@ -257,6 +279,26 @@ export default function UnifiedPanel({
           ref={panelRef}
           className="fixed top-20 left-4 z-40 w-80 max-h-[calc(100vh-6rem)] bg-white rounded-xl shadow-2xl border border-gray-200 flex flex-col overflow-hidden"
         >
+          {/* User Info & Sign Out */}
+          {userEmail && onSignOut && (
+            <div className="p-3 border-b border-gray-200 bg-gray-50">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2 text-sm text-gray-700 truncate flex-1">
+                  <User size={14} className="text-gray-500 flex-shrink-0" />
+                  <span className="truncate">{userEmail}</span>
+                </div>
+                <button
+                  onClick={onSignOut}
+                  className="ml-2 inline-flex items-center gap-1.5 px-2.5 py-1.5 text-xs font-medium text-red-600 hover:bg-red-50 rounded-md transition-colors"
+                  title="Sign Out"
+                >
+                  <LogOut size={14} />
+                  Sign Out
+                </button>
+              </div>
+            </div>
+          )}
+
           {/* Title & Actions */}
           <div className="p-4 border-b border-gray-200 bg-gradient-to-br from-gray-50 to-white">
             <input
