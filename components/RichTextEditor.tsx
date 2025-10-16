@@ -1,0 +1,1715 @@
+'use client'
+
+import {
+  forwardRef,
+  useCallback,
+  useEffect,
+  useImperativeHandle,
+  useRef,
+  useState
+} from 'react'
+import type {
+  ClipboardEvent as ReactClipboardEvent,
+  KeyboardEvent as ReactKeyboardEvent
+} from 'react'
+import DOMPurify, { Config } from 'dompurify'
+import { marked } from 'marked'
+import { X, Search, Link as LinkIcon, Type, List, CheckSquare, Quote, Code, Minus } from 'lucide-react'
+
+export type RichTextCommand =
+  | 'bold'
+  | 'italic'
+  | 'underline'
+  | 'strike'
+  | 'code'
+  | 'unordered-list'
+  | 'ordered-list'
+  | 'blockquote'
+  | 'checklist'
+  | 'heading1'
+  | 'heading2'
+  | 'heading3'
+  | 'undo'
+  | 'redo'
+  | 'link'
+  | 'horizontal-rule'
+
+export interface RichTextEditorHandle {
+  focus: () => void
+  exec: (command: RichTextCommand) => void
+  getHTML: () => string
+  getHeadings: () => Array<{ id: string; level: number; text: string }>
+  queryCommandState: (command: string) => boolean
+  showLinkDialog: () => void
+  showSearchDialog: () => void
+  getRootElement: () => HTMLDivElement | null
+  scrollToHeading: (headingId: string) => void
+}
+
+interface RichTextEditorProps {
+  value: string
+  onChange: (html: string) => void
+  disabled?: boolean
+  placeholder?: string
+}
+
+const SANITIZE_CONFIG: Config = {
+  ALLOWED_TAGS: [
+    'a',
+    'b',
+    'strong',
+    'i',
+    'em',
+    'u',
+    's',
+    'code',
+    'pre',
+    'p',
+    'br',
+    'div',
+    'span',
+    'blockquote',
+    'ul',
+    'ol',
+    'li',
+    'hr',
+    'input',
+    'h1',
+    'h2',
+    'h3',
+    'mark'
+  ],
+  ALLOWED_ATTR: ['href', 'target', 'rel', 'class', 'type', 'checked', 'data-checked', 'id'],
+  ALLOW_DATA_ATTR: true
+}
+
+interface SlashCommand {
+  id: string
+  label: string
+  icon: React.ReactNode
+  command: RichTextCommand | (() => void)
+  description: string
+}
+
+interface SearchMatch {
+  index: number
+  length: number
+  text: string
+}
+
+const RichTextEditor = forwardRef<RichTextEditorHandle, RichTextEditorProps>(
+  ({ value, onChange, disabled, placeholder }, ref) => {
+    const editorRef = useRef<HTMLDivElement | null>(null)
+    const slashMenuRef = useRef<HTMLDivElement | null>(null)
+    const [showSlashMenu, setShowSlashMenu] = useState(false)
+    const [slashMenuPosition, setSlashMenuPosition] = useState({ top: 0, left: 0 })
+    const [slashMenuFilter, setSlashMenuFilter] = useState('')
+    const [selectedCommandIndex, setSelectedCommandIndex] = useState(0)
+    const [showLinkDialog, setShowLinkDialog] = useState(false)
+    const [linkUrl, setLinkUrl] = useState('')
+    const [linkText, setLinkText] = useState('')
+    const [showSearchDialog, setShowSearchDialog] = useState(false)
+    const [searchQuery, setSearchQuery] = useState('')
+    const [replaceQuery, setReplaceQuery] = useState('')
+    const [searchMatches, setSearchMatches] = useState<SearchMatch[]>([])
+    const [currentMatchIndex, setCurrentMatchIndex] = useState(0)
+    const [caseSensitive, setCaseSensitive] = useState(false)
+    const savedSelectionRef = useRef<Range | null>(null)
+    const slashPositionRef = useRef<{ container: Node; offset: number } | null>(null)
+
+    const sanitize = useCallback(
+      (html: string) => DOMPurify.sanitize(html, SANITIZE_CONFIG) as string,
+      []
+    )
+
+    // Configure marked for our editor
+    useEffect(() => {
+      marked.setOptions({
+        gfm: true, // GitHub Flavored Markdown
+        breaks: true, // Convert \n to <br>
+      })
+    }, [])
+
+    // Detect if text looks like markdown
+    const looksLikeMarkdown = useCallback((text: string): boolean => {
+      const markdownPatterns = [
+        /^#{1,6}\s/m, // Headers
+        /^\* |\*\*|__/, // Bold/italic
+        /^\- |\+ |\* /m, // Lists
+        /^\d+\. /m, // Numbered lists
+        /^\[.+\]\(.+\)/, // Links
+        /^```/m, // Code blocks
+        /^> /m, // Blockquotes
+        /^\[[ x]\]/m, // Checkboxes
+        /!\[.+\]\(.+\)/, // Images
+      ]
+      
+      return markdownPatterns.some(pattern => pattern.test(text))
+    }, [])
+
+    // Convert markdown to HTML
+    const markdownToHtml = useCallback(async (markdown: string): Promise<string> => {
+      try {
+        let html = await marked.parse(markdown)
+        
+        // Convert GFM task lists to our checklist format
+        html = html.replace(
+          /<li>\s*<input[^>]*type="checkbox"[^>]*(?:checked)?[^>]*>\s*([^<]*(?:<[^\/].*?<\/[^>]+>)*[^<]*)<\/li>/gi,
+          (match, content) => {
+            const isChecked = /checked/i.test(match)
+            return `<li class="checklist-item" data-checklist="true"><input type="checkbox" class="checklist-checkbox align-middle mr-2" data-checked="${isChecked}"${isChecked ? ' checked' : ''}>${content}</li>`
+          }
+        )
+        
+        // Mark lists containing checkboxes as checklist-list
+        html = html.replace(
+          /(<ul>)([\s\S]*?<li class="checklist-item"[\s\S]*?)(<\/ul>)/gi,
+          '$1<ul class="checklist-list" data-checklist="true">$2</ul>$3'
+        )
+        
+        // Add IDs to headings for TOC
+        html = html.replace(
+          /<(h[1-3])>([^<]+)<\/h[1-3]>/gi,
+          (match, tag, text) => {
+            const id = text
+              .toLowerCase()
+              .replace(/[^a-z0-9]+/g, '-')
+              .replace(/^-|-$/g, '')
+            return `<${tag} id="${id || `heading-${Date.now()}`}">${text}</${tag}>`
+          }
+        )
+        
+        return html
+      } catch (error) {
+        console.error('Failed to parse markdown:', error)
+        return markdown
+      }
+    }, [])
+
+    const emitChange = useCallback(() => {
+      if (!editorRef.current) return
+      const sanitized = sanitize(editorRef.current.innerHTML)
+      if (sanitized !== value) {
+        onChange(sanitized)
+      }
+    }, [onChange, sanitize, value])
+
+    const createChecklistCheckbox = useCallback(() => {
+      const checkbox = document.createElement('input')
+      checkbox.type = 'checkbox'
+      checkbox.className = 'align-middle mr-2 checklist-checkbox'
+      checkbox.setAttribute('data-checked', 'false')
+      checkbox.addEventListener('change', () => {
+        checkbox.setAttribute('data-checked', checkbox.checked ? 'true' : 'false')
+        if (checkbox.checked) {
+          checkbox.setAttribute('checked', 'true')
+        } else {
+          checkbox.removeAttribute('checked')
+        }
+        emitChange()
+      })
+      return checkbox
+    }, [emitChange])
+
+    const markChecklistList = useCallback(
+      (list: HTMLUListElement | HTMLOListElement | null | undefined, isChecklist: boolean) => {
+        if (!list) return
+        if (isChecklist) {
+          list.classList.add('checklist-list')
+          list.setAttribute('data-checklist', 'true')
+        } else {
+          list.classList.remove('checklist-list')
+          list.removeAttribute('data-checklist')
+        }
+      },
+      []
+    )
+
+    const markChecklistItem = useCallback((listItem: HTMLLIElement, isChecklist: boolean) => {
+      if (isChecklist) {
+        listItem.classList.add('checklist-item')
+        listItem.setAttribute('data-checklist', 'true')
+      } else {
+        listItem.classList.remove('checklist-item')
+        listItem.removeAttribute('data-checklist')
+      }
+      markChecklistList(listItem.parentElement as HTMLUListElement | HTMLOListElement | null, isChecklist)
+    }, [markChecklistList])
+
+    const ensureTextNode = useCallback((element: HTMLElement): Text => {
+      const existingTextNode = Array.from(element.childNodes).find(
+        (node): node is Text => node.nodeType === Node.TEXT_NODE
+      )
+      if (existingTextNode) {
+        return existingTextNode
+      }
+      const textNode = document.createTextNode('')
+      element.appendChild(textNode)
+      return textNode
+    }, [])
+
+    const getChecklistItemText = useCallback((listItem: HTMLLIElement) => {
+      return Array.from(listItem.childNodes)
+        .filter((node) => {
+          return !(node instanceof HTMLInputElement && node.type === 'checkbox')
+        })
+        .map((node) => node.textContent ?? '')
+        .join('')
+        .trim()
+    }, [])
+
+    const addCheckboxToListItem = useCallback(
+      (listItem: HTMLLIElement) => {
+        const existingCheckbox = listItem.querySelector('input[type="checkbox"]') as
+          | HTMLInputElement
+          | null
+
+        if (existingCheckbox) {
+          existingCheckbox.classList.add('checklist-checkbox', 'align-middle', 'mr-2')
+          markChecklistItem(listItem, true)
+          ensureTextNode(listItem)
+          return existingCheckbox
+        }
+
+        const checkbox = createChecklistCheckbox()
+        listItem.insertBefore(checkbox, listItem.firstChild)
+        markChecklistItem(listItem, true)
+        ensureTextNode(listItem)
+        return checkbox
+      },
+      [createChecklistCheckbox, ensureTextNode, markChecklistItem]
+    )
+
+    const removeCheckboxFromListItem = useCallback(
+      (listItem: HTMLLIElement) => {
+        const checkbox = listItem.querySelector('input[type="checkbox"]')
+        if (checkbox) {
+          checkbox.remove()
+        }
+        markChecklistItem(listItem, false)
+      },
+      [markChecklistItem]
+    )
+
+    const convertListToChecklist = useCallback(
+      (list: HTMLUListElement | HTMLOListElement) => {
+        Array.from(list.children).forEach((child) => {
+          if (child instanceof HTMLLIElement) {
+            addCheckboxToListItem(child)
+          }
+        })
+        markChecklistList(list, true)
+      },
+      [addCheckboxToListItem, markChecklistList]
+    )
+
+    const convertListToRegular = useCallback(
+      (list: HTMLUListElement | HTMLOListElement) => {
+        Array.from(list.children).forEach((child) => {
+          if (child instanceof HTMLLIElement) {
+            removeCheckboxFromListItem(child)
+          }
+        })
+        markChecklistList(list, false)
+      },
+      [markChecklistList, removeCheckboxFromListItem]
+    )
+
+    const normalizeChecklistItems = useCallback(() => {
+      if (!editorRef.current) return
+
+      const listItems = editorRef.current.querySelectorAll('li')
+      listItems.forEach((item) => {
+        const li = item as HTMLLIElement
+        const checkbox = li.querySelector('input[type="checkbox"]') as HTMLInputElement | null
+
+        if (checkbox) {
+          if (!checkbox.classList.contains('checklist-checkbox')) {
+            checkbox.classList.add('checklist-checkbox', 'align-middle', 'mr-2')
+          }
+          if (!checkbox.hasAttribute('data-checked')) {
+            checkbox.setAttribute('data-checked', checkbox.checked ? 'true' : 'false')
+          }
+          markChecklistItem(li, true)
+          ensureTextNode(li)
+        } else if (li.classList.contains('checklist-item') || li.getAttribute('data-checklist') === 'true') {
+          markChecklistItem(li, false)
+        }
+      })
+
+      const lists = editorRef.current.querySelectorAll('ul, ol')
+      lists.forEach((list) => {
+        const hasCheckbox = !!list.querySelector('input[type="checkbox"]')
+        markChecklistList(list as HTMLUListElement | HTMLOListElement, hasCheckbox)
+      })
+    }, [ensureTextNode, markChecklistItem, markChecklistList])
+
+    const execDocumentCommand = useCallback(
+      (command: string, valueArg?: string) => {
+        if (disabled) return
+        document.execCommand(command, false, valueArg)
+        emitChange()
+      },
+      [disabled, emitChange]
+    )
+
+    const applyInlineCode = useCallback(() => {
+      if (disabled) return
+      const selection = window.getSelection()
+      if (!selection || selection.rangeCount === 0) return
+
+      const range = selection.getRangeAt(0)
+      const code = document.createElement('code')
+
+      if (range.collapsed) {
+        // No selection - insert placeholder
+        const textNode = document.createTextNode('code')
+        code.appendChild(textNode)
+        range.insertNode(code)
+        
+        // Select the text inside the code element
+        const newRange = document.createRange()
+        newRange.setStart(textNode, 0)
+        newRange.setEnd(textNode, textNode.length)
+        selection.removeAllRanges()
+        selection.addRange(newRange)
+      } else {
+        // Has selection - wrap it
+        const contents = range.extractContents()
+        code.appendChild(contents)
+        range.insertNode(code)
+        
+        // Select the code element contents
+        selection.removeAllRanges()
+        const newRange = document.createRange()
+        newRange.selectNodeContents(code)
+        selection.addRange(newRange)
+      }
+
+      emitChange()
+    }, [disabled, emitChange])
+
+    const closestListItem = (node: Node | null): HTMLLIElement | null => {
+      while (node) {
+        if (node instanceof HTMLLIElement) return node
+        node = node.parentNode
+      }
+      return null
+    }
+
+    const toggleChecklist = useCallback(() => {
+      if (disabled) return
+
+      const selection = window.getSelection()
+      if (!selection || selection.rangeCount === 0) return
+
+      const currentListItem = closestListItem(selection.anchorNode)
+
+      if (!currentListItem) {
+        execDocumentCommand('insertUnorderedList')
+        setTimeout(() => {
+          const updatedSelection = window.getSelection()
+          const newListItem = closestListItem(updatedSelection?.anchorNode ?? null)
+          const list = newListItem?.parentElement as HTMLUListElement | HTMLOListElement | null
+          if (!list) {
+            emitChange()
+            return
+          }
+          convertListToChecklist(list)
+          emitChange()
+        }, 0)
+        return
+      }
+
+      const list = currentListItem.parentElement as HTMLUListElement | HTMLOListElement | null
+      if (!list) return
+
+      const hasCheckbox = !!list.querySelector('input[type="checkbox"]')
+
+      if (hasCheckbox) {
+        convertListToRegular(list)
+      } else {
+        convertListToChecklist(list)
+      }
+
+      emitChange()
+    }, [convertListToChecklist, convertListToRegular, disabled, emitChange, execDocumentCommand])
+
+    const applyHeading = useCallback(
+      (level: 1 | 2 | 3) => {
+        if (disabled) return
+        const selection = window.getSelection()
+        if (!selection || selection.rangeCount === 0) return
+
+        execDocumentCommand('formatBlock', `h${level}`)
+        
+        // Generate ID for the heading for TOC links
+        setTimeout(() => {
+          if (!editorRef.current) return
+          const headings = editorRef.current.querySelectorAll('h1, h2, h3')
+          headings.forEach((heading) => {
+            if (!heading.id) {
+              const text = heading.textContent || ''
+              const id = text
+                .toLowerCase()
+                .replace(/[^a-z0-9]+/g, '-')
+                .replace(/^-|-$/g, '')
+              heading.id = id || `heading-${Date.now()}`
+            }
+          })
+          emitChange()
+        }, 0)
+      },
+      [disabled, emitChange, execDocumentCommand]
+    )
+
+    const getHeadings = useCallback(() => {
+      if (!editorRef.current) return []
+      const headings = editorRef.current.querySelectorAll('h1, h2, h3')
+      return Array.from(headings).map((heading) => ({
+        id: heading.id || '',
+        level: parseInt(heading.tagName.substring(1)),
+        text: heading.textContent || ''
+      }))
+    }, [])
+
+
+    // Save current selection
+    const saveSelection = useCallback(() => {
+      const selection = window.getSelection()
+      if (selection && selection.rangeCount > 0) {
+        savedSelectionRef.current = selection.getRangeAt(0)
+      }
+    }, [])
+
+    // Restore saved selection
+    const restoreSelection = useCallback(() => {
+      if (savedSelectionRef.current) {
+        const selection = window.getSelection()
+        selection?.removeAllRanges()
+        selection?.addRange(savedSelectionRef.current)
+      }
+    }, [])
+
+    // Link functionality
+    const insertLink = useCallback(() => {
+      if (disabled) return
+      
+      const selection = window.getSelection()
+      if (!selection || selection.rangeCount === 0) return
+
+      const range = selection.getRangeAt(0)
+      const selectedText = range.toString()
+
+      // Check if we're inside a link
+      let node = range.commonAncestorContainer
+      if (node.nodeType === Node.TEXT_NODE) {
+        node = node.parentNode!
+      }
+      const existingLink = (node as Element).closest('a')
+
+      if (existingLink) {
+        // Edit existing link
+        setLinkUrl(existingLink.getAttribute('href') || '')
+        setLinkText(existingLink.textContent || '')
+      } else {
+        // New link
+        setLinkUrl('')
+        setLinkText(selectedText)
+      }
+
+      saveSelection()
+      setShowLinkDialog(true)
+    }, [disabled, saveSelection])
+
+    const applyLink = useCallback(() => {
+      if (!linkUrl) return
+
+      restoreSelection()
+
+      const selection = window.getSelection()
+      if (!selection || selection.rangeCount === 0) return
+
+      const range = selection.getRangeAt(0)
+      
+      // Remove existing link if inside one
+      let node = range.commonAncestorContainer
+      if (node.nodeType === Node.TEXT_NODE) {
+        node = node.parentNode!
+      }
+      const existingLink = (node as Element).closest('a')
+      
+      if (existingLink) {
+        existingLink.setAttribute('href', linkUrl)
+        existingLink.textContent = linkText || linkUrl
+      } else {
+        const link = document.createElement('a')
+        link.href = linkUrl
+        link.target = '_blank'
+        link.rel = 'noopener noreferrer'
+        link.textContent = linkText || linkUrl
+
+        if (range.collapsed) {
+          range.insertNode(link)
+        } else {
+          range.deleteContents()
+          range.insertNode(link)
+        }
+      }
+
+      setShowLinkDialog(false)
+      setLinkUrl('')
+      setLinkText('')
+      emitChange()
+      editorRef.current?.focus()
+    }, [linkUrl, linkText, restoreSelection, emitChange])
+
+    // Search functionality
+    const performSearch = useCallback(() => {
+      if (!editorRef.current || !searchQuery) {
+        setSearchMatches([])
+        return
+      }
+
+      const content = editorRef.current.textContent || ''
+      const query = caseSensitive ? searchQuery : searchQuery.toLowerCase()
+      const searchIn = caseSensitive ? content : content.toLowerCase()
+      
+      const matches: SearchMatch[] = []
+      let index = searchIn.indexOf(query)
+      
+      while (index !== -1) {
+        matches.push({
+          index,
+          length: searchQuery.length,
+          text: content.substr(index, searchQuery.length)
+        })
+        index = searchIn.indexOf(query, index + 1)
+      }
+
+      setSearchMatches(matches)
+      setCurrentMatchIndex(0)
+      
+      if (matches.length > 0) {
+        highlightMatch(0)
+      }
+    }, [searchQuery, caseSensitive])
+
+    const highlightMatch = useCallback((matchIndex: number) => {
+      if (!editorRef.current || matchIndex < 0 || matchIndex >= searchMatches.length) return
+
+      const match = searchMatches[matchIndex]
+      const range = document.createRange()
+      const selection = window.getSelection()
+      
+      // Find text node and position
+      const walker = document.createTreeWalker(
+        editorRef.current,
+        NodeFilter.SHOW_TEXT,
+        null
+      )
+
+      let currentPos = 0
+      let node = walker.nextNode()
+
+      while (node) {
+        const nodeLength = node.textContent?.length || 0
+        if (currentPos + nodeLength > match.index) {
+          const offset = match.index - currentPos
+          range.setStart(node, offset)
+          range.setEnd(node, offset + match.length)
+          break
+        }
+        currentPos += nodeLength
+        node = walker.nextNode()
+      }
+
+      selection?.removeAllRanges()
+      selection?.addRange(range)
+      
+      // Scroll into view
+      range.startContainer.parentElement?.scrollIntoView({
+        behavior: 'smooth',
+        block: 'center'
+      })
+    }, [searchMatches])
+
+    const nextMatch = useCallback(() => {
+      if (searchMatches.length === 0) return
+      const nextIndex = (currentMatchIndex + 1) % searchMatches.length
+      setCurrentMatchIndex(nextIndex)
+      highlightMatch(nextIndex)
+    }, [currentMatchIndex, searchMatches, highlightMatch])
+
+    const previousMatch = useCallback(() => {
+      if (searchMatches.length === 0) return
+      const prevIndex = (currentMatchIndex - 1 + searchMatches.length) % searchMatches.length
+      setCurrentMatchIndex(prevIndex)
+      highlightMatch(prevIndex)
+    }, [currentMatchIndex, searchMatches, highlightMatch])
+
+    const replaceCurrentMatch = useCallback(() => {
+      if (searchMatches.length === 0 || !editorRef.current) return
+      
+      highlightMatch(currentMatchIndex)
+      document.execCommand('insertText', false, replaceQuery)
+      
+      emitChange()
+      performSearch() // Re-search after replace
+    }, [currentMatchIndex, replaceQuery, searchMatches, highlightMatch, emitChange, performSearch])
+
+    const replaceAllMatches = useCallback(() => {
+      if (!editorRef.current || !searchQuery) return
+      
+      const content = editorRef.current.innerHTML
+      const flags = caseSensitive ? 'g' : 'gi'
+      const regex = new RegExp(searchQuery.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), flags)
+      const newContent = content.replace(regex, replaceQuery)
+      
+      editorRef.current.innerHTML = newContent
+      emitChange()
+      performSearch()
+    }, [searchQuery, replaceQuery, caseSensitive, emitChange, performSearch])
+
+    // Horizontal rule
+    const insertHorizontalRule = useCallback(() => {
+      if (disabled) return
+      document.execCommand('insertHorizontalRule')
+      emitChange()
+    }, [disabled, emitChange])
+
+    // Slash commands menu
+    const slashCommands: SlashCommand[] = [
+      { id: 'h1', label: 'Heading 1', icon: <Type size={16} />, command: 'heading1', description: 'Large heading' },
+      { id: 'h2', label: 'Heading 2', icon: <Type size={16} />, command: 'heading2', description: 'Medium heading' },
+      { id: 'h3', label: 'Heading 3', icon: <Type size={16} />, command: 'heading3', description: 'Small heading' },
+      { id: 'ul', label: 'Bullet List', icon: <List size={16} />, command: 'unordered-list', description: 'Create a bullet list' },
+      { id: 'ol', label: 'Numbered List', icon: <List size={16} />, command: 'ordered-list', description: 'Create a numbered list' },
+      { id: 'check', label: 'Checklist', icon: <CheckSquare size={16} />, command: 'checklist', description: 'Create a checklist' },
+      { id: 'quote', label: 'Quote', icon: <Quote size={16} />, command: 'blockquote', description: 'Insert a quote' },
+      { id: 'code', label: 'Code', icon: <Code size={16} />, command: 'code', description: 'Inline code' },
+      { id: 'hr', label: 'Divider', icon: <Minus size={16} />, command: 'horizontal-rule', description: 'Insert horizontal rule' },
+      { id: 'link', label: 'Link', icon: <LinkIcon size={16} />, command: insertLink, description: 'Insert a link' },
+    ]
+
+    const filteredSlashCommands = slashCommands.filter(cmd =>
+      cmd.label.toLowerCase().includes(slashMenuFilter.toLowerCase()) ||
+      cmd.description.toLowerCase().includes(slashMenuFilter.toLowerCase())
+    )
+
+    // Update menu position based on caret and viewport boundaries
+    const updateSlashMenuPosition = useCallback(() => {
+      if (!editorRef.current) return
+
+      const selection = window.getSelection()
+      if (!selection || selection.rangeCount === 0) return
+
+      const range = selection.getRangeAt(0)
+      const rect = range.getBoundingClientRect()
+      const editorRect = editorRef.current.getBoundingClientRect()
+
+      // Calculate base position relative to editor
+      let top = rect.bottom - editorRect.top + editorRef.current.scrollTop + 4
+      let left = rect.left - editorRect.left + editorRef.current.scrollLeft
+
+      // Menu dimensions (responsive to screen size)
+      const isMobile = window.innerWidth < 640
+      const menuWidth = isMobile ? Math.min(window.innerWidth - 32, 280) : 288
+      const menuHeight = Math.min(filteredSlashCommands.length * 60 + 80, 384)
+
+      // Check right boundary
+      const editorWidth = editorRect.width
+      const maxLeft = editorWidth - menuWidth - 8
+      if (left > maxLeft) {
+        left = Math.max(8, maxLeft)
+      }
+      if (left < 0) {
+        left = 8
+      }
+
+      // Check bottom boundary - flip above caret if needed
+      const viewportBottom = window.innerHeight
+      const menuBottom = rect.bottom + menuHeight + 4
+      
+      if (menuBottom > viewportBottom) {
+        // Position above the caret
+        const newTop = rect.top - editorRect.top + editorRef.current.scrollTop - menuHeight - 4
+        // Ensure it doesn't go above viewport
+        if (newTop > 0) {
+          top = newTop
+        } else {
+          // If can't fit above, keep below but adjust to fit
+          top = Math.max(8, viewportBottom - editorRect.top - menuHeight - 8)
+        }
+      }
+
+      setSlashMenuPosition({ top, left })
+    }, [filteredSlashCommands.length])
+
+    const detectSlashCommand = useCallback((event: ReactKeyboardEvent<HTMLDivElement>) => {
+      if (event.key === '/' && !showSlashMenu) {
+        const selection = window.getSelection()
+        if (!selection || selection.rangeCount === 0) return
+
+        const range = selection.getRangeAt(0)
+        const textBeforeCursor = range.startContainer.textContent?.substring(0, range.startOffset) || ''
+        
+        // Don't show menu if typing a URL (http:// or https://)
+        const urlPattern = /https?:$/
+        if (urlPattern.test(textBeforeCursor.trim())) {
+          return
+        }
+        
+        // Only show menu if / is at start of line or after whitespace
+        if (textBeforeCursor.trim() === '' || textBeforeCursor.endsWith(' ') || textBeforeCursor.endsWith('\n')) {
+          // Store the position where slash was typed
+          slashPositionRef.current = {
+            container: range.startContainer,
+            offset: range.startOffset
+          }
+
+          setTimeout(() => {
+            updateSlashMenuPosition()
+            setShowSlashMenu(true)
+            setSlashMenuFilter('')
+            setSelectedCommandIndex(0)
+          }, 0)
+        }
+      }
+    }, [showSlashMenu, updateSlashMenuPosition])
+
+    const executeSlashCommand = useCallback((command: SlashCommand) => {
+      setShowSlashMenu(false)
+      
+      // Remove the / character and any typed filter text
+      const selection = window.getSelection()
+      if (selection && selection.rangeCount > 0 && slashPositionRef.current) {
+        try {
+          const range = document.createRange()
+          range.setStart(slashPositionRef.current.container, slashPositionRef.current.offset)
+          range.setEnd(selection.getRangeAt(0).endContainer, selection.getRangeAt(0).endOffset)
+          range.deleteContents()
+          
+          // Restore cursor position
+          selection.removeAllRanges()
+          selection.addRange(range)
+        } catch (e) {
+          console.warn('Failed to delete slash character:', e)
+        }
+      }
+
+      slashPositionRef.current = null
+      setSlashMenuFilter('')
+      setSelectedCommandIndex(0)
+
+      // Small delay to ensure slash is removed before executing command
+      setTimeout(() => {
+        // Execute command
+        if (typeof command.command === 'function') {
+          command.command()
+        } else {
+          // Use the exec method from imperative handle
+          const execFn = (cmd: RichTextCommand) => {
+            switch (cmd) {
+              case 'bold':
+                execDocumentCommand('bold')
+                break
+              case 'italic':
+                execDocumentCommand('italic')
+                break
+              case 'underline':
+                execDocumentCommand('underline')
+                break
+              case 'strike':
+                execDocumentCommand('strikeThrough')
+                break
+              case 'code':
+                applyInlineCode()
+                break
+              case 'unordered-list':
+                execDocumentCommand('insertUnorderedList')
+                break
+              case 'ordered-list':
+                execDocumentCommand('insertOrderedList')
+                break
+              case 'blockquote':
+                execDocumentCommand('formatBlock', 'blockquote')
+                break
+              case 'checklist':
+                toggleChecklist()
+                break
+              case 'heading1':
+                applyHeading(1)
+                break
+              case 'heading2':
+                applyHeading(2)
+                break
+              case 'heading3':
+                applyHeading(3)
+                break
+              case 'horizontal-rule':
+                insertHorizontalRule()
+                break
+              case 'link':
+                insertLink()
+                break
+            }
+          }
+          execFn(command.command as RichTextCommand)
+        }
+        
+        // Focus back on editor
+        editorRef.current?.focus()
+      }, 10)
+    }, [slashMenuFilter, execDocumentCommand, applyInlineCode, toggleChecklist, applyHeading, insertHorizontalRule, insertLink])
+
+    const scrollToHeading = useCallback((headingId: string) => {
+      if (!editorRef.current || !headingId) return
+      
+      // Escape special characters in the ID for use in querySelector
+      const escapedId = CSS.escape(headingId)
+      const heading = editorRef.current.querySelector(`#${escapedId}`)
+      if (heading && heading instanceof HTMLElement) {
+        // Calculate the position of the heading relative to the editor container
+        const editorRect = editorRef.current.getBoundingClientRect()
+        const headingRect = heading.getBoundingClientRect()
+        
+        // Calculate the scroll position needed to bring the heading to the top of the editor
+        const scrollTop = editorRef.current.scrollTop + (headingRect.top - editorRect.top) - 16 // 16px padding
+        
+        // Smooth scroll the editor container
+        editorRef.current.scrollTo({
+          top: scrollTop,
+          behavior: 'smooth'
+        })
+      }
+    }, [])
+
+    useImperativeHandle(
+      ref,
+      () => ({
+        focus: () => editorRef.current?.focus(),
+        getHTML: () => sanitize(editorRef.current?.innerHTML ?? ''),
+        getHeadings,
+        getRootElement: () => editorRef.current,
+        scrollToHeading,
+        queryCommandState: (command: string) => {
+          try {
+            return document.queryCommandState(command)
+          } catch {
+            return false
+          }
+        },
+        showLinkDialog: () => {
+          insertLink()
+        },
+        showSearchDialog: () => {
+          setShowSearchDialog(true)
+        },
+        exec: (command: RichTextCommand) => {
+          switch (command) {
+            case 'bold':
+              execDocumentCommand('bold')
+              break
+            case 'italic':
+              execDocumentCommand('italic')
+              break
+            case 'underline':
+              execDocumentCommand('underline')
+              break
+            case 'strike':
+              execDocumentCommand('strikeThrough')
+              break
+            case 'code':
+              applyInlineCode()
+              break
+            case 'unordered-list':
+              execDocumentCommand('insertUnorderedList')
+              break
+            case 'ordered-list':
+              execDocumentCommand('insertOrderedList')
+              break
+            case 'blockquote':
+              execDocumentCommand('formatBlock', 'blockquote')
+              break
+            case 'checklist':
+              toggleChecklist()
+              break
+            case 'heading1':
+              applyHeading(1)
+              break
+            case 'heading2':
+              applyHeading(2)
+              break
+            case 'heading3':
+              applyHeading(3)
+              break
+            case 'horizontal-rule':
+              insertHorizontalRule()
+              break
+            case 'link':
+              insertLink()
+              break
+            case 'undo':
+              execDocumentCommand('undo')
+              break
+            case 'redo':
+              execDocumentCommand('redo')
+              break
+            default:
+              break
+          }
+        }
+      }),
+      [applyInlineCode, execDocumentCommand, sanitize, toggleChecklist, applyHeading, getHeadings, insertLink, insertHorizontalRule, scrollToHeading]
+    )
+
+    useEffect(() => {
+      if (!editorRef.current) return
+      const content = editorRef.current.innerHTML
+      if (sanitize(content) !== value) {
+        editorRef.current.innerHTML = value || ''
+      }
+      normalizeChecklistItems()
+    }, [normalizeChecklistItems, sanitize, value])
+
+    useEffect(() => {
+      if (!editorRef.current) return
+
+      const handleCheckboxChange = (event: Event) => {
+        const target = event.target as HTMLInputElement | null
+        if (!target || target.type !== 'checkbox') return
+        target.setAttribute('data-checked', target.checked ? 'true' : 'false')
+        if (target.checked) {
+          target.setAttribute('checked', 'true')
+        } else {
+          target.removeAttribute('checked')
+        }
+        emitChange()
+      }
+
+      const el = editorRef.current
+      el.addEventListener('change', handleCheckboxChange)
+      return () => {
+        el.removeEventListener('change', handleCheckboxChange)
+      }
+    }, [emitChange])
+
+    // Close slash menu on click outside
+    useEffect(() => {
+      if (!showSlashMenu) return
+
+      const handleClickOutside = (event: MouseEvent) => {
+        if (
+          slashMenuRef.current &&
+          !slashMenuRef.current.contains(event.target as Node) &&
+          editorRef.current &&
+          !editorRef.current.contains(event.target as Node)
+        ) {
+          setShowSlashMenu(false)
+          setSlashMenuFilter('')
+          setSelectedCommandIndex(0)
+          slashPositionRef.current = null
+        }
+      }
+
+      document.addEventListener('mousedown', handleClickOutside)
+      return () => {
+        document.removeEventListener('mousedown', handleClickOutside)
+      }
+    }, [showSlashMenu])
+
+    // Update slash menu position on scroll/resize
+    useEffect(() => {
+      if (!showSlashMenu) return
+
+      const handleUpdate = () => {
+        updateSlashMenuPosition()
+      }
+
+      window.addEventListener('scroll', handleUpdate, true)
+      window.addEventListener('resize', handleUpdate)
+
+      return () => {
+        window.removeEventListener('scroll', handleUpdate, true)
+        window.removeEventListener('resize', handleUpdate)
+      }
+    }, [showSlashMenu, updateSlashMenuPosition])
+
+    // Reset selected index when filter changes
+    useEffect(() => {
+      if (selectedCommandIndex >= filteredSlashCommands.length) {
+        setSelectedCommandIndex(Math.max(0, filteredSlashCommands.length - 1))
+      }
+    }, [filteredSlashCommands.length, selectedCommandIndex])
+
+    // Scroll selected command into view
+    useEffect(() => {
+      if (!showSlashMenu || !slashMenuRef.current) return
+
+      const selectedElement = slashMenuRef.current.querySelector(
+        `[data-command-index="${selectedCommandIndex}"]`
+      ) as HTMLElement | null
+
+      if (selectedElement) {
+        selectedElement.scrollIntoView({
+          block: 'nearest',
+          behavior: 'smooth'
+        })
+      }
+    }, [selectedCommandIndex, showSlashMenu])
+
+    const handleInput = () => emitChange()
+
+  const handleKeyDown = (event: ReactKeyboardEvent<HTMLDivElement>) => {
+      // Detect slash command
+      detectSlashCommand(event)
+
+      if (event.key === 'Enter' && !event.shiftKey) {
+        const selection = window.getSelection()
+        const currentListItem = closestListItem(selection?.anchorNode ?? null)
+        if (currentListItem) {
+          const hasCheckbox = !!currentListItem.querySelector('input[type="checkbox"]')
+          const isChecklist =
+            hasCheckbox ||
+            currentListItem.classList.contains('checklist-item') ||
+            currentListItem.getAttribute('data-checklist') === 'true'
+
+          if (isChecklist) {
+            const list = currentListItem.parentElement
+            if (list) {
+              const textContent = getChecklistItemText(currentListItem)
+
+              if (textContent.length === 0) {
+                event.preventDefault()
+
+                const parent = list.parentElement
+                const paragraph = document.createElement('p')
+                paragraph.appendChild(document.createElement('br'))
+
+                list.removeChild(currentListItem)
+                if (list.childElementCount === 0) {
+                  list.remove()
+                }
+
+                if (parent) {
+                  parent.insertBefore(paragraph, list.nextSibling)
+                } else {
+                  editorRef.current?.appendChild(paragraph)
+                }
+
+                const sel = window.getSelection()
+                if (sel) {
+                  const range = document.createRange()
+                  range.setStart(paragraph, 0)
+                  range.collapse(true)
+                  sel.removeAllRanges()
+                  sel.addRange(range)
+                }
+
+                emitChange()
+                return
+              }
+
+              setTimeout(() => {
+                const postSelection = window.getSelection()
+                const newListItem = closestListItem(postSelection?.anchorNode ?? null)
+                if (!newListItem || newListItem === currentListItem) {
+                  return
+                }
+
+                if (!newListItem.querySelector('input[type="checkbox"]')) {
+                  addCheckboxToListItem(newListItem)
+                } else {
+                  markChecklistItem(newListItem, true)
+                }
+
+                emitChange()
+              }, 0)
+            }
+          }
+        }
+      }
+
+      // Close slash menu on Escape
+      if (event.key === 'Escape' && showSlashMenu) {
+        event.preventDefault()
+        setShowSlashMenu(false)
+        setSlashMenuFilter('')
+        setSelectedCommandIndex(0)
+        slashPositionRef.current = null
+        return
+      }
+
+      // Navigate slash menu with arrow keys
+      if (showSlashMenu) {
+        if (event.key === 'ArrowDown') {
+          event.preventDefault()
+          setSelectedCommandIndex((prev) => 
+            prev < filteredSlashCommands.length - 1 ? prev + 1 : prev
+          )
+          return
+        }
+        if (event.key === 'ArrowUp') {
+          event.preventDefault()
+          setSelectedCommandIndex((prev) => (prev > 0 ? prev - 1 : prev))
+          return
+        }
+        if (event.key === 'Enter') {
+          event.preventDefault()
+          if (filteredSlashCommands.length > 0 && selectedCommandIndex < filteredSlashCommands.length) {
+            executeSlashCommand(filteredSlashCommands[selectedCommandIndex])
+          }
+          return
+        }
+        if (event.key === 'Tab') {
+          event.preventDefault()
+          if (filteredSlashCommands.length > 0 && selectedCommandIndex < filteredSlashCommands.length) {
+            executeSlashCommand(filteredSlashCommands[selectedCommandIndex])
+          }
+          return
+        }
+        // Handle backspace in filter
+        if (event.key === 'Backspace') {
+          if (slashMenuFilter.length > 0) {
+            setSlashMenuFilter((prev) => {
+              const newFilter = prev.slice(0, -1)
+              setSelectedCommandIndex(0)
+              return newFilter
+            })
+          } else {
+            // Close menu and delete the slash
+            setShowSlashMenu(false)
+            slashPositionRef.current = null
+          }
+          return
+        }
+        // Update filter as user types (only single printable characters)
+        if (event.key.length === 1 && !event.ctrlKey && !event.metaKey && !event.altKey) {
+          event.preventDefault()
+          setSlashMenuFilter((prev) => {
+            const newFilter = prev + event.key
+            setSelectedCommandIndex(0)
+            return newFilter
+          })
+          return
+        }
+      }
+
+  if (!(event.metaKey || event.ctrlKey)) return
+      const key = event.key.toLowerCase()
+
+      if (key === 'b' && !event.shiftKey) {
+        event.preventDefault()
+        execDocumentCommand('bold')
+      } else if (key === 'i') {
+        event.preventDefault()
+        execDocumentCommand('italic')
+      } else if (key === 'u') {
+        event.preventDefault()
+        execDocumentCommand('underline')
+      } else if (event.shiftKey && key === 'x') {
+        event.preventDefault()
+        execDocumentCommand('strikeThrough')
+      } else if (event.shiftKey && key === 'c') {
+        event.preventDefault()
+        toggleChecklist()
+      } else if (event.shiftKey && key === 'b') {
+        event.preventDefault()
+        execDocumentCommand('formatBlock', 'blockquote')
+      } else if (event.shiftKey && key === 'l') {
+        event.preventDefault()
+        execDocumentCommand('insertUnorderedList')
+      } else if (event.shiftKey && key === 'o') {
+        event.preventDefault()
+        execDocumentCommand('insertOrderedList')
+      } else if (event.altKey && key === '1') {
+        event.preventDefault()
+        applyHeading(1)
+      } else if (event.altKey && key === '2') {
+        event.preventDefault()
+        applyHeading(2)
+      } else if (event.altKey && key === '3') {
+        event.preventDefault()
+        applyHeading(3)
+      } else if (key === '`') {
+        event.preventDefault()
+        applyInlineCode()
+      } else if (key === 'k') {
+        // Cmd/Ctrl+K for link
+        event.preventDefault()
+        insertLink()
+      } else if (key === 'f') {
+        // Cmd/Ctrl+F for search
+        event.preventDefault()
+        setShowSearchDialog(true)
+      } else if (key === 'z') {
+        event.preventDefault()
+        execDocumentCommand(event.shiftKey ? 'redo' : 'undo')
+      }
+    }
+
+  const handlePaste = (event: ReactClipboardEvent<HTMLDivElement>) => {
+      if (disabled) return
+      event.preventDefault()
+      
+      // Try to get HTML content first
+      const html = event.clipboardData.getData('text/html')
+      const text = event.clipboardData.getData('text/plain')
+      
+      if (html) {
+        // Sanitize and insert HTML
+        const sanitized = sanitize(html)
+        document.execCommand('insertHTML', false, sanitized)
+      } else if (text) {
+        // Check if text looks like markdown
+        if (looksLikeMarkdown(text)) {
+          // Convert markdown to HTML
+          markdownToHtml(text).then(convertedHtml => {
+            const sanitized = sanitize(convertedHtml)
+            document.execCommand('insertHTML', false, sanitized)
+            
+            // Normalize checklist items after insertion
+            setTimeout(() => {
+              normalizeChecklistItems()
+              emitChange()
+            }, 0)
+          })
+          return
+        }
+        
+        // Check if text is a URL and auto-create link
+        const urlPattern = /^https?:\/\/.+/i
+        if (urlPattern.test(text.trim())) {
+          const selection = window.getSelection()
+          const selectedText = selection?.toString()
+          
+          if (selectedText && selectedText.length > 0 && selection && selection.rangeCount > 0) {
+            // Create link with selected text
+            const link = document.createElement('a')
+            link.href = text.trim()
+            link.target = '_blank'
+            link.rel = 'noopener noreferrer'
+            link.textContent = selectedText
+            
+            const range = selection.getRangeAt(0)
+            range.deleteContents()
+            range.insertNode(link)
+          } else {
+            // Insert as plain link
+            document.execCommand('insertHTML', false, 
+              `<a href="${text.trim()}" target="_blank" rel="noopener noreferrer">${text.trim()}</a>`)
+          }
+        } else {
+          // Plain text
+          document.execCommand('insertText', false, text)
+        }
+      }
+      
+      emitChange()
+    }
+
+    return (
+      <div className="relative h-full">
+        <div
+          ref={editorRef}
+          className="w-full h-full overflow-y-auto whitespace-pre-wrap break-words focus:outline-none p-4"
+          contentEditable={!disabled}
+          data-placeholder={placeholder}
+          onInput={handleInput}
+          onKeyDown={handleKeyDown}
+          onPaste={handlePaste}
+          suppressContentEditableWarning
+          spellCheck
+        />
+
+        {/* Slash Commands Menu */}
+        {showSlashMenu && (
+          <div
+            ref={slashMenuRef}
+            className="absolute z-50 bg-white border border-gray-200 rounded-lg shadow-xl overflow-hidden"
+            style={{
+              top: `${slashMenuPosition.top}px`,
+              left: `${slashMenuPosition.left}px`,
+              width: 'min(288px, calc(100vw - 2rem))',
+              maxHeight: 'min(384px, calc(100vh - 8rem))'
+            }}
+          >
+            {slashMenuFilter && (
+              <div className="px-3 py-2 text-xs text-gray-500 border-b border-gray-100 bg-gray-50">
+                Searching: <span className="font-semibold text-gray-700">/{slashMenuFilter}</span>
+              </div>
+            )}
+            <div className="overflow-y-auto max-h-80">
+              {filteredSlashCommands.length > 0 ? (
+                <div className="py-1">
+                  {filteredSlashCommands.map((cmd, index) => (
+                    <button
+                      key={cmd.id}
+                      data-command-index={index}
+                      className={`w-full px-3 py-2.5 text-left flex items-center gap-3 transition-all ${
+                        index === selectedCommandIndex
+                          ? 'bg-blue-50 text-blue-700 border-l-2 border-blue-500'
+                          : 'text-gray-700 hover:bg-gray-50 border-l-2 border-transparent'
+                      }`}
+                      onClick={() => executeSlashCommand(cmd)}
+                      onMouseEnter={() => setSelectedCommandIndex(index)}
+                    >
+                      <span className={`flex-shrink-0 ${index === selectedCommandIndex ? 'text-blue-600' : 'text-gray-400'}`}>
+                        {cmd.icon}
+                      </span>
+                      <div className="flex-1 min-w-0">
+                        <div className="text-sm font-medium truncate">{cmd.label}</div>
+                        <div className="text-xs text-gray-500 truncate">{cmd.description}</div>
+                      </div>
+                      {index === selectedCommandIndex && (
+                        <span className="flex-shrink-0 text-xs text-blue-600 font-semibold">↵</span>
+                      )}
+                    </button>
+                  ))}
+                </div>
+              ) : (
+                <div className="px-3 py-6 text-sm text-center text-gray-500">
+                  <div className="mb-1 font-medium">No commands found</div>
+                  {slashMenuFilter && (
+                    <div className="text-xs">for "{slashMenuFilter}"</div>
+                  )}
+                </div>
+              )}
+            </div>
+            <div className="px-3 py-2 text-xs text-gray-400 border-t border-gray-100 bg-gray-50 flex-shrink-0">
+              <div className="flex flex-wrap gap-x-2 gap-y-1 justify-center sm:justify-start">
+                <span className="inline-flex items-center gap-1">
+                  <kbd className="px-1 py-0.5 bg-gray-200 rounded text-[10px] font-semibold">↑↓</kbd>
+                  <span className="hidden sm:inline">navigate</span>
+                </span>
+                <span className="hidden sm:inline text-gray-300">•</span>
+                <span className="inline-flex items-center gap-1">
+                  <kbd className="px-1 py-0.5 bg-gray-200 rounded text-[10px] font-semibold">↵</kbd>
+                  <span className="hidden sm:inline">select</span>
+                </span>
+                <span className="hidden sm:inline text-gray-300">•</span>
+                <span className="inline-flex items-center gap-1">
+                  <kbd className="px-1 py-0.5 bg-gray-200 rounded text-[10px] font-semibold">Esc</kbd>
+                  <span className="hidden sm:inline">close</span>
+                </span>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Link Dialog */}
+        {showLinkDialog && (
+          <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+            <div className="bg-white rounded-lg shadow-xl p-6 w-full max-w-md">
+              <div className="flex items-center justify-between mb-4">
+                <h3 className="text-lg font-semibold text-gray-900">Insert Link</h3>
+                <button
+                  onClick={() => {
+                    setShowLinkDialog(false)
+                    setLinkUrl('')
+                    setLinkText('')
+                  }}
+                  className="text-gray-400 hover:text-gray-600"
+                >
+                  <X size={20} />
+                </button>
+              </div>
+              <div className="space-y-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Text to display
+                  </label>
+                  <input
+                    type="text"
+                    value={linkText}
+                    onChange={(e) => setLinkText(e.target.value)}
+                    placeholder="Link text"
+                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    URL
+                  </label>
+                  <input
+                    type="url"
+                    value={linkUrl}
+                    onChange={(e) => setLinkUrl(e.target.value)}
+                    placeholder="https://example.com"
+                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                    autoFocus
+                  />
+                </div>
+                <div className="flex gap-2 justify-end">
+                  <button
+                    onClick={() => {
+                      setShowLinkDialog(false)
+                      setLinkUrl('')
+                      setLinkText('')
+                    }}
+                    className="px-4 py-2 text-gray-700 hover:bg-gray-100 rounded-md transition-colors"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    onClick={applyLink}
+                    disabled={!linkUrl}
+                    className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                  >
+                    Insert Link
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Search & Replace Dialog */}
+        {showSearchDialog && (
+          <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+            <div className="bg-white rounded-lg shadow-xl p-6 w-full max-w-lg">
+              <div className="flex items-center justify-between mb-4">
+                <h3 className="text-lg font-semibold text-gray-900 flex items-center gap-2">
+                  <Search size={20} />
+                  Find & Replace
+                </h3>
+                <button
+                  onClick={() => {
+                    setShowSearchDialog(false)
+                    setSearchQuery('')
+                    setReplaceQuery('')
+                    setSearchMatches([])
+                  }}
+                  className="text-gray-400 hover:text-gray-600"
+                >
+                  <X size={20} />
+                </button>
+              </div>
+              <div className="space-y-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Find
+                  </label>
+                  <div className="flex gap-2">
+                    <input
+                      type="text"
+                      value={searchQuery}
+                      onChange={(e) => setSearchQuery(e.target.value)}
+                      placeholder="Search text..."
+                      className="flex-1 px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                      autoFocus
+                    />
+                    <button
+                      onClick={performSearch}
+                      className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors"
+                    >
+                      Find
+                    </button>
+                  </div>
+                  {searchMatches.length > 0 && (
+                    <div className="mt-2 flex items-center gap-2">
+                      <span className="text-sm text-gray-600">
+                        {currentMatchIndex + 1} of {searchMatches.length}
+                      </span>
+                      <button
+                        onClick={previousMatch}
+                        className="px-2 py-1 text-sm bg-gray-100 hover:bg-gray-200 rounded transition-colors"
+                      >
+                        Previous
+                      </button>
+                      <button
+                        onClick={nextMatch}
+                        className="px-2 py-1 text-sm bg-gray-100 hover:bg-gray-200 rounded transition-colors"
+                      >
+                        Next
+                      </button>
+                    </div>
+                  )}
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Replace with
+                  </label>
+                  <input
+                    type="text"
+                    value={replaceQuery}
+                    onChange={(e) => setReplaceQuery(e.target.value)}
+                    placeholder="Replacement text..."
+                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  />
+                </div>
+                <div className="flex items-center gap-2">
+                  <label className="flex items-center gap-2 text-sm text-gray-700">
+                    <input
+                      type="checkbox"
+                      checked={caseSensitive}
+                      onChange={(e) => setCaseSensitive(e.target.checked)}
+                      className="rounded border-gray-300"
+                    />
+                    Case sensitive
+                  </label>
+                </div>
+                <div className="flex gap-2 justify-end">
+                  <button
+                    onClick={replaceCurrentMatch}
+                    disabled={searchMatches.length === 0}
+                    className="px-4 py-2 bg-gray-100 text-gray-700 rounded-md hover:bg-gray-200 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                  >
+                    Replace
+                  </button>
+                  <button
+                    onClick={replaceAllMatches}
+                    disabled={searchMatches.length === 0}
+                    className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                  >
+                    Replace All
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+
+        <style jsx global>{`
+          [data-placeholder]:empty:before {
+            content: attr(data-placeholder);
+            color: #9ca3af;
+            pointer-events: none;
+            display: block;
+          }
+
+          [contenteditable='true']:focus {
+            outline: none;
+          }
+
+          [contenteditable='true'] input[type='checkbox'] {
+            margin-right: 0.5rem;
+            cursor: pointer;
+          }
+
+          [contenteditable='true'] ul,
+          [contenteditable='true'] ol {
+            margin: 1em 0 !important;
+            padding-left: 2em !important;
+            display: block !important;
+          }
+
+          [contenteditable='true'] ul {
+            list-style-type: disc !important;
+          }
+
+          [contenteditable='true'] ol {
+            list-style-type: decimal !important;
+          }
+
+          [contenteditable='true'] .checklist-list,
+          [contenteditable='true'] [data-checklist='true'] {
+            list-style: none !important;
+            padding-left: 1.75em !important;
+            margin-left: 0 !important;
+          }
+
+          [contenteditable='true'] li {
+            margin: 0.5em 0 !important;
+            display: list-item !important;
+          }
+
+          [contenteditable='true'] ul li {
+            list-style-type: disc !important;
+          }
+
+          [contenteditable='true'] ol li {
+            list-style-type: decimal !important;
+          }
+
+          [contenteditable='true'] li.checklist-item {
+            list-style: none !important;
+            display: flex !important;
+            align-items: flex-start !important;
+          }
+
+          [contenteditable='true'] li.checklist-item .checklist-checkbox {
+            margin-top: 0.2em;
+            flex-shrink: 0;
+          }
+
+          [contenteditable='true'] h1 {
+            font-size: 2.5em !important;
+            font-weight: 800 !important;
+            margin-top: 0.67em !important;
+            margin-bottom: 0.67em !important;
+            line-height: 1.2 !important;
+            color: #111827 !important;
+            scroll-margin-top: 2rem !important;
+            display: block !important;
+          }
+
+          [contenteditable='true'] h2 {
+            font-size: 2em !important;
+            font-weight: 700 !important;
+            margin-top: 0.83em !important;
+            margin-bottom: 0.83em !important;
+            line-height: 1.3 !important;
+            color: #1f2937 !important;
+            scroll-margin-top: 2rem !important;
+            display: block !important;
+          }
+
+          [contenteditable='true'] h3 {
+            font-size: 1.5em !important;
+            font-weight: 700 !important;
+            margin-top: 1em !important;
+            margin-bottom: 1em !important;
+            line-height: 1.4 !important;
+            color: #374151 !important;
+            scroll-margin-top: 2rem !important;
+            display: block !important;
+          }
+
+          [contenteditable='true'] blockquote {
+            border-left: 4px solid #e5e7eb !important;
+            padding-left: 1rem !important;
+            margin-left: 0 !important;
+            color: #6b7280 !important;
+            font-style: italic !important;
+            display: block !important;
+          }
+
+          [contenteditable='true'] code {
+            background-color: #f3f4f6 !important;
+            padding: 0.125rem 0.25rem !important;
+            border-radius: 0.25rem !important;
+            font-family: monospace !important;
+            font-size: 0.875em !important;
+          }
+
+          [contenteditable='true'] a {
+            color: #2563eb !important;
+            text-decoration: underline !important;
+            cursor: pointer !important;
+          }
+
+          [contenteditable='true'] a:hover {
+            color: #1d4ed8 !important;
+          }
+
+          [contenteditable='true'] hr {
+            border: none !important;
+            border-top: 2px solid #e5e7eb !important;
+            margin: 1.5rem 0 !important;
+          }
+
+          [contenteditable='true'] mark {
+            background-color: #fef08a !important;
+            padding: 0.125rem 0 !important;
+          }
+        `}</style>
+      </div>
+    )
+  }
+)
+
+RichTextEditor.displayName = 'RichTextEditor'
+
+export default RichTextEditor
