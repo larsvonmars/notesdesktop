@@ -206,6 +206,44 @@ export default function Dashboard() {
     router.push('/login')
   }
 
+  const handleDuplicateNote = async (note: Note) => {
+    try {
+      const duplicatedNote = await createNote({
+        title: `${note.title} (Copy)`,
+        content: note.content,
+        folder_id: note.folder_id,
+        note_type: note.note_type,
+      })
+      setNotes([duplicatedNote, ...notes])
+      setSelectedNote(duplicatedNote)
+      setIsCreatingNew(false)
+    } catch (error) {
+      console.error('Error duplicating note:', error)
+      alert('Failed to duplicate note')
+    }
+  }
+
+  const handleMoveNote = async (noteId: string, newFolderId: string | null) => {
+    try {
+      await updateNote(noteId, { folder_id: newFolderId })
+      loadNotesInFolder(selectedFolderId)
+      loadFolders()
+    } catch (error) {
+      console.error('Error moving note:', error)
+      alert('Failed to move note')
+    }
+  }
+
+  const handleMoveFolder = async (folderId: string, newParentId: string | null) => {
+    try {
+      await updateFolder(folderId, { parent_id: newParentId })
+      loadFolders()
+    } catch (error) {
+      console.error('Error moving folder:', error)
+      alert('Failed to move folder')
+    }
+  }
+
   if (loading) {
     return (
       <div className="flex items-center justify-center min-h-screen bg-white">
@@ -238,9 +276,12 @@ export default function Dashboard() {
             onCreateFolder={handleCreateFolder}
             onRenameFolder={handleRenameFolder}
             onDeleteFolder={handleDeleteFolder}
+            onMoveFolder={handleMoveFolder}
             notes={notes}
             onSelectNote={handleSelectNote}
             onNewNote={handleNewNote}
+            onDuplicateNote={handleDuplicateNote}
+            onMoveNote={handleMoveNote}
             isLoadingNotes={isLoadingNotes}
             currentFolderName={getCurrentFolderName()}
             onSignOut={handleSignOut}

@@ -77,9 +77,12 @@ interface NoteEditorWithPanelProps extends NoteEditorProps {
   onCreateFolder?: (parentId: string | null) => void
   onRenameFolder?: (folderId: string, newName: string) => void
   onDeleteFolder?: (folderId: string) => void
+  onMoveFolder?: (folderId: string, newParentId: string | null) => void
   notes?: LibNote[]
   onSelectNote?: (note: LibNote) => void
   onNewNote?: () => void
+  onDuplicateNote?: (note: LibNote) => void
+  onMoveNote?: (noteId: string, newFolderId: string | null) => void
   isLoadingNotes?: boolean
   currentFolderName?: string
   userEmail?: string
@@ -98,9 +101,12 @@ export default function NoteEditor({
   onCreateFolder = () => {},
   onRenameFolder = () => {},
   onDeleteFolder = () => {},
+  onMoveFolder,
   notes = [],
   onSelectNote = () => {},
   onNewNote = () => {},
+  onDuplicateNote,
+  onMoveNote,
   isLoadingNotes = false,
   currentFolderName,
   userEmail,
@@ -611,10 +617,13 @@ export default function NoteEditor({
         onCreateFolder={onCreateFolder}
         onRenameFolder={onRenameFolder}
         onDeleteFolder={onDeleteFolder}
+        onMoveFolder={onMoveFolder}
         notes={notes}
         selectedNoteId={note?.id}
         onSelectNote={onSelectNote}
         onNewNote={onNewNote}
+        onDuplicateNote={onDuplicateNote}
+        onMoveNote={onMoveNote}
         isLoadingNotes={isLoadingNotes}
         currentFolderName={currentFolderName}
         stats={stats}
