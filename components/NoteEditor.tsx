@@ -623,10 +623,10 @@ export default function NoteEditor({
       />
 
       {/* Clean Editor Area */}
-      <div className="flex flex-col h-screen bg-white pl-20">
-        <div className="flex-1 p-6 overflow-hidden">
-          <div className="max-w-4xl mx-auto h-full">
-            <div className="relative rounded-xl border border-gray-200 bg-white shadow-sm h-full overflow-hidden flex flex-col">
+      <div className="flex flex-col h-screen bg-white">
+        <div className="flex-1 px-3 py-2 sm:px-4 sm:py-3 overflow-hidden">
+          <div className="h-full w-full">
+            <div className="relative h-full overflow-hidden flex flex-col bg-white">
               {noteType === 'drawing' ? (
                 <DrawingEditor
                   ref={drawingEditorRef}

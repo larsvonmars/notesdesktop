@@ -1409,7 +1409,7 @@ const RichTextEditor = forwardRef<RichTextEditorHandle, RichTextEditorProps>(
       <div className="relative h-full">
         <div
           ref={editorRef}
-          className="w-full h-full overflow-y-auto whitespace-pre-wrap break-words focus:outline-none p-4"
+          className="w-full h-full overflow-y-auto whitespace-pre-wrap break-words focus:outline-none p-3 sm:p-4"
           contentEditable={!disabled}
           data-placeholder={placeholder}
           onInput={handleInput}

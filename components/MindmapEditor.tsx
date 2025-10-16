@@ -1332,8 +1332,8 @@ const MindmapEditor = forwardRef<MindmapEditorHandle, MindmapEditorProps>(
         />
 
         {breadcrumbPath.length > 0 && (
-          <div className="absolute top-4 left-1/2 z-10 -translate-x-1/2">
-            <nav className="flex flex-wrap items-center justify-center gap-1 rounded-full border border-slate-200 bg-white/90 px-4 py-2 text-xs font-medium text-slate-500 shadow-sm backdrop-blur">
+          <div className="absolute top-3 left-1/2 z-10 -translate-x-1/2">
+            <nav className="flex flex-wrap items-center justify-center gap-1 rounded-full border border-slate-200 bg-white/90 px-3 py-1.5 text-xs font-medium text-slate-500 shadow-sm backdrop-blur">
               {breadcrumbPath.map((node, index) => {
                 const isActive = index === breadcrumbPath.length - 1
                 return (
@@ -1359,7 +1359,7 @@ const MindmapEditor = forwardRef<MindmapEditorHandle, MindmapEditorProps>(
 
         {/* Toolbar */}
         {!readOnly && (
-          <div className="absolute top-4 left-4 flex flex-col gap-2 bg-white rounded-lg shadow-lg p-2 border border-gray-200">
+          <div className="absolute top-3 left-3 flex flex-col gap-1.5 bg-white rounded-lg shadow-lg p-1.5 border border-gray-200">
             <button
               onClick={addChildNode}
               disabled={!selectedNodeId}
@@ -1418,13 +1418,13 @@ const MindmapEditor = forwardRef<MindmapEditorHandle, MindmapEditorProps>(
 
         {/* Node detail view */}
         {detailNodeId && detailDraft && detailNode && (
-          <div className="absolute inset-0 z-20 flex items-center justify-center bg-slate-900/50 backdrop-blur-sm p-4">
+          <div className="absolute inset-0 z-20 flex items-center justify-center bg-slate-900/50 backdrop-blur-sm p-3">
             <div
               className="w-full max-w-2xl bg-white rounded-2xl shadow-2xl border border-slate-200 overflow-hidden"
               role="dialog"
               aria-modal="true"
             >
-              <div className="flex items-start justify-between gap-4 px-6 py-4 border-b border-slate-200">
+              <div className="flex items-start justify-between gap-4 px-5 py-3 border-b border-slate-200">
                 <div>
                   <div className="flex items-center gap-2 text-slate-600 text-sm font-medium">
                     <Edit2 size={18} />
@@ -1454,7 +1454,7 @@ const MindmapEditor = forwardRef<MindmapEditorHandle, MindmapEditorProps>(
                 </button>
               </div>
 
-              <div className="px-6 py-5 space-y-6 max-h-[70vh] overflow-y-auto">
+              <div className="px-5 py-4 space-y-5 max-h-[70vh] overflow-y-auto">
                 <div className="space-y-2">
                   <label className="text-sm font-medium text-slate-700" htmlFor="mindmap-node-title">
                     Title
@@ -1610,7 +1610,7 @@ const MindmapEditor = forwardRef<MindmapEditorHandle, MindmapEditorProps>(
                 </div>
               </div>
 
-              <div className="flex items-center justify-end gap-3 border-t border-slate-200 bg-slate-50 px-6 py-4">
+              <div className="flex items-center justify-end gap-3 border-t border-slate-200 bg-slate-50 px-5 py-3">
                 <button
                   onClick={closeNodeDetail}
                   className="inline-flex items-center gap-2 rounded-lg border border-slate-200 px-4 py-2 text-sm font-medium text-slate-600 hover:bg-slate-100 transition-colors"

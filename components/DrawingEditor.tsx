@@ -693,7 +693,7 @@ const DrawingEditor = forwardRef<DrawingEditorHandle, DrawingEditorProps>(
     return (
       <div className="flex flex-col h-full bg-white">
         {/* Compact Toolbar */}
-        <div className="flex items-center gap-2 px-3 py-2 border-b border-gray-200 bg-gray-50">
+  <div className="flex items-center gap-2 px-2.5 py-1.5 border-b border-gray-200 bg-gray-50">
           {/* Tools */}
           <div className="flex items-center gap-0.5">
             <button
@@ -907,7 +907,7 @@ const DrawingEditor = forwardRef<DrawingEditorHandle, DrawingEditorProps>(
               </svg>
             </button>
             
-            <div className="px-2 text-xs text-gray-700 font-medium min-w-[45px] text-center">
+            <div className="px-1.5 text-xs text-gray-700 font-medium min-w-[45px] text-center">
               {currentPageIndex + 1}/{drawingData.pages.length}
             </div>
 
