@@ -141,9 +141,55 @@ const RichTextEditor = forwardRef<RichTextEditorHandle, RichTextEditorProps>(
       }
       
       checklistNormalizationTimerRef.current = setTimeout(() => {
-        normalizeChecklistItems()
+        if (!editorRef.current) return
+
+        const listItems = editorRef.current.querySelectorAll('li')
+        listItems.forEach((item) => {
+          const li = item as HTMLLIElement
+          const checkbox = li.querySelector('input[type="checkbox"]') as HTMLInputElement | null
+
+          if (checkbox) {
+            if (!checkbox.classList.contains('checklist-checkbox')) {
+              checkbox.classList.add('checklist-checkbox', 'align-middle', 'mr-2')
+            }
+            if (!checkbox.hasAttribute('data-checked')) {
+              checkbox.setAttribute('data-checked', checkbox.checked ? 'true' : 'false')
+            }
+            // Inline mark checklist item
+            if (checkbox) {
+              li.classList.add('checklist-item')
+              li.setAttribute('data-checklist', 'true')
+            } else {
+              li.classList.remove('checklist-item')
+              li.removeAttribute('data-checklist')
+            }
+            // Ensure text node
+            const existingTextNode = Array.from(li.childNodes).find(
+              (node): node is Text => node.nodeType === Node.TEXT_NODE
+            )
+            if (!existingTextNode) {
+              const textNode = document.createTextNode('')
+              li.appendChild(textNode)
+            }
+          } else if (li.classList.contains('checklist-item') || li.getAttribute('data-checklist') === 'true') {
+            li.classList.remove('checklist-item')
+            li.removeAttribute('data-checklist')
+          }
+        })
+
+        const lists = editorRef.current.querySelectorAll('ul, ol')
+        lists.forEach((list) => {
+          const hasCheckbox = !!list.querySelector('input[type="checkbox"]')
+          if (hasCheckbox) {
+            list.classList.add('checklist-list')
+            list.setAttribute('data-checklist', 'true')
+          } else {
+            list.classList.remove('checklist-list')
+            list.removeAttribute('data-checklist')
+          }
+        })
       }, 150) // Debounce by 150ms
-    }, [normalizeChecklistItems])
+    }, [])
 
     const emitChange = useCallback(() => {
       if (!editorRef.current) return
@@ -589,9 +635,45 @@ const RichTextEditor = forwardRef<RichTextEditorHandle, RichTextEditorProps>(
       setCurrentMatchIndex(0)
       
       if (matches.length > 0) {
-        highlightMatch(0)
+        // Inline highlight logic
+        if (!editorRef.current || 0 < 0 || 0 >= matches.length) return
+
+        const match = matches[0]
+        const range = document.createRange()
+        const selection = window.getSelection()
+        
+        // Find text node and position
+        const walker = document.createTreeWalker(
+          editorRef.current,
+          NodeFilter.SHOW_TEXT,
+          null
+        )
+
+        let currentPos = 0
+        let node = walker.nextNode()
+
+        while (node) {
+          const nodeLength = node.textContent?.length || 0
+          if (currentPos + nodeLength > match.index) {
+            const offset = match.index - currentPos
+            range.setStart(node, offset)
+            range.setEnd(node, offset + match.length)
+            break
+          }
+          currentPos += nodeLength
+          node = walker.nextNode()
+        }
+
+        selection?.removeAllRanges()
+        selection?.addRange(range)
+        
+        // Scroll into view
+        range.startContainer.parentElement?.scrollIntoView({
+          behavior: 'smooth',
+          block: 'center'
+        })
       }
-    }, [searchQuery, caseSensitive, highlightMatch])
+    }, [searchQuery, caseSensitive])
 
     const highlightMatch = useCallback((matchIndex: number) => {
       if (!editorRef.current || matchIndex < 0 || matchIndex >= searchMatches.length) return
