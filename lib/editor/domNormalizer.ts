@@ -178,12 +178,14 @@ export function normalizeEditorContent(editorElement: HTMLElement): void {
   normalizeElement(editorElement)
   
   // Ensure editor has at least one block element
-  if (editorElement.children.length === 0 || 
-      (editorElement.children.length === 1 && editorElement.textContent?.trim() === '')) {
+  // Only add a paragraph if the editor is truly empty (no children at all)
+  if (editorElement.children.length === 0) {
     const p = document.createElement('p')
     p.appendChild(document.createElement('br'))
     editorElement.appendChild(p)
   }
+  // Note: Removed the check for single empty child to avoid interfering with
+  // empty headings or other block elements that are being edited
 }
 
 /**
