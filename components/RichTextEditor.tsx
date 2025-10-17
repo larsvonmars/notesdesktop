@@ -574,15 +574,53 @@ const RichTextEditor = forwardRef<RichTextEditorHandle, RichTextEditorProps>(
       (level: 1 | 2 | 3) => {
         if (disabled || !editorRef.current) return;
         const selection = window.getSelection();
-        if (!selection || selection.rangeCount === 0) return;
-
-        const range = selection.getRangeAt(0);
-        if (selection.isCollapsed) {
-          // Insert empty heading and place cursor inside
+        if (!selection || selection.rangeCount === 0) {
+          // Fallback: insert heading at end
           const heading = document.createElement(`h${level}`);
           heading.appendChild(document.createTextNode(''));
-          range.insertNode(heading);
-          // Move cursor inside heading
+          editorRef.current.appendChild(heading);
+          // Place cursor inside
+          const newRange = document.createRange();
+          newRange.selectNodeContents(heading);
+          newRange.collapse(true);
+          selection?.removeAllRanges();
+          selection?.addRange(newRange);
+          setTimeout(() => {
+            if (!editorRef.current) return;
+            heading.id = generateHeadingId('');
+            normalizeEditorContent(editorRef.current!);
+            emitChange();
+          }, 0);
+          return;
+        }
+
+        const range = selection.getRangeAt(0);
+        // Ensure we are not inside another block element
+        let container = range.startContainer;
+        if (container.nodeType === Node.TEXT_NODE) {
+          container = container.parentNode as Node;
+        }
+        // If inside a block (p, h1, h2, h3, blockquote, li, etc), insert after it
+        const blockTags = ['P', 'H1', 'H2', 'H3', 'BLOCKQUOTE', 'LI', 'DIV'];
+        let blockAncestor = container;
+        while (blockAncestor && blockAncestor !== editorRef.current && !(blockAncestor instanceof HTMLElement && blockTags.includes(blockAncestor.tagName))) {
+          blockAncestor = blockAncestor.parentNode as Node;
+        }
+        if (selection.isCollapsed) {
+          const heading = document.createElement(`h${level}`);
+          heading.appendChild(document.createTextNode(''));
+          if (blockAncestor && blockAncestor !== editorRef.current) {
+            // Insert after the block
+            if (blockAncestor.nextSibling) {
+              editorRef.current.insertBefore(heading, blockAncestor.nextSibling);
+            } else {
+              editorRef.current.appendChild(heading);
+            }
+          } else {
+            // Insert at caret
+            range.insertNode(heading);
+          }
+          // Place cursor inside
           const newRange = document.createRange();
           newRange.selectNodeContents(heading);
           newRange.collapse(true);
@@ -593,7 +631,15 @@ const RichTextEditor = forwardRef<RichTextEditorHandle, RichTextEditorProps>(
           const content = range.extractContents();
           const heading = document.createElement(`h${level}`);
           heading.appendChild(content);
-          range.insertNode(heading);
+          if (blockAncestor && blockAncestor !== editorRef.current) {
+            if (blockAncestor.nextSibling) {
+              editorRef.current.insertBefore(heading, blockAncestor.nextSibling);
+            } else {
+              editorRef.current.appendChild(heading);
+            }
+          } else {
+            range.insertNode(heading);
+          }
           // Move cursor to end of heading
           const newRange = document.createRange();
           newRange.selectNodeContents(heading);
