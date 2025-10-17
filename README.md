@@ -129,3 +129,32 @@ Right-click (or use ⋮ button) on folders and notes for more options!
 ## License
 
 MIT
+
+## End-to-end tests (Playwright)
+
+This project includes a basic Playwright setup for end-to-end tests.
+
+Install Playwright and browsers:
+
+```bash
+npm install --save-dev @playwright/test
+npm run test:e2e:install
+```
+
+Run tests:
+
+```bash
+# start the dev server in one terminal:
+npm run dev
+
+# in another terminal run:
+npm run test:e2e
+```
+
+Useful scripts:
+
+- `npm run test:e2e` — run Playwright tests in headless mode
+- `npm run test:e2e:headed` — run tests with headed browsers
+- `npm run test:e2e:report` — open the last HTML report
+
+Tests live in the `e2e/` directory. The Playwright config is in `playwright.config.ts`.
