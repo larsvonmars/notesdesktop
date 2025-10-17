@@ -1034,7 +1034,36 @@ const RichTextEditor = forwardRef<RichTextEditorHandle, RichTextEditorProps>(
           // Special handling for headings in WebKit
           if (command.command === 'heading1' || command.command === 'heading2' || command.command === 'heading3') {
             const level = command.command === 'heading1' ? 1 : command.command === 'heading2' ? 2 : 3;
-            applyHeading(level);
+            // Insert heading with sample text
+            const sampleText = level === 1 ? 'Heading 1' : level === 2 ? 'Heading 2' : 'Heading 3';
+            const selection = window.getSelection();
+            if (selection && selection.rangeCount > 0) {
+              const range = selection.getRangeAt(0);
+              // Create heading element
+              const heading = document.createElement(`h${level}`);
+              const textNode = document.createTextNode(sampleText);
+              heading.appendChild(textNode);
+              range.insertNode(heading);
+              // Move cursor to end of heading
+              const newRange = document.createRange();
+              newRange.setStart(heading, 1);
+              newRange.collapse(true);
+              selection.removeAllRanges();
+              selection.addRange(newRange);
+            }
+            // Generate IDs and normalize
+            setTimeout(() => {
+              if (!editorRef.current) return;
+              const headings = editorRef.current.querySelectorAll('h1, h2, h3');
+              headings.forEach((heading) => {
+                if (!heading.id) {
+                  const text = heading.textContent || '';
+                  heading.id = generateHeadingId(text);
+                }
+              });
+              normalizeEditorContent(editorRef.current);
+              emitChange();
+            }, 10);
           } else if (typeof command.command === 'function') {
             command.command();
           } else {
@@ -1090,13 +1119,12 @@ const RichTextEditor = forwardRef<RichTextEditorHandle, RichTextEditorProps>(
         } catch (error) {
           console.error('Slash command execution failed:', error);
           // Fallback: insert plain text representation
-          const fallbackText = command.command === 'heading1' ? '# ' : 
-                              command.command === 'heading2' ? '## ' : 
-                              command.command === 'heading3' ? '### ' : 
+          const fallbackText = command.command === 'heading1' ? '# Heading 1\n' : 
+                              command.command === 'heading2' ? '## Heading 2\n' : 
+                              command.command === 'heading3' ? '### Heading 3\n' : 
                               `# ${command.label}\n`;
           insertPlainTextAtSelection(fallbackText);
         }
-        
         // Force focus for WebView compatibility
         forceWebViewFocus();
       }, 20); // Slightly longer delay for WebKit
