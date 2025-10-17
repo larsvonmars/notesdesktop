@@ -569,20 +569,20 @@ const RichTextEditor = forwardRef<RichTextEditorHandle, RichTextEditorProps>(
       emitChange()
     }, [disabled, emitChange])
 
-    // Fixed applyHeading function with robust WebView handling
+    // FIXED applyHeading function with WebKit/WebView compatibility
     const applyHeading = useCallback(
       (level: 1 | 2 | 3) => {
         if (disabled || !editorRef.current) return;
         
         const selection = window.getSelection();
         if (!selection || selection.rangeCount === 0) {
-          // Fallback: insert heading at end with proper cursor placement
+          // Fallback: create heading at end
           const heading = document.createElement(`h${level}`);
           const textNode = document.createTextNode('');
           heading.appendChild(textNode);
           editorRef.current.appendChild(heading);
           
-          // Set cursor inside new heading
+          // WebKit-compatible cursor placement
           const range = document.createRange();
           range.setStart(textNode, 0);
           range.collapse(true);
@@ -595,34 +595,73 @@ const RichTextEditor = forwardRef<RichTextEditorHandle, RichTextEditorProps>(
             heading.id = generateHeadingId('');
             normalizeEditorContent(editorRef.current);
             emitChange();
-          }, 0);
+          }, 10);
           return;
         }
 
         const range = selection.getRangeAt(0);
-        
-        // Simple approach: always create new heading element
-        const heading = document.createElement(`h${level}`);
-        
-        if (!range.collapsed) {
-          // Wrap selected content
-          const content = range.extractContents();
-          heading.appendChild(content);
+        let container = range.startContainer;
+        let offset = range.startOffset;
+
+        // Handle WebKit specific behavior for empty blocks
+        if (range.collapsed) {
+          const blockElement = container.nodeType === Node.TEXT_NODE 
+            ? container.parentElement 
+            : container as Element;
+          
+          // Check if we're in an empty block or at the beginning
+          const isEmptyBlock = blockElement && 
+            (blockElement.textContent === '' || 
+             (blockElement.textContent === '\u200B' || 
+              blockElement.innerHTML === '<br>'));
+          
+          if (isEmptyBlock) {
+            // Replace the empty block with a heading
+            const heading = document.createElement(`h${level}`);
+            const textNode = document.createTextNode('');
+            heading.appendChild(textNode);
+            
+            if (blockElement.parentNode) {
+              blockElement.parentNode.replaceChild(heading, blockElement);
+              
+              // Set cursor inside the new heading
+              const newRange = document.createRange();
+              newRange.setStart(textNode, 0);
+              newRange.collapse(true);
+              selection.removeAllRanges();
+              selection.addRange(newRange);
+            }
+          } else {
+            // Regular insertion for non-empty content
+            const heading = document.createElement(`h${level}`);
+            heading.appendChild(document.createTextNode(''));
+            
+            // Insert at current position
+            range.insertNode(heading);
+            
+            // Move cursor inside the heading
+            const newRange = document.createRange();
+            newRange.selectNodeContents(heading);
+            newRange.collapse(true);
+            selection.removeAllRanges();
+            selection.addRange(newRange);
+          }
         } else {
-          // Insert empty heading
-          heading.appendChild(document.createTextNode(''));
+          // Wrap selected content in heading
+          const content = range.extractContents();
+          const heading = document.createElement(`h${level}`);
+          heading.appendChild(content);
+          range.insertNode(heading);
+          
+          // Move cursor to end of heading
+          const newRange = document.createRange();
+          newRange.selectNodeContents(heading);
+          newRange.collapse(false);
+          selection.removeAllRanges();
+          selection.addRange(newRange);
         }
         
-        range.insertNode(heading);
-        
-        // Move cursor inside heading
-        const newRange = document.createRange();
-        newRange.selectNodeContents(heading);
-        newRange.collapse(true);
-        selection.removeAllRanges();
-        selection.addRange(newRange);
-        
-        // Generate ID and normalize
+        // Generate IDs and normalize
         setTimeout(() => {
           if (!editorRef.current) return;
           const headings = editorRef.current.querySelectorAll('h1, h2, h3');
@@ -634,7 +673,7 @@ const RichTextEditor = forwardRef<RichTextEditorHandle, RichTextEditorProps>(
           });
           normalizeEditorContent(editorRef.current);
           emitChange();
-        }, 0);
+        }, 10);
       },
       [disabled, emitChange]
     )
@@ -957,7 +996,7 @@ const RichTextEditor = forwardRef<RichTextEditorHandle, RichTextEditorProps>(
       }
     }, [showSlashMenu, updateSlashMenuPosition])
 
-    // Fixed executeSlashCommand with robust WebView handling
+    // FIXED executeSlashCommand with WebKit-compatible heading handling
     const executeSlashCommand = useCallback((command: SlashCommand) => {
       if (!editorRef.current) return;
       
@@ -965,10 +1004,7 @@ const RichTextEditor = forwardRef<RichTextEditorHandle, RichTextEditorProps>(
       setSlashMenuFilter('');
       setSelectedCommandIndex(0);
 
-      // Save current selection before any DOM manipulation
-      saveSelection();
-      
-      // Simple approach to remove slash command text
+      // Use a simpler approach for WebKit - just remove the slash and text after it
       const selection = window.getSelection();
       if (selection && selection.rangeCount > 0) {
         const range = selection.getRangeAt(0);
@@ -979,10 +1015,10 @@ const RichTextEditor = forwardRef<RichTextEditorHandle, RichTextEditorProps>(
           const slashIndex = textContent.lastIndexOf('/');
           
           if (slashIndex !== -1) {
-            // Remove the slash and filter text
+            // Simply remove everything from the slash onwards
             startContainer.textContent = textContent.substring(0, slashIndex);
             
-            // Set cursor position after the removal
+            // Set cursor right after where the slash was
             const newRange = document.createRange();
             newRange.setStart(startContainer, slashIndex);
             newRange.collapse(true);
@@ -992,16 +1028,13 @@ const RichTextEditor = forwardRef<RichTextEditorHandle, RichTextEditorProps>(
         }
       }
 
-      // Execute command immediately with requestAnimationFrame for better timing
-      requestAnimationFrame(() => {
+      // Use setTimeout to ensure DOM is updated before executing command
+      setTimeout(() => {
         try {
-          // Special handling for headings to ensure correct cursor placement
-          if (command.command === 'heading1') {
-            applyHeading(1);
-          } else if (command.command === 'heading2') {
-            applyHeading(2);
-          } else if (command.command === 'heading3') {
-            applyHeading(3);
+          // Special handling for headings in WebKit
+          if (command.command === 'heading1' || command.command === 'heading2' || command.command === 'heading3') {
+            const level = command.command === 'heading1' ? 1 : command.command === 'heading2' ? 2 : 3;
+            applyHeading(level);
           } else if (typeof command.command === 'function') {
             command.command();
           } else {
@@ -1057,13 +1090,16 @@ const RichTextEditor = forwardRef<RichTextEditorHandle, RichTextEditorProps>(
         } catch (error) {
           console.error('Slash command execution failed:', error);
           // Fallback: insert plain text representation
-          const fallbackText = `# ${command.label}\n`;
+          const fallbackText = command.command === 'heading1' ? '# ' : 
+                              command.command === 'heading2' ? '## ' : 
+                              command.command === 'heading3' ? '### ' : 
+                              `# ${command.label}\n`;
           insertPlainTextAtSelection(fallbackText);
         }
         
         // Force focus for WebView compatibility
         forceWebViewFocus();
-      });
+      }, 20); // Slightly longer delay for WebKit
     }, [execCommand, applyCode, toggleChecklist, applyHeading, insertHorizontalRule, insertLink, insertPlainTextAtSelection, forceWebViewFocus])
 
     const scrollToHeading = useCallback((headingId: string) => {
