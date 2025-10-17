@@ -97,6 +97,19 @@ function processNodeToMarkdown(node: Node): string {
   const element = node as HTMLElement
   const tagName = element.tagName.toLowerCase()
   const children = Array.from(element.childNodes).map(child => processNodeToMarkdown(child)).join('')
+
+  // Helper to preserve any whitespace that surrounds inline content so
+  // that spaces before/after stylized elements (e.g. <strong>) are not
+  // swallowed by the markdown wrapper. It keeps leading/trailing
+  // whitespace outside of the markdown markers.
+  const wrapPreserveWhitespace = (left: string, right: string, content: string) => {
+    const leadingMatch = content.match(/^\s+/)
+    const trailingMatch = content.match(/\s+$/)
+    const leading = leadingMatch ? leadingMatch[0] : ''
+    const trailing = trailingMatch ? trailingMatch[0] : ''
+    const inner = content.trim()
+    return `${leading}${left}${inner}${right}${trailing}`
+  }
   
   switch (tagName) {
     case 'h1':
@@ -115,16 +128,16 @@ function processNodeToMarkdown(node: Node): string {
       return `${children}\n\n`
     case 'strong':
     case 'b':
-      return `**${children}**`
+      return wrapPreserveWhitespace('**', '**', children)
     case 'em':
     case 'i':
-      return `*${children}*`
+      return wrapPreserveWhitespace('*', '*', children)
     case 'code':
       // Check if parent is pre for code block
       if (element.parentElement?.tagName.toLowerCase() === 'pre') {
         return children
       }
-      return `\`${children}\``
+      return wrapPreserveWhitespace('`', '`', children)
     case 'pre':
       return `\`\`\`\n${children}\n\`\`\`\n\n`
     case 'blockquote':
@@ -138,7 +151,11 @@ function processNodeToMarkdown(node: Node): string {
       return children
     case 'a':
       const href = element.getAttribute('href') || ''
-      return `[${children}](${href})`
+      // Preserve whitespace around link text too
+      const linkMarkdown = `[${children.trim()}](${href})`
+      const leading = children.match(/^\s+/)?.[0] ?? ''
+      const trailing = children.match(/\s+$/)?.[0] ?? ''
+      return `${leading}${linkMarkdown}${trailing}`
     case 'hr':
       return '---\n\n'
     case 'u':
@@ -181,6 +198,8 @@ function processListToMarkdown(listElement: HTMLElement, ordered: boolean): stri
       }
     })
     
-    return prefix + content.trim()
+    // Do not trim content here — trimming removes intentional
+    // spaces before/after stylized inline elements (e.g. bold)
+    return prefix + content
   }).join('\n')
 }
