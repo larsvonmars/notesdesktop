@@ -220,14 +220,24 @@ const RichTextEditor = forwardRef<RichTextEditorHandle, RichTextEditorProps>(
 
     const sanitize = useCallback(
       (html: string) => {
-        // DOMPurify needs window to be available (should always be in browser context)
         if (typeof window === 'undefined') return html
         return DOMPurify.sanitize(html, SANITIZE_CONFIG) as string
       },
       []
     )
 
-    // Debounced checklist normalization to avoid synchronous DOM walks on every keystroke
+    // WebView-specific focus helper
+    const forceWebViewFocus = useCallback(() => {
+      if (!editorRef.current) return;
+      
+      // WebView sometimes needs extra focus handling
+      editorRef.current.blur();
+      setTimeout(() => {
+        editorRef.current?.focus();
+      }, 50);
+    }, []);
+
+    // Debounced checklist normalization
     const normalizeChecklistItemsInline = useCallback(() => {
       if (!editorRef.current) return
 
@@ -243,10 +253,8 @@ const RichTextEditor = forwardRef<RichTextEditorHandle, RichTextEditorProps>(
           if (!checkbox.hasAttribute('data-checked')) {
             checkbox.setAttribute('data-checked', checkbox.checked ? 'true' : 'false')
           }
-          // Mark checklist item
           li.classList.add('checklist-item')
           li.setAttribute('data-checklist', 'true')
-          // Ensure text node
           const existingTextNode = Array.from(li.childNodes).find(
             (node): node is Text => node.nodeType === Node.TEXT_NODE
           )
@@ -280,7 +288,7 @@ const RichTextEditor = forwardRef<RichTextEditorHandle, RichTextEditorProps>(
       
       checklistNormalizationTimerRef.current = setTimeout(() => {
         normalizeChecklistItemsInline()
-      }, 150) // Debounce by 150ms
+      }, 150)
     }, [normalizeChecklistItemsInline])
 
     const emitChange = useCallback(() => {
@@ -288,7 +296,6 @@ const RichTextEditor = forwardRef<RichTextEditorHandle, RichTextEditorProps>(
       const sanitized = sanitize(editorRef.current.innerHTML)
       if (sanitized !== value) {
         onChange(sanitized)
-        // Capture history after change
         if (debouncedCaptureRef.current) {
           debouncedCaptureRef.current()
         }
@@ -449,11 +456,8 @@ const RichTextEditor = forwardRef<RichTextEditorHandle, RichTextEditorProps>(
     useEffect(() => {
       if (!editorRef.current) return
       
-      // Create mutation observer to watch for DOM changes
       const observer = new MutationObserver((mutations) => {
-        // Check if any mutations involve list items or checkboxes
         const hasRelevantChanges = mutations.some(mutation => {
-          // Check if target is or contains a list item
           if (mutation.target instanceof HTMLElement) {
             const target = mutation.target
             if (target.tagName === 'LI' || target.closest('li') || target.querySelector('li')) {
@@ -461,7 +465,6 @@ const RichTextEditor = forwardRef<RichTextEditorHandle, RichTextEditorProps>(
             }
           }
           
-          // Check added nodes
           for (const node of Array.from(mutation.addedNodes)) {
             if (node instanceof HTMLElement) {
               if (node.tagName === 'LI' || node.querySelector('li') || node.querySelector('input[type="checkbox"]')) {
@@ -478,7 +481,6 @@ const RichTextEditor = forwardRef<RichTextEditorHandle, RichTextEditorProps>(
         }
       })
       
-      // Observe the editor for changes
       observer.observe(editorRef.current, {
         childList: true,
         subtree: true,
@@ -506,7 +508,6 @@ const RichTextEditor = forwardRef<RichTextEditorHandle, RichTextEditorProps>(
           sanitizeInlineNodes(range)
         }
         
-        // Execute command based on type
         switch (command) {
           case 'bold':
             applyInlineStyle('strong')
@@ -538,7 +539,6 @@ const RichTextEditor = forwardRef<RichTextEditorHandle, RichTextEditorProps>(
             console.warn(`Unsupported rich text command: ${command}`)
         }
         
-        // Normalize after command
         if (editorRef.current) {
           normalizeEditorContent(editorRef.current)
           mergeAdjacentLists(editorRef.current)
@@ -563,38 +563,78 @@ const RichTextEditor = forwardRef<RichTextEditorHandle, RichTextEditorProps>(
       
       toggleChecklistState(editorRef.current)
       
-      // Normalize after
       normalizeEditorContent(editorRef.current)
       mergeAdjacentLists(editorRef.current)
       
       emitChange()
     }, [disabled, emitChange])
 
+    // Fixed applyHeading function with robust WebView handling
     const applyHeading = useCallback(
       (level: 1 | 2 | 3) => {
-        if (disabled || !editorRef.current) return
+        if (disabled || !editorRef.current) return;
         
-        const selection = window.getSelection()
-        if (!selection || selection.rangeCount === 0) return
+        const selection = window.getSelection();
+        if (!selection || selection.rangeCount === 0) {
+          // Fallback: insert heading at end with proper cursor placement
+          const heading = document.createElement(`h${level}`);
+          const textNode = document.createTextNode('');
+          heading.appendChild(textNode);
+          editorRef.current.appendChild(heading);
+          
+          // Set cursor inside new heading
+          const range = document.createRange();
+          range.setStart(textNode, 0);
+          range.collapse(true);
+          selection?.removeAllRanges();
+          selection?.addRange(range);
+          
+          // Generate ID and normalize
+          setTimeout(() => {
+            if (!editorRef.current) return;
+            heading.id = generateHeadingId('');
+            normalizeEditorContent(editorRef.current);
+            emitChange();
+          }, 0);
+          return;
+        }
 
-        applyBlockFormat(`h${level}` as 'h1' | 'h2' | 'h3', editorRef.current)
+        const range = selection.getRangeAt(0);
         
-        // Generate ID for the heading for TOC links
+        // Simple approach: always create new heading element
+        const heading = document.createElement(`h${level}`);
+        
+        if (!range.collapsed) {
+          // Wrap selected content
+          const content = range.extractContents();
+          heading.appendChild(content);
+        } else {
+          // Insert empty heading
+          heading.appendChild(document.createTextNode(''));
+        }
+        
+        range.insertNode(heading);
+        
+        // Move cursor inside heading
+        const newRange = document.createRange();
+        newRange.selectNodeContents(heading);
+        newRange.collapse(true);
+        selection.removeAllRanges();
+        selection.addRange(newRange);
+        
+        // Generate ID and normalize
         setTimeout(() => {
-          if (!editorRef.current) return
-          const headings = editorRef.current.querySelectorAll('h1, h2, h3')
+          if (!editorRef.current) return;
+          const headings = editorRef.current.querySelectorAll('h1, h2, h3');
           headings.forEach((heading) => {
             if (!heading.id) {
-              const text = heading.textContent || ''
-              heading.id = generateHeadingId(text)
+              const text = heading.textContent || '';
+              heading.id = generateHeadingId(text);
             }
-          })
-          
-          // Normalize after
-          normalizeEditorContent(editorRef.current!)
-          
-          emitChange()
-        }, 0)
+          });
+          normalizeEditorContent(editorRef.current);
+          emitChange();
+        }, 0);
       },
       [disabled, emitChange]
     )
@@ -636,7 +676,6 @@ const RichTextEditor = forwardRef<RichTextEditorHandle, RichTextEditorProps>(
       const range = selection.getRangeAt(0)
       const selectedText = range.toString()
 
-      // Check if we're inside a link
       let node = range.commonAncestorContainer
       if (node.nodeType === Node.TEXT_NODE) {
         node = node.parentNode!
@@ -644,11 +683,9 @@ const RichTextEditor = forwardRef<RichTextEditorHandle, RichTextEditorProps>(
       const existingLink = (node as Element).closest('a')
 
       if (existingLink) {
-        // Edit existing link
         setLinkUrl(existingLink.getAttribute('href') || '')
         setLinkText(existingLink.textContent || '')
       } else {
-        // New link
         setLinkUrl('')
         setLinkText(selectedText)
       }
@@ -667,7 +704,6 @@ const RichTextEditor = forwardRef<RichTextEditorHandle, RichTextEditorProps>(
 
       const range = selection.getRangeAt(0)
       
-      // Remove existing link if inside one
       let node = range.commonAncestorContainer
       if (node.nodeType === Node.TEXT_NODE) {
         node = node.parentNode!
@@ -707,7 +743,6 @@ const RichTextEditor = forwardRef<RichTextEditorHandle, RichTextEditorProps>(
       const range = document.createRange()
       const selection = window.getSelection()
       
-      // Find text node and position
       const walker = document.createTreeWalker(
         editorRef.current,
         NodeFilter.SHOW_TEXT,
@@ -732,7 +767,6 @@ const RichTextEditor = forwardRef<RichTextEditorHandle, RichTextEditorProps>(
       selection?.removeAllRanges()
       selection?.addRange(range)
       
-      // Scroll into view
       range.startContainer.parentElement?.scrollIntoView({
         behavior: 'smooth',
         block: 'center'
@@ -796,7 +830,7 @@ const RichTextEditor = forwardRef<RichTextEditorHandle, RichTextEditorProps>(
       }
       
       emitChange()
-      performSearch() // Re-search after replace
+      performSearch()
     }, [currentMatchIndex, replaceQuery, searchMatches, highlightMatch, insertPlainTextAtSelection, emitChange, performSearch, scheduleChecklistNormalization])
 
     const replaceAllMatches = useCallback(() => {
@@ -826,12 +860,10 @@ const RichTextEditor = forwardRef<RichTextEditorHandle, RichTextEditorProps>(
       const hr = document.createElement('hr')
       range.insertNode(hr)
       
-      // Insert a paragraph after the hr for continued editing
       const p = document.createElement('p')
       p.appendChild(document.createElement('br'))
       hr.parentNode?.insertBefore(p, hr.nextSibling)
       
-      // Move cursor to the new paragraph
       const newRange = document.createRange()
       newRange.setStart(p, 0)
       newRange.collapse(true)
@@ -865,16 +897,13 @@ const RichTextEditor = forwardRef<RichTextEditorHandle, RichTextEditorProps>(
       const rect = range.getBoundingClientRect()
       const editorRect = editorRef.current.getBoundingClientRect()
 
-      // Calculate base position relative to editor
       let top = rect.bottom - editorRect.top + editorRef.current.scrollTop + 4
       let left = rect.left - editorRect.left + editorRef.current.scrollLeft
 
-      // Menu dimensions (responsive to screen size)
       const isMobile = window.innerWidth < 640
       const menuWidth = isMobile ? Math.min(window.innerWidth - 32, 280) : 288
       const menuHeight = Math.min(filteredSlashCommands.length * 60 + 80, 384)
 
-      // Check right boundary
       const editorWidth = editorRect.width
       const maxLeft = editorWidth - menuWidth - 8
       if (left > maxLeft) {
@@ -884,18 +913,14 @@ const RichTextEditor = forwardRef<RichTextEditorHandle, RichTextEditorProps>(
         left = 8
       }
 
-      // Check bottom boundary - flip above caret if needed
       const viewportBottom = window.innerHeight
       const menuBottom = rect.bottom + menuHeight + 4
       
       if (menuBottom > viewportBottom) {
-        // Position above the caret
         const newTop = rect.top - editorRect.top + editorRef.current.scrollTop - menuHeight - 4
-        // Ensure it doesn't go above viewport
         if (newTop > 0) {
           top = newTop
         } else {
-          // If can't fit above, keep below but adjust to fit
           top = Math.max(8, viewportBottom - editorRect.top - menuHeight - 8)
         }
       }
@@ -911,15 +936,12 @@ const RichTextEditor = forwardRef<RichTextEditorHandle, RichTextEditorProps>(
         const range = selection.getRangeAt(0)
         const textBeforeCursor = range.startContainer.textContent?.substring(0, range.startOffset) || ''
         
-        // Don't show menu if typing a URL (http:// or https://)
         const urlPattern = /https?:$/
         if (urlPattern.test(textBeforeCursor.trim())) {
           return
         }
         
-        // Only show menu if / is at start of line or after whitespace
         if (textBeforeCursor.trim() === '' || textBeforeCursor.endsWith(' ') || textBeforeCursor.endsWith('\n')) {
-          // Store the position where slash was typed
           slashPositionRef.current = {
             container: range.startContainer,
             offset: range.startOffset
@@ -935,146 +957,128 @@ const RichTextEditor = forwardRef<RichTextEditorHandle, RichTextEditorProps>(
       }
     }, [showSlashMenu, updateSlashMenuPosition])
 
+    // Fixed executeSlashCommand with robust WebView handling
     const executeSlashCommand = useCallback((command: SlashCommand) => {
-      setShowSlashMenu(false)
+      if (!editorRef.current) return;
       
-      // Remove the / character and any typed filter text
-      const selection = window.getSelection()
-      if (selection && selection.rangeCount > 0 && slashPositionRef.current) {
-        try {
-          const range = document.createRange()
-          range.setStart(slashPositionRef.current.container, slashPositionRef.current.offset)
-          range.setEnd(selection.getRangeAt(0).endContainer, selection.getRangeAt(0).endOffset)
-          range.deleteContents()
+      setShowSlashMenu(false);
+      setSlashMenuFilter('');
+      setSelectedCommandIndex(0);
+
+      // Save current selection before any DOM manipulation
+      saveSelection();
+      
+      // Simple approach to remove slash command text
+      const selection = window.getSelection();
+      if (selection && selection.rangeCount > 0) {
+        const range = selection.getRangeAt(0);
+        const startContainer = range.startContainer;
+        
+        if (startContainer.nodeType === Node.TEXT_NODE) {
+          const textContent = startContainer.textContent || '';
+          const slashIndex = textContent.lastIndexOf('/');
           
-          // Restore cursor position with WebKit-friendly collapse handling
-          let collapseContainer: Node | null = range.startContainer
-          let collapseOffset = range.startOffset
-
-          // If the container is no longer in the document, walk up to a parent that is
-          const editorElement = editorRef.current
-          if (collapseContainer && editorElement) {
-            // Check if node is still in the document using contains() which is more reliable
-            const isInDocument = editorElement.contains(collapseContainer)
+          if (slashIndex !== -1) {
+            // Remove the slash and filter text
+            startContainer.textContent = textContent.substring(0, slashIndex);
             
-            if (!isInDocument) {
-              // Walk up the tree to find a connected ancestor inside the editor
-              let parent: Node | null = collapseContainer.parentNode
-              let found = false
-              while (parent) {
-                if (editorElement.contains(parent)) {
-                  const index = Array.prototype.indexOf.call(parent.childNodes, collapseContainer)
-                  collapseOffset = index >= 0 ? index : parent.childNodes.length
-                  collapseContainer = parent
-                  found = true
-                  break
-                }
-                parent = parent.parentNode
-              }
-
-              if (!found) {
-                collapseContainer = editorElement
-                collapseOffset = editorElement.childNodes.length
-              }
-            }
+            // Set cursor position after the removal
+            const newRange = document.createRange();
+            newRange.setStart(startContainer, slashIndex);
+            newRange.collapse(true);
+            selection.removeAllRanges();
+            selection.addRange(newRange);
           }
-
-          selection.removeAllRanges()
-          try {
-            selection.collapse(collapseContainer, collapseOffset)
-          } catch (_collapseError) {
-            if (editorElement) {
-              selection.collapse(editorElement, editorElement.childNodes.length)
-            }
-          }
-        } catch (e) {
-          console.warn('Failed to delete slash character:', e)
         }
       }
 
-      slashPositionRef.current = null
-      setSlashMenuFilter('')
-      setSelectedCommandIndex(0)
-
-      // Small delay to ensure slash is removed before executing command
-      setTimeout(() => {
-        // Execute command
-        if (typeof command.command === 'function') {
-          command.command()
-        } else {
-          // Use the exec method from imperative handle
-          const execFn = (cmd: RichTextCommand) => {
-            switch (cmd) {
-              case 'bold':
-                execCommand('bold')
-                break
-              case 'italic':
-                execCommand('italic')
-                break
-              case 'underline':
-                execCommand('underline')
-                break
-              case 'strike':
-                execCommand('strikeThrough')
-                break
-              case 'code':
-                applyCode()
-                break
-              case 'unordered-list':
-                execCommand('insertUnorderedList')
-                break
-              case 'ordered-list':
-                execCommand('insertOrderedList')
-                break
-              case 'blockquote':
-                execCommand('formatBlock', 'blockquote')
-                break
-              case 'checklist':
-                toggleChecklist()
-                break
-              case 'heading1':
-                applyHeading(1)
-                break
-              case 'heading2':
-                applyHeading(2)
-                break
-              case 'heading3':
-                applyHeading(3)
-                break
-              case 'horizontal-rule':
-                insertHorizontalRule()
-                break
-              case 'link':
-                insertLink()
-                break
-            }
+      // Execute command immediately with requestAnimationFrame for better timing
+      requestAnimationFrame(() => {
+        try {
+          // Special handling for headings to ensure correct cursor placement
+          if (command.command === 'heading1') {
+            applyHeading(1);
+          } else if (command.command === 'heading2') {
+            applyHeading(2);
+          } else if (command.command === 'heading3') {
+            applyHeading(3);
+          } else if (typeof command.command === 'function') {
+            command.command();
+          } else {
+            // Use the exec method from imperative handle
+            const execFn = (cmd: RichTextCommand) => {
+              switch (cmd) {
+                case 'bold':
+                  execCommand('bold');
+                  break;
+                case 'italic':
+                  execCommand('italic');
+                  break;
+                case 'underline':
+                  execCommand('underline');
+                  break;
+                case 'strike':
+                  execCommand('strikeThrough');
+                  break;
+                case 'code':
+                  applyCode();
+                  break;
+                case 'unordered-list':
+                  execCommand('insertUnorderedList');
+                  break;
+                case 'ordered-list':
+                  execCommand('insertOrderedList');
+                  break;
+                case 'blockquote':
+                  execCommand('formatBlock', 'blockquote');
+                  break;
+                case 'checklist':
+                  toggleChecklist();
+                  break;
+                case 'heading1':
+                  applyHeading(1);
+                  break;
+                case 'heading2':
+                  applyHeading(2);
+                  break;
+                case 'heading3':
+                  applyHeading(3);
+                  break;
+                case 'horizontal-rule':
+                  insertHorizontalRule();
+                  break;
+                case 'link':
+                  insertLink();
+                  break;
+              }
+            };
+            execFn(command.command as RichTextCommand);
           }
-          execFn(command.command as RichTextCommand)
+        } catch (error) {
+          console.error('Slash command execution failed:', error);
+          // Fallback: insert plain text representation
+          const fallbackText = `# ${command.label}\n`;
+          insertPlainTextAtSelection(fallbackText);
         }
         
-        // Focus back on editor
-        editorRef.current?.focus()
-      }, 10)
-    }, [execCommand, applyCode, toggleChecklist, applyHeading, insertHorizontalRule, insertLink])
+        // Force focus for WebView compatibility
+        forceWebViewFocus();
+      });
+    }, [execCommand, applyCode, toggleChecklist, applyHeading, insertHorizontalRule, insertLink, insertPlainTextAtSelection, forceWebViewFocus])
 
     const scrollToHeading = useCallback((headingId: string) => {
       if (!editorRef.current || !headingId) return
       
-      // Escape special characters in the ID for use in querySelector
-      // Fallback for browsers without CSS.escape
       const escapedId = typeof CSS !== 'undefined' && CSS.escape 
         ? CSS.escape(headingId)
         : headingId.replace(/[!"#$%&'()*+,.\/:;<=>?@[\\\]^`{|}~]/g, '\\$&')
       const heading = editorRef.current.querySelector(`#${escapedId}`)
       if (heading && heading instanceof HTMLElement) {
-        // Calculate the position of the heading relative to the editor container
         const editorRect = editorRef.current.getBoundingClientRect()
         const headingRect = heading.getBoundingClientRect()
         
-        // Calculate the scroll position needed to bring the heading to the top of the editor
-        const scrollTop = editorRef.current.scrollTop + (headingRect.top - editorRect.top) - 16 // 16px padding
+        const scrollTop = editorRef.current.scrollTop + (headingRect.top - editorRect.top) - 16
         
-        // Smooth scroll the editor container
         editorRef.current.scrollTo({
           top: scrollTop,
           behavior: 'smooth'
@@ -1093,7 +1097,6 @@ const RichTextEditor = forwardRef<RichTextEditorHandle, RichTextEditorProps>(
         scrollToHeading,
         queryCommandState: (command: string) => {
           try {
-            // For our custom commands, check the DOM directly
             const selection = window.getSelection()
             if (!selection || selection.rangeCount === 0) return false
             
@@ -1117,8 +1120,6 @@ const RichTextEditor = forwardRef<RichTextEditorHandle, RichTextEditorProps>(
               case 'insertOrderedList':
                 return !!element?.closest('ol')
               default:
-                // Use document.queryCommandState as fallback, but avoid it in WebView
-                // where it might not be reliable
                 try {
                   return document.queryCommandState?.(command) ?? false
                 } catch {
@@ -1208,7 +1209,6 @@ const RichTextEditor = forwardRef<RichTextEditorHandle, RichTextEditorProps>(
       const content = editorRef.current.innerHTML
       if (sanitize(content) !== value) {
         editorRef.current.innerHTML = value || ''
-        // Initialize history after setting initial content
         if (historyManagerRef.current) {
           historyManagerRef.current.capture()
         }
@@ -1421,7 +1421,6 @@ const RichTextEditor = forwardRef<RichTextEditorHandle, RichTextEditorProps>(
               return newFilter
             })
           } else {
-            // Close menu and delete the slash
             setShowSlashMenu(false)
             slashPositionRef.current = null
           }
@@ -1479,11 +1478,9 @@ const RichTextEditor = forwardRef<RichTextEditorHandle, RichTextEditorProps>(
         event.preventDefault()
         applyCode()
       } else if (key === 'k') {
-        // Cmd/Ctrl+K for link
         event.preventDefault()
         insertLink()
       } else if (key === 'f') {
-        // Cmd/Ctrl+F for search
         event.preventDefault()
         setShowSearchDialog(true)
       } else if (key === 'z') {
