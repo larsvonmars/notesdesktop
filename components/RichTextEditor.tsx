@@ -572,32 +572,48 @@ const RichTextEditor = forwardRef<RichTextEditorHandle, RichTextEditorProps>(
 
     const applyHeading = useCallback(
       (level: 1 | 2 | 3) => {
-        if (disabled || !editorRef.current) return
-        
-        const selection = window.getSelection()
-        if (!selection || selection.rangeCount === 0) return
+        if (disabled || !editorRef.current) return;
+        const selection = window.getSelection();
+        if (!selection || selection.rangeCount === 0) return;
 
-        applyBlockFormat(`h${level}` as 'h1' | 'h2' | 'h3', editorRef.current)
-        
+        const range = selection.getRangeAt(0);
+        if (selection.isCollapsed) {
+          // Insert empty heading and place cursor inside
+          const heading = document.createElement(`h${level}`);
+          heading.appendChild(document.createTextNode(''));
+          range.insertNode(heading);
+          // Move cursor inside heading
+          const newRange = document.createRange();
+          newRange.selectNodeContents(heading);
+          newRange.collapse(true);
+          selection.removeAllRanges();
+          selection.addRange(newRange);
+        } else {
+          // Wrap selected content in heading
+          const content = range.extractContents();
+          const heading = document.createElement(`h${level}`);
+          heading.appendChild(content);
+          range.insertNode(heading);
+          // Move cursor to end of heading
+          const newRange = document.createRange();
+          newRange.selectNodeContents(heading);
+          newRange.collapse(false);
+          selection.removeAllRanges();
+          selection.addRange(newRange);
+        }
         // Generate ID for the heading for TOC links and normalize
-        // Use setTimeout to allow DOM to settle after block format change
         setTimeout(() => {
-          if (!editorRef.current) return
-          
-          const headings = editorRef.current.querySelectorAll('h1, h2, h3')
+          if (!editorRef.current) return;
+          const headings = editorRef.current.querySelectorAll('h1, h2, h3');
           headings.forEach((heading) => {
             if (!heading.id) {
-              const text = heading.textContent || ''
-              heading.id = generateHeadingId(text)
+              const text = heading.textContent || '';
+              heading.id = generateHeadingId(text);
             }
-          })
-          
-          // Normalize content to ensure consistent DOM structure
-          normalizeEditorContent(editorRef.current!)
-          
-          // Emit change to notify parent component
-          emitChange()
-        }, 0)
+          });
+          normalizeEditorContent(editorRef.current!);
+          emitChange();
+        }, 0);
       },
       [disabled, emitChange]
     )
@@ -1001,63 +1017,77 @@ const RichTextEditor = forwardRef<RichTextEditorHandle, RichTextEditorProps>(
 
       // Small delay to ensure slash is removed before executing command
       setTimeout(() => {
-        // Execute command
+        // Special handling for headings to ensure correct cursor placement
+        if (command.command === 'heading1') {
+          applyHeading(1);
+          editorRef.current?.focus();
+          return;
+        }
+        if (command.command === 'heading2') {
+          applyHeading(2);
+          editorRef.current?.focus();
+          return;
+        }
+        if (command.command === 'heading3') {
+          applyHeading(3);
+          editorRef.current?.focus();
+          return;
+        }
         if (typeof command.command === 'function') {
-          command.command()
+          command.command();
         } else {
           // Use the exec method from imperative handle
           const execFn = (cmd: RichTextCommand) => {
             switch (cmd) {
               case 'bold':
-                execCommand('bold')
-                break
+                execCommand('bold');
+                break;
               case 'italic':
-                execCommand('italic')
-                break
+                execCommand('italic');
+                break;
               case 'underline':
-                execCommand('underline')
-                break
+                execCommand('underline');
+                break;
               case 'strike':
-                execCommand('strikeThrough')
-                break
+                execCommand('strikeThrough');
+                break;
               case 'code':
-                applyCode()
-                break
+                applyCode();
+                break;
               case 'unordered-list':
-                execCommand('insertUnorderedList')
-                break
+                execCommand('insertUnorderedList');
+                break;
               case 'ordered-list':
-                execCommand('insertOrderedList')
-                break
+                execCommand('insertOrderedList');
+                break;
               case 'blockquote':
-                execCommand('formatBlock', 'blockquote')
-                break
+                execCommand('formatBlock', 'blockquote');
+                break;
               case 'checklist':
-                toggleChecklist()
-                break
+                toggleChecklist();
+                break;
               case 'heading1':
-                applyHeading(1)
-                break
+                applyHeading(1);
+                break;
               case 'heading2':
-                applyHeading(2)
-                break
+                applyHeading(2);
+                break;
               case 'heading3':
-                applyHeading(3)
-                break
+                applyHeading(3);
+                break;
               case 'horizontal-rule':
-                insertHorizontalRule()
-                break
+                insertHorizontalRule();
+                break;
               case 'link':
-                insertLink()
-                break
+                insertLink();
+                break;
             }
-          }
-          execFn(command.command as RichTextCommand)
+          };
+          execFn(command.command as RichTextCommand);
         }
-        
         // Focus back on editor
-        editorRef.current?.focus()
-      }, 10)
+        editorRef.current?.focus();
+      }, 10);
     }, [execCommand, applyCode, toggleChecklist, applyHeading, insertHorizontalRule, insertLink])
 
     const scrollToHeading = useCallback((headingId: string) => {
