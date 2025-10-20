@@ -516,16 +516,16 @@ export default function UnifiedPanel({
                 handleFolderToggle(folder.id)
               }
             }}
-            className={`group flex items-center gap-1.5 px-2 py-1.5 rounded-md transition-colors focus:outline-none focus:ring-2 focus:ring-offset-1 focus:ring-blue-500 ${
-              isSelected ? 'bg-blue-50 text-blue-700 font-medium' : 'hover:bg-gray-50 text-gray-700'
-            } ${hoverFolderId === folderKey(folder.id) ? 'ring-2 ring-blue-300 bg-blue-50' : ''}`}
+            className={`group flex items-center gap-1.5 px-2 py-1.5 rounded-md transition-all duration-150 focus:outline-none focus:ring-2 focus:ring-offset-1 focus:ring-blue-500 ${
+              isSelected ? 'bg-blue-50 text-blue-700 font-medium shadow-sm' : 'hover:bg-gray-50 text-gray-700'
+            } ${hoverFolderId === folderKey(folder.id) ? 'ring-2 ring-blue-400 bg-blue-50 shadow-sm' : ''}`}
             style={{ paddingLeft: `${level * 12 + 8}px` }}
           >
             <ChevronRight
               size={14}
-              className={`flex-shrink-0 transition-transform ${isExpanded ? 'rotate-90' : ''}`}
+              className={`flex-shrink-0 transition-transform duration-200 ${isExpanded ? 'rotate-90' : ''} ${hasChildren ? 'text-gray-600' : 'text-gray-300'}`}
             />
-            <FolderTreeIcon size={14} className="flex-shrink-0" />
+            <FolderTreeIcon size={14} className={`flex-shrink-0 ${isExpanded ? 'text-blue-500' : 'text-gray-500'}`} />
             <span className="text-sm truncate flex-1">{folder.name}</span>
             {isLoadingFolder && <span className="text-xs text-gray-400">Loading...</span>}
             {noteCount > 0 && !isLoadingFolder && (
@@ -547,30 +547,36 @@ export default function UnifiedPanel({
 
           {/* Notes in this folder (shown when folder is selected and expanded) */}
           {isExpanded && (
-            <div className="ml-6 space-y-0.5 border-l border-blue-200 pl-2">
+            <div className="ml-4 space-y-0.5 border-l-2 border-gray-200 pl-3 mt-1">
               {isLoadingFolder ? (
-                <div className="text-xs text-gray-500 py-1.5 px-2">Loading notes...</div>
+                <div className="text-xs text-gray-500 py-1.5 px-2 flex items-center gap-2">
+                  <Loader2 size={12} className="animate-spin" />
+                  Loading notes...
+                </div>
               ) : folderError ? (
                 <div className="text-xs text-red-500 py-1.5 px-2">
                   {folderError}
                 </div>
               ) : visibleNotes.length === 0 ? (
-                <div className="text-xs text-gray-400 italic py-1.5 px-2">
-                  {hasSearch ? 'No matching notes in this folder' : 'No notes in this folder'}
+                <div className="text-xs text-gray-400 italic py-1.5 px-2 bg-gray-50 rounded border border-dashed border-gray-300">
+                  {hasSearch ? 'No matching notes in this folder' : 'Empty folder'}
                 </div>
               ) : (
                 visibleNotes.map((n) => (
                   <button
                     key={n.id}
+                    draggable
+                    onDragStart={(e) => handleNoteDragStart(e, n.id)}
+                    onDragEnd={handleNoteDragEnd}
                     onClick={() => {
                       onSelectNote(n)
                       setIsOpen(false)
                     }}
                     onContextMenu={(e) => handleNoteContextMenu(e, n)}
-                    className={`group w-full text-left px-2 py-1.5 rounded-md transition-colors flex items-start justify-between ${
+                    className={`group w-full text-left px-2 py-1.5 rounded-md transition-all duration-150 flex items-start justify-between ${
                       selectedNoteId === n.id
-                        ? 'bg-blue-100 text-blue-700 font-medium'
-                        : 'hover:bg-gray-100 text-gray-700'
+                        ? 'bg-blue-100 text-blue-700 font-medium shadow-sm'
+                        : 'hover:bg-gray-50 text-gray-700 hover:shadow-sm'
                     }`}
                   >
                     <div className="flex-1 min-w-0">
@@ -584,7 +590,7 @@ export default function UnifiedPanel({
                         )}
                         <div className="text-sm truncate">{n.title || 'Untitled'}</div>
                       </div>
-                      <div className="text-xs text-gray-500 mt-0.5">
+                      <div className="text-xs text-gray-500 mt-0.5 ml-5">
                         {new Date(n.updated_at).toLocaleDateString()}
                       </div>
                     </div>
@@ -624,13 +630,20 @@ export default function UnifiedPanel({
   const displayedAllNotes = sortNotes(filteredAllNotes)
   const allError = allNotesEntry?.error
 
-  // Context menu handlers
+  // Context menu handlers with smart positioning
   const handleFolderContextMenu = (e: React.MouseEvent, folderId: string, folderName: string) => {
     e.preventDefault()
     e.stopPropagation()
+    
+    // Calculate position to keep menu in viewport
+    const menuWidth = 200
+    const menuHeight = 250 // Approximate max height
+    const x = Math.min(e.clientX, window.innerWidth - menuWidth - 10)
+    const y = Math.min(e.clientY, window.innerHeight - menuHeight - 10)
+    
     setContextMenu({
-      x: e.clientX,
-      y: e.clientY,
+      x,
+      y,
       type: 'folder',
       id: folderId,
       name: folderName,
@@ -640,9 +653,16 @@ export default function UnifiedPanel({
   const handleNoteContextMenu = (e: React.MouseEvent, note: Note) => {
     e.preventDefault()
     e.stopPropagation()
+    
+    // Calculate position to keep menu in viewport
+    const menuWidth = 200
+    const menuHeight = 180 // Approximate max height
+    const x = Math.min(e.clientX, window.innerWidth - menuWidth - 10)
+    const y = Math.min(e.clientY, window.innerHeight - menuHeight - 10)
+    
     setContextMenu({
-      x: e.clientX,
-      y: e.clientY,
+      x,
+      y,
       type: 'note',
       id: note.id,
       name: note.title || 'Untitled',
@@ -1013,19 +1033,20 @@ export default function UnifiedPanel({
                                     onSelectNote(result)
                                     setIsOpen(false)
                                   }}
-                                  className="w-full text-left px-2.5 py-1.5 rounded-md hover:bg-blue-50 transition-colors"
+                                  className="w-full text-left px-2.5 py-2 rounded-md hover:bg-blue-50 hover:shadow-sm transition-all duration-150 border border-transparent hover:border-blue-200"
                                 >
-                                  <div className="flex items-start gap-2">
-                                    {noteIcon}
+                                  <div className="flex items-start gap-2.5">
+                                    <div className="mt-0.5">{noteIcon}</div>
                                     <div className="flex-1 min-w-0">
                                       <div className="text-sm font-medium text-gray-800 truncate">
                                         {result.title || 'Untitled note'}
                                       </div>
-                                      <div className="text-[11px] text-gray-500 truncate">
-                                        {pathLabel || 'No folder'}
+                                      <div className="text-[11px] text-gray-500 truncate mt-0.5 flex items-center gap-1">
+                                        <FolderTreeIcon size={10} className="flex-shrink-0" />
+                                        <span>{pathLabel || 'All Notes'}</span>
                                       </div>
                                     </div>
-                                    <span className="text-[10px] text-gray-400 flex-shrink-0">
+                                    <span className="text-[10px] text-gray-400 flex-shrink-0 mt-0.5">
                                       {new Date(result.updated_at).toLocaleDateString()}
                                     </span>
                                   </div>
@@ -1046,7 +1067,7 @@ export default function UnifiedPanel({
                               <button
                                 key={folderResult.id}
                                 onClick={() => expandToFolder(folderResult.id)}
-                                className="w-full text-left px-2.5 py-1.5 rounded-md hover:bg-gray-100 transition-colors flex items-start gap-2"
+                                className="w-full text-left px-2.5 py-2 rounded-md hover:bg-gray-50 hover:shadow-sm transition-all duration-150 border border-transparent hover:border-gray-200 flex items-start gap-2.5"
                               >
                                 <FolderTreeIcon size={14} className="text-amber-500 flex-shrink-0" />
                                 <div className="flex-1 min-w-0">
@@ -1149,10 +1170,10 @@ export default function UnifiedPanel({
                                     setIsOpen(false)
                                   }}
                                   onContextMenu={(e) => handleNoteContextMenu(e, n)}
-                                  className={`group w-full text-left px-2 py-1.5 rounded-md transition-colors flex items-start justify-between ${
+                                  className={`group w-full text-left px-2 py-1.5 rounded-md transition-all duration-150 flex items-start justify-between ${
                                     selectedNoteId === n.id
-                                      ? 'bg-blue-100 text-blue-700 font-medium'
-                                      : 'hover:bg-gray-100 text-gray-700'
+                                      ? 'bg-blue-100 text-blue-700 font-medium shadow-sm'
+                                      : 'hover:bg-gray-50 text-gray-700 hover:shadow-sm'
                                   }`}
                                 >
                             <div className="flex-1 min-w-0">
@@ -1166,7 +1187,7 @@ export default function UnifiedPanel({
                                 )}
                                 <div className="text-sm truncate">{n.title || 'Untitled'}</div>
                               </div>
-                              <div className="text-xs text-gray-500 mt-0.5">
+                              <div className="text-xs text-gray-500 mt-0.5 ml-5">
                                 {new Date(n.updated_at).toLocaleDateString()}
                               </div>
                             </div>
