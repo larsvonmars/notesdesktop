@@ -117,13 +117,7 @@ export default function NoteEditor({
   userEmail,
   onSignOut,
 }: NoteEditorWithPanelProps) {
-  const toast = (() => {
-    try {
-      return useToast()
-    } catch {
-      return null as any
-    }
-  })()
+  const toast = useToast()
   const [title, setTitle] = useState('')
   const [content, setContent] = useState('')
   const [drawingData, setDrawingData] = useState<DrawingData | null>(null)
