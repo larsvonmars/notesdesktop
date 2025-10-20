@@ -47,6 +47,9 @@ interface UnifiedPanelProps {
   // Search
   onSearch: () => void
 
+  // Knowledge Graph
+  onOpenKnowledgeGraph?: () => void
+
   // Folders
   folders: FolderNode[]
   selectedFolderId: string | null
@@ -91,6 +94,7 @@ export default function UnifiedPanel({
   onToggleTOC,
   onScrollToHeading,
   onSearch,
+  onOpenKnowledgeGraph,
   folders,
   selectedFolderId,
   onSelectFolder: _onSelectFolder,
@@ -1084,6 +1088,23 @@ export default function UnifiedPanel({
                     </div>
                   )}
                 </div>
+
+                {/* Knowledge Graph */}
+                {onOpenKnowledgeGraph && (
+                  <div className="border-t border-gray-200 pt-2.5">
+                    <button
+                      onClick={() => {
+                        onOpenKnowledgeGraph()
+                        setIsOpen(false)
+                      }}
+                      className="w-full px-3 py-2.5 bg-gradient-to-r from-indigo-500 to-purple-600 text-white text-sm font-medium rounded-md hover:from-indigo-600 hover:to-purple-700 transition-all shadow-sm hover:shadow flex items-center justify-center gap-2"
+                      title="Open Knowledge Graph - Visualize note connections"
+                    >
+                      <Network size={16} />
+                      <span>Knowledge Graph</span>
+                    </button>
+                  </div>
+                )}
 
                 {/* All Notes Folder */}
                 <div className="border-t border-gray-200 pt-2.5">
