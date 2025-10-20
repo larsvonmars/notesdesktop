@@ -198,7 +198,11 @@ export default function Dashboard() {
     }
   }
 
-  const handleNewNote = (noteType: 'rich-text' | 'drawing' | 'mindmap' = 'rich-text') => {
+  const handleNewNote = (noteType: 'rich-text' | 'drawing' | 'mindmap' = 'rich-text', folderId?: string | null) => {
+    // If a folderId is explicitly passed, use it; otherwise keep current selection
+    if (folderId !== undefined) {
+      setSelectedFolderId(folderId)
+    }
     setSelectedNote(null)
     setIsCreatingNew(true)
     setNewNoteType(noteType)
