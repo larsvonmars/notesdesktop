@@ -37,13 +37,18 @@ import MindmapEditor, {
   type MindmapData
 } from './MindmapEditor'
 import UnifiedPanel from './UnifiedPanel'
+import { useToast } from './ToastProvider'
 import { Note as LibNote } from '../lib/notes'
 
 export type { Note } from '../lib/notes'
 
 interface NoteEditorProps {
   note?: LibNote | null
-  onSave: (note: { title: string; content: string; note_type?: 'rich-text' | 'drawing' | 'mindmap' }) => Promise<void>
+  // `isAuto` will be passed when the editor triggers an autosave so parents can handle it differently
+  onSave: (
+    note: { title: string; content: string; note_type?: 'rich-text' | 'drawing' | 'mindmap' },
+    isAuto?: boolean
+  ) => Promise<void>
   onCancel?: () => void
   onDelete?: (id: string) => Promise<void>
   initialNoteType?: 'rich-text' | 'drawing' | 'mindmap'
@@ -82,7 +87,7 @@ interface NoteEditorWithPanelProps extends NoteEditorProps {
   onSelectNote?: (note: LibNote) => void
   onNewNote?: () => void
   onDuplicateNote?: (note: LibNote) => void
-  onMoveNote?: (noteId: string, newFolderId: string | null) => void
+  onMoveNote?: (noteId: string, newFolderId: string | null) => Promise<void>
   isLoadingNotes?: boolean
   currentFolderName?: string
   userEmail?: string
@@ -112,6 +117,7 @@ export default function NoteEditor({
   userEmail,
   onSignOut,
 }: NoteEditorWithPanelProps) {
+  const toast = useToast()
   const [title, setTitle] = useState('')
   const [content, setContent] = useState('')
   const [drawingData, setDrawingData] = useState<DrawingData | null>(null)
@@ -127,6 +133,8 @@ export default function NoteEditor({
   const drawingEditorRef = useRef<DrawingEditorHandle | null>(null)
   const mindmapEditorRef = useRef<MindmapEditorHandle | null>(null)
   const headingUpdateTimeoutRef = useRef<number | null>(null)
+  const autosaveTimeoutRef = useRef<number | null>(null)
+  const isAutosavingRef = useRef(false)
   const activeFormatsFrameRef = useRef<number | null>(null)
   const floatingToolbarRef = useRef<HTMLDivElement | null>(null)
   const floatingToolbarSizeRef = useRef({ width: 0, height: 0 })
@@ -286,6 +294,10 @@ export default function NoteEditor({
       if (activeFormatsFrameRef.current !== null) {
         window.cancelAnimationFrame(activeFormatsFrameRef.current)
       }
+      if (autosaveTimeoutRef.current !== null) {
+        window.clearTimeout(autosaveTimeoutRef.current)
+        autosaveTimeoutRef.current = null
+      }
     }
   }, [])
 
@@ -414,42 +426,114 @@ export default function NoteEditor({
     [scheduleActiveFormatsUpdate, updateFloatingToolbar]
   )
 
-  const handleSave = useCallback(async () => {
+  const handleSave = useCallback(async (opts?: { isAuto?: boolean }) => {
+    const isAuto = !!opts?.isAuto
+
+    // If this is a manual save, cancel pending autosave
+    if (!isAuto && autosaveTimeoutRef.current !== null) {
+      window.clearTimeout(autosaveTimeoutRef.current)
+      autosaveTimeoutRef.current = null
+    }
+
     if (!title.trim()) {
-      alert('Please enter a title')
+      if (!isAuto) alert('Please enter a title')
       return
     }
 
-    setIsSaving(true)
+    if (isAuto) {
+      // mark autosave in-flight to avoid concurrent autosaves; use ref to avoid rerenders
+      isAutosavingRef.current = true
+    } else {
+      setIsSaving(true)
+    }
+
     try {
       if (noteType === 'drawing') {
         const drawingContent = JSON.stringify(drawingData)
-        await onSave({ 
-          title: title.trim(), 
+        await onSave({
+          title: title.trim(),
           content: drawingContent,
-          note_type: 'drawing'
+          note_type: 'drawing',
         })
       } else if (noteType === 'mindmap') {
         const mindmapContent = JSON.stringify(mindmapData)
-        await onSave({ 
-          title: title.trim(), 
+        await onSave({
+          title: title.trim(),
           content: mindmapContent,
-          note_type: 'mindmap'
+          note_type: 'mindmap',
         })
       } else {
-        await onSave({ 
-          title: title.trim(), 
+        await onSave({
+          title: title.trim(),
           content,
-          note_type: 'rich-text'
+          note_type: 'rich-text',
         })
       }
       setHasChanges(false)
     } catch (error: any) {
-      alert('Failed to save note: ' + error.message)
+      if (!isAuto) {
+        alert('Failed to save note: ' + error.message)
+      } else {
+        // for autosave failures, log but don't interrupt the UI
+        console.error('Autosave failed:', error)
+      }
     } finally {
-      setIsSaving(false)
+      if (isAuto) {
+        isAutosavingRef.current = false
+      } else {
+        setIsSaving(false)
+      }
     }
   }, [content, drawingData, mindmapData, onSave, title, noteType])
+
+  // Autosave: debounce saves after a short period of inactivity.
+  useEffect(() => {
+    const AUTOSAVE_DELAY = 2000 // ms
+
+    // clear any existing autosave
+    if (autosaveTimeoutRef.current !== null) {
+      window.clearTimeout(autosaveTimeoutRef.current)
+      autosaveTimeoutRef.current = null
+    }
+
+    // Only schedule autosave when there are unsaved changes, not currently saving/deleting,
+    // and the note has a non-empty title (avoid creating unnamed notes)
+    if (!hasChanges || isSaving || isDeleting || !title.trim()) {
+      return
+    }
+
+    autosaveTimeoutRef.current = window.setTimeout(() => {
+      // safety guards before saving
+      if (!hasChanges || isSaving || isDeleting || !title.trim()) {
+        autosaveTimeoutRef.current = null
+        return
+      }
+      ;(async () => {
+        try {
+          // avoid scheduling a new autosave while one is running
+          if (isAutosavingRef.current) return
+          await handleSave({ isAuto: true })
+          // show autosaved toast if provider available
+          try {
+            if (toast && toast.push) {
+              toast.push({ title: 'Autosaved', description: '', duration: 1800 })
+            }
+          } catch {
+            // ignore toast errors
+          }
+        } finally {
+          autosaveTimeoutRef.current = null
+        }
+      })()
+    }, AUTOSAVE_DELAY)
+
+    return () => {
+      if (autosaveTimeoutRef.current !== null) {
+        window.clearTimeout(autosaveTimeoutRef.current)
+        autosaveTimeoutRef.current = null
+      }
+    }
+  }, [title, content, drawingData, mindmapData, noteType, hasChanges, isSaving, isDeleting, handleSave])
 
   const handleDelete = async () => {
     if (!note || !onDelete) return
@@ -652,12 +736,41 @@ export default function NoteEditor({
                 />
               ) : (
                 <RichTextEditor
-                  ref={editorRef}
-                  value={content}
-                  onChange={handleContentChange}
-                  disabled={isSaving || isDeleting}
-                  placeholder="Start writing your note..."
-                />
+                    ref={editorRef}
+                    value={content}
+                    onChange={handleContentChange}
+                    disabled={isSaving || isDeleting}
+                    placeholder="Start writing your note..."
+                    customBlocks={[
+                    
+                      {
+                        type: 'table',
+                        render: (payload?: any) => {
+                          const rows = (payload && payload.rows) || 3
+                          const cols = (payload && payload.cols) || 3
+                          let html = '<div class="overflow-auto my-2"><table class="min-w-full table-fixed border-collapse">'
+                          for (let r = 0; r < rows; r++) {
+                            html += '<tr>'
+                            for (let c = 0; c < cols; c++) {
+                              html += '<td class="border px-2 py-1 align-top">' + (r === 0 ? '<strong>Header</strong>' : '&nbsp;') + '</td>'
+                            }
+                            html += '</tr>'
+                          }
+                          html += '</table></div>'
+                          return html
+                        },
+                        parse: (el: HTMLElement) => {
+                          // naive parse: count rows/cols
+                          const table = el.querySelector('table')
+                          if (!table) return { rows: 0, cols: 0 }
+                          const rows = table.querySelectorAll('tr').length
+                          const firstRow = table.querySelector('tr')
+                          const cols = firstRow ? firstRow.querySelectorAll('td,th').length : 0
+                          return { rows, cols }
+                        }
+                      }
+                    ]}
+                  />
               )}
             </div>
           </div>

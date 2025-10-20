@@ -32,7 +32,7 @@ interface UnifiedPanelProps {
   title: string
   onTitleChange: (title: string) => void
   onSave: () => void
-  onDelete?: () => void
+  onDelete?: (id: string) => Promise<void>
   onCancel: () => void
   isSaving: boolean
   isDeleting: boolean
@@ -59,9 +59,9 @@ interface UnifiedPanelProps {
   notes: Note[]
   selectedNoteId?: string
   onSelectNote: (note: Note) => void
-  onNewNote: (noteType?: 'rich-text' | 'drawing' | 'mindmap') => void
+  onNewNote: (noteType?: 'rich-text' | 'drawing' | 'mindmap', folderId?: string | null) => void
   onDuplicateNote?: (note: Note) => void
-  onMoveNote?: (noteId: string, newFolderId: string | null) => void
+  onMoveNote?: (noteId: string, newFolderId: string | null) => Promise<void>
   isLoadingNotes: boolean
   currentFolderName?: string
   
@@ -140,6 +140,7 @@ export default function UnifiedPanel({
     name: string;
   } | null>(null)
   const [notesSortBy, setNotesSortBy] = useState<'updated' | 'created' | 'title'>('updated')
+  const [hoverFolderId, setHoverFolderId] = useState<string | null>(null)
 
   const matchesNote = useCallback(
     (note: Note) => {
@@ -167,22 +168,22 @@ export default function UnifiedPanel({
           return
         }
 
-        switch (e.key.toLowerCase()) {
-          case 'n':
-            e.preventDefault()
-            onNewNote('rich-text')
-            setIsOpen(false)
-            break
-          case 'd':
-            e.preventDefault()
-            onNewNote('drawing')
-            setIsOpen(false)
-            break
-          case 'm':
-            e.preventDefault()
-            onNewNote('mindmap')
-            setIsOpen(false)
-            break
+            switch (e.key.toLowerCase()) {
+              case 'n':
+                e.preventDefault()
+                onNewNote('rich-text', selectedFolderId)
+                setIsOpen(false)
+                break
+              case 'd':
+                e.preventDefault()
+                onNewNote('drawing', selectedFolderId)
+                setIsOpen(false)
+                break
+              case 'm':
+                e.preventDefault()
+                onNewNote('mindmap', selectedFolderId)
+                setIsOpen(false)
+                break
           case 'f':
             e.preventDefault()
             onCreateFolder(null)
@@ -505,22 +506,26 @@ export default function UnifiedPanel({
             tabIndex={0}
             onClick={() => handleFolderToggle(folder.id)}
             onContextMenu={(e) => handleFolderContextMenu(e, folder.id, folder.name)}
+            onDragOver={handleFolderDragOver}
+            onDragEnter={(e) => handleFolderDragEnter(e, folder.id)}
+            onDragLeave={handleFolderDragLeave}
+            onDrop={(e) => { handleFolderDrop(e, folder.id); setHoverFolderId(null) }}
             onKeyDown={(event) => {
               if (event.key === 'Enter' || event.key === ' ') {
                 event.preventDefault()
                 handleFolderToggle(folder.id)
               }
             }}
-            className={`group flex items-center gap-1.5 px-2 py-1.5 rounded-md transition-colors focus:outline-none focus:ring-2 focus:ring-offset-1 focus:ring-blue-500 ${
-              isSelected ? 'bg-blue-50 text-blue-700 font-medium' : 'hover:bg-gray-50 text-gray-700'
-            }`}
+            className={`group flex items-center gap-1.5 px-2 py-1.5 rounded-md transition-all duration-150 focus:outline-none focus:ring-2 focus:ring-offset-1 focus:ring-blue-500 ${
+              isSelected ? 'bg-blue-50 text-blue-700 font-medium shadow-sm' : 'hover:bg-gray-50 text-gray-700'
+            } ${hoverFolderId === folderKey(folder.id) ? 'ring-2 ring-blue-400 bg-blue-50 shadow-sm' : ''}`}
             style={{ paddingLeft: `${level * 12 + 8}px` }}
           >
             <ChevronRight
               size={14}
-              className={`flex-shrink-0 transition-transform ${isExpanded ? 'rotate-90' : ''}`}
+              className={`flex-shrink-0 transition-transform duration-200 ${isExpanded ? 'rotate-90' : ''} ${hasChildren ? 'text-gray-600' : 'text-gray-300'}`}
             />
-            <FolderTreeIcon size={14} className="flex-shrink-0" />
+            <FolderTreeIcon size={14} className={`flex-shrink-0 ${isExpanded ? 'text-blue-500' : 'text-gray-500'}`} />
             <span className="text-sm truncate flex-1">{folder.name}</span>
             {isLoadingFolder && <span className="text-xs text-gray-400">Loading...</span>}
             {noteCount > 0 && !isLoadingFolder && (
@@ -542,30 +547,36 @@ export default function UnifiedPanel({
 
           {/* Notes in this folder (shown when folder is selected and expanded) */}
           {isExpanded && (
-            <div className="ml-6 space-y-0.5 border-l border-blue-200 pl-2">
+            <div className="ml-4 space-y-0.5 border-l-2 border-gray-200 pl-3 mt-1">
               {isLoadingFolder ? (
-                <div className="text-xs text-gray-500 py-1.5 px-2">Loading notes...</div>
+                <div className="text-xs text-gray-500 py-1.5 px-2 flex items-center gap-2">
+                  <Loader2 size={12} className="animate-spin" />
+                  Loading notes...
+                </div>
               ) : folderError ? (
                 <div className="text-xs text-red-500 py-1.5 px-2">
                   {folderError}
                 </div>
               ) : visibleNotes.length === 0 ? (
-                <div className="text-xs text-gray-400 italic py-1.5 px-2">
-                  {hasSearch ? 'No matching notes in this folder' : 'No notes in this folder'}
+                <div className="text-xs text-gray-400 italic py-1.5 px-2 bg-gray-50 rounded border border-dashed border-gray-300">
+                  {hasSearch ? 'No matching notes in this folder' : 'Empty folder'}
                 </div>
               ) : (
                 visibleNotes.map((n) => (
                   <button
                     key={n.id}
+                    draggable
+                    onDragStart={(e) => handleNoteDragStart(e, n.id)}
+                    onDragEnd={handleNoteDragEnd}
                     onClick={() => {
                       onSelectNote(n)
                       setIsOpen(false)
                     }}
                     onContextMenu={(e) => handleNoteContextMenu(e, n)}
-                    className={`group w-full text-left px-2 py-1.5 rounded-md transition-colors flex items-start justify-between ${
+                    className={`group w-full text-left px-2 py-1.5 rounded-md transition-all duration-150 flex items-start justify-between ${
                       selectedNoteId === n.id
-                        ? 'bg-blue-100 text-blue-700 font-medium'
-                        : 'hover:bg-gray-100 text-gray-700'
+                        ? 'bg-blue-100 text-blue-700 font-medium shadow-sm'
+                        : 'hover:bg-gray-50 text-gray-700 hover:shadow-sm'
                     }`}
                   >
                     <div className="flex-1 min-w-0">
@@ -579,7 +590,7 @@ export default function UnifiedPanel({
                         )}
                         <div className="text-sm truncate">{n.title || 'Untitled'}</div>
                       </div>
-                      <div className="text-xs text-gray-500 mt-0.5">
+                      <div className="text-xs text-gray-500 mt-0.5 ml-5">
                         {new Date(n.updated_at).toLocaleDateString()}
                       </div>
                     </div>
@@ -619,13 +630,20 @@ export default function UnifiedPanel({
   const displayedAllNotes = sortNotes(filteredAllNotes)
   const allError = allNotesEntry?.error
 
-  // Context menu handlers
+  // Context menu handlers with smart positioning
   const handleFolderContextMenu = (e: React.MouseEvent, folderId: string, folderName: string) => {
     e.preventDefault()
     e.stopPropagation()
+    
+    // Calculate position to keep menu in viewport
+    const menuWidth = 200
+    const menuHeight = 250 // Approximate max height
+    const x = Math.min(e.clientX, window.innerWidth - menuWidth - 10)
+    const y = Math.min(e.clientY, window.innerHeight - menuHeight - 10)
+    
     setContextMenu({
-      x: e.clientX,
-      y: e.clientY,
+      x,
+      y,
       type: 'folder',
       id: folderId,
       name: folderName,
@@ -635,13 +653,86 @@ export default function UnifiedPanel({
   const handleNoteContextMenu = (e: React.MouseEvent, note: Note) => {
     e.preventDefault()
     e.stopPropagation()
+    
+    // Calculate position to keep menu in viewport
+    const menuWidth = 200
+    const menuHeight = 180 // Approximate max height
+    const x = Math.min(e.clientX, window.innerWidth - menuWidth - 10)
+    const y = Math.min(e.clientY, window.innerHeight - menuHeight - 10)
+    
     setContextMenu({
-      x: e.clientX,
-      y: e.clientY,
+      x,
+      y,
       type: 'note',
       id: note.id,
       name: note.title || 'Untitled',
     })
+  }
+
+  // Drag and drop handlers for moving notes
+  const handleNoteDragStart = (e: React.DragEvent, noteId: string) => {
+    e.dataTransfer.setData('text/plain', noteId)
+    e.dataTransfer.effectAllowed = 'move'
+    // Add visual feedback
+    if (e.currentTarget instanceof HTMLElement) {
+      e.currentTarget.style.opacity = '0.5'
+    }
+  }
+  
+  const handleNoteDragEnd = (e: React.DragEvent) => {
+    // Reset visual feedback
+    if (e.currentTarget instanceof HTMLElement) {
+      e.currentTarget.style.opacity = '1'
+    }
+    setHoverFolderId(null)
+  }
+
+  const handleFolderDragOver = (e: React.DragEvent) => {
+    e.preventDefault()
+    e.dataTransfer.dropEffect = 'move'
+  }
+
+  const handleFolderDragEnter = (e: React.DragEvent, targetFolderId: string | null) => {
+    e.preventDefault()
+    // Only set hover if we're entering the target element itself
+    if (e.currentTarget === e.target) {
+      setHoverFolderId(targetFolderId === null ? ALL_FOLDER_KEY : folderKey(targetFolderId))
+    }
+  }
+
+  const handleFolderDragLeave = (e: React.DragEvent) => {
+    e.preventDefault()
+    // Only clear hover if we're actually leaving the element
+    if (e.currentTarget === e.target || !e.currentTarget.contains(e.relatedTarget as Node)) {
+      setHoverFolderId(null)
+    }
+  }
+
+  const handleFolderDrop = async (e: React.DragEvent, targetFolderId: string | null) => {
+    e.preventDefault()
+    setHoverFolderId(null)
+    
+    const noteId = e.dataTransfer.getData('text/plain')
+    if (!noteId) return
+    
+    // Avoid moving into same folder if we can determine it
+    const note = notes.find(n => n.id === noteId) || searchResults.find(n => n.id === noteId)
+    const currentFolder = note?.folder_id ?? null
+    
+    if (currentFolder === targetFolderId) {
+      // Note is already in this folder
+      return
+    }
+    
+    if (onMoveNote) {
+      try {
+        await onMoveNote(noteId, targetFolderId)
+      } catch (error) {
+        console.error('Failed to move note:', error)
+        // Error handling is done in the parent component
+      }
+    }
+    setContextMenu(null)
   }
 
   const handleRenameFromContext = () => {
@@ -670,10 +761,9 @@ export default function UnifiedPanel({
     if (showDeleteModal.type === 'folder') {
       onDeleteFolder(showDeleteModal.id)
     } else {
-      // For notes, we need to trigger deletion through the appropriate handler
-      // If it's the currently selected note, use onDelete
-      if (note?.id === showDeleteModal.id && onDelete) {
-        onDelete()
+      // Delete note - onDelete handler should work for any note ID
+      if (onDelete) {
+        await onDelete(showDeleteModal.id)
       }
     }
     setShowDeleteModal(null)
@@ -688,11 +778,17 @@ export default function UnifiedPanel({
     setIsOpen(false)
   }
 
-  const handleMoveNoteToFolder = (noteId: string, targetFolderId: string | null) => {
+  const handleMoveNoteToFolder = async (noteId: string, targetFolderId: string | null) => {
     if (onMoveNote) {
-      onMoveNote(noteId, targetFolderId)
+      try {
+        await onMoveNote(noteId, targetFolderId)
+        setContextMenu(null)
+        setIsOpen(false)
+      } catch (error) {
+        console.error('Failed to move note:', error)
+        // Keep context menu open on error so user can retry
+      }
     }
-    setContextMenu(null)
   }
 
   const handleMoveFolderToParent = (folderId: string, newParentId: string | null) => {
@@ -763,7 +859,7 @@ export default function UnifiedPanel({
               
               {note && onDelete && (
                 <button
-                  onClick={onDelete}
+                  onClick={() => onDelete(note.id)}
                   disabled={isDeleting}
                   className="px-2.5 py-1.5 border border-red-200 text-red-600 text-sm font-medium rounded-md hover:bg-red-50 disabled:opacity-50 transition-colors"
                   title="Delete note"
@@ -833,7 +929,7 @@ export default function UnifiedPanel({
                   </div>
                   <button
                     onClick={() => {
-                      onNewNote('rich-text')
+                      onNewNote('rich-text', selectedFolderId)
                       setIsOpen(false)
                     }}
                     className="w-full px-3 py-2 bg-blue-600 text-white text-sm font-medium rounded-md hover:bg-blue-700 transition-colors flex items-center justify-between gap-2.5 shadow-sm hover:shadow"
@@ -848,9 +944,9 @@ export default function UnifiedPanel({
                   <div className="grid grid-cols-2 gap-1.5">
                     <button
                       onClick={() => {
-                        onNewNote('drawing')
-                        setIsOpen(false)
-                      }}
+                          onNewNote('drawing', selectedFolderId)
+                          setIsOpen(false)
+                        }}
                       className="px-2.5 py-2 bg-purple-600 text-white text-sm font-medium rounded-md hover:bg-purple-700 transition-colors flex flex-col items-center justify-center gap-1"
                       title="Create a new drawing note"
                     >
@@ -862,7 +958,7 @@ export default function UnifiedPanel({
                     </button>
                     <button
                       onClick={() => {
-                        onNewNote('mindmap')
+                        onNewNote('mindmap', selectedFolderId)
                         setIsOpen(false)
                       }}
                       className="px-2.5 py-2 bg-green-600 text-white text-sm font-medium rounded-md hover:bg-green-700 transition-colors flex flex-col items-center justify-center gap-1"
@@ -937,19 +1033,20 @@ export default function UnifiedPanel({
                                     onSelectNote(result)
                                     setIsOpen(false)
                                   }}
-                                  className="w-full text-left px-2.5 py-1.5 rounded-md hover:bg-blue-50 transition-colors"
+                                  className="w-full text-left px-2.5 py-2 rounded-md hover:bg-blue-50 hover:shadow-sm transition-all duration-150 border border-transparent hover:border-blue-200"
                                 >
-                                  <div className="flex items-start gap-2">
-                                    {noteIcon}
+                                  <div className="flex items-start gap-2.5">
+                                    <div className="mt-0.5">{noteIcon}</div>
                                     <div className="flex-1 min-w-0">
                                       <div className="text-sm font-medium text-gray-800 truncate">
                                         {result.title || 'Untitled note'}
                                       </div>
-                                      <div className="text-[11px] text-gray-500 truncate">
-                                        {pathLabel || 'No folder'}
+                                      <div className="text-[11px] text-gray-500 truncate mt-0.5 flex items-center gap-1">
+                                        <FolderTreeIcon size={10} className="flex-shrink-0" />
+                                        <span>{pathLabel || 'All Notes'}</span>
                                       </div>
                                     </div>
-                                    <span className="text-[10px] text-gray-400 flex-shrink-0">
+                                    <span className="text-[10px] text-gray-400 flex-shrink-0 mt-0.5">
                                       {new Date(result.updated_at).toLocaleDateString()}
                                     </span>
                                   </div>
@@ -970,7 +1067,7 @@ export default function UnifiedPanel({
                               <button
                                 key={folderResult.id}
                                 onClick={() => expandToFolder(folderResult.id)}
-                                className="w-full text-left px-2.5 py-1.5 rounded-md hover:bg-gray-100 transition-colors flex items-start gap-2"
+                                className="w-full text-left px-2.5 py-2 rounded-md hover:bg-gray-50 hover:shadow-sm transition-all duration-150 border border-transparent hover:border-gray-200 flex items-start gap-2.5"
                               >
                                 <FolderTreeIcon size={14} className="text-amber-500 flex-shrink-0" />
                                 <div className="flex-1 min-w-0">
@@ -1015,9 +1112,13 @@ export default function UnifiedPanel({
                         handleFolderToggle(null)
                       }
                     }}
+                    onDragOver={(e) => { e.preventDefault(); e.dataTransfer.dropEffect = 'move' }}
+                    onDragEnter={(e) => handleFolderDragEnter(e as React.DragEvent, null)}
+                    onDragLeave={(e) => handleFolderDragLeave(e as React.DragEvent)}
+                    onDrop={(e) => { handleFolderDrop(e as React.DragEvent, null); setHoverFolderId(null) }}
                     className={`w-full text-left px-2 py-1.5 rounded-md mb-1.5 text-sm font-medium transition-colors flex items-center gap-2 focus:outline-none focus:ring-2 focus:ring-offset-1 focus:ring-blue-500 ${
                       selectedFolderId === null ? 'bg-blue-50 text-blue-700' : 'hover:bg-gray-50 text-gray-700'
-                    }`}
+                    } ${hoverFolderId === ALL_FOLDER_KEY ? 'ring-2 ring-blue-300 bg-blue-50' : ''}`}
                   >
                     <ChevronRight
                       size={15}
@@ -1048,24 +1149,33 @@ export default function UnifiedPanel({
                           {allError}
                         </div>
                       ) : displayedAllNotes.length === 0 ? (
-                        <div className="text-xs text-gray-400 italic py-1.5 px-2">
-                          {hasSearch ? 'No matching notes found' : 'No notes yet'}
+                        <div className="text-center py-4 px-3 bg-gray-50 rounded-lg border border-dashed border-gray-300">
+                          <FileText size={32} className="mx-auto text-gray-300 mb-2" />
+                          <div className="text-xs text-gray-500 mb-1">
+                            {hasSearch ? 'No matching notes found' : 'No notes yet'}
+                          </div>
+                          {!hasSearch && (
+                            <div className="text-xs text-gray-400">Create your first note to get started</div>
+                          )}
                         </div>
                       ) : (
                         displayedAllNotes.map((n) => (
-                          <button
-                            key={n.id}
-                            onClick={() => {
-                              onSelectNote(n)
-                              setIsOpen(false)
-                            }}
-                            onContextMenu={(e) => handleNoteContextMenu(e, n)}
-                            className={`group w-full text-left px-2 py-1.5 rounded-md transition-colors flex items-start justify-between ${
-                              selectedNoteId === n.id
-                                ? 'bg-blue-100 text-blue-700 font-medium'
-                                : 'hover:bg-gray-100 text-gray-700'
-                            }`}
-                          >
+                                <button
+                                  key={n.id}
+                                  draggable
+                                  onDragStart={(e) => handleNoteDragStart(e, n.id)}
+                                  onDragEnd={handleNoteDragEnd}
+                                  onClick={() => {
+                                    onSelectNote(n)
+                                    setIsOpen(false)
+                                  }}
+                                  onContextMenu={(e) => handleNoteContextMenu(e, n)}
+                                  className={`group w-full text-left px-2 py-1.5 rounded-md transition-all duration-150 flex items-start justify-between ${
+                                    selectedNoteId === n.id
+                                      ? 'bg-blue-100 text-blue-700 font-medium shadow-sm'
+                                      : 'hover:bg-gray-50 text-gray-700 hover:shadow-sm'
+                                  }`}
+                                >
                             <div className="flex-1 min-w-0">
                               <div className="flex items-center gap-1.5">
                                 {n.note_type === 'drawing' ? (
@@ -1077,7 +1187,7 @@ export default function UnifiedPanel({
                                 )}
                                 <div className="text-sm truncate">{n.title || 'Untitled'}</div>
                               </div>
-                              <div className="text-xs text-gray-500 mt-0.5">
+                              <div className="text-xs text-gray-500 mt-0.5 ml-5">
                                 {new Date(n.updated_at).toLocaleDateString()}
                               </div>
                             </div>
@@ -1104,7 +1214,11 @@ export default function UnifiedPanel({
                     Folders
                   </div>
                   {folders.length === 0 ? (
-                    <div className="text-xs text-gray-400 italic py-1.5 px-2">No folders yet</div>
+                    <div className="text-center py-4 px-3 bg-gray-50 rounded-lg border border-dashed border-gray-300 mb-2">
+                      <FolderTreeIcon size={32} className="mx-auto text-gray-300 mb-2" />
+                      <div className="text-xs text-gray-500 mb-1">No folders yet</div>
+                      <div className="text-xs text-gray-400">Organize your notes by creating folders</div>
+                    </div>
                   ) : (
                     hasSearch && displayedFolders.length === 0 ? (
                       <div className="text-xs text-gray-400 italic py-1.5 px-2">No matching folders</div>
@@ -1131,12 +1245,8 @@ export default function UnifiedPanel({
                 {headings.length === 0 ? (
                   <div className="text-center py-10 px-4">
                     <ListTree size={40} className="mx-auto text-gray-300 mb-2" />
-                    <p className="text-sm text-gray-500">
-                      No headings in this note yet
-                    </p>
-                    <p className="text-xs text-gray-400 mt-1.5">
-                      Use H1, H2, or H3 to create headings
-                    </p>
+                    <p className="text-sm text-gray-500">No headings in this note yet</p>
+                    <p className="text-xs text-gray-400 mt-1.5">Use H1, H2, or H3 to create headings</p>
                   </div>
                 ) : (
                   <div className="space-y-0.5">
@@ -1222,6 +1332,18 @@ export default function UnifiedPanel({
                 >
                   <FolderPlus size={16} />
                   <span className="font-medium">New Subfolder</span>
+                </button>
+                <button
+                  onClick={() => {
+                    // create a new text note inside this folder
+                    onNewNote?.('rich-text', contextMenu.id)
+                    setContextMenu(null)
+                    setIsOpen(false)
+                  }}
+                  className="w-full px-3 py-2 text-sm text-left hover:bg-gray-50 flex items-center gap-2 text-gray-700 transition-colors"
+                >
+                  <FileText size={16} />
+                  <span className="font-medium">New Note in Folder</span>
                 </button>
                 {onMoveFolder && folders.length > 0 && (
                   <div className="border-t border-gray-200 my-1">

@@ -14,7 +14,7 @@ import type {
 } from 'react'
 import DOMPurify from 'dompurify'
 import type { Config } from 'dompurify'
-import { X, Search, Link as LinkIcon, Type, List, CheckSquare, Quote, Code, Minus } from 'lucide-react'
+import { X, Search, Link as LinkIcon, Type, List, CheckSquare, Quote, Code, Minus, Plus, Trash2 } from 'lucide-react'
 import {
   applyInlineStyle,
   applyBlockFormat,
@@ -53,6 +53,7 @@ export type { RichTextCommand }
 export interface RichTextEditorHandle {
   focus: () => void
   exec: (command: RichTextCommand) => void
+  insertCustomBlock?: (type: string, payload?: any) => void
   getHTML: () => string
   getMarkdown: () => string
   getHeadings: () => Array<{ id: string; level: number; text: string }>
@@ -68,6 +69,8 @@ interface RichTextEditorProps {
   onChange: (html: string) => void
   disabled?: boolean
   placeholder?: string
+  // Optional custom block descriptors that allow rendering and parsing of blocks
+  customBlocks?: CustomBlockDescriptor[]
 }
 
 const SANITIZE_CONFIG: Config = {
@@ -96,8 +99,32 @@ const SANITIZE_CONFIG: Config = {
     'h3',
     'mark'
   ],
-  ALLOWED_ATTR: ['href', 'target', 'rel', 'class', 'type', 'checked', 'data-checked', 'id'],
+  // allow data-block attributes and stored payload attribute
+  // (data-block-payload stores URI-encoded JSON)
+  ALLOWED_ATTR: [
+    'href',
+    'target',
+    'rel',
+    'class',
+    'type',
+    'checked',
+    'data-checked',
+    'id',
+    'data-block',
+    'data-block-type',
+    'data-block-payload'
+  ],
   ALLOW_DATA_ATTR: true
+}
+
+// Type describing a custom block renderer/parser that callers can register
+export interface CustomBlockDescriptor {
+  // unique type identifier used in data-block-type
+  type: string
+  // render block given an optional payload; should return an HTML string
+  render: (payload?: any) => string
+  // optional function to parse the block element back into a payload for serialization
+  parse?: (el: HTMLElement) => any
 }
 
 interface SearchMatch {
@@ -121,7 +148,9 @@ const splitLinesToFragment = (text: string): DocumentFragment => {
 }
 
 const RichTextEditor = forwardRef<RichTextEditorHandle, RichTextEditorProps>(
-  ({ value, onChange, disabled, placeholder }, ref) => {
+  ({ value, onChange, disabled, placeholder, customBlocks }, ref) => {
+    // local ref to hold passed customBlocks (avoid re-creating callbacks when prop changes)
+    const customBlocksRef = useRef<CustomBlockDescriptor[] | undefined>(undefined)
     const editorRef = useRef<HTMLDivElement | null>(null)
     const slashMenuRef = useRef<HTMLDivElement | null>(null)
     const historyManagerRef = useRef<HistoryManager | null>(null)
@@ -141,8 +170,14 @@ const RichTextEditor = forwardRef<RichTextEditorHandle, RichTextEditorProps>(
     const [searchMatches, setSearchMatches] = useState<SearchMatch[]>([])
     const [currentMatchIndex, setCurrentMatchIndex] = useState(0)
     const [caseSensitive, setCaseSensitive] = useState(false)
+  const [showTableDialog, setShowTableDialog] = useState(false)
+  const [tableRows, setTableRows] = useState(3)
+  const [tableCols, setTableCols] = useState(3)
+  const [hoverRows, setHoverRows] = useState<number | null>(null)
+  const [hoverCols, setHoverCols] = useState<number | null>(null)
     const savedSelectionRef = useRef<Range | null>(null)
     const slashPositionRef = useRef<{ container: Node; offset: number } | null>(null)
+    
 
     const insertFragmentAtSelection = useCallback(
         (fragment: DocumentFragment) => {
@@ -192,6 +227,18 @@ const RichTextEditor = forwardRef<RichTextEditorHandle, RichTextEditorProps>(
         [editorRef]
       )
 
+        const insertCustomBlockAtSelection = useCallback(
+          (html: string) => {
+            // Wrap block in a container with data-block-type so it survives sanitization
+            const wrapper = document.createElement('div')
+            wrapper.setAttribute('data-block', 'true')
+            wrapper.innerHTML = html
+
+            return insertFragmentAtSelection(document.createRange().createContextualFragment(wrapper.outerHTML))
+          },
+          [insertFragmentAtSelection]
+        )
+
     const insertHTMLAtSelection = useCallback(
         (html: string) => {
           const fragment = document.createDocumentFragment()
@@ -217,6 +264,11 @@ const RichTextEditor = forwardRef<RichTextEditorHandle, RichTextEditorProps>(
         },
         [insertFragmentAtSelection]
       )
+
+    // keep customBlocksRef in sync with prop
+    useEffect(() => {
+      customBlocksRef.current = customBlocks
+    }, [customBlocks])
 
     const sanitize = useCallback(
       (html: string) => {
@@ -301,6 +353,224 @@ const RichTextEditor = forwardRef<RichTextEditorHandle, RichTextEditorProps>(
         }
       }
     }, [onChange, sanitize, value])
+
+    // Public API: insert a custom block by type and optional payload
+    const insertCustomBlock = useCallback(
+      (type: string, payload?: any) => {
+        const descriptors = customBlocksRef.current || []
+        const desc = descriptors.find((d) => d.type === type)
+        if (!desc) {
+          console.warn(`No custom block registered for type: ${type}`)
+          return false
+        }
+
+        try {
+          const html = desc.render(payload)
+          const ok = insertCustomBlockAtSelection(html)
+          if (ok) {
+            // mark the inserted block's top-level element with data-block-type
+            // and, if a payload was provided, attach it as data-block-payload
+            // we do this after a short timeout to allow DOM insertion
+            setTimeout(() => {
+              if (!editorRef.current) return
+              const blocks = editorRef.current.querySelectorAll('[data-block]')
+              blocks.forEach((b) => {
+                if (!b.getAttribute('data-block-type')) {
+                  b.setAttribute('data-block-type', type)
+                }
+                if (payload !== undefined && !b.getAttribute('data-block-payload')) {
+                  try {
+                    b.setAttribute('data-block-payload', encodeURIComponent(JSON.stringify(payload)))
+                  } catch (e) {
+                    // ignore serialization errors
+                  }
+                }
+              })
+            }, 20)
+          }
+          emitChange()
+          return ok
+        } catch (err) {
+          console.error('Failed to render custom block', err)
+          return false
+        }
+      },
+      [insertCustomBlockAtSelection, emitChange]
+    )
+
+    // Rehydrate existing custom blocks in the editor by running descriptor.parse
+    const rehydrateExistingBlocks = useCallback(() => {
+      if (!editorRef.current) return
+      const descriptors = customBlocksRef.current || []
+      const nodes = Array.from(editorRef.current.querySelectorAll('[data-block][data-block-type]'))
+      nodes.forEach((node) => {
+        const type = node.getAttribute('data-block-type') || ''
+        const desc = descriptors.find((d) => d.type === type)
+        if (desc && typeof desc.parse === 'function') {
+          try {
+            const parsed = desc.parse(node as HTMLElement)
+            if (parsed !== undefined) {
+              try {
+                node.setAttribute('data-block-payload', encodeURIComponent(JSON.stringify(parsed)))
+              } catch {}
+            }
+          } catch (e) {
+            // parsing failed - ignore
+          }
+        } else {
+          // if there is already a payload attribute, leave it as-is; otherwise clear
+        }
+      })
+    }, [])
+
+    // Table manipulation helpers (defined after emitChange so it's available)
+    const [tableToolbarVisible, setTableToolbarVisible] = useState(false)
+    const [tableToolbarPos, setTableToolbarPos] = useState({ top: 0, left: 0 })
+    const tableNodeRef = useRef<HTMLElement | null>(null)
+
+    const findClosestTableBlock = useCallback((el: Node | null) => {
+      if (!el || !editorRef.current) return null
+      let node: Node | null = el
+      while (node && node !== editorRef.current) {
+        if (node instanceof HTMLElement) {
+          const isBlock = node.getAttribute('data-block') === 'true' || node.hasAttribute('data-block')
+          const type = node.getAttribute('data-block-type')
+          if (isBlock && type === 'table') return node as HTMLElement
+          const table = node.closest('table')
+          if (table) return table as HTMLElement
+        }
+        node = node.parentNode
+      }
+      return null
+    }, [])
+
+    const showTableToolbarForNode = useCallback((node: HTMLElement | null) => {
+      if (!node) {
+        setTableToolbarVisible(false)
+        tableNodeRef.current = null
+        return
+      }
+      tableNodeRef.current = node
+      const rect = node.getBoundingClientRect()
+
+      // Prefer showing toolbar above the table; if not enough space, show below
+      const TOOLBAR_HEIGHT = 40
+      const MARGIN = 8
+      let top = rect.top - TOOLBAR_HEIGHT - MARGIN
+      if (top < MARGIN) {
+        top = rect.bottom + MARGIN
+      }
+
+      // Align left to table left, but clamp to viewport
+      let left = rect.left
+      const toolbarWidthEstimate = 360
+      const maxLeft = window.innerWidth - toolbarWidthEstimate - MARGIN
+      if (left > maxLeft) left = Math.max(MARGIN, maxLeft)
+      if (left < MARGIN) left = MARGIN
+
+      setTableToolbarPos({ top, left })
+      setTableToolbarVisible(true)
+    }, [])
+
+    const updateTablePayload = useCallback(() => {
+      const table = tableNodeRef.current as HTMLTableElement | null
+      if (!table) return
+      // find ancestor block element that has data-block attribute, otherwise use table
+      let block: HTMLElement | null = table
+      let p: HTMLElement | null = table
+      while (p && p !== editorRef.current) {
+        if (p.getAttribute && (p.getAttribute('data-block') === 'true' || p.hasAttribute('data-block'))) {
+          block = p
+          break
+        }
+        p = p.parentElement
+      }
+      const rows = table.querySelectorAll('tr').length
+      const cols = table.querySelectorAll('tr')[0]?.querySelectorAll('td,th').length || 0
+      try {
+        block.setAttribute('data-block-payload', encodeURIComponent(JSON.stringify({ rows, cols })))
+      } catch {}
+    }, [])
+
+    const addTableRow = useCallback(() => {
+      const table = tableNodeRef.current as HTMLTableElement | null
+      if (!table) return
+      const cols = table.querySelectorAll('tr')[0]?.querySelectorAll('td,th').length || 1
+      const tr = document.createElement('tr')
+      for (let i = 0; i < cols; i++) {
+        const td = document.createElement('td')
+        td.className = 'border px-2 py-1 align-top'
+        td.innerHTML = '&nbsp;'
+        tr.appendChild(td)
+      }
+      table.appendChild(tr)
+      // update payload on the containing block element
+      updateTablePayload()
+      emitChange()
+    }, [emitChange])
+
+    const deleteTableRow = useCallback(() => {
+      const table = tableNodeRef.current as HTMLTableElement | null
+      if (!table) return
+      const rows = table.querySelectorAll('tr')
+      if (rows.length <= 1) return
+      const last = rows[rows.length - 1]
+      last.remove()
+      updateTablePayload()
+      emitChange()
+    }, [emitChange])
+
+    const addTableCol = useCallback(() => {
+      const table = tableNodeRef.current as HTMLTableElement | null
+      if (!table) return
+      const rows = table.querySelectorAll('tr')
+      rows.forEach((row) => {
+        const td = document.createElement('td')
+        td.className = 'border px-2 py-1 align-top'
+        td.innerHTML = '&nbsp;'
+        row.appendChild(td)
+      })
+      updateTablePayload()
+      emitChange()
+    }, [emitChange])
+
+    const deleteTableCol = useCallback(() => {
+      const table = tableNodeRef.current as HTMLTableElement | null
+      if (!table) return
+      const rows = table.querySelectorAll('tr')
+      rows.forEach((row) => {
+        const cells = row.querySelectorAll('td,th')
+        if (cells.length > 1) {
+          cells[cells.length - 1].remove()
+        }
+      })
+      updateTablePayload()
+      emitChange()
+    }, [emitChange])
+
+    const deleteTable = useCallback(() => {
+      const table = tableNodeRef.current as HTMLElement | null
+      if (!table) return
+      table.remove()
+      tableNodeRef.current = null
+      setTableToolbarVisible(false)
+      emitChange()
+    }, [emitChange])
+
+    // Editor click handler to detect table clicks
+    useEffect(() => {
+      const handleClick = (event: MouseEvent) => {
+        const target = event.target as Node | null
+        const tableNode = findClosestTableBlock(target)
+        if (tableNode) {
+          showTableToolbarForNode(tableNode as HTMLElement)
+        } else {
+          setTableToolbarVisible(false)
+        }
+      }
+      document.addEventListener('click', handleClick)
+      return () => document.removeEventListener('click', handleClick)
+    }, [findClosestTableBlock, showTableToolbarForNode])
 
     const createChecklistCheckbox = useCallback(() => {
       const checkbox = document.createElement('input')
@@ -1065,7 +1335,24 @@ const RichTextEditor = forwardRef<RichTextEditorHandle, RichTextEditorProps>(
               emitChange();
             }, 10);
           } else if (typeof command.command === 'function') {
-            command.command();
+            // If there is a custom block registered with the same id/type as the slash command,
+            // insert it via the custom block API. This allows slash commands to map to custom blocks.
+            const descriptors = customBlocksRef.current || []
+            const desc = descriptors.find((d) => d.type === command.id)
+            if (desc) {
+              // If it's table, show dialog to configure rows/cols first
+              if (command.id === 'table') {
+                setTableRows(3)
+                setTableCols(3)
+                setShowTableDialog(true)
+              } else {
+                // Provide a few sensible defaults for known block types
+                let payload: any = undefined
+                insertCustomBlock(command.id, payload)
+              }
+            } else {
+              command.command();
+            }
           } else {
             // Use the exec method from imperative handle
             const execFn = (cmd: RichTextCommand) => {
@@ -1200,6 +1487,24 @@ const RichTextEditor = forwardRef<RichTextEditorHandle, RichTextEditorProps>(
         showSearchDialog: () => {
           setShowSearchDialog(true)
         },
+        insertCustomBlock: (type: string, payload?: any) => {
+          return insertCustomBlock(type, payload)
+        },
+        getBlockPayloads: () => {
+          if (!editorRef.current) return []
+          const nodes = Array.from(editorRef.current.querySelectorAll('[data-block][data-block-type]'))
+          return nodes.map((n) => {
+            const type = n.getAttribute('data-block-type') || ''
+            const raw = n.getAttribute('data-block-payload')
+            let payload: any = undefined
+            if (raw) {
+              try {
+                payload = JSON.parse(decodeURIComponent(raw))
+              } catch {}
+            }
+            return { type, payload, node: n }
+          })
+        },
         exec: (command: RichTextCommand) => {
           switch (command) {
             case 'bold':
@@ -1278,6 +1583,8 @@ const RichTextEditor = forwardRef<RichTextEditorHandle, RichTextEditorProps>(
         }
       }
       scheduleChecklistNormalization()
+      // attempt to rehydrate any custom blocks that came from loaded HTML
+      rehydrateExistingBlocks()
     }, [sanitize, value, scheduleChecklistNormalization])
 
     useEffect(() => {
@@ -1910,6 +2217,91 @@ const RichTextEditor = forwardRef<RichTextEditorHandle, RichTextEditorProps>(
                 </div>
               </div>
             </div>
+          </div>
+        )}
+        {/* Table configuration dialog */}
+        {showTableDialog && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center">
+            <div className="absolute inset-0 bg-black/30" onMouseDown={() => setShowTableDialog(false)} />
+            <div className="relative z-10 w-80 rounded bg-white p-4 shadow-lg">
+              <h3 className="text-sm font-medium mb-2">Insert table</h3>
+              <div className="mb-3">
+                <div className="text-xs mb-2">Pick table size</div>
+                <div className="grid grid-cols-6 gap-1">
+                  {Array.from({ length: 36 }).map((_, idx) => {
+                    const r = Math.floor(idx / 6)
+                    const c = idx % 6
+                    const rowsSelected = hoverRows ?? tableRows
+                    const colsSelected = hoverCols ?? tableCols
+                    const isActive = rowsSelected > r && colsSelected > c
+                    return (
+                      <button
+                        key={`cell-${r}-${c}`}
+                        type="button"
+                        onMouseEnter={() => { setHoverRows(r + 1); setHoverCols(c + 1) }}
+                        onMouseLeave={() => { setHoverRows(null); setHoverCols(null) }}
+                        onClick={() => { setTableRows(r + 1); setTableCols(c + 1) }}
+                        aria-label={`${r + 1} by ${c + 1}`}
+                        className={`w-6 h-6 rounded-sm border ${isActive ? 'bg-blue-500 border-blue-500' : 'bg-white border-gray-200'} focus:outline-none`}
+                      />
+                    )
+                  })}
+                </div>
+                <div className="mt-2 text-xs text-gray-600">{(hoverRows ?? tableRows)} x {(hoverCols ?? tableCols)}</div>
+              </div>
+              <div className="flex justify-end gap-2">
+                <button
+                  type="button"
+                  onClick={() => setShowTableDialog(false)}
+                  className="px-3 py-1 rounded border text-sm"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setShowTableDialog(false)
+                    insertCustomBlock('table', { rows: tableRows, cols: tableCols })
+                    forceWebViewFocus()
+                  }}
+                  className="px-3 py-1 rounded bg-blue-600 text-white text-sm"
+                >
+                  Insert
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+        {/* Table toolbar for manipulating existing tables */}
+        {tableToolbarVisible && (
+          <div
+            className="fixed z-50 flex items-center gap-2 rounded-md bg-white border px-2 py-1 shadow max-w-[92vw] overflow-auto"
+            style={{ top: tableToolbarPos.top, left: tableToolbarPos.left }}
+          >
+            <div className="px-2 py-0.5 rounded bg-gray-100 text-xs text-gray-700 font-medium">
+              {(() => {
+                const table = tableNodeRef.current as HTMLTableElement | null
+                if (!table) return '0 x 0'
+                const rows = table.querySelectorAll('tr').length
+                const cols = table.querySelectorAll('tr')[0]?.querySelectorAll('td,th').length || 0
+                return `${rows} x ${cols}`
+              })()}
+            </div>
+            <button onClick={addTableRow} className="inline-flex items-center gap-1 px-2 py-1 text-sm rounded hover:bg-gray-100">
+              <Plus size={14} /> Row
+            </button>
+            <button onClick={deleteTableRow} className="inline-flex items-center gap-1 px-2 py-1 text-sm rounded hover:bg-gray-100">
+              <Minus size={14} /> Row
+            </button>
+            <button onClick={addTableCol} className="inline-flex items-center gap-1 px-2 py-1 text-sm rounded hover:bg-gray-100">
+              <Plus size={14} /> Col
+            </button>
+            <button onClick={deleteTableCol} className="inline-flex items-center gap-1 px-2 py-1 text-sm rounded hover:bg-gray-100">
+              <Minus size={14} /> Col
+            </button>
+            <button onClick={deleteTable} className="inline-flex items-center gap-1 px-2 py-1 text-sm rounded text-red-600 hover:bg-red-50">
+              <Trash2 size={14} /> Delete
+            </button>
           </div>
         )}
       </div>
