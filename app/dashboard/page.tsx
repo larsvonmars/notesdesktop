@@ -228,6 +228,22 @@ export default function Dashboard() {
   const confirmCreateFolder = async () => {
     const name = newFolderName?.trim()
     if (!name) return
+    
+    // Add validation for folder name length and special characters
+    if (name.length > 100) {
+      alert('Folder name is too long (max 100 characters)')
+      return
+    }
+    
+    // Check for duplicate folder names at the same level
+    const siblings = createFolderParentId 
+      ? folders.filter(f => f.parent_id === createFolderParentId)
+      : folders.filter(f => f.parent_id === null)
+    
+    if (siblings.some(f => f.name.toLowerCase() === name.toLowerCase())) {
+      alert('A folder with this name already exists at this level')
+      return
+    }
 
     try {
       await createFolder({ name, parent_id: createFolderParentId })
@@ -238,7 +254,7 @@ export default function Dashboard() {
     } catch (error) {
       console.error('Error creating folder:', error)
       // keep modal open so user can retry; show simple alert for now
-      alert('Failed to create folder')
+      alert('Failed to create folder. Please try again.')
     }
   }
 
@@ -249,12 +265,36 @@ export default function Dashboard() {
   }
 
   const handleRenameFolder = async (folderId: string, newName: string) => {
+    const trimmedName = newName.trim()
+    if (!trimmedName) {
+      alert('Folder name cannot be empty')
+      return
+    }
+    
+    if (trimmedName.length > 100) {
+      alert('Folder name is too long (max 100 characters)')
+      return
+    }
+    
+    // Find the folder being renamed to check siblings
+    const folderToRename = folders.find(f => f.id === folderId)
+    if (folderToRename) {
+      const siblings = folders.filter(f => 
+        f.parent_id === folderToRename.parent_id && f.id !== folderId
+      )
+      
+      if (siblings.some(f => f.name.toLowerCase() === trimmedName.toLowerCase())) {
+        alert('A folder with this name already exists at this level')
+        return
+      }
+    }
+    
     try {
-      await updateFolder(folderId, { name: newName })
+      await updateFolder(folderId, { name: trimmedName })
       loadFolders()
     } catch (error) {
       console.error('Error renaming folder:', error)
-      alert('Failed to rename folder')
+      alert('Failed to rename folder. Please try again.')
     }
   }
 

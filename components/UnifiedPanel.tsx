@@ -653,6 +653,18 @@ export default function UnifiedPanel({
   const handleNoteDragStart = (e: React.DragEvent, noteId: string) => {
     e.dataTransfer.setData('text/plain', noteId)
     e.dataTransfer.effectAllowed = 'move'
+    // Add visual feedback
+    if (e.currentTarget instanceof HTMLElement) {
+      e.currentTarget.style.opacity = '0.5'
+    }
+  }
+  
+  const handleNoteDragEnd = (e: React.DragEvent) => {
+    // Reset visual feedback
+    if (e.currentTarget instanceof HTMLElement) {
+      e.currentTarget.style.opacity = '1'
+    }
+    setHoverFolderId(null)
   }
 
   const handleFolderDragOver = (e: React.DragEvent) => {
@@ -662,23 +674,44 @@ export default function UnifiedPanel({
 
   const handleFolderDragEnter = (e: React.DragEvent, targetFolderId: string | null) => {
     e.preventDefault()
-    setHoverFolderId(targetFolderId === null ? ALL_FOLDER_KEY : folderKey(targetFolderId))
+    // Only set hover if we're entering the target element itself
+    if (e.currentTarget === e.target) {
+      setHoverFolderId(targetFolderId === null ? ALL_FOLDER_KEY : folderKey(targetFolderId))
+    }
   }
 
   const handleFolderDragLeave = (e: React.DragEvent) => {
     e.preventDefault()
-    setHoverFolderId(null)
+    // Only clear hover if we're actually leaving the element
+    if (e.currentTarget === e.target || !e.currentTarget.contains(e.relatedTarget as Node)) {
+      setHoverFolderId(null)
+    }
   }
 
-  const handleFolderDrop = (e: React.DragEvent, targetFolderId: string | null) => {
+  const handleFolderDrop = async (e: React.DragEvent, targetFolderId: string | null) => {
     e.preventDefault()
+    setHoverFolderId(null)
+    
     const noteId = e.dataTransfer.getData('text/plain')
     if (!noteId) return
+    
     // Avoid moving into same folder if we can determine it
     const note = notes.find(n => n.id === noteId) || searchResults.find(n => n.id === noteId)
     const currentFolder = note?.folder_id ?? null
-    if (currentFolder === targetFolderId) return
-    if (onMoveNote) onMoveNote(noteId, targetFolderId)
+    
+    if (currentFolder === targetFolderId) {
+      // Note is already in this folder
+      return
+    }
+    
+    if (onMoveNote) {
+      try {
+        await onMoveNote(noteId, targetFolderId)
+      } catch (error) {
+        console.error('Failed to move note:', error)
+        // Error handling is done in the parent component
+      }
+    }
     setContextMenu(null)
   }
 
@@ -708,9 +741,8 @@ export default function UnifiedPanel({
     if (showDeleteModal.type === 'folder') {
       onDeleteFolder(showDeleteModal.id)
     } else {
-      // For notes, we need to trigger deletion through the appropriate handler
-      // If it's the currently selected note, use onDelete
-      if (note?.id === showDeleteModal.id && onDelete) {
+      // Delete note - onDelete handler should work for any note ID
+      if (onDelete) {
         await onDelete(showDeleteModal.id)
       }
     }
@@ -1065,7 +1097,7 @@ export default function UnifiedPanel({
                     onDrop={(e) => { handleFolderDrop(e as React.DragEvent, null); setHoverFolderId(null) }}
                     className={`w-full text-left px-2 py-1.5 rounded-md mb-1.5 text-sm font-medium transition-colors flex items-center gap-2 focus:outline-none focus:ring-2 focus:ring-offset-1 focus:ring-blue-500 ${
                       selectedFolderId === null ? 'bg-blue-50 text-blue-700' : 'hover:bg-gray-50 text-gray-700'
-                    }`}
+                    } ${hoverFolderId === ALL_FOLDER_KEY ? 'ring-2 ring-blue-300 bg-blue-50' : ''}`}
                   >
                     <ChevronRight
                       size={15}
@@ -1096,8 +1128,14 @@ export default function UnifiedPanel({
                           {allError}
                         </div>
                       ) : displayedAllNotes.length === 0 ? (
-                        <div className="text-xs text-gray-400 italic py-1.5 px-2">
-                          {hasSearch ? 'No matching notes found' : 'No notes yet'}
+                        <div className="text-center py-4 px-3 bg-gray-50 rounded-lg border border-dashed border-gray-300">
+                          <FileText size={32} className="mx-auto text-gray-300 mb-2" />
+                          <div className="text-xs text-gray-500 mb-1">
+                            {hasSearch ? 'No matching notes found' : 'No notes yet'}
+                          </div>
+                          {!hasSearch && (
+                            <div className="text-xs text-gray-400">Create your first note to get started</div>
+                          )}
                         </div>
                       ) : (
                         displayedAllNotes.map((n) => (
@@ -1105,6 +1143,7 @@ export default function UnifiedPanel({
                                   key={n.id}
                                   draggable
                                   onDragStart={(e) => handleNoteDragStart(e, n.id)}
+                                  onDragEnd={handleNoteDragEnd}
                                   onClick={() => {
                                     onSelectNote(n)
                                     setIsOpen(false)
@@ -1154,7 +1193,11 @@ export default function UnifiedPanel({
                     Folders
                   </div>
                   {folders.length === 0 ? (
-                    <div className="text-xs text-gray-400 italic py-1.5 px-2">No folders yet</div>
+                    <div className="text-center py-4 px-3 bg-gray-50 rounded-lg border border-dashed border-gray-300 mb-2">
+                      <FolderTreeIcon size={32} className="mx-auto text-gray-300 mb-2" />
+                      <div className="text-xs text-gray-500 mb-1">No folders yet</div>
+                      <div className="text-xs text-gray-400">Organize your notes by creating folders</div>
+                    </div>
                   ) : (
                     hasSearch && displayedFolders.length === 0 ? (
                       <div className="text-xs text-gray-400 italic py-1.5 px-2">No matching folders</div>
