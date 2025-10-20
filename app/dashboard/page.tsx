@@ -2,9 +2,10 @@
 
 import { useAuth } from '@/lib/auth-context'
 import { useRouter } from 'next/navigation'
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useRef } from 'react'
 import NoteEditor, { Note } from '@/components/NoteEditor'
 import { Loader2, FileEdit, Sparkles } from 'lucide-react'
+import { useToast } from '@/components/ToastProvider'
 import {
   getNotesByFolder,
   createNote,
@@ -26,6 +27,7 @@ import {
 export default function Dashboard() {
   const { user, loading, signOut } = useAuth()
   const router = useRouter()
+  const toast = useToast()
   const [notes, setNotes] = useState<Note[]>([])
   const [folders, setFolders] = useState<Folder[]>([])
   const [folderTree, setFolderTree] = useState<FolderNode[]>([])
@@ -35,6 +37,12 @@ export default function Dashboard() {
   const [isLoadingFolders, setIsLoadingFolders] = useState(true)
   const [isCreatingNew, setIsCreatingNew] = useState(false)
   const [newNoteType, setNewNoteType] = useState<'rich-text' | 'drawing' | 'mindmap'>('rich-text')
+  // Create-folder modal state (replace window.prompt for Tauri compatibility)
+  const suppressRealtimeRef = useRef(false)
+  const [showCreateFolderModal, setShowCreateFolderModal] = useState(false)
+  const [createFolderParentId, setCreateFolderParentId] = useState<string | null>(null)
+  const [newFolderName, setNewFolderName] = useState('')
+  const createFolderInputRef = useRef<HTMLInputElement | null>(null)
 
   useEffect(() => {
     if (!loading && !user) {
@@ -61,8 +69,54 @@ export default function Dashboard() {
     if (!user) return
 
     const unsubscribeNotes = subscribeToNotes(user.id, (payload) => {
-      console.log('Real-time note update:', payload)
-      loadNotesInFolder(selectedFolderId)
+      try {
+        // payload example: { eventType: 'UPDATE'|'INSERT'|'DELETE', new: {...}, old: {...} }
+        const { eventType, new: newRow, old: oldRow } = payload
+        // If we're suppressing realtime reloads (e.g. an autosave just happened), ignore
+        if (suppressRealtimeRef.current) return
+
+        // Helper: determine if a note belongs in the currently selected folder view
+        const belongsInCurrentFolder = (note: any) => {
+          if (selectedFolderId === null) return note.folder_id === null
+          return note.folder_id === selectedFolderId
+        }
+
+        if (eventType === 'INSERT') {
+          if (newRow && belongsInCurrentFolder(newRow)) {
+            setNotes((prev) => {
+              // avoid duplicates
+              if (prev.some((n) => n.id === newRow.id)) return prev
+              return [newRow, ...prev]
+            })
+          }
+        } else if (eventType === 'UPDATE') {
+          if (newRow) {
+            setNotes((prev) => {
+              const exists = prev.some((n) => n.id === newRow.id)
+              // If note already present, replace it
+              if (exists) {
+                return prev.map((n) => (n.id === newRow.id ? newRow : n))
+              }
+              // If it now belongs in the current folder, add it
+              if (belongsInCurrentFolder(newRow)) {
+                return [newRow, ...prev]
+              }
+              return prev
+            })
+          }
+        } else if (eventType === 'DELETE') {
+          if (oldRow) {
+            setNotes((prev) => prev.filter((n) => n.id !== oldRow.id))
+          }
+        } else {
+          // unknown event — fall back to reloading current folder
+          loadNotesInFolder(selectedFolderId)
+        }
+      } catch (err) {
+        console.error('Error handling realtime note payload', err)
+        // on unexpected error, fallback to reloading
+        loadNotesInFolder(selectedFolderId)
+      }
     })
 
     const unsubscribeFolders = subscribeToFolders(user.id, (payload) => {
@@ -100,13 +154,21 @@ export default function Dashboard() {
     }
   }
 
-  const handleSaveNote = async (noteData: { title: string; content: string; note_type?: 'rich-text' | 'drawing' | 'mindmap' }) => {
+  const handleSaveNote = async (
+    noteData: { title: string; content: string; note_type?: 'rich-text' | 'drawing' | 'mindmap' },
+    isAuto?: boolean
+  ) => {
     try {
       if (selectedNote && !isCreatingNew) {
         // Update existing note
         const updated = await updateNote(selectedNote.id, noteData)
-        setNotes(notes.map((n) => (n.id === updated.id ? updated : n)))
+        setNotes((prev) => prev.map((n) => (n.id === updated.id ? updated : n)))
         setSelectedNote(updated)
+        if (isAuto) {
+          // briefly suppress realtime reloads triggered by DB hooks
+          suppressRealtimeRef.current = true
+          setTimeout(() => (suppressRealtimeRef.current = false), 1200)
+        }
       } else {
         // Create new note in current folder
         const created = await createNote({
@@ -114,7 +176,7 @@ export default function Dashboard() {
           folder_id: selectedFolderId,
           note_type: noteData.note_type || newNoteType,
         })
-        setNotes([created, ...notes])
+        setNotes((prev) => [created, ...prev])
         setSelectedNote(created)
         setIsCreatingNew(false)
       }
@@ -153,17 +215,37 @@ export default function Dashboard() {
     setIsCreatingNew(false)
   }
 
+  // Open an in-app modal to create a folder. This replaces window.prompt which
+  // doesn't appear in some WebViews (notably Tauri on macOS).
   const handleCreateFolder = async (parentId: string | null) => {
-    const name = prompt('Enter folder name:')
-    if (!name || !name.trim()) return
+    setCreateFolderParentId(parentId)
+    setNewFolderName('')
+    setShowCreateFolderModal(true)
+    // focus the input on next tick when modal is rendered
+    setTimeout(() => createFolderInputRef.current?.focus(), 50)
+  }
+
+  const confirmCreateFolder = async () => {
+    const name = newFolderName?.trim()
+    if (!name) return
 
     try {
-      await createFolder({ name: name.trim(), parent_id: parentId })
+      await createFolder({ name, parent_id: createFolderParentId })
+      setShowCreateFolderModal(false)
+      setNewFolderName('')
+      setCreateFolderParentId(null)
       loadFolders()
     } catch (error) {
       console.error('Error creating folder:', error)
+      // keep modal open so user can retry; show simple alert for now
       alert('Failed to create folder')
     }
+  }
+
+  const cancelCreateFolder = () => {
+    setShowCreateFolderModal(false)
+    setNewFolderName('')
+    setCreateFolderParentId(null)
   }
 
   const handleRenameFolder = async (folderId: string, newName: string) => {
@@ -226,8 +308,17 @@ export default function Dashboard() {
   const handleMoveNote = async (noteId: string, newFolderId: string | null) => {
     try {
       await updateNote(noteId, { folder_id: newFolderId })
-      loadNotesInFolder(selectedFolderId)
+      await loadNotesInFolder(selectedFolderId)
       loadFolders()
+      
+      // Show success toast
+      const note = notes.find(n => n.id === noteId)
+      const folderName = newFolderId === null ? 'All Notes' : folders.find(f => f.id === newFolderId)?.name || 'Unknown folder'
+      toast.push({ 
+        title: 'Note moved', 
+        description: `"${note?.title || 'Untitled'}" moved to ${folderName}`, 
+        duration: 3000 
+      })
     } catch (error) {
       console.error('Error moving note:', error)
       alert('Failed to move note')
@@ -316,6 +407,42 @@ export default function Dashboard() {
           </div>
         )}
       </main>
+
+      {/* Create Folder Modal (in-app) */}
+      {showCreateFolderModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50">
+          <div className="bg-white rounded-xl shadow-2xl border border-gray-200 max-w-md w-full p-5">
+            <h3 className="text-lg font-semibold text-gray-900 mb-2">New Folder</h3>
+            <p className="text-sm text-gray-600 mb-4">Enter a name for the new folder.</p>
+            <input
+              ref={createFolderInputRef}
+              type="text"
+              value={newFolderName}
+              onChange={(e) => setNewFolderName(e.target.value)}
+              placeholder="Folder name"
+              className="w-full px-3 py-2 border border-gray-200 rounded mb-4 focus:outline-none focus:ring-2 focus:ring-blue-500"
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') confirmCreateFolder()
+                if (e.key === 'Escape') cancelCreateFolder()
+              }}
+            />
+            <div className="flex justify-end gap-2">
+              <button
+                onClick={cancelCreateFolder}
+                className="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded hover:bg-gray-50"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={confirmCreateFolder}
+                className="px-4 py-2 text-sm font-medium text-white bg-blue-600 rounded hover:bg-blue-700"
+              >
+                Create
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }

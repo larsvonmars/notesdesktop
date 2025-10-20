@@ -131,6 +131,16 @@ export function getSlashCommands(customIcons: {
       keywords: ['separator', 'line', 'break']
     },
     {
+      id: 'table',
+      label: 'Table',
+      icon: customIcons.List,
+      // placeholder function - executed by the editor which has context to insert blocks
+      command: () => {},
+      description: 'Insert a table block',
+      category: 'blocks',
+      keywords: ['table', 'grid', 'rows', 'columns']
+    },
+    {
       id: 'link',
       label: 'Link',
       icon: customIcons.Link,
