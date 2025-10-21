@@ -88,11 +88,19 @@ export async function createFolder(input: CreateFolderInput): Promise<Folder> {
   // Get the next position if not provided
   let position = input.position ?? 0
   if (position === 0) {
-    const { count } = await supabase
+    // Build query to count folders at the target level
+    const query = supabase
       .from('folders')
       .select('*', { count: 'exact', head: true })
-      .eq('parent_id', input.parent_id || null)
     
+    // Use .is() for null checks, .eq() for non-null values
+    if (input.parent_id === null || input.parent_id === undefined) {
+      query.is('parent_id', null)
+    } else {
+      query.eq('parent_id', input.parent_id)
+    }
+    
+    const { count } = await query
     position = (count || 0) + 1
   }
 
@@ -149,9 +157,28 @@ export async function moveFolder(
   newParentId: string | null,
   newPosition?: number
 ): Promise<Folder> {
+  // If position is not provided, calculate it
+  let position = newPosition
+  if (position === undefined) {
+    // Build query to count folders at the target level
+    const query = supabase
+      .from('folders')
+      .select('*', { count: 'exact', head: true })
+    
+    // Use .is() for null checks, .eq() for non-null values
+    if (newParentId === null) {
+      query.is('parent_id', null)
+    } else {
+      query.eq('parent_id', newParentId)
+    }
+    
+    const { count } = await query
+    position = (count || 0) + 1
+  }
+  
   return updateFolder(folderId, {
     parent_id: newParentId,
-    position: newPosition,
+    position,
   })
 }
 
@@ -246,11 +273,19 @@ export async function reorderFolders(
   parentId: string | null
 ): Promise<void> {
   // Get all sibling folders
-  const { data: siblings } = await supabase
+  const query = supabase
     .from('folders')
     .select('id, position')
-    .eq('parent_id', parentId || null)
     .order('position')
+  
+  // Use .is() for null checks, .eq() for non-null values
+  if (parentId === null) {
+    query.is('parent_id', null)
+  } else {
+    query.eq('parent_id', parentId)
+  }
+  
+  const { data: siblings } = await query
 
   if (!siblings) return
 
