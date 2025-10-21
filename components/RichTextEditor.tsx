@@ -156,10 +156,11 @@ const RichTextEditor = forwardRef<RichTextEditorHandle, RichTextEditorProps>(
   ({ value, onChange, disabled, placeholder, customBlocks, onCustomSlashCommand }, ref) => {
     // local ref to hold passed customBlocks (avoid re-creating callbacks when prop changes)
     const customBlocksRef = useRef<CustomBlockDescriptor[] | undefined>(undefined)
-    const editorRef = useRef<HTMLDivElement | null>(null)
+  const editorRef = useRef<HTMLDivElement | null>(null)
     const slashMenuRef = useRef<HTMLDivElement | null>(null)
     const historyManagerRef = useRef<HistoryManager | null>(null)
     const debouncedCaptureRef = useRef<(() => void) | null>(null)
+  const lastSyncedValueRef = useRef<string>('')
     const mutationObserverRef = useRef<MutationObserver | null>(null)
     const checklistNormalizationTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
     const [showSlashMenu, setShowSlashMenu] = useState(false)
@@ -362,6 +363,7 @@ const RichTextEditor = forwardRef<RichTextEditorHandle, RichTextEditorProps>(
     const emitChange = useCallback(() => {
       if (!editorRef.current) return
       const sanitized = sanitize(editorRef.current.innerHTML)
+      lastSyncedValueRef.current = sanitized
       if (sanitized !== value) {
         onChange(sanitized)
         if (debouncedCaptureRef.current) {
@@ -1612,17 +1614,22 @@ const RichTextEditor = forwardRef<RichTextEditorHandle, RichTextEditorProps>(
 
     useEffect(() => {
       if (!editorRef.current) return
-      const content = editorRef.current.innerHTML
-      if (sanitize(content) !== value) {
-        editorRef.current.innerHTML = value || ''
+
+      const editorEl = editorRef.current
+      const sanitizedValue = sanitize(value || '')
+
+      if (lastSyncedValueRef.current !== sanitizedValue) {
+        editorEl.innerHTML = sanitizedValue
+        lastSyncedValueRef.current = sanitizedValue
         if (historyManagerRef.current) {
           historyManagerRef.current.capture()
         }
       }
+
       scheduleChecklistNormalization()
       // attempt to rehydrate any custom blocks that came from loaded HTML
       rehydrateExistingBlocks()
-    }, [sanitize, value, scheduleChecklistNormalization])
+    }, [sanitize, value, scheduleChecklistNormalization, rehydrateExistingBlocks])
 
     useEffect(() => {
       if (!editorRef.current) return
