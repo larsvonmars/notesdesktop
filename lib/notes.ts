@@ -30,6 +30,7 @@ export interface UpdateNoteInput {
   folder_id?: string | null
   project_id?: string | null
   position?: number
+  note_type?: NoteType
 }
 
 /**

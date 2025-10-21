@@ -77,6 +77,9 @@ interface UnifiedPanelProps {
   // User info
   userEmail?: string
   onSignOut?: () => void
+
+  // Control signals
+  autoOpenKey?: string | number
 }
 
 export default function UnifiedPanel({
@@ -113,6 +116,7 @@ export default function UnifiedPanel({
   stats,
   userEmail,
   onSignOut,
+  autoOpenKey,
 }: UnifiedPanelProps) {
   const [isOpen, setIsOpen] = useState(false)
   const [activeTab, setActiveTab] = useState<'browse' | 'toc'>('browse')
@@ -151,6 +155,7 @@ export default function UnifiedPanel({
   const renameFolderInputRef = useRef<HTMLInputElement | null>(null)
   const [notesSortBy, setNotesSortBy] = useState<'updated' | 'created' | 'title'>('updated')
   const [hoverFolderId, setHoverFolderId] = useState<string | null>(null)
+  const lastAutoOpenKey = useRef<string | number | undefined>(undefined)
 
   const matchesNote = useCallback(
     (note: Note) => {
@@ -825,6 +830,13 @@ export default function UnifiedPanel({
     }
     setContextMenu(null)
   }
+
+  useEffect(() => {
+    if (autoOpenKey === undefined) return
+    if (lastAutoOpenKey.current === autoOpenKey) return
+    lastAutoOpenKey.current = autoOpenKey
+    setIsOpen(true)
+  }, [autoOpenKey])
 
   return (
     <>

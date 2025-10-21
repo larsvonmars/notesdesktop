@@ -1,6 +1,7 @@
 'use client'
 
 import { useCallback, useEffect, useMemo, useState } from 'react'
+import { usePathname, useRouter } from 'next/navigation'
 import {
   Target,
   X,
@@ -87,6 +88,8 @@ export default function ProjectsWorkspaceModal({
   onDuplicateNote,
 }: ProjectsWorkspaceModalProps) {
   const toast = useToast()
+  const router = useRouter()
+  const pathname = usePathname()
   const [projects, setProjects] = useState<Project[]>([])
   const [folders, setFolders] = useState<Folder[]>([])
   const [notes, setNotes] = useState<Note[]>([])
@@ -119,6 +122,30 @@ export default function ProjectsWorkspaceModal({
   const [notePendingDelete, setNotePendingDelete] = useState<Note | null>(null)
   const [relocateTarget, setRelocateTarget] = useState<{ type: 'folder' | 'note'; id: string } | null>(null)
   const [folderContentsId, setFolderContentsId] = useState<string | null>(null)
+
+  const goToWorkspace = useCallback(
+    (folderId: string | null) => {
+      if (typeof window === 'undefined') return
+
+      const basePath = pathname === '/dashboard' || pathname === '/' ? pathname : '/dashboard'
+      const normalizedBase = basePath || '/dashboard'
+
+      const targetUrl = new URL(window.location.href)
+      targetUrl.pathname = normalizedBase
+      if (folderId) {
+        targetUrl.searchParams.set('folder', folderId)
+      } else {
+        targetUrl.searchParams.delete('folder')
+      }
+
+      const nextPath = `${targetUrl.pathname}${targetUrl.search}`
+      const currentPath = `${window.location.pathname}${window.location.search}`
+      if (currentPath !== nextPath) {
+        router.push(nextPath)
+      }
+    },
+    [pathname, router]
+  )
 
   const folderMap = useMemo(() => {
     const map = new Map<string, Folder>()
@@ -335,6 +362,7 @@ export default function ProjectsWorkspaceModal({
           onClick={() => {
             setSelectedFolderId(node.id)
             setFolderMenuId(null)
+            setFolderContentsId(node.id)
           }}
         >
           <button
@@ -379,6 +407,8 @@ export default function ProjectsWorkspaceModal({
                 className="flex w-full items-center gap-2 px-3 py-2 text-left text-sm hover:bg-gray-100"
                 onClick={() => {
                   onSelectFolder?.(node.id)
+                  goToWorkspace(node.id)
+                  setFolderMenuId(null)
                   onClose()
                 }}
               >
@@ -718,6 +748,7 @@ export default function ProjectsWorkspaceModal({
 
   const handleNoteSelect = (note: Note) => {
     onSelectFolder?.(note.folder_id ?? null)
+    goToWorkspace(note.folder_id ?? null)
     onSelectNote?.(note)
     onClose()
   }
@@ -737,6 +768,7 @@ export default function ProjectsWorkspaceModal({
 
   const handleOpenFolderInWorkspace = (folderId: string) => {
     onSelectFolder?.(folderId)
+    goToWorkspace(folderId)
     setFolderContentsId(null)
     onClose()
   }
