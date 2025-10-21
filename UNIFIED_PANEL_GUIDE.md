@@ -117,9 +117,16 @@ All existing shortcuts still work:
 ## Technical Details
 
 ### Components
-- **UnifiedPanel.tsx**: The main floating panel component
+- **UnifiedPanel.tsx**: The main floating panel component (optimized for WebView and Tauri)
 - **NoteEditor.tsx**: Updated to work with the unified panel
 - **RichTextEditor.tsx**: The core content editing component
+
+### WebView and Tauri Optimization
+The UnifiedPanel is fully optimized for WebView and Tauri environments:
+- Uses only standard browser APIs that work across all WebView implementations
+- No deprecated or problematic APIs (no CSS.escape, queryCommandState, etc.)
+- Touch and pointer events properly handled
+- Works seamlessly on Windows (WebView2), macOS (WKWebView), and Linux (WebKitGTK)
 
 ### State Management
 The panel handles:

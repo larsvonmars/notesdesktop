@@ -143,6 +143,12 @@ export default function UnifiedPanel({
     id: string;
     name: string;
   } | null>(null)
+  const [showRenameModal, setShowRenameModal] = useState<{
+    folderId: string;
+    currentName: string;
+  } | null>(null)
+  const [renameFolderInput, setRenameFolderInput] = useState('')
+  const renameFolderInputRef = useRef<HTMLInputElement | null>(null)
   const [notesSortBy, setNotesSortBy] = useState<'updated' | 'created' | 'title'>('updated')
   const [hoverFolderId, setHoverFolderId] = useState<string | null>(null)
 
@@ -742,12 +748,30 @@ export default function UnifiedPanel({
   const handleRenameFromContext = () => {
     if (!contextMenu) return
     if (contextMenu.type === 'folder') {
-      const newName = prompt('Rename folder:', contextMenu.name)
-      if (newName && newName.trim()) {
-        onRenameFolder(contextMenu.id, newName.trim())
-      }
+      setShowRenameModal({
+        folderId: contextMenu.id,
+        currentName: contextMenu.name,
+      })
+      setRenameFolderInput(contextMenu.name)
+      // Focus the input on next tick when modal is rendered
+      setTimeout(() => renameFolderInputRef.current?.focus(), 50)
     }
     setContextMenu(null)
+  }
+
+  const handleConfirmRename = () => {
+    if (!showRenameModal) return
+    const newName = renameFolderInput.trim()
+    if (newName) {
+      onRenameFolder(showRenameModal.folderId, newName)
+    }
+    setShowRenameModal(null)
+    setRenameFolderInput('')
+  }
+
+  const handleCancelRename = () => {
+    setShowRenameModal(null)
+    setRenameFolderInput('')
   }
 
   const handleDeleteFromContext = () => {
@@ -1487,6 +1511,54 @@ export default function UnifiedPanel({
                 className="px-4 py-2 text-sm font-medium text-white bg-red-600 rounded-lg hover:bg-red-700 transition-colors"
               >
                 Delete {showDeleteModal.type === 'folder' ? 'Folder' : 'Note'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Rename Folder Modal */}
+      {showRenameModal && (
+        <div className="fixed inset-0 z-[70] flex items-center justify-center p-4 bg-black/50">
+          <div className="bg-white rounded-xl shadow-2xl border border-gray-200 max-w-md w-full p-6">
+            <div className="flex items-start gap-4 mb-4">
+              <div className="flex-shrink-0 w-12 h-12 rounded-full bg-blue-100 flex items-center justify-center">
+                <Edit2 size={24} className="text-blue-600" />
+              </div>
+              <div className="flex-1">
+                <h3 className="text-lg font-semibold text-gray-900 mb-1">
+                  Rename Folder
+                </h3>
+                <p className="text-sm text-gray-600">
+                  Enter a new name for &quot;{showRenameModal.currentName}&quot;
+                </p>
+              </div>
+            </div>
+            <input
+              ref={renameFolderInputRef}
+              type="text"
+              value={renameFolderInput}
+              onChange={(e) => setRenameFolderInput(e.target.value)}
+              placeholder="Folder name"
+              className="w-full px-3 py-2 border border-gray-200 rounded-lg mb-4 focus:outline-none focus:ring-2 focus:ring-blue-500"
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') handleConfirmRename()
+                if (e.key === 'Escape') handleCancelRename()
+              }}
+            />
+            <div className="flex items-center justify-end gap-2">
+              <button
+                onClick={handleCancelRename}
+                className="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleConfirmRename}
+                disabled={!renameFolderInput.trim()}
+                className="px-4 py-2 text-sm font-medium text-white bg-blue-600 rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+              >
+                Rename
               </button>
             </div>
           </div>

@@ -5,17 +5,18 @@
 A complete folder system with unlimited nesting depth and intuitive organization:
 
 ### New Components
-- **FolderTree** (`components/FolderTree.tsx`) - Hierarchical folder navigation
+- **UnifiedPanel** (`components/UnifiedPanel.tsx`) - Floating panel with hierarchical folder navigation and notes management (replaces old FolderTree)
 - **Folders API** (`lib/folders.ts`) - Complete CRUD operations
-- **Updated Dashboard** - 3-column layout with folders
+- **Updated Dashboard** - Full-screen editor with floating panel
 
 ### New Features
 ✅ **Unlimited nesting** - Create folders within folders, no depth limit  
-✅ **Drag & drop ready** - Structure supports reordering (UI can be added)  
-✅ **Context menus** - Right-click for folder actions  
+✅ **Drag & drop** - Move notes between folders with visual feedback  
+✅ **Context menus** - Right-click for folder and note actions  
 ✅ **Real-time sync** - Folder changes appear instantly  
-✅ **Breadcrumbs ready** - Path tracking built-in  
-✅ **Expand/collapse** - Collapsible folder tree  
+✅ **Expand/collapse** - Collapsible folder tree with chevron indicators  
+✅ **Search** - Find notes and folders quickly  
+✅ **WebView optimized** - Works perfectly in Tauri on all platforms  
 
 ## 📋 Setup Required
 
@@ -44,26 +45,45 @@ npm run tauri:dev
 
 ## 🎨 New UI Layout
 
-The dashboard now has 3 columns:
+The dashboard now features a full-screen editor with a floating panel:
 
 ```
 ┌───────────────────────────────────────────────────┐
-│              Navigation Bar                       │
-├────────────┬──────────────┬──────────────────────┤
-│  Folders   │  Notes List  │   Note Editor        │
-│  (Tree)    │  (Selected   │   (Content)          │
-│            │   Folder)    │                      │
-│ 📁 Work    │ Note 1       │ ┌──Title────────┐   │
-│   📁 Proj  │ Note 2       │ │               │   │
-│ 📁 Personal│ Note 3       │ ├──Content──────┤   │
-│ + New      │              │ │               │   │
-│            │              │ │               │   │
-└────────────┴──────────────┴──────────────────────┘
+│                                        [☰ Menu]   │
+│                                                   │
+│                                                   │
+│                                                   │
+│           Full-Screen Note Editor                 │
+│                                                   │
+│                                                   │
+│                                                   │
+│                                                   │
+└───────────────────────────────────────────────────┘
+
+When menu is clicked, UnifiedPanel appears:
+┌──────────────────────────────────┐
+│ [User Info]          [Sign Out] │
+│ ┌──────────────────────────────┐│
+│ │ Note Title                   ││
+│ │ [Save] [Delete] [Cancel]     ││
+│ └──────────────────────────────┘│
+│ [Browse] [Contents]              │
+│ ┌──────────────────────────────┐│
+│ │ 📝 Create New                ││
+│ │ 🔍 Search                    ││
+│ │ 📁 All Notes (3)             ││
+│ │ 📂 Folders                   ││
+│ │   📁 Work (5)                ││
+│ │     📁 Projects (2)          ││
+│ │   📁 Personal (3)            ││
+│ │ [+ New Folder]               ││
+│ └──────────────────────────────┘│
+└──────────────────────────────────┘
 ```
 
-- **Left (25%)**: Folder tree with expand/collapse
-- **Middle (25%)**: Notes in selected folder
-- **Right (50%)**: Note editor
+- **Full Screen**: Distraction-free editor
+- **Floating Panel**: Toggles with menu button or ⌘/Ctrl+\\
+- **Unified Navigation**: Folders and notes in one view
 
 ## 🌳 Folder Tree Features
 
