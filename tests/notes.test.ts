@@ -33,6 +33,26 @@ describe('notes lib', () => {
     expect(newNote).toBeDefined()
   })
 
+  it('createNote handles null folder_id correctly', async () => {
+    const newNote = await notesLib.createNote({ 
+      title: 'Root Note', 
+      content: 'In root folder',
+      folder_id: null 
+    })
+    expect(newNote).toBeDefined()
+    expect(newNote.folder_id).toBe(null)
+  })
+
+  it('createNote handles specific folder_id correctly', async () => {
+    const newNote = await notesLib.createNote({ 
+      title: 'Folder Note', 
+      content: 'In specific folder',
+      folder_id: 'folder-1'
+    })
+    expect(newNote).toBeDefined()
+    expect(newNote.folder_id).toBe('folder-1')
+  })
+
   it('updateNote updates an existing note', async () => {
     // update note with id '1'
     const updated = await notesLib.updateNote('1', { title: 'Updated A' })
@@ -49,5 +69,17 @@ describe('notes lib', () => {
   it('searchNotes filters by query', async () => {
     const results = await notesLib.searchNotes('A')
     expect(Array.isArray(results)).toBe(true)
+  })
+
+  it('moveNote calculates position when moving to null folder', async () => {
+    const moved = await notesLib.moveNote('2', null)
+    expect(moved).toBeDefined()
+    expect(moved.folder_id).toBe(null)
+  })
+
+  it('moveNote calculates position when moving to specific folder', async () => {
+    const moved = await notesLib.moveNote('1', 'folder-1')
+    expect(moved).toBeDefined()
+    expect(moved.folder_id).toBe('folder-1')
   })
 })

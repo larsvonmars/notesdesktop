@@ -5,6 +5,7 @@ export interface Folder {
   user_id: string
   name: string
   parent_id: string | null
+  project_id: string | null
   position: number
   created_at: string
   updated_at: string
@@ -13,12 +14,14 @@ export interface Folder {
 export interface CreateFolderInput {
   name: string
   parent_id?: string | null
+  project_id?: string | null
   position?: number
 }
 
 export interface UpdateFolderInput {
   name?: string
   parent_id?: string | null
+  project_id?: string | null
   position?: number
 }
 
@@ -88,11 +91,25 @@ export async function createFolder(input: CreateFolderInput): Promise<Folder> {
   // Get the next position if not provided
   let position = input.position ?? 0
   if (position === 0) {
-    const { count } = await supabase
+    // Build query to count folders at the target level
+    const query = supabase
       .from('folders')
       .select('*', { count: 'exact', head: true })
-      .eq('parent_id', input.parent_id || null)
     
+    // Use .is() for null checks, .eq() for non-null values
+    if (input.parent_id === null || input.parent_id === undefined) {
+      query.is('parent_id', null)
+    } else {
+      query.eq('parent_id', input.parent_id)
+    }
+
+    if (input.project_id === null || input.project_id === undefined) {
+      query.is('project_id', null)
+    } else {
+      query.eq('project_id', input.project_id)
+    }
+    
+    const { count } = await query
     position = (count || 0) + 1
   }
 
@@ -101,6 +118,7 @@ export async function createFolder(input: CreateFolderInput): Promise<Folder> {
     .insert({
       name: input.name,
       parent_id: input.parent_id || null,
+      project_id: input.project_id ?? null,
       position,
       user_id: user.id,
     })
@@ -149,9 +167,55 @@ export async function moveFolder(
   newParentId: string | null,
   newPosition?: number
 ): Promise<Folder> {
+  // Determine target project for ordering context
+  let targetProjectId: string | null = null
+
+  if (newParentId) {
+    const { data: parentFolder } = await supabase
+      .from('folders')
+      .select('project_id')
+      .eq('id', newParentId)
+      .single()
+
+    targetProjectId = parentFolder?.project_id ?? null
+  } else {
+    const { data: folderRecord } = await supabase
+      .from('folders')
+      .select('project_id')
+      .eq('id', folderId)
+      .single()
+
+    targetProjectId = folderRecord?.project_id ?? null
+  }
+
+  // If position is not provided, calculate it
+  let position = newPosition
+  if (position === undefined) {
+    // Build query to count folders at the target level
+    const query = supabase
+      .from('folders')
+      .select('*', { count: 'exact', head: true })
+    
+    // Use .is() for null checks, .eq() for non-null values
+    if (newParentId === null) {
+      query.is('parent_id', null)
+    } else {
+      query.eq('parent_id', newParentId)
+    }
+
+    if (targetProjectId === null) {
+      query.is('project_id', null)
+    } else {
+      query.eq('project_id', targetProjectId)
+    }
+    
+    const { count } = await query
+    position = (count || 0) + 1
+  }
+  
   return updateFolder(folderId, {
     parent_id: newParentId,
-    position: newPosition,
+    position,
   })
 }
 
@@ -246,11 +310,19 @@ export async function reorderFolders(
   parentId: string | null
 ): Promise<void> {
   // Get all sibling folders
-  const { data: siblings } = await supabase
+  const query = supabase
     .from('folders')
     .select('id, position')
-    .eq('parent_id', parentId || null)
     .order('position')
+  
+  // Use .is() for null checks, .eq() for non-null values
+  if (parentId === null) {
+    query.is('parent_id', null)
+  } else {
+    query.eq('parent_id', parentId)
+  }
+  
+  const { data: siblings } = await query
 
   if (!siblings) return
 

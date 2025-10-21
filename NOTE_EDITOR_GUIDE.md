@@ -4,7 +4,7 @@
 
 A full-featured note editor system with:
 - **NoteEditor Component** - Rich text editor with auto-save
-- **NotesList Component** - Sidebar list of all notes
+- **UnifiedPanel Component** - Floating panel for navigation and controls (replaces old NotesList)
 - **Notes API** - Supabase integration with CRUD operations
 - **Real-time Sync** - Automatic updates across app instances
 - **Database Schema** - Fully documented SQL schema
@@ -21,14 +21,17 @@ A full-featured note editor system with:
 - ✅ Timestamp display
 - ✅ Loading states
 
-### Notes List (`components/NotesList.tsx`)
-- ✅ Scrollable list of all notes
-- ✅ Smart date formatting (Today, Yesterday, etc.)
-- ✅ Note preview with truncation
-- ✅ Visual indicator for selected note
-- ✅ Empty state with call-to-action
-- ✅ Note count display
-- ✅ "Edited" indicator
+### Unified Panel (`components/UnifiedPanel.tsx`)
+- ✅ Floating menu button with toggle (⌘/Ctrl+\\)
+- ✅ Tabbed interface: Browse and Table of Contents
+- ✅ Hierarchical folder and notes view
+- ✅ Search functionality across notes and folders
+- ✅ Note type indicators (text, drawing, mindmap)
+- ✅ Context menus for notes and folders
+- ✅ Drag and drop to move notes
+- ✅ Sort options (updated, created, title)
+- ✅ Note counts and status indicators
+- ✅ Optimized for WebView and Tauri environments
 
 ### Notes API (`lib/notes.ts`)
 - ✅ `getNotes()` - Fetch all user notes

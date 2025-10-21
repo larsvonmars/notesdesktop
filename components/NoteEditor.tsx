@@ -22,7 +22,13 @@ import {
   ListTree,
   Link as LinkIcon,
   Search,
-  PenTool
+  PenTool,
+  Check,
+  Loader2,
+  FolderOpen,
+  Target,
+  Edit2,
+  Network
 } from 'lucide-react'
 import RichTextEditor, {
   type RichTextCommand,
@@ -37,8 +43,13 @@ import MindmapEditor, {
   type MindmapData
 } from './MindmapEditor'
 import UnifiedPanel from './UnifiedPanel'
+import ProjectsWorkspaceModal from './ProjectsWorkspaceModal'
 import { useToast } from './ToastProvider'
 import { Note as LibNote } from '../lib/notes'
+import NoteLinkDialog from './NoteLinkDialog'
+import KnowledgeGraphModal from './KnowledgeGraphModal'
+import { noteLinkBlock, registerNoteLinkCommand } from '../lib/editor/noteLinkBlock'
+import { FileText } from 'lucide-react'
 
 export type { Note } from '../lib/notes'
 
@@ -85,13 +96,14 @@ interface NoteEditorWithPanelProps extends NoteEditorProps {
   onMoveFolder?: (folderId: string, newParentId: string | null) => void
   notes?: LibNote[]
   onSelectNote?: (note: LibNote) => void
-  onNewNote?: () => void
+  onNewNote?: (noteType?: 'rich-text' | 'drawing' | 'mindmap', folderId?: string | null, projectId?: string | null) => void
   onDuplicateNote?: (note: LibNote) => void
   onMoveNote?: (noteId: string, newFolderId: string | null) => Promise<void>
   isLoadingNotes?: boolean
   currentFolderName?: string
   userEmail?: string
   onSignOut?: () => void
+  autoOpenPanelKey?: string | number
 }
 
 export default function NoteEditor({ 
@@ -116,6 +128,7 @@ export default function NoteEditor({
   currentFolderName,
   userEmail,
   onSignOut,
+  autoOpenPanelKey,
 }: NoteEditorWithPanelProps) {
   const toast = useToast()
   const [title, setTitle] = useState('')
@@ -141,6 +154,14 @@ export default function NoteEditor({
   const [floatingToolbar, setFloatingToolbar] = useState({ visible: false, top: 0, left: 0 })
   const deferredContent = useDeferredValue(content)
   const plainContent = useMemo(() => stripHtml(deferredContent), [deferredContent])
+  const [lastSaveTime, setLastSaveTime] = useState<Date | null>(null)
+  const [wordGoal, setWordGoal] = useState<number | null>(null)
+  const [showWordGoalInput, setShowWordGoalInput] = useState(false)
+  const wordGoalInputRef = useRef<HTMLInputElement>(null)
+  const [showNoteLinkDialog, setShowNoteLinkDialog] = useState(false)
+  const savedNoteLinkSelection = useRef<Range | null>(null)
+  const [showKnowledgeGraph, setShowKnowledgeGraph] = useState(false)
+  const [showProjectsModal, setShowProjectsModal] = useState(false)
 
   const scheduleHeadingsUpdate = useCallback(() => {
     if (headingUpdateTimeoutRef.current !== null) {
@@ -232,6 +253,12 @@ export default function NoteEditor({
       
       setHasChanges(false)
       scheduleHeadingsUpdate()
+      
+      // Load word goal from localStorage for this note
+      if (note.id) {
+        const savedGoal = localStorage.getItem(`wordGoal_${note.id}`)
+        setWordGoal(savedGoal ? parseInt(savedGoal, 10) : null)
+      }
     } else {
       setTitle('')
       setContent('')
@@ -256,6 +283,7 @@ export default function NoteEditor({
       setNoteType(initialNoteType)
       setHasChanges(false)
       setHeadings([])
+      setWordGoal(null)
     }
     setActiveFormats(new Set())
   }, [note, initialNoteType, scheduleHeadingsUpdate])
@@ -426,6 +454,83 @@ export default function NoteEditor({
     [scheduleActiveFormatsUpdate, updateFloatingToolbar]
   )
 
+  // Save current selection before opening note link dialog
+  const saveNoteLinkSelection = useCallback(() => {
+    const selection = window.getSelection()
+    if (selection && selection.rangeCount > 0) {
+      savedNoteLinkSelection.current = selection.getRangeAt(0).cloneRange()
+    }
+  }, [])
+
+  // Restore selection and insert note link
+  const handleNoteLinkSelect = useCallback(
+    (noteId: string, noteTitle: string, folderId?: string | null) => {
+      // Restore the saved selection first
+      if (savedNoteLinkSelection.current) {
+        const selection = window.getSelection()
+        if (selection) {
+          selection.removeAllRanges()
+          selection.addRange(savedNoteLinkSelection.current)
+        }
+      }
+
+      // Focus the editor
+      editorRef.current?.focus()
+
+      // Small delay to ensure focus is set before inserting
+      setTimeout(() => {
+        if (editorRef.current && editorRef.current.insertCustomBlock) {
+          editorRef.current.insertCustomBlock('note-link', {
+            noteId,
+            noteTitle,
+            folderId
+          })
+          setHasChanges(true)
+        }
+        // Clear the saved selection
+        savedNoteLinkSelection.current = null
+      }, 10)
+    },
+    []
+  )
+
+  // Handle clicking on note links
+  useEffect(() => {
+    const handleNoteLinkClick = async (event: Event) => {
+      const customEvent = event as CustomEvent<{ noteId: string }>
+      const noteId = customEvent.detail?.noteId
+      
+      if (noteId && onSelectNote) {
+        // First check if the note is in the current notes array (already loaded)
+        if (notes) {
+          const targetNote = notes.find(n => n.id === noteId)
+          if (targetNote) {
+            onSelectNote(targetNote)
+            return
+          }
+        }
+        
+        // If not found in current notes, fetch it directly from Supabase
+        // This handles notes in other folders
+        try {
+          const { getNote } = await import('../lib/notes')
+          const targetNote = await getNote(noteId)
+          if (targetNote) {
+            onSelectNote(targetNote)
+          } else {
+            toast.push({ title: 'Note not found', description: 'The linked note could not be found.' })
+          }
+        } catch (error) {
+          console.error('Failed to load note:', error)
+          toast.push({ title: 'Error loading note', description: 'Failed to load the linked note.' })
+        }
+      }
+    }
+
+    window.addEventListener('note-link-click', handleNoteLinkClick)
+    return () => window.removeEventListener('note-link-click', handleNoteLinkClick)
+  }, [notes, onSelectNote, toast])
+
   const handleSave = useCallback(async (opts?: { isAuto?: boolean }) => {
     const isAuto = !!opts?.isAuto
 
@@ -470,6 +575,7 @@ export default function NoteEditor({
         })
       }
       setHasChanges(false)
+      setLastSaveTime(new Date())
     } catch (error: any) {
       if (!isAuto) {
         alert('Failed to save note: ' + error.message)
@@ -513,14 +619,6 @@ export default function NoteEditor({
           // avoid scheduling a new autosave while one is running
           if (isAutosavingRef.current) return
           await handleSave({ isAuto: true })
-          // show autosaved toast if provider available
-          try {
-            if (toast && toast.push) {
-              toast.push({ title: 'Autosaved', description: '', duration: 1800 })
-            }
-          } catch {
-            // ignore toast errors
-          }
         } finally {
           autosaveTimeoutRef.current = null
         }
@@ -557,6 +655,18 @@ export default function NoteEditor({
       }
     }
     onCancel?.()
+  }
+
+  const handleSetWordGoal = (goal: number | null) => {
+    setWordGoal(goal)
+    if (note?.id) {
+      if (goal === null) {
+        localStorage.removeItem(`wordGoal_${note.id}`)
+      } else {
+        localStorage.setItem(`wordGoal_${note.id}`, goal.toString())
+      }
+    }
+    setShowWordGoalInput(false)
   }
 
   useEffect(() => {
@@ -642,10 +752,73 @@ export default function NoteEditor({
     scheduleActiveFormatsUpdate()
   }, [note, scheduleActiveFormatsUpdate])
 
+  // Register note link slash command
+  useEffect(() => {
+    registerNoteLinkCommand(<FileText size={16} />)
+  }, [])
+
+  // Update last save display every 10 seconds
+  useEffect(() => {
+    if (!lastSaveTime) return
+    
+    const interval = setInterval(() => {
+      // Force re-render by updating a dummy state (the memo will recalculate)
+      setLastSaveTime(new Date(lastSaveTime))
+    }, 10000)
+    
+    return () => clearInterval(interval)
+  }, [lastSaveTime])
+
   const stats = useMemo(() => {
     const words = plainContent ? plainContent.split(/\s+/).filter(Boolean).length : 0
     return { characters: plainContent.length, words }
   }, [plainContent])
+
+  const wordGoalProgress = useMemo(() => {
+    if (!wordGoal) return null
+    const percentage = Math.min((stats.words / wordGoal) * 100, 100)
+    const isComplete = stats.words >= wordGoal
+    return { percentage, isComplete }
+  }, [wordGoal, stats.words])
+
+  // Get folder path for display
+  const folderPath = useMemo(() => {
+    if (!note?.folder_id) return 'All Notes'
+    
+    const findFolderPath = (folderId: string, nodes: any[], path: string[] = []): string[] | null => {
+      for (const node of nodes) {
+        if (node.id === folderId) {
+          return [...path, node.name]
+        }
+        if (node.children && node.children.length > 0) {
+          const result = findFolderPath(folderId, node.children, [...path, node.name])
+          if (result) return result
+        }
+      }
+      return null
+    }
+    
+    const path = findFolderPath(note.folder_id, folders)
+    return path ? path.join(' / ') : 'All Notes'
+  }, [note?.folder_id, folders])
+
+  // Format last save time
+  const lastSaveDisplay = useMemo(() => {
+    if (!lastSaveTime) return null
+    
+    const now = new Date()
+    const diffMs = now.getTime() - lastSaveTime.getTime()
+    const diffSecs = Math.floor(diffMs / 1000)
+    
+    if (diffSecs < 10) return 'Just now'
+    if (diffSecs < 60) return `${diffSecs}s ago`
+    
+    const diffMins = Math.floor(diffSecs / 60)
+    if (diffMins < 60) return `${diffMins}m ago`
+    
+    const diffHours = Math.floor(diffMins / 60)
+    return `${diffHours}h ago`
+  }, [lastSaveTime])
 
   const toolbar: Array<{
     label: string
@@ -695,6 +868,7 @@ export default function NoteEditor({
         onToggleTOC={() => setShowTOC(!showTOC)}
         onScrollToHeading={(headingId) => editorRef.current?.scrollToHeading(headingId)}
         onSearch={() => editorRef.current?.showSearchDialog()}
+        onOpenKnowledgeGraph={() => setShowKnowledgeGraph(true)}
         folders={folders}
         selectedFolderId={selectedFolderId}
         onSelectFolder={onSelectFolder}
@@ -713,10 +887,11 @@ export default function NoteEditor({
         stats={stats}
         userEmail={userEmail}
         onSignOut={onSignOut}
+          autoOpenKey={autoOpenPanelKey}
       />
 
       {/* Clean Editor Area */}
-      <div className="flex flex-col h-screen bg-white">
+      <div className="flex flex-col h-screen bg-white pb-10">
         <div className="flex-1 px-3 py-2 sm:px-4 sm:py-3 overflow-hidden">
           <div className="h-full w-full">
             <div className="relative h-full overflow-hidden flex flex-col bg-white">
@@ -741,8 +916,14 @@ export default function NoteEditor({
                     onChange={handleContentChange}
                     disabled={isSaving || isDeleting}
                     placeholder="Start writing your note..."
+                    onCustomSlashCommand={(commandId) => {
+                      if (commandId === 'note-link') {
+                        saveNoteLinkSelection()
+                        setShowNoteLinkDialog(true)
+                      }
+                    }}
                     customBlocks={[
-                    
+                      noteLinkBlock,
                       {
                         type: 'table',
                         render: (payload?: any) => {
@@ -833,6 +1014,214 @@ export default function NoteEditor({
           ))}
         </div>
       )}
+
+      {/* Status Bar */}
+      <div className="fixed bottom-0 left-0 right-0 z-30 bg-gradient-to-r from-gray-50 to-gray-100 border-t border-gray-200 px-4 py-2">
+        <div className="flex items-center justify-between text-xs text-gray-600">
+          <div className="flex items-center gap-4">
+            {/* Save Status */}
+            <div className="flex items-center gap-1.5">
+              {isSaving ? (
+                <>
+                  <Loader2 size={12} className="animate-spin text-blue-500" />
+                  <span className="text-blue-600 font-medium">Saving...</span>
+                </>
+              ) : hasChanges ? (
+                <>
+                  <span className="w-2 h-2 bg-amber-500 rounded-full animate-pulse" />
+                  <span className="text-amber-600 font-medium">Unsaved changes</span>
+                </>
+              ) : lastSaveDisplay ? (
+                <>
+                  <Check size={12} className="text-green-500" />
+                  <span className="text-green-600 font-medium">Saved {lastSaveDisplay}</span>
+                </>
+              ) : null}
+            </div>
+
+            {/* Folder Path */}
+            {note && (
+              <div className="flex items-center gap-1.5 text-gray-500">
+                <FolderOpen size={12} />
+                <span>{folderPath}</span>
+              </div>
+            )}
+
+            {/* Note Type */}
+            {note && (
+              <div className="flex items-center gap-1.5 text-gray-500">
+                <span className="px-1.5 py-0.5 bg-gray-200 rounded text-[10px] font-medium uppercase">
+                  {noteType === 'rich-text' ? 'Text' : noteType === 'drawing' ? 'Drawing' : 'Mindmap'}
+                </span>
+              </div>
+            )}
+
+            {/* Project Manager Button */}
+            <button
+              onClick={() => setShowProjectsModal(true)}
+              className="flex items-center gap-1.5 px-2 py-1 text-gray-600 hover:text-blue-600 hover:bg-blue-50 rounded transition-colors font-medium"
+              title="Open Project Manager"
+            >
+              <Target size={14} className="text-blue-500" />
+              <span>Projects</span>
+            </button>
+          </div>
+
+          {/* Stats - Only for rich text notes */}
+          {noteType === 'rich-text' && (
+            <div className="flex items-center gap-4 text-gray-500">
+              {/* Word Goal Progress */}
+              {wordGoal && wordGoalProgress ? (
+                <div className="flex items-center gap-2">
+                  <div className="flex items-center gap-1.5">
+                    <Target size={12} className={wordGoalProgress.isComplete ? 'text-green-500' : 'text-blue-500'} />
+                    <span className={wordGoalProgress.isComplete ? 'text-green-600 font-medium' : 'text-gray-700'}>
+                      {stats.words}/{wordGoal} words
+                    </span>
+                  </div>
+                  <div className="relative w-24 h-2 bg-gray-200 rounded-full overflow-hidden">
+                    <div 
+                      className={`absolute left-0 top-0 h-full transition-all duration-300 rounded-full ${
+                        wordGoalProgress.isComplete 
+                          ? 'bg-gradient-to-r from-green-400 to-green-500' 
+                          : 'bg-gradient-to-r from-blue-400 to-blue-500'
+                      }`}
+                      style={{ width: `${wordGoalProgress.percentage}%` }}
+                    />
+                  </div>
+                  <button
+                    onClick={() => setShowWordGoalInput(true)}
+                    className="text-gray-400 hover:text-gray-600 transition-colors"
+                    title="Edit goal"
+                  >
+                    <Edit2 size={10} />
+                  </button>
+                </div>
+              ) : (
+                <>
+                  <span>{stats.words} {stats.words === 1 ? 'word' : 'words'}</span>
+                  {note && (
+                    <button
+                      onClick={() => setShowWordGoalInput(true)}
+                      className="flex items-center gap-1 text-blue-500 hover:text-blue-600 transition-colors font-medium"
+                      title="Set word goal"
+                    >
+                      <Target size={12} />
+                      <span>Set goal</span>
+                    </button>
+                  )}
+                </>
+              )}
+              
+              <span>{stats.characters} {stats.characters === 1 ? 'char' : 'chars'}</span>
+              {headings.length > 0 && (
+                <span>{headings.length} {headings.length === 1 ? 'heading' : 'headings'}</span>
+              )}
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* Word Goal Input Modal */}
+      {showWordGoalInput && (
+        <div className="fixed inset-0 z-[70] flex items-center justify-center p-4 bg-black/50">
+          <div className="bg-white rounded-xl shadow-2xl border border-gray-200 max-w-md w-full p-6">
+            <div className="flex items-start gap-4 mb-4">
+              <div className="flex-shrink-0 w-12 h-12 rounded-full bg-blue-100 flex items-center justify-center">
+                <Target size={24} className="text-blue-600" />
+              </div>
+              <div className="flex-1">
+                <h3 className="text-lg font-semibold text-gray-900 mb-1">Set Word Goal</h3>
+                <p className="text-sm text-gray-500">Set a target word count for this note</p>
+              </div>
+            </div>
+            
+            <div className="mb-4">
+              <label className="block text-sm font-medium text-gray-700 mb-2">
+                Target word count
+              </label>
+              <input
+                ref={wordGoalInputRef}
+                type="number"
+                min="1"
+                defaultValue={wordGoal || ''}
+                placeholder="e.g., 1000"
+                autoFocus
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') {
+                    const value = parseInt(e.currentTarget.value, 10)
+                    if (value > 0) {
+                      handleSetWordGoal(value)
+                    }
+                  } else if (e.key === 'Escape') {
+                    setShowWordGoalInput(false)
+                  }
+                }}
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+              />
+              <p className="text-xs text-gray-400 mt-1">Current: {stats.words} words</p>
+            </div>
+
+            <div className="flex items-center justify-between gap-2">
+              <button
+                onClick={() => handleSetWordGoal(null)}
+                className="px-4 py-2 text-sm font-medium text-red-600 hover:bg-red-50 rounded-lg transition-colors"
+              >
+                Clear Goal
+              </button>
+              <div className="flex gap-2">
+                <button
+                  onClick={() => setShowWordGoalInput(false)}
+                  className="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={() => {
+                    if (wordGoalInputRef.current) {
+                      const value = parseInt(wordGoalInputRef.current.value, 10)
+                      if (!isNaN(value) && value > 0) {
+                        handleSetWordGoal(value)
+                      }
+                    }
+                  }}
+                  className="px-4 py-2 text-sm font-medium text-white bg-blue-600 rounded-lg hover:bg-blue-700 transition-colors"
+                >
+                  Set Goal
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Note Link Dialog */}
+      <NoteLinkDialog
+        isOpen={showNoteLinkDialog}
+        onClose={() => setShowNoteLinkDialog(false)}
+        onSelect={handleNoteLinkSelect}
+        currentNoteId={note?.id}
+      />
+
+      {/* Knowledge Graph Modal */}
+      <KnowledgeGraphModal
+        isOpen={showKnowledgeGraph}
+        onClose={() => setShowKnowledgeGraph(false)}
+        currentNoteId={note?.id}
+        onSelectNote={onSelectNote}
+        folders={folders}
+        selectedFolderId={selectedFolderId}
+      />
+
+      {/* Project Manager Modal */}
+      <ProjectsWorkspaceModal
+        isOpen={showProjectsModal}
+        onClose={() => setShowProjectsModal(false)}
+        onSelectNote={onSelectNote}
+        onSelectFolder={onSelectFolder}
+        onNewNote={onNewNote}
+        onDuplicateNote={onDuplicateNote}
+      />
     </>
   )
 }

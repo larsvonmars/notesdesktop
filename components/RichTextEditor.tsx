@@ -71,6 +71,8 @@ interface RichTextEditorProps {
   placeholder?: string
   // Optional custom block descriptors that allow rendering and parsing of blocks
   customBlocks?: CustomBlockDescriptor[]
+  // Optional callback for handling custom slash commands that need UI interaction
+  onCustomSlashCommand?: (commandId: string) => void
 }
 
 const SANITIZE_CONFIG: Config = {
@@ -112,7 +114,10 @@ const SANITIZE_CONFIG: Config = {
     'id',
     'data-block',
     'data-block-type',
-    'data-block-payload'
+    'data-block-payload',
+    'data-note-id',
+    'data-note-title',
+    'data-folder-id'
   ],
   ALLOW_DATA_ATTR: true
 }
@@ -148,13 +153,14 @@ const splitLinesToFragment = (text: string): DocumentFragment => {
 }
 
 const RichTextEditor = forwardRef<RichTextEditorHandle, RichTextEditorProps>(
-  ({ value, onChange, disabled, placeholder, customBlocks }, ref) => {
+  ({ value, onChange, disabled, placeholder, customBlocks, onCustomSlashCommand }, ref) => {
     // local ref to hold passed customBlocks (avoid re-creating callbacks when prop changes)
     const customBlocksRef = useRef<CustomBlockDescriptor[] | undefined>(undefined)
-    const editorRef = useRef<HTMLDivElement | null>(null)
+  const editorRef = useRef<HTMLDivElement | null>(null)
     const slashMenuRef = useRef<HTMLDivElement | null>(null)
     const historyManagerRef = useRef<HistoryManager | null>(null)
     const debouncedCaptureRef = useRef<(() => void) | null>(null)
+  const lastSyncedValueRef = useRef<string>('')
     const mutationObserverRef = useRef<MutationObserver | null>(null)
     const checklistNormalizationTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
     const [showSlashMenu, setShowSlashMenu] = useState(false)
@@ -229,7 +235,18 @@ const RichTextEditor = forwardRef<RichTextEditorHandle, RichTextEditorProps>(
 
         const insertCustomBlockAtSelection = useCallback(
           (html: string) => {
-            // Wrap block in a container with data-block-type so it survives sanitization
+            // Parse the HTML to check if it's already marked as a block
+            const temp = document.createElement('div')
+            temp.innerHTML = html
+            const firstChild = temp.firstChild as HTMLElement
+            
+            // If the content already has data-block attribute (inline blocks like note-link),
+            // insert it directly without wrapping
+            if (firstChild && firstChild.getAttribute && firstChild.getAttribute('data-block') === 'true') {
+              return insertFragmentAtSelection(document.createRange().createContextualFragment(html))
+            }
+            
+            // Otherwise, wrap block in a container with data-block-type so it survives sanitization
             const wrapper = document.createElement('div')
             wrapper.setAttribute('data-block', 'true')
             wrapper.innerHTML = html
@@ -346,6 +363,7 @@ const RichTextEditor = forwardRef<RichTextEditorHandle, RichTextEditorProps>(
     const emitChange = useCallback(() => {
       if (!editorRef.current) return
       const sanitized = sanitize(editorRef.current.innerHTML)
+      lastSyncedValueRef.current = sanitized
       if (sanitized !== value) {
         onChange(sanitized)
         if (debouncedCaptureRef.current) {
@@ -557,10 +575,28 @@ const RichTextEditor = forwardRef<RichTextEditorHandle, RichTextEditorProps>(
       emitChange()
     }, [emitChange])
 
-    // Editor click handler to detect table clicks
+    // Editor click handler to detect table clicks and note link clicks
     useEffect(() => {
       const handleClick = (event: MouseEvent) => {
-        const target = event.target as Node | null
+        const target = event.target as HTMLElement | null
+        
+        // Check for note link clicks
+        if (target) {
+          const noteLinkElement = target.closest('[data-block-type="note-link"]') as HTMLElement | null
+          if (noteLinkElement) {
+            event.preventDefault()
+            const noteId = noteLinkElement.getAttribute('data-note-id')
+            if (noteId) {
+              // Dispatch custom event that parent can listen to
+              window.dispatchEvent(new CustomEvent('note-link-click', { 
+                detail: { noteId } 
+              }))
+            }
+            return
+          }
+        }
+        
+        // Check for table clicks
         const tableNode = findClosestTableBlock(target)
         if (tableNode) {
           showTableToolbarForNode(tableNode as HTMLElement)
@@ -1345,6 +1381,9 @@ const RichTextEditor = forwardRef<RichTextEditorHandle, RichTextEditorProps>(
                 setTableRows(3)
                 setTableCols(3)
                 setShowTableDialog(true)
+              } else if (command.id === 'note-link' && onCustomSlashCommand) {
+                // For note-link, call the parent's handler to show note selector
+                onCustomSlashCommand('note-link')
               } else {
                 // Provide a few sensible defaults for known block types
                 let payload: any = undefined
@@ -1575,17 +1614,22 @@ const RichTextEditor = forwardRef<RichTextEditorHandle, RichTextEditorProps>(
 
     useEffect(() => {
       if (!editorRef.current) return
-      const content = editorRef.current.innerHTML
-      if (sanitize(content) !== value) {
-        editorRef.current.innerHTML = value || ''
+
+      const editorEl = editorRef.current
+      const sanitizedValue = sanitize(value || '')
+
+      if (lastSyncedValueRef.current !== sanitizedValue) {
+        editorEl.innerHTML = sanitizedValue
+        lastSyncedValueRef.current = sanitizedValue
         if (historyManagerRef.current) {
           historyManagerRef.current.capture()
         }
       }
+
       scheduleChecklistNormalization()
       // attempt to rehydrate any custom blocks that came from loaded HTML
       rehydrateExistingBlocks()
-    }, [sanitize, value, scheduleChecklistNormalization])
+    }, [sanitize, value, scheduleChecklistNormalization, rehydrateExistingBlocks])
 
     useEffect(() => {
       if (!editorRef.current) return

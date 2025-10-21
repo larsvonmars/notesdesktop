@@ -19,33 +19,30 @@ Complete UI overhaul with lucide-react icons and modern design patterns while ma
 - Unsaved changes badge: Amber theme with pulsing dot indicator
 - Responsive: Text labels hidden on small screens (lg/xl breakpoints)
 
-### 2. FolderTree (`components/FolderTree.tsx`)
+### 2. UnifiedPanel (`components/UnifiedPanel.tsx`)
+**Status:** ✅ Active - Replaces old FolderTree and NotesList components
+
 **Icons Added:**
-- Navigation: `Folder`, `FolderOpen`, `ChevronRight`, `FileStack`
-- Actions: `Plus`, `FolderPlus`, `Edit2`, `Trash2`
+- Navigation: `Menu`, `X`, `FolderTreeIcon`, `ChevronRight`, `FileText`
+- Actions: `Save`, `Trash2`, `Search`, `FolderPlus`, `Edit2`, `MoreVertical`
+- Note types: `PenTool` (drawing), `Network` (mindmap), `FileText` (text)
+- User: `User`, `LogOut`
 
 **Style Improvements:**
-- Folder items: Gradient backgrounds on selection (blue-50 to blue-100)
-- Open folders: Blue `FolderOpen` icon, closed folders: Gray `Folder` icon
-- Chevron rotation: Smooth 200ms transition on expand/collapse
-- Context menu: Rounded-lg with shadow-xl, medium font weight
-- New folder button: Gradient hover effect with border animation
-- All Notes item: Uses `FileStack` icon with semibold label
+- Floating menu button: Rounded-full with shadow-lg, top-right positioning
+- Panel: Fixed positioning with rounded-xl, shadow-2xl, max-height constraints
+- Tabbed interface: Browse and TOC tabs with smooth transitions
+- Folder tree: Hierarchical display with expand/collapse animations
+- Note counts: Badge indicators on folders
+- Context menus: Smart positioning to stay in viewport
+- Delete confirmation: Modal with proper styling and animations
+- Drag and drop: Visual feedback for moving notes between folders
 
-### 3. NotesList (`components/NotesList.tsx`)
-**Icons Added:**
-- Header: `FileText`, `Plus`
-- Empty state: Large `FileText` with glow effect
-- Note items: `Pencil` (active indicator), `Clock` (timestamp)
-- Loading: Spinning border animation
-
-**Style Improvements:**
-- Header: Gradient background (gray-50 to white) with icon
-- Note count: Blue dot indicator instead of plain text
-- Selected note: Gradient background (blue-50 to blue-100) with left border
-- Empty state: Glowing background effect behind icon
-- Note items: Better spacing, semibold titles, hover states
-- HTML content: Stripped tags for preview display
+**WebView/Tauri Optimizations:**
+- Uses only standard browser APIs
+- No deprecated or problematic APIs
+- Touch and pointer events properly handled
+- Works on Windows (WebView2), macOS (WKWebView), Linux (WebKitGTK)
 
 ### 4. Dashboard (`app/dashboard/page.tsx`)
 **Icons Added:**

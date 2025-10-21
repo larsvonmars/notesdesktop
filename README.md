@@ -76,16 +76,20 @@ The built application will be available in `src-tauri/target/release/bundle/`.
 - ✅ Login and signup pages
 - ✅ Protected routes
 - ✅ Responsive UI with Tailwind CSS
+- ✅ **Unified floating panel** - Single interface for all navigation and controls
 - ✅ **Complete folder management** (create, rename, move, delete, nested folders)
 - ✅ **Complete note management** (create, duplicate, move, delete, sort)
 - ✅ **Multiple note types** (text, drawing, mindmap)
+- ✅ **Note linking** - Create hyperlinks between notes with `/note-link` command
+- ✅ **Knowledge Graph** - Visualize all notes and their connections
 - ✅ **Context menus** for quick actions on folders and notes
 - ✅ **Advanced search** across notes and folders
+- ✅ **Drag and drop** - Move notes between folders with visual feedback
 - ✅ **Keyboard shortcuts** for efficient workflow
 - ✅ **Note sorting** (by updated date, created date, or title)
 - ✅ **Delete confirmations** with safety warnings
 - ✅ **Real-time synchronization** with Supabase
-- ✅ **100% WebView and Tauri compatible** - All editors work seamlessly across platforms
+- ✅ **100% WebView and Tauri compatible** - Fully optimized for Windows, macOS, and Linux
 
 ## Project Structure
 
@@ -109,6 +113,12 @@ The built application will be available in `src-tauri/target/release/bundle/`.
 
 ## Documentation
 
+- [Unified Panel Guide](./UNIFIED_PANEL_GUIDE.md) - Complete guide to the unified floating panel interface
+- [Panel Migration Summary](./PANEL_MIGRATION_SUMMARY.md) - Technical details of the panel optimization
+- [Note Link Feature](./NOTE_LINK_QUICKSTART.md) - Create hyperlinks between notes
+- [Note Link Technical Guide](./NOTE_LINK_FEATURE.md) - Technical documentation for note linking
+- [Knowledge Graph](./KNOWLEDGE_GRAPH_QUICKSTART.md) - Visual graph of note connections
+- [Knowledge Graph Technical Guide](./KNOWLEDGE_GRAPH_FEATURE.md) - Technical documentation for knowledge graph
 - [Folder and Notes Management Guide](./FOLDER_AND_NOTES_MANAGEMENT.md) - Complete guide to all folder and note management features
 - [Project Summary](./PROJECT_SUMMARY.md) - Overview of the entire project
 - [Database Schema](./DATABASE_SCHEMA.md) - Database structure and relationships
