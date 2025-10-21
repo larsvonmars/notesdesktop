@@ -5,6 +5,7 @@ export interface Folder {
   user_id: string
   name: string
   parent_id: string | null
+  project_id: string | null
   position: number
   created_at: string
   updated_at: string
@@ -13,12 +14,14 @@ export interface Folder {
 export interface CreateFolderInput {
   name: string
   parent_id?: string | null
+  project_id?: string | null
   position?: number
 }
 
 export interface UpdateFolderInput {
   name?: string
   parent_id?: string | null
+  project_id?: string | null
   position?: number
 }
 
@@ -99,6 +102,12 @@ export async function createFolder(input: CreateFolderInput): Promise<Folder> {
     } else {
       query.eq('parent_id', input.parent_id)
     }
+
+    if (input.project_id === null || input.project_id === undefined) {
+      query.is('project_id', null)
+    } else {
+      query.eq('project_id', input.project_id)
+    }
     
     const { count } = await query
     position = (count || 0) + 1
@@ -109,6 +118,7 @@ export async function createFolder(input: CreateFolderInput): Promise<Folder> {
     .insert({
       name: input.name,
       parent_id: input.parent_id || null,
+      project_id: input.project_id ?? null,
       position,
       user_id: user.id,
     })
@@ -157,6 +167,27 @@ export async function moveFolder(
   newParentId: string | null,
   newPosition?: number
 ): Promise<Folder> {
+  // Determine target project for ordering context
+  let targetProjectId: string | null = null
+
+  if (newParentId) {
+    const { data: parentFolder } = await supabase
+      .from('folders')
+      .select('project_id')
+      .eq('id', newParentId)
+      .single()
+
+    targetProjectId = parentFolder?.project_id ?? null
+  } else {
+    const { data: folderRecord } = await supabase
+      .from('folders')
+      .select('project_id')
+      .eq('id', folderId)
+      .single()
+
+    targetProjectId = folderRecord?.project_id ?? null
+  }
+
   // If position is not provided, calculate it
   let position = newPosition
   if (position === undefined) {
@@ -170,6 +201,12 @@ export async function moveFolder(
       query.is('parent_id', null)
     } else {
       query.eq('parent_id', newParentId)
+    }
+
+    if (targetProjectId === null) {
+      query.is('project_id', null)
+    } else {
+      query.eq('project_id', targetProjectId)
     }
     
     const { count } = await query

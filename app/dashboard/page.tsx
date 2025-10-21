@@ -34,6 +34,7 @@ export default function Dashboard() {
   const [folders, setFolders] = useState<Folder[]>([])
   const [folderTree, setFolderTree] = useState<FolderNode[]>([])
   const [selectedFolderId, setSelectedFolderId] = useState<string | null>(null)
+  const [selectedProjectId, setSelectedProjectId] = useState<string | null>(null)
   const [selectedNote, setSelectedNote] = useState<Note | null>(null)
   const [isLoadingNotes, setIsLoadingNotes] = useState(true)
   const [isLoadingFolders, setIsLoadingFolders] = useState(true)
@@ -163,9 +164,10 @@ export default function Dashboard() {
     try {
       if (selectedNote && !isCreatingNew) {
         // Update existing note
-        const updated = await updateNote(selectedNote.id, noteData)
+  const updated = await updateNote(selectedNote.id, noteData)
         setNotes((prev) => prev.map((n) => (n.id === updated.id ? updated : n)))
         setSelectedNote(updated)
+  setSelectedProjectId(updated.project_id ?? null)
         if (isAuto) {
           // briefly suppress realtime reloads triggered by DB hooks
           suppressRealtimeRef.current = true
@@ -176,10 +178,12 @@ export default function Dashboard() {
         const created = await createNote({
           ...noteData,
           folder_id: selectedFolderId,
+          project_id: selectedProjectId ?? null,
           note_type: noteData.note_type || newNoteType,
         })
         setNotes((prev) => [created, ...prev])
         setSelectedNote(created)
+        setSelectedProjectId(created.project_id ?? null)
         setIsCreatingNew(false)
       }
     } catch (error) {
@@ -193,6 +197,7 @@ export default function Dashboard() {
       await deleteNote(id)
       setNotes(notes.filter((n) => n.id !== id))
       setSelectedNote(null)
+  setSelectedProjectId(null)
       setIsCreatingNew(false)
     } catch (error) {
       console.error('Error deleting note:', error)
@@ -200,11 +205,26 @@ export default function Dashboard() {
     }
   }
 
-  const handleNewNote = (noteType: 'rich-text' | 'drawing' | 'mindmap' = 'rich-text', folderId?: string | null) => {
-    // If a folderId is explicitly passed, use it; otherwise keep current selection
+  const handleNewNote = (
+    noteType: 'rich-text' | 'drawing' | 'mindmap' = 'rich-text',
+    folderId?: string | null,
+    projectId?: string | null
+  ) => {
     if (folderId !== undefined) {
       setSelectedFolderId(folderId)
     }
+
+    if (projectId !== undefined) {
+      setSelectedProjectId(projectId)
+    } else if (folderId !== undefined) {
+      if (folderId) {
+        const targetFolder = folders.find((f) => f.id === folderId)
+        setSelectedProjectId(targetFolder?.project_id ?? null)
+      } else {
+        setSelectedProjectId(null)
+      }
+    }
+
     setSelectedNote(null)
     setIsCreatingNew(true)
     setNewNoteType(noteType)
@@ -213,12 +233,20 @@ export default function Dashboard() {
   const handleSelectNote = (note: Note) => {
     setSelectedNote(note)
     setIsCreatingNew(false)
+    setSelectedFolderId(note.folder_id ?? null)
+    setSelectedProjectId(note.project_id ?? null)
   }
 
   const handleSelectFolder = (folderId: string | null) => {
     setSelectedFolderId(folderId)
     setSelectedNote(null)
     setIsCreatingNew(false)
+    if (folderId) {
+      const folder = folders.find((f) => f.id === folderId)
+      setSelectedProjectId(folder?.project_id ?? null)
+    } else {
+      setSelectedProjectId(null)
+    }
   }
 
   // Open an in-app modal to create a folder. This replaces window.prompt which
@@ -340,10 +368,12 @@ export default function Dashboard() {
         title: `${note.title} (Copy)`,
         content: note.content,
         folder_id: note.folder_id,
+        project_id: note.project_id ?? null,
         note_type: note.note_type,
       })
       setNotes([duplicatedNote, ...notes])
       setSelectedNote(duplicatedNote)
+      setSelectedProjectId(duplicatedNote.project_id ?? null)
       setIsCreatingNew(false)
     } catch (error) {
       console.error('Error duplicating note:', error)
@@ -356,6 +386,12 @@ export default function Dashboard() {
       await moveNote(noteId, newFolderId)
       await loadNotesInFolder(selectedFolderId)
       loadFolders()
+      if (newFolderId) {
+        const folder = folders.find((f) => f.id === newFolderId)
+        setSelectedProjectId(folder?.project_id ?? null)
+      } else {
+        setSelectedProjectId(null)
+      }
       
       // Show success toast
       const note = notes.find(n => n.id === noteId)

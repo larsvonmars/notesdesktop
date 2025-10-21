@@ -43,7 +43,7 @@ import MindmapEditor, {
   type MindmapData
 } from './MindmapEditor'
 import UnifiedPanel from './UnifiedPanel'
-import ProjectManager from './ProjectManager'
+import ProjectsWorkspaceModal from './ProjectsWorkspaceModal'
 import { useToast } from './ToastProvider'
 import { Note as LibNote } from '../lib/notes'
 import NoteLinkDialog from './NoteLinkDialog'
@@ -96,7 +96,7 @@ interface NoteEditorWithPanelProps extends NoteEditorProps {
   onMoveFolder?: (folderId: string, newParentId: string | null) => void
   notes?: LibNote[]
   onSelectNote?: (note: LibNote) => void
-  onNewNote?: () => void
+  onNewNote?: (noteType?: 'rich-text' | 'drawing' | 'mindmap', folderId?: string | null, projectId?: string | null) => void
   onDuplicateNote?: (note: LibNote) => void
   onMoveNote?: (noteId: string, newFolderId: string | null) => Promise<void>
   isLoadingNotes?: boolean
@@ -159,7 +159,7 @@ export default function NoteEditor({
   const [showNoteLinkDialog, setShowNoteLinkDialog] = useState(false)
   const savedNoteLinkSelection = useRef<Range | null>(null)
   const [showKnowledgeGraph, setShowKnowledgeGraph] = useState(false)
-  const [showProjectManager, setShowProjectManager] = useState(false)
+  const [showProjectsModal, setShowProjectsModal] = useState(false)
 
   const scheduleHeadingsUpdate = useCallback(() => {
     if (headingUpdateTimeoutRef.current !== null) {
@@ -1055,7 +1055,7 @@ export default function NoteEditor({
 
             {/* Project Manager Button */}
             <button
-              onClick={() => setShowProjectManager(true)}
+              onClick={() => setShowProjectsModal(true)}
               className="flex items-center gap-1.5 px-2 py-1 text-gray-600 hover:text-blue-600 hover:bg-blue-50 rounded transition-colors font-medium"
               title="Open Project Manager"
             >
@@ -1211,13 +1211,13 @@ export default function NoteEditor({
       />
 
       {/* Project Manager Modal */}
-      <ProjectManager
-        isOpen={showProjectManager}
-        onClose={() => setShowProjectManager(false)}
-        folders={folders}
-        notes={notes}
+      <ProjectsWorkspaceModal
+        isOpen={showProjectsModal}
+        onClose={() => setShowProjectsModal(false)}
         onSelectNote={onSelectNote}
         onSelectFolder={onSelectFolder}
+        onNewNote={onNewNote}
+        onDuplicateNote={onDuplicateNote}
       />
     </>
   )
