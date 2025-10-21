@@ -43,6 +43,7 @@ import MindmapEditor, {
   type MindmapData
 } from './MindmapEditor'
 import UnifiedPanel from './UnifiedPanel'
+import ProjectManager from './ProjectManager'
 import { useToast } from './ToastProvider'
 import { Note as LibNote } from '../lib/notes'
 import NoteLinkDialog from './NoteLinkDialog'
@@ -158,6 +159,7 @@ export default function NoteEditor({
   const [showNoteLinkDialog, setShowNoteLinkDialog] = useState(false)
   const savedNoteLinkSelection = useRef<Range | null>(null)
   const [showKnowledgeGraph, setShowKnowledgeGraph] = useState(false)
+  const [showProjectManager, setShowProjectManager] = useState(false)
 
   const scheduleHeadingsUpdate = useCallback(() => {
     if (headingUpdateTimeoutRef.current !== null) {
@@ -1050,6 +1052,16 @@ export default function NoteEditor({
                 </span>
               </div>
             )}
+
+            {/* Project Manager Button */}
+            <button
+              onClick={() => setShowProjectManager(true)}
+              className="flex items-center gap-1.5 px-2 py-1 text-gray-600 hover:text-blue-600 hover:bg-blue-50 rounded transition-colors font-medium"
+              title="Open Project Manager"
+            >
+              <Target size={14} className="text-blue-500" />
+              <span>Projects</span>
+            </button>
           </div>
 
           {/* Stats - Only for rich text notes */}
@@ -1196,6 +1208,16 @@ export default function NoteEditor({
         onSelectNote={onSelectNote}
         folders={folders}
         selectedFolderId={selectedFolderId}
+      />
+
+      {/* Project Manager Modal */}
+      <ProjectManager
+        isOpen={showProjectManager}
+        onClose={() => setShowProjectManager(false)}
+        folders={folders}
+        notes={notes}
+        onSelectNote={onSelectNote}
+        onSelectFolder={onSelectFolder}
       />
     </>
   )
