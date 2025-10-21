@@ -12,6 +12,7 @@ import {
   updateNote,
   deleteNote,
   subscribeToNotes,
+  moveNote,
 } from '@/lib/notes'
 import {
   getFolders,
@@ -22,6 +23,7 @@ import {
   subscribeToFolders,
   FolderNode,
   Folder,
+  moveFolder,
 } from '@/lib/folders'
 
 export default function Dashboard() {
@@ -351,7 +353,7 @@ export default function Dashboard() {
 
   const handleMoveNote = async (noteId: string, newFolderId: string | null) => {
     try {
-      await updateNote(noteId, { folder_id: newFolderId })
+      await moveNote(noteId, newFolderId)
       await loadNotesInFolder(selectedFolderId)
       loadFolders()
       
@@ -371,7 +373,7 @@ export default function Dashboard() {
 
   const handleMoveFolder = async (folderId: string, newParentId: string | null) => {
     try {
-      await updateFolder(folderId, { parent_id: newParentId })
+      await moveFolder(folderId, newParentId)
       loadFolders()
     } catch (error) {
       console.error('Error moving folder:', error)
