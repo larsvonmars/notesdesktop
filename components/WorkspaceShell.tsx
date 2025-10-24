@@ -2,7 +2,7 @@
 
 import { useAuth } from '@/lib/auth-context'
 import { useRouter, useSearchParams } from 'next/navigation'
-import { useEffect, useState, useRef, useCallback } from 'react'
+import { useEffect, useState, useRef, useCallback, Suspense } from 'react'
 import NoteEditor, { Note } from '@/components/NoteEditor'
 import { Loader2, FileEdit, Sparkles } from 'lucide-react'
 import { useToast } from '@/components/ToastProvider'
@@ -26,7 +26,7 @@ import {
   moveFolder,
 } from '@/lib/folders'
 
-export default function WorkspaceShell() {
+function WorkspaceContent() {
   const { user, loading, signOut } = useAuth()
   const router = useRouter()
   const searchParams = useSearchParams()
@@ -617,5 +617,20 @@ export default function WorkspaceShell() {
         </div>
       )}
     </div>
+  )
+}
+
+export default function WorkspaceShell() {
+  return (
+    <Suspense fallback={
+      <div className="flex items-center justify-center min-h-screen bg-white">
+        <div className="text-center">
+          <Loader2 className="w-12 h-12 text-blue-600 animate-spin mx-auto mb-4" />
+          <div className="text-lg text-gray-700 font-medium">Loading your workspace...</div>
+        </div>
+      </div>
+    }>
+      <WorkspaceContent />
+    </Suspense>
   )
 }
