@@ -559,20 +559,20 @@ export default function NoteEditor({
           title: title.trim(),
           content: drawingContent,
           note_type: 'drawing',
-        })
+        }, isAuto)
       } else if (noteType === 'mindmap') {
         const mindmapContent = JSON.stringify(mindmapData)
         await onSave({
           title: title.trim(),
           content: mindmapContent,
           note_type: 'mindmap',
-        })
+        }, isAuto)
       } else {
         await onSave({
           title: title.trim(),
           content,
           note_type: 'rich-text',
-        })
+        }, isAuto)
       }
       setHasChanges(false)
       setLastSaveTime(new Date())
