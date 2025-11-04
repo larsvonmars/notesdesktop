@@ -43,20 +43,20 @@ export default function DayEventsModal({
   })
 
   return (
-    <div className="fixed inset-0 z-[55] flex items-center justify-center p-4 bg-black/50">
-      <div className="bg-white rounded-xl shadow-2xl border border-gray-200 w-full max-w-2xl max-h-[80vh] overflow-hidden flex flex-col">
+    <div className="fixed inset-0 z-[55] flex items-center justify-center p-3 sm:p-4 bg-black/50">
+      <div className="bg-white rounded-xl shadow-2xl border border-gray-200 w-full max-w-2xl max-h-[85vh] sm:max-h-[80vh] overflow-hidden flex flex-col mx-4">
         {/* Header */}
-        <div className="flex items-center justify-between p-6 border-b border-gray-200">
-          <div className="flex items-center gap-3">
-            <div className={`w-10 h-10 rounded-full flex items-center justify-center ${
+        <div className="flex items-center justify-between p-3 sm:p-6 border-b border-gray-200">
+          <div className="flex items-center gap-2 sm:gap-3">
+            <div className={`w-8 h-8 sm:w-10 sm:h-10 rounded-full flex items-center justify-center ${
               isToday ? 'bg-blue-100' : 'bg-gray-100'
             }`}>
-              <CalendarIcon size={20} className={isToday ? 'text-blue-600' : 'text-gray-600'} />
+              <CalendarIcon size={16} className={`sm:w-5 sm:h-5 ${isToday ? 'text-blue-600' : 'text-gray-600'}`} />
             </div>
             <div>
-              <h2 className="text-2xl font-bold text-gray-900">{dateString}</h2>
+              <h2 className="text-lg sm:text-2xl font-bold text-gray-900">{dateString}</h2>
               {isToday && (
-                <p className="text-sm text-blue-600 font-medium">Today</p>
+                <p className="text-xs sm:text-sm text-blue-600 font-medium">Today</p>
               )}
             </div>
           </div>

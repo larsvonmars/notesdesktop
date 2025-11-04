@@ -329,35 +329,35 @@ export default function CalendarModal({ isOpen, onClose }: CalendarModalProps) {
   if (!isOpen) return null
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50">
-      <div className="bg-white rounded-xl shadow-2xl border border-gray-200 w-full max-w-5xl max-h-[90vh] overflow-hidden flex flex-col">
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-2 sm:p-4 bg-black/50">
+      <div className="bg-white rounded-xl shadow-2xl border border-gray-200 w-full max-w-5xl max-h-[95vh] sm:max-h-[90vh] overflow-hidden flex flex-col">
         {/* Header */}
-        <div className="flex items-center justify-between p-6 border-b border-gray-200">
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-full bg-blue-100 flex items-center justify-center">
-              <CalendarIcon size={20} className="text-blue-600" />
+        <div className="flex items-center justify-between p-3 sm:p-6 border-b border-gray-200">
+          <div className="flex items-center gap-2 sm:gap-3">
+            <div className="w-8 h-8 sm:w-10 sm:h-10 rounded-full bg-blue-100 flex items-center justify-center">
+              <CalendarIcon size={16} className="sm:w-5 sm:h-5 text-blue-600" />
             </div>
             <div>
-              <h2 className="text-2xl font-bold text-gray-900">Calendar & Reminders</h2>
-              <p className="text-sm text-gray-500">Manage your events and todos</p>
+              <h2 className="text-lg sm:text-2xl font-bold text-gray-900">Calendar & Reminders</h2>
+              <p className="text-xs sm:text-sm text-gray-500">Manage your events and todos</p>
             </div>
           </div>
           <button
             onClick={onClose}
-            className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
+            className="p-1.5 sm:p-2 hover:bg-gray-100 rounded-lg transition-colors"
             title="Close"
           >
-            <X size={20} className="text-gray-500" />
+            <X size={18} className="sm:w-5 sm:h-5 text-gray-500" />
           </button>
         </div>
 
         {/* Content */}
-        <div className="flex-1 overflow-hidden flex">
+        <div className="flex-1 overflow-hidden flex flex-col sm:flex-row">
           {/* Main Calendar/List View */}
-          <div className="flex-1 overflow-y-auto p-6">
+          <div className="flex-1 overflow-y-auto p-3 sm:p-6">
             {/* View Toggle and Controls */}
-            <div className="flex items-center justify-between mb-6">
-              <div className="flex items-center gap-2">
+            <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between mb-4 sm:mb-6 gap-3 sm:gap-0">
+              <div className="flex items-center gap-2 w-full sm:w-auto">
                 <button
                   onClick={() => setViewMode('calendar')}
                   className={`px-4 py-2 rounded-lg font-medium transition-colors ${
@@ -758,16 +758,16 @@ export default function CalendarModal({ isOpen, onClose }: CalendarModalProps) {
 
       {/* Event Form Modal */}
       {showEventForm && (
-        <div className="fixed inset-0 z-[60] flex items-center justify-center p-4 bg-black/50">
-          <div className="bg-white rounded-xl shadow-2xl border border-gray-200 max-w-lg w-full p-6">
-            <h3 className="text-xl font-bold text-gray-900 mb-4">
+        <div className="fixed inset-0 z-[60] flex items-center justify-center p-3 sm:p-4 bg-black/50">
+          <div className="bg-white rounded-xl shadow-2xl border border-gray-200 max-w-lg w-full p-4 sm:p-6 mx-4">
+            <h3 className="text-lg sm:text-xl font-bold text-gray-900 mb-3 sm:mb-4">
               {editingEvent ? 'Edit Event' : 'New Event'}
             </h3>
 
-            <div className="space-y-4">
+            <div className="space-y-3 sm:space-y-4">
               {/* Title */}
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
+                <label className="block text-xs sm:text-sm font-medium text-gray-700 mb-1">
                   Title *
                 </label>
                 <input
@@ -775,14 +775,14 @@ export default function CalendarModal({ isOpen, onClose }: CalendarModalProps) {
                   value={formData.title}
                   onChange={(e) => setFormData({ ...formData, title: e.target.value })}
                   placeholder="Event title"
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  className="w-full px-3 py-2 text-sm sm:text-base border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                   autoFocus
                 />
               </div>
 
               {/* Description */}
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
+                <label className="block text-xs sm:text-sm font-medium text-gray-700 mb-1">
                   Description
                 </label>
                 <textarea
@@ -790,7 +790,7 @@ export default function CalendarModal({ isOpen, onClose }: CalendarModalProps) {
                   onChange={(e) => setFormData({ ...formData, description: e.target.value })}
                   placeholder="Event description"
                   rows={3}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent resize-none"
+                  className="w-full px-3 py-2 text-sm sm:text-base border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent resize-none"
                 />
               </div>
 
