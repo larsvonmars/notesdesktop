@@ -48,8 +48,9 @@ import { useToast } from './ToastProvider'
 import { Note as LibNote } from '../lib/notes'
 import NoteLinkDialog from './NoteLinkDialog'
 import KnowledgeGraphModal from './KnowledgeGraphModal'
+import CalendarModal from './CalendarModal'
 import { noteLinkBlock, registerNoteLinkCommand } from '../lib/editor/noteLinkBlock'
-import { FileText } from 'lucide-react'
+import { FileText, Calendar as CalendarIcon } from 'lucide-react'
 
 export type { Note } from '../lib/notes'
 
@@ -130,6 +131,8 @@ export default function NoteEditor({
   onSignOut,
   autoOpenPanelKey,
 }: NoteEditorWithPanelProps) {
+  // Tunable autosave delay; increased to reduce frequent saves and improve stability in heavy edits
+  const AUTOSAVE_DELAY_MS = 4000
   const toast = useToast()
   const [title, setTitle] = useState('')
   const [content, setContent] = useState('')
@@ -162,6 +165,7 @@ export default function NoteEditor({
   const savedNoteLinkSelection = useRef<Range | null>(null)
   const [showKnowledgeGraph, setShowKnowledgeGraph] = useState(false)
   const [showProjectsModal, setShowProjectsModal] = useState(false)
+  const [showCalendarModal, setShowCalendarModal] = useState(false)
 
   const scheduleHeadingsUpdate = useCallback(() => {
     if (headingUpdateTimeoutRef.current !== null) {
@@ -594,7 +598,7 @@ export default function NoteEditor({
 
   // Autosave: debounce saves after a short period of inactivity.
   useEffect(() => {
-    const AUTOSAVE_DELAY = 2000 // ms
+    const AUTOSAVE_DELAY = AUTOSAVE_DELAY_MS // ms
 
     // clear any existing autosave
     if (autosaveTimeoutRef.current !== null) {
@@ -623,7 +627,7 @@ export default function NoteEditor({
           autosaveTimeoutRef.current = null
         }
       })()
-    }, AUTOSAVE_DELAY)
+  }, AUTOSAVE_DELAY)
 
     return () => {
       if (autosaveTimeoutRef.current !== null) {
@@ -631,7 +635,7 @@ export default function NoteEditor({
         autosaveTimeoutRef.current = null
       }
     }
-  }, [title, content, drawingData, mindmapData, noteType, hasChanges, isSaving, isDeleting, handleSave])
+  }, [title, content, drawingData, mindmapData, noteType, hasChanges, isSaving, isDeleting, handleSave, AUTOSAVE_DELAY_MS])
 
   const handleDelete = async () => {
     if (!note || !onDelete) return
@@ -647,6 +651,66 @@ export default function NoteEditor({
       setIsDeleting(false)
     }
   }
+
+  // Save-on-exit hooks: try to persist unsaved changes on window/tab close or app quit
+  useEffect(() => {
+    if (typeof window === 'undefined') return
+
+    let unlistenTauri: (() => void) | null = null
+    let tauriClosing = false
+
+    const handleBeforeUnload = (event: BeforeUnloadEvent) => {
+      // Only attempt if there's anything to save and we have a title
+      if (hasChanges && !isSaving && !isDeleting && title.trim()) {
+        // Fire-and-forget autosave; browsers/tauri might not await this, but it's a best-effort
+        void handleSave({ isAuto: true })
+        // Request confirmation to give the app time; on desktop this may be ignored but harmless
+        event.preventDefault()
+        event.returnValue = ''
+        return ''
+      }
+      return undefined
+    }
+
+    window.addEventListener('beforeunload', handleBeforeUnload)
+
+    // In Tauri, also intercept the app close event for a more reliable save
+    ;(async () => {
+      try {
+        if ((window as any).__TAURI__) {
+          const { appWindow } = await import('@tauri-apps/api/window')
+          unlistenTauri = await appWindow.onCloseRequested(async (e) => {
+            // If nothing to save, allow default close
+            if (!hasChanges || isSaving || isDeleting || !title.trim()) {
+              return
+            }
+            // Prevent default close to run save first
+            e.preventDefault()
+            if (tauriClosing) return
+            tauriClosing = true
+            try {
+              await handleSave({ isAuto: true })
+            } catch {
+              // Ignore save failures during shutdown
+            } finally {
+              // Proceed with close regardless to avoid trapping the window
+              try { await appWindow.close() } catch {}
+            }
+          })
+        }
+      } catch {
+        // no-op if tauri APIs are unavailable
+      }
+    })()
+
+    return () => {
+      window.removeEventListener('beforeunload', handleBeforeUnload)
+      if (unlistenTauri) {
+        try { unlistenTauri() } catch {}
+        unlistenTauri = null
+      }
+    }
+  }, [hasChanges, isSaving, isDeleting, title, handleSave])
 
   const handleCancel = () => {
     if (hasChanges) {
@@ -1065,6 +1129,16 @@ export default function NoteEditor({
               <Target size={14} className="text-blue-500" />
               <span>Projects</span>
             </button>
+
+            {/* Calendar Button */}
+            <button
+              onClick={() => setShowCalendarModal(true)}
+              className="flex items-center gap-1.5 px-2 py-1 text-gray-600 hover:text-purple-600 hover:bg-purple-50 rounded transition-colors font-medium"
+              title="Open Calendar & Reminders"
+            >
+              <CalendarIcon size={14} className="text-purple-500" />
+              <span>Calendar</span>
+            </button>
           </div>
 
           {/* Stats - Only for rich text notes */}
@@ -1221,6 +1295,12 @@ export default function NoteEditor({
         onSelectFolder={onSelectFolder}
         onNewNote={onNewNote}
         onDuplicateNote={onDuplicateNote}
+      />
+
+      {/* Calendar Modal */}
+      <CalendarModal
+        isOpen={showCalendarModal}
+        onClose={() => setShowCalendarModal(false)}
       />
     </>
   )

@@ -20,10 +20,14 @@ import {
   FolderPlus,
   Copy,
   MoreVertical,
+  ChevronLeft,
+  Calendar as CalendarIcon,
 } from 'lucide-react'
 import { Note } from './NoteEditor'
 import { FolderNode } from '@/lib/folders'
 import { getNotesByFolder } from '@/lib/notes'
+import { CalendarEvent, getCalendarEvents, subscribeToCalendarEvents } from '@/lib/calendar'
+import { useAuth } from '@/lib/auth-context'
 
 interface UnifiedPanelProps {
   // Note controls
@@ -117,8 +121,11 @@ export default function UnifiedPanel({
   onSignOut,
   autoOpenKey,
 }: UnifiedPanelProps) {
+  const { user } = useAuth()
   const [isOpen, setIsOpen] = useState(false)
   const [activeTab, setActiveTab] = useState<'browse' | 'toc'>('browse')
+  const [calendarEvents, setCalendarEvents] = useState<CalendarEvent[]>([])
+  const [currentMonth, setCurrentMonth] = useState(new Date())
   const ALL_FOLDER_KEY = '__ALL__'
   const folderKey = (folderId: string | null) => folderId ?? ALL_FOLDER_KEY
   const [expandedFolders, setExpandedFolders] = useState<Set<string>>(
@@ -148,6 +155,76 @@ export default function UnifiedPanel({
   const renameFolderInputRef = useRef<HTMLInputElement | null>(null)
   const [hoverFolderId, setHoverFolderId] = useState<string | null>(null)
   const lastAutoOpenKey = useRef<string | number | undefined>(undefined)
+
+  // Load calendar events
+  useEffect(() => {
+    if (!user) return
+    
+    const loadEvents = async () => {
+      try {
+        const events = await getCalendarEvents()
+        setCalendarEvents(events)
+      } catch (error) {
+        console.error('Error loading calendar events:', error)
+      }
+    }
+
+    loadEvents()
+
+    // Subscribe to real-time updates
+    const unsubscribe = subscribeToCalendarEvents(user.id, () => {
+      loadEvents()
+    })
+
+    return unsubscribe
+  }, [user])
+
+  // Calendar helper functions
+  const getDaysInMonth = (date: Date) => {
+    const year = date.getFullYear()
+    const month = date.getMonth()
+    const firstDay = new Date(year, month, 1)
+    const lastDay = new Date(year, month + 1, 0)
+    const daysInMonth = lastDay.getDate()
+    const startingDayOfWeek = firstDay.getDay()
+
+    const days: (Date | null)[] = []
+
+    // Add empty slots for days before the first of the month
+    for (let i = 0; i < startingDayOfWeek; i++) {
+      days.push(null)
+    }
+
+    // Add all days of the month
+    for (let i = 1; i <= daysInMonth; i++) {
+      days.push(new Date(year, month, i))
+    }
+
+    return days
+  }
+
+  const getEventsForDate = (date: Date | null): CalendarEvent[] => {
+    if (!date) return []
+    
+    const dateStr = date.toISOString().split('T')[0]
+    return calendarEvents.filter(event => {
+      const eventStart = event.start_date.split('T')[0]
+      const eventEnd = event.end_date.split('T')[0]
+      return dateStr >= eventStart && dateStr <= eventEnd
+    })
+  }
+
+  const goToPreviousMonth = () => {
+    setCurrentMonth(new Date(currentMonth.getFullYear(), currentMonth.getMonth() - 1))
+  }
+
+  const goToNextMonth = () => {
+    setCurrentMonth(new Date(currentMonth.getFullYear(), currentMonth.getMonth() + 1))
+  }
+
+  const goToToday = () => {
+    setCurrentMonth(new Date())
+  }
 
   // Keyboard shortcuts
   useEffect(() => {
@@ -782,8 +859,8 @@ export default function UnifiedPanel({
                   : 'text-gray-600 hover:text-gray-800 hover:bg-gray-100'
               }`}
             >
-              <FileText size={15} />
-              Browse
+              <CalendarIcon size={15} />
+              Calendar
             </button>
             <button
               onClick={() => setActiveTab('toc')}
@@ -808,6 +885,99 @@ export default function UnifiedPanel({
           <div className="flex-1 overflow-y-auto p-3">
             {activeTab === 'browse' && (
               <div className="space-y-3">
+                {/* Mini Calendar */}
+                <div className="bg-gradient-to-br from-blue-50 to-indigo-50 rounded-lg p-3 border border-blue-200">
+                  {/* Calendar Header */}
+                  <div className="flex items-center justify-between mb-3">
+                    <button
+                      onClick={goToPreviousMonth}
+                      className="p-1 hover:bg-white/60 rounded transition-colors"
+                      title="Previous month"
+                    >
+                      <ChevronLeft size={16} className="text-gray-600" />
+                    </button>
+                    <div className="flex flex-col items-center">
+                      <div className="text-sm font-semibold text-gray-800">
+                        {currentMonth.toLocaleDateString('en-US', { month: 'long', year: 'numeric' })}
+                      </div>
+                      <button
+                        onClick={goToToday}
+                        className="text-xs text-blue-600 hover:text-blue-700 font-medium mt-0.5"
+                      >
+                        Today
+                      </button>
+                    </div>
+                    <button
+                      onClick={goToNextMonth}
+                      className="p-1 hover:bg-white/60 rounded transition-colors"
+                      title="Next month"
+                    >
+                      <ChevronRight size={16} className="text-gray-600" />
+                    </button>
+                  </div>
+
+                  {/* Day Labels */}
+                  <div className="grid grid-cols-7 gap-0.5 mb-1">
+                    {['Su', 'Mo', 'Tu', 'We', 'Th', 'Fr', 'Sa'].map(day => (
+                      <div key={day} className="text-center text-[10px] font-semibold text-gray-500 py-1">
+                        {day}
+                      </div>
+                    ))}
+                  </div>
+
+                  {/* Calendar Grid */}
+                  <div className="grid grid-cols-7 gap-0.5">
+                    {getDaysInMonth(currentMonth).map((day, index) => {
+                      if (!day) {
+                        return <div key={`empty-${index}`} className="aspect-square" />
+                      }
+
+                      const isToday = 
+                        day.getDate() === new Date().getDate() &&
+                        day.getMonth() === new Date().getMonth() &&
+                        day.getFullYear() === new Date().getFullYear()
+
+                      const dayEvents = getEventsForDate(day)
+                      const hasEvents = dayEvents.length > 0
+
+                      return (
+                        <div
+                          key={day.toISOString()}
+                          className={`aspect-square flex flex-col items-center justify-center rounded text-xs transition-all cursor-pointer ${
+                            isToday
+                              ? 'bg-blue-600 text-white font-bold shadow-md hover:bg-blue-700'
+                              : hasEvents
+                              ? 'bg-white text-gray-800 font-medium hover:bg-blue-100 shadow-sm'
+                              : 'bg-white/40 text-gray-600 hover:bg-white/70'
+                          }`}
+                          title={hasEvents ? `${dayEvents.length} event${dayEvents.length > 1 ? 's' : ''}` : ''}
+                        >
+                          <span className="text-[11px]">{day.getDate()}</span>
+                          {hasEvents && (
+                            <div className="flex gap-0.5 mt-0.5">
+                              {dayEvents.slice(0, 3).map((event, i) => (
+                                <div
+                                  key={i}
+                                  className="w-1 h-1 rounded-full"
+                                  style={{ backgroundColor: isToday ? '#fff' : event.color }}
+                                />
+                              ))}
+                            </div>
+                          )}
+                        </div>
+                      )
+                    })}
+                  </div>
+
+                  {/* Event Count */}
+                  <div className="mt-3 pt-2 border-t border-blue-200 flex items-center justify-between">
+                    <div className="text-xs text-gray-600">
+                      {calendarEvents.length} event{calendarEvents.length !== 1 ? 's' : ''}
+                    </div>
+                    <CalendarIcon size={14} className="text-blue-400" />
+                  </div>
+                </div>
+
                 {/* Knowledge Graph */}
                 {onOpenKnowledgeGraph && (
                   <div>
