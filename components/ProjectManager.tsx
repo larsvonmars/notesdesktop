@@ -263,53 +263,54 @@ export default function ProjectManager({
   if (!isOpen) return null
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50">
-      <div className="bg-white rounded-xl shadow-2xl border border-gray-200 w-full max-w-4xl max-h-[80vh] flex flex-col overflow-hidden">
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-black/50">
+      <div className="bg-white rounded-xl shadow-2xl border border-gray-200 w-full max-w-4xl max-h-[90vh] sm:max-h-[80vh] flex flex-col overflow-hidden mx-4">
         {/* Header */}
-        <div className="flex items-center justify-between p-4 border-b border-gray-200 bg-gradient-to-r from-blue-50 to-indigo-50">
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-full bg-blue-500 flex items-center justify-center">
-              <TargetIcon size={20} className="text-white" />
+        <div className="flex items-center justify-between p-3 sm:p-4 border-b border-gray-200 bg-gradient-to-r from-blue-50 to-indigo-50">
+          <div className="flex items-center gap-2 sm:gap-3">
+            <div className="w-8 h-8 sm:w-10 sm:h-10 rounded-full bg-blue-500 flex items-center justify-center">
+              <TargetIcon size={16} className="sm:w-5 sm:h-5 text-white" />
             </div>
             <div>
-              <h2 className="text-xl font-bold text-gray-900">Project Manager</h2>
-              <p className="text-sm text-gray-600">Organize your work into projects</p>
+              <h2 className="text-base sm:text-xl font-bold text-gray-900">Project Manager</h2>
+              <p className="text-xs sm:text-sm text-gray-600">Organize your work into projects</p>
             </div>
           </div>
           <button
             onClick={onClose}
-            className="p-2 hover:bg-white/50 rounded-lg transition-colors"
+            className="p-1.5 sm:p-2 hover:bg-white/50 rounded-lg transition-colors"
             title="Close"
           >
-            <X size={20} />
+            <X size={18} className="sm:w-5 sm:h-5" />
           </button>
         </div>
 
         {/* Search and Create */}
-        <div className="p-4 border-b border-gray-200 bg-gray-50">
-          <div className="flex gap-2">
+        <div className="p-3 sm:p-4 border-b border-gray-200 bg-gray-50">
+          <div className="flex flex-col sm:flex-row gap-2">
             <div className="flex-1 relative">
-              <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
+              <Search size={14} className="sm:w-4 sm:h-4 absolute left-2.5 sm:left-3 top-1/2 -translate-y-1/2 text-gray-400" />
               <input
                 type="text"
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
                 placeholder="Search projects..."
-                className="w-full pl-10 pr-4 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                className="w-full pl-8 sm:pl-10 pr-3 sm:pr-4 py-2 text-sm sm:text-base border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
               />
             </div>
             <button
               onClick={openCreateModal}
-              className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white font-medium rounded-lg hover:bg-blue-700 transition-colors"
+              className="flex items-center gap-1.5 sm:gap-2 px-3 sm:px-4 py-2 text-sm sm:text-base bg-blue-600 text-white font-medium rounded-lg hover:bg-blue-700 transition-colors whitespace-nowrap"
             >
               <Plus size={16} />
-              New Project
+              <span className="hidden xs:inline">New Project</span>
+              <span className="xs:hidden">New</span>
             </button>
           </div>
         </div>
 
         {/* Content */}
-        <div className="flex-1 overflow-y-auto p-4">
+        <div className="flex-1 overflow-y-auto p-3 sm:p-4">
           {isLoading ? (
             <div className="flex items-center justify-center py-12">
               <Loader2 size={32} className="animate-spin text-blue-500" />
@@ -493,15 +494,15 @@ export default function ProjectManager({
 
       {/* Create/Edit Project Modal */}
       {(showCreateModal || showEditModal) && (
-        <div className="fixed inset-0 z-[60] flex items-center justify-center p-4 bg-black/50">
-          <div className="bg-white rounded-xl shadow-2xl border border-gray-200 max-w-md w-full p-6">
-            <h3 className="text-lg font-semibold text-gray-900 mb-4">
+        <div className="fixed inset-0 z-[60] flex items-center justify-center p-3 sm:p-4 bg-black/50">
+          <div className="bg-white rounded-xl shadow-2xl border border-gray-200 max-w-md w-full p-4 sm:p-6 mx-4">
+            <h3 className="text-base sm:text-lg font-semibold text-gray-900 mb-3 sm:mb-4">
               {showCreateModal ? 'Create New Project' : 'Edit Project'}
             </h3>
             
-            <div className="space-y-4">
+            <div className="space-y-3 sm:space-y-4">
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
+                <label className="block text-xs sm:text-sm font-medium text-gray-700 mb-1">
                   Project Name
                 </label>
                 <input
@@ -510,7 +511,7 @@ export default function ProjectManager({
                   value={projectName}
                   onChange={(e) => setProjectName(e.target.value)}
                   placeholder="My Awesome Project"
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  className="w-full px-3 py-2 text-sm sm:text-base border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
                   onKeyDown={(e) => {
                     if (e.key === 'Enter') {
                       showCreateModal ? handleCreateProject() : handleUpdateProject()
@@ -523,7 +524,7 @@ export default function ProjectManager({
               </div>
               
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
+                <label className="block text-xs sm:text-sm font-medium text-gray-700 mb-1">
                   Description (optional)
                 </label>
                 <textarea
@@ -531,12 +532,12 @@ export default function ProjectManager({
                   onChange={(e) => setProjectDescription(e.target.value)}
                   placeholder="What's this project about?"
                   rows={3}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none"
+                  className="w-full px-3 py-2 text-sm sm:text-base border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none"
                 />
               </div>
               
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
+                <label className="block text-xs sm:text-sm font-medium text-gray-700 mb-2">
                   Color
                 </label>
                 <div className="flex gap-2">
@@ -579,17 +580,17 @@ export default function ProjectManager({
 
       {/* Delete Confirmation Modal */}
       {showDeleteModal && (
-        <div className="fixed inset-0 z-[60] flex items-center justify-center p-4 bg-black/50">
-          <div className="bg-white rounded-xl shadow-2xl border border-gray-200 max-w-md w-full p-6">
-            <div className="flex items-start gap-4 mb-4">
-              <div className="flex-shrink-0 w-12 h-12 rounded-full bg-red-100 flex items-center justify-center">
-                <Trash2 size={24} className="text-red-600" />
+        <div className="fixed inset-0 z-[60] flex items-center justify-center p-3 sm:p-4 bg-black/50">
+          <div className="bg-white rounded-xl shadow-2xl border border-gray-200 max-w-md w-full p-4 sm:p-6 mx-4">
+            <div className="flex items-start gap-3 sm:gap-4 mb-3 sm:mb-4">
+              <div className="flex-shrink-0 w-10 h-10 sm:w-12 sm:h-12 rounded-full bg-red-100 flex items-center justify-center">
+                <Trash2 size={20} className="sm:w-6 sm:h-6 text-red-600" />
               </div>
               <div className="flex-1">
-                <h3 className="text-lg font-semibold text-gray-900 mb-1">
+                <h3 className="text-base sm:text-lg font-semibold text-gray-900 mb-1">
                   Delete Project?
                 </h3>
-                <p className="text-sm text-gray-600">
+                <p className="text-xs sm:text-sm text-gray-600">
                   Are you sure you want to delete &quot;{showDeleteModal.name}&quot;?
                   <span className="block mt-1 text-gray-500">
                     Folders and notes will be moved to &quot;No Project&quot;. This action cannot be undone.
@@ -600,13 +601,13 @@ export default function ProjectManager({
             <div className="flex items-center justify-end gap-2">
               <button
                 onClick={() => setShowDeleteModal(null)}
-                className="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors"
+                className="px-3 sm:px-4 py-2 text-xs sm:text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors"
               >
                 Cancel
               </button>
               <button
                 onClick={handleDeleteProject}
-                className="px-4 py-2 text-sm font-medium text-white bg-red-600 rounded-lg hover:bg-red-700 transition-colors"
+                className="px-3 sm:px-4 py-2 text-xs sm:text-sm font-medium text-white bg-red-600 rounded-lg hover:bg-red-700 transition-colors"
               >
                 Delete Project
               </button>
