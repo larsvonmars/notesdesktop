@@ -35,7 +35,7 @@ import {
   getClosestListItem,
   mergeAdjacentLists
 } from '@/lib/editor/listHandler'
-import { HistoryManager, createDebouncedCapture } from '@/lib/editor/historyManager'
+import { HistoryManager, createDebouncedCapture, type DebouncedCapture } from '@/lib/editor/historyManager'
 import {
   looksLikeMarkdown,
   markdownToHtml,
@@ -159,7 +159,7 @@ const RichTextEditor = forwardRef<RichTextEditorHandle, RichTextEditorProps>(
   const editorRef = useRef<HTMLDivElement | null>(null)
     const slashMenuRef = useRef<HTMLDivElement | null>(null)
     const historyManagerRef = useRef<HistoryManager | null>(null)
-    const debouncedCaptureRef = useRef<(() => void) | null>(null)
+  const debouncedCaptureRef = useRef<DebouncedCapture | null>(null)
   const lastSyncedValueRef = useRef<string>('')
     const mutationObserverRef = useRef<MutationObserver | null>(null)
     const checklistNormalizationTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
@@ -1606,9 +1606,28 @@ const RichTextEditor = forwardRef<RichTextEditorHandle, RichTextEditorProps>(
     useEffect(() => {
       if (editorRef.current && !historyManagerRef.current) {
         const manager = new HistoryManager(editorRef.current)
+        // Increase debounce delay for history snapshots to reduce churn
+        manager.setDebounceDelay(1500)
         manager.initialize()
         historyManagerRef.current = manager
         debouncedCaptureRef.current = createDebouncedCapture(manager)
+      }
+    }, [])
+
+    // Global cleanup on unmount to prevent stray timers/observers
+    useEffect(() => {
+      return () => {
+        if (debouncedCaptureRef.current && typeof debouncedCaptureRef.current.cancel === 'function') {
+          debouncedCaptureRef.current.cancel()
+        }
+        if (checklistNormalizationTimerRef.current) {
+          clearTimeout(checklistNormalizationTimerRef.current)
+          checklistNormalizationTimerRef.current = null
+        }
+        if (mutationObserverRef.current) {
+          try { mutationObserverRef.current.disconnect() } catch {}
+          mutationObserverRef.current = null
+        }
       }
     }, [])
 

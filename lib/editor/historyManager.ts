@@ -17,7 +17,7 @@ export class HistoryManager {
   private maxSize = 100
   private editorElement: HTMLElement
   private lastSnapshotTime = 0
-  private debounceDelay = 500 // ms
+  private debounceDelay = 1500 // ms (increased for fewer, more stable snapshots)
   private isCapturing = true
   
   constructor(editorElement: HTMLElement) {
@@ -171,17 +171,19 @@ export class HistoryManager {
   }
 }
 
+export type DebouncedCapture = (() => void) & { cancel: () => void }
+
 /**
  * Create a debounced function for history capture
  */
 export function createDebouncedCapture(
   historyManager: HistoryManager,
   delay?: number
-): () => void {
+): DebouncedCapture {
   let timeoutId: ReturnType<typeof setTimeout> | null = null
   const actualDelay = delay ?? historyManager.getDebounceDelay()
   
-  return () => {
+  const fn = (() => {
     if (timeoutId) {
       clearTimeout(timeoutId)
     }
@@ -190,5 +192,14 @@ export function createDebouncedCapture(
       historyManager.push()
       timeoutId = null
     }, actualDelay)
+  }) as DebouncedCapture
+
+  fn.cancel = () => {
+    if (timeoutId) {
+      clearTimeout(timeoutId)
+      timeoutId = null
+    }
   }
+
+  return fn
 }

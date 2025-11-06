@@ -687,21 +687,21 @@ export default function KnowledgeGraphModal({
   }
 
   return (
-    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-      <div className="bg-white rounded-lg shadow-xl w-full h-full max-w-7xl max-h-[90vh] flex flex-col">
+    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-2 sm:p-4">
+      <div className="bg-white rounded-lg shadow-xl w-full h-full max-w-7xl max-h-[95vh] sm:max-h-[90vh] flex flex-col">
         {/* Header */}
-        <div className="flex items-center justify-between p-4 border-b border-gray-200">
-          <div className="flex items-center gap-4 flex-1">
-            <div>
-              <h2 className="text-lg font-semibold text-gray-900">Knowledge Graph</h2>
-              <p className="text-sm text-gray-500">
+        <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between p-3 sm:p-4 border-b border-gray-200 gap-3 sm:gap-0">
+          <div className="flex items-center gap-3 sm:gap-4 flex-1 w-full sm:w-auto">
+            <div className="flex-1">
+              <h2 className="text-base sm:text-lg font-semibold text-gray-900">Knowledge Graph</h2>
+              <p className="text-xs sm:text-sm text-gray-500">
                 {stats.totalNotes} notes · {stats.totalLinks} links · {stats.connectedNotes} connected
               </p>
             </div>
             
             {/* Folder Filter */}
-            <div className="flex items-center gap-2 ml-auto mr-4">
-              <FolderTree size={16} className="text-gray-500" />
+            <div className="flex items-center gap-1.5 sm:gap-2 sm:ml-auto sm:mr-4">
+              <FolderTree size={14} className="sm:w-4 sm:h-4 text-gray-500" />
               <select
                 value={filterFolderId === null ? 'root' : filterFolderId}
                 onChange={(e) => {
@@ -714,7 +714,7 @@ export default function KnowledgeGraphModal({
                     setFilterFolderId(value)
                   }
                 }}
-                className="text-sm px-3 py-1.5 border border-gray-300 rounded-md bg-white hover:border-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                className="text-xs sm:text-sm px-2 sm:px-3 py-1 sm:py-1.5 border border-gray-300 rounded-md bg-white hover:border-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
               >
                 {folderOptions.map(option => (
                   <option 
@@ -729,10 +729,10 @@ export default function KnowledgeGraphModal({
           </div>
           <button
             onClick={onClose}
-            className="text-gray-400 hover:text-gray-600 transition-colors flex-shrink-0"
+            className="text-gray-400 hover:text-gray-600 transition-colors flex-shrink-0 absolute top-3 right-3 sm:static"
             aria-label="Close"
           >
-            <X size={20} />
+            <X size={18} className="sm:w-5 sm:h-5" />
           </button>
         </div>
 

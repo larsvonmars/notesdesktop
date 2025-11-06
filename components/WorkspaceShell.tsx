@@ -556,25 +556,25 @@ function WorkspaceContent() {
             autoOpenPanelKey={autoOpenPanelKey}
           />
         ) : (
-          <div className="flex items-center justify-center h-full">
-            <div className="text-center p-8 max-w-md">
-              <div className="relative mb-8">
+          <div className="flex items-center justify-center h-full px-4 sm:px-8">
+            <div className="text-center p-4 sm:p-8 max-w-md w-full">
+              <div className="relative mb-6 sm:mb-8">
                 <div className="absolute inset-0 bg-blue-100 rounded-full blur-3xl opacity-40"></div>
-                <FileEdit className="relative w-24 h-24 text-blue-500 mx-auto" strokeWidth={1.5} />
+                <FileEdit className="relative w-20 h-20 sm:w-24 sm:h-24 text-blue-500 mx-auto" strokeWidth={1.5} />
               </div>
-              <h1 className="text-3xl font-bold text-gray-900 mb-3">Welcome to Notes Desktop</h1>
-              <p className="text-lg text-gray-600 mb-8">
+              <h1 className="text-2xl sm:text-3xl font-bold text-gray-900 mb-2 sm:mb-3">Welcome to Notes Desktop</h1>
+              <p className="text-base sm:text-lg text-gray-600 mb-6 sm:mb-8">
                 A distraction-free writing space designed for your thoughts
               </p>
               <div className="space-y-3">
                 <button
                   onClick={() => handleNewNote('rich-text')}
-                  className="w-full inline-flex items-center justify-center gap-3 px-6 py-3 bg-blue-600 text-white font-medium rounded-lg hover:bg-blue-700 transition-all duration-150 shadow-sm hover:shadow active:scale-95"
+                  className="w-full inline-flex items-center justify-center gap-2 sm:gap-3 px-5 sm:px-6 py-2.5 sm:py-3 bg-blue-600 text-white text-sm sm:text-base font-medium rounded-lg hover:bg-blue-700 transition-all duration-150 shadow-sm hover:shadow active:scale-95"
                 >
-                  <Sparkles size={20} />
+                  <Sparkles size={18} className="sm:w-5 sm:h-5" />
                   Start Writing
                 </button>
-                <p className="text-sm text-gray-500">Click the menu button (top-left) to browse your notes</p>
+                <p className="text-xs sm:text-sm text-gray-500">Click the menu button (top-right) to browse your notes</p>
               </div>
             </div>
           </div>
@@ -583,17 +583,17 @@ function WorkspaceContent() {
 
       {/* Create Folder Modal (in-app) */}
       {showCreateFolderModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50">
-          <div className="bg-white rounded-xl shadow-2xl border border-gray-200 max-w-md w-full p-5">
-            <h3 className="text-lg font-semibold text-gray-900 mb-2">New Folder</h3>
-            <p className="text-sm text-gray-600 mb-4">Enter a name for the new folder.</p>
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-black/50">
+          <div className="bg-white rounded-xl shadow-2xl border border-gray-200 max-w-md w-full p-4 sm:p-5 mx-4">
+            <h3 className="text-base sm:text-lg font-semibold text-gray-900 mb-2">New Folder</h3>
+            <p className="text-xs sm:text-sm text-gray-600 mb-3 sm:mb-4">Enter a name for the new folder.</p>
             <input
               ref={createFolderInputRef}
               type="text"
               value={newFolderName}
               onChange={(e) => setNewFolderName(e.target.value)}
               placeholder="Folder name"
-              className="w-full px-3 py-2 border border-gray-200 rounded mb-4 focus:outline-none focus:ring-2 focus:ring-blue-500"
+              className="w-full px-3 py-2 text-sm sm:text-base border border-gray-200 rounded mb-3 sm:mb-4 focus:outline-none focus:ring-2 focus:ring-blue-500"
               onKeyDown={(e) => {
                 if (e.key === 'Enter') confirmCreateFolder()
                 if (e.key === 'Escape') cancelCreateFolder()
@@ -602,13 +602,13 @@ function WorkspaceContent() {
             <div className="flex justify-end gap-2">
               <button
                 onClick={cancelCreateFolder}
-                className="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded hover:bg-gray-50"
+                className="px-3 sm:px-4 py-2 text-xs sm:text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded hover:bg-gray-50"
               >
                 Cancel
               </button>
               <button
                 onClick={confirmCreateFolder}
-                className="px-4 py-2 text-sm font-medium text-white bg-blue-600 rounded hover:bg-blue-700"
+                className="px-3 sm:px-4 py-2 text-xs sm:text-sm font-medium text-white bg-blue-600 rounded hover:bg-blue-700"
               >
                 Create
               </button>

@@ -20,10 +20,14 @@ import {
   FolderPlus,
   Copy,
   MoreVertical,
+  ChevronLeft,
+  Calendar as CalendarIcon,
 } from 'lucide-react'
 import { Note } from './NoteEditor'
 import { FolderNode } from '@/lib/folders'
 import { getNotesByFolder } from '@/lib/notes'
+import { CalendarEvent, getCalendarEvents, subscribeToCalendarEvents } from '@/lib/calendar'
+import { useAuth } from '@/lib/auth-context'
 
 interface UnifiedPanelProps {
   // Note controls
@@ -117,8 +121,11 @@ export default function UnifiedPanel({
   onSignOut,
   autoOpenKey,
 }: UnifiedPanelProps) {
+  const { user } = useAuth()
   const [isOpen, setIsOpen] = useState(false)
   const [activeTab, setActiveTab] = useState<'browse' | 'toc'>('browse')
+  const [calendarEvents, setCalendarEvents] = useState<CalendarEvent[]>([])
+  const [currentMonth, setCurrentMonth] = useState(new Date())
   const ALL_FOLDER_KEY = '__ALL__'
   const folderKey = (folderId: string | null) => folderId ?? ALL_FOLDER_KEY
   const [expandedFolders, setExpandedFolders] = useState<Set<string>>(
@@ -148,6 +155,76 @@ export default function UnifiedPanel({
   const renameFolderInputRef = useRef<HTMLInputElement | null>(null)
   const [hoverFolderId, setHoverFolderId] = useState<string | null>(null)
   const lastAutoOpenKey = useRef<string | number | undefined>(undefined)
+
+  // Load calendar events
+  useEffect(() => {
+    if (!user) return
+    
+    const loadEvents = async () => {
+      try {
+        const events = await getCalendarEvents()
+        setCalendarEvents(events)
+      } catch (error) {
+        console.error('Error loading calendar events:', error)
+      }
+    }
+
+    loadEvents()
+
+    // Subscribe to real-time updates
+    const unsubscribe = subscribeToCalendarEvents(user.id, () => {
+      loadEvents()
+    })
+
+    return unsubscribe
+  }, [user])
+
+  // Calendar helper functions
+  const getDaysInMonth = (date: Date) => {
+    const year = date.getFullYear()
+    const month = date.getMonth()
+    const firstDay = new Date(year, month, 1)
+    const lastDay = new Date(year, month + 1, 0)
+    const daysInMonth = lastDay.getDate()
+    const startingDayOfWeek = firstDay.getDay()
+
+    const days: (Date | null)[] = []
+
+    // Add empty slots for days before the first of the month
+    for (let i = 0; i < startingDayOfWeek; i++) {
+      days.push(null)
+    }
+
+    // Add all days of the month
+    for (let i = 1; i <= daysInMonth; i++) {
+      days.push(new Date(year, month, i))
+    }
+
+    return days
+  }
+
+  const getEventsForDate = (date: Date | null): CalendarEvent[] => {
+    if (!date) return []
+    
+    const dateStr = date.toISOString().split('T')[0]
+    return calendarEvents.filter(event => {
+      const eventStart = event.start_date.split('T')[0]
+      const eventEnd = event.end_date.split('T')[0]
+      return dateStr >= eventStart && dateStr <= eventEnd
+    })
+  }
+
+  const goToPreviousMonth = () => {
+    setCurrentMonth(new Date(currentMonth.getFullYear(), currentMonth.getMonth() - 1))
+  }
+
+  const goToNextMonth = () => {
+    setCurrentMonth(new Date(currentMonth.getFullYear(), currentMonth.getMonth() + 1))
+  }
+
+  const goToToday = () => {
+    setCurrentMonth(new Date())
+  }
 
   // Keyboard shortcuts
   useEffect(() => {
@@ -689,7 +766,7 @@ export default function UnifiedPanel({
       {/* Floating Menu Button */}
       <button
         onClick={() => setIsOpen(!isOpen)}
-        className="fixed top-14 right-6 z-50 p-3 bg-white border-2 border-gray-200 rounded-full shadow-lg hover:shadow-xl hover:scale-105 transition-all duration-200"
+        className="fixed top-3 right-3 sm:top-14 sm:right-6 z-50 p-2.5 sm:p-3 bg-white border-2 border-gray-200 rounded-full shadow-lg hover:shadow-xl hover:scale-105 transition-all duration-200"
         aria-label={isOpen ? 'Close menu' : 'Open menu (⌘\\)'}
         title={isOpen ? 'Close menu' : 'Open menu (⌘\\)'}
       >
@@ -700,36 +777,36 @@ export default function UnifiedPanel({
       {isOpen && (
         <div
           ref={panelRef}
-          className="fixed top-24 right-6 z-40 w-80 max-h-[calc(100vh-6rem)] bg-white rounded-xl shadow-2xl border border-gray-200 flex flex-col overflow-hidden"
+          className="fixed top-14 right-3 sm:top-24 sm:right-6 z-40 w-[calc(100vw-1.5rem)] sm:w-96 md:w-[26rem] max-h-[calc(100vh-4rem)] sm:max-h-[calc(100vh-6rem)] bg-white rounded-xl shadow-2xl border border-gray-200 flex flex-col overflow-hidden"
         >
           {/* User Info & Sign Out */}
           {userEmail && onSignOut && (
-            <div className="p-2.5 border-b border-gray-200 bg-gray-50">
+            <div className="p-2 sm:p-2.5 border-b border-gray-200 bg-gray-50">
               <div className="flex items-center justify-between gap-2">
-                <div className="flex items-center gap-2 text-xs text-gray-700 truncate flex-1 min-w-0">
-                  <User size={13} className="text-gray-500 flex-shrink-0" />
+                <div className="flex items-center gap-1.5 sm:gap-2 text-[10px] sm:text-xs text-gray-700 truncate flex-1 min-w-0">
+                  <User size={12} className="sm:w-[13px] sm:h-[13px] text-gray-500 flex-shrink-0" />
                   <span className="truncate">{userEmail}</span>
                 </div>
                 <button
                   onClick={onSignOut}
-                  className="inline-flex items-center gap-1 px-2 py-1 text-xs font-medium text-red-600 hover:bg-red-50 rounded transition-colors flex-shrink-0"
+                  className="inline-flex items-center gap-1 px-1.5 sm:px-2 py-0.5 sm:py-1 text-[10px] sm:text-xs font-medium text-red-600 hover:bg-red-50 rounded transition-colors flex-shrink-0"
                   title="Sign Out"
                 >
-                  <LogOut size={13} />
-                  <span>Sign Out</span>
+                  <LogOut size={12} className="sm:w-[13px] sm:h-[13px]" />
+                  <span className="hidden xs:inline">Sign Out</span>
                 </button>
               </div>
             </div>
           )}
 
           {/* Title & Actions */}
-          <div className="p-3 border-b border-gray-200 bg-gradient-to-br from-gray-50 to-white">
+          <div className="p-2.5 sm:p-3 border-b border-gray-200 bg-gradient-to-br from-gray-50 to-white">
             <input
               type="text"
               value={title}
               onChange={(e) => onTitleChange(e.target.value)}
               placeholder="Note title..."
-              className="w-full px-2.5 py-1.5 text-base font-semibold border border-gray-200 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-transparent mb-2"
+              className="w-full px-2.5 py-1.5 text-sm sm:text-base font-semibold border border-gray-200 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-transparent mb-2"
               disabled={isSaving || isDeleting}
             />
             
@@ -737,17 +814,17 @@ export default function UnifiedPanel({
               <button
                 onClick={onSave}
                 disabled={isSaving || isDeleting || !hasChanges}
-                className="flex-1 inline-flex items-center justify-center gap-1.5 px-3 py-1.5 bg-blue-600 text-white text-sm font-medium rounded-md hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                className="flex-1 inline-flex items-center justify-center gap-1.5 px-2.5 sm:px-3 py-1.5 bg-blue-600 text-white text-xs sm:text-sm font-medium rounded-md hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
               >
                 <Save size={14} />
-                {isSaving ? 'Saving...' : 'Save'}
+                <span className="hidden xs:inline">{isSaving ? 'Saving...' : 'Save'}</span>
               </button>
               
               {note && onDelete && (
                 <button
                   onClick={() => onDelete(note.id)}
                   disabled={isDeleting}
-                  className="px-2.5 py-1.5 border border-red-200 text-red-600 text-sm font-medium rounded-md hover:bg-red-50 disabled:opacity-50 transition-colors"
+                  className="px-2 sm:px-2.5 py-1.5 border border-red-200 text-red-600 text-xs sm:text-sm font-medium rounded-md hover:bg-red-50 disabled:opacity-50 transition-colors"
                   title="Delete note"
                 >
                   <Trash2 size={14} />
@@ -757,7 +834,7 @@ export default function UnifiedPanel({
               <button
                 onClick={onCancel}
                 disabled={isSaving || isDeleting}
-                className="px-2.5 py-1.5 border border-gray-200 text-gray-600 text-sm font-medium rounded-md hover:bg-gray-50 disabled:opacity-50 transition-colors"
+                className="px-2 sm:px-2.5 py-1.5 border border-gray-200 text-gray-600 text-xs sm:text-sm font-medium rounded-md hover:bg-gray-50 disabled:opacity-50 transition-colors"
                 title="Cancel"
               >
                 <X size={14} />
@@ -776,26 +853,26 @@ export default function UnifiedPanel({
           <div className="flex border-b border-gray-200 bg-gray-50">
             <button
               onClick={() => setActiveTab('browse')}
-              className={`flex-1 px-3 py-2 text-sm font-medium transition-colors flex items-center justify-center gap-1.5 ${
+              className={`flex-1 px-2 sm:px-3 py-2 text-xs sm:text-sm font-medium transition-colors flex items-center justify-center gap-1 sm:gap-1.5 ${
                 activeTab === 'browse'
                   ? 'text-blue-600 border-b-2 border-blue-600 bg-white'
                   : 'text-gray-600 hover:text-gray-800 hover:bg-gray-100'
               }`}
             >
-              <FileText size={15} />
-              Browse
+              <CalendarIcon size={14} className="sm:w-[15px] sm:h-[15px]" />
+              <span className="hidden xs:inline">Calendar</span>
             </button>
             <button
               onClick={() => setActiveTab('toc')}
-              className={`flex-1 px-3 py-2 text-sm font-medium transition-colors flex items-center justify-center gap-1.5 ${
+              className={`flex-1 px-2 sm:px-3 py-2 text-xs sm:text-sm font-medium transition-colors flex items-center justify-center gap-1 sm:gap-1.5 ${
                 activeTab === 'toc'
                   ? 'text-blue-600 border-b-2 border-blue-600 bg-white'
                   : 'text-gray-600 hover:text-gray-800 hover:bg-gray-100'
               }`}
               disabled={headings.length === 0}
             >
-              <ListTree size={15} />
-              Contents
+              <ListTree size={14} className="sm:w-[15px] sm:h-[15px]" />
+              <span className="hidden xs:inline">Contents</span>
               {headings.length > 0 && (
                 <span className="px-1.5 py-0.5 text-xs bg-blue-100 text-blue-600 rounded-full font-semibold">
                   {headings.length}
@@ -808,6 +885,99 @@ export default function UnifiedPanel({
           <div className="flex-1 overflow-y-auto p-3">
             {activeTab === 'browse' && (
               <div className="space-y-3">
+                {/* Mini Calendar */}
+                <div className="bg-gradient-to-br from-blue-50 to-indigo-50 rounded-lg p-2 sm:p-3 border border-blue-200">
+                  {/* Calendar Header */}
+                  <div className="flex items-center justify-between mb-2 sm:mb-3">
+                    <button
+                      onClick={goToPreviousMonth}
+                      className="p-1 hover:bg-white/60 rounded transition-colors"
+                      title="Previous month"
+                    >
+                      <ChevronLeft size={14} className="sm:w-4 sm:h-4 text-gray-600" />
+                    </button>
+                    <div className="flex flex-col items-center">
+                      <div className="text-xs sm:text-sm font-semibold text-gray-800">
+                        {currentMonth.toLocaleDateString('en-US', { month: 'long', year: 'numeric' })}
+                      </div>
+                      <button
+                        onClick={goToToday}
+                        className="text-[10px] sm:text-xs text-blue-600 hover:text-blue-700 font-medium mt-0.5"
+                      >
+                        Today
+                      </button>
+                    </div>
+                    <button
+                      onClick={goToNextMonth}
+                      className="p-1 hover:bg-white/60 rounded transition-colors"
+                      title="Next month"
+                    >
+                      <ChevronRight size={14} className="sm:w-4 sm:h-4 text-gray-600" />
+                    </button>
+                  </div>
+
+                  {/* Day Labels */}
+                  <div className="grid grid-cols-7 gap-0.5 mb-1">
+                    {['Su', 'Mo', 'Tu', 'We', 'Th', 'Fr', 'Sa'].map(day => (
+                      <div key={day} className="text-center text-[9px] sm:text-[10px] font-semibold text-gray-500 py-0.5 sm:py-1">
+                        {day}
+                      </div>
+                    ))}
+                  </div>
+
+                  {/* Calendar Grid */}
+                  <div className="grid grid-cols-7 gap-0.5">
+                    {getDaysInMonth(currentMonth).map((day, index) => {
+                      if (!day) {
+                        return <div key={`empty-${index}`} className="aspect-square" />
+                      }
+
+                      const isToday = 
+                        day.getDate() === new Date().getDate() &&
+                        day.getMonth() === new Date().getMonth() &&
+                        day.getFullYear() === new Date().getFullYear()
+
+                      const dayEvents = getEventsForDate(day)
+                      const hasEvents = dayEvents.length > 0
+
+                      return (
+                        <div
+                          key={day.toISOString()}
+                          className={`aspect-square flex flex-col items-center justify-center rounded text-[10px] sm:text-xs transition-all cursor-pointer ${
+                            isToday
+                              ? 'bg-blue-600 text-white font-bold shadow-md hover:bg-blue-700'
+                              : hasEvents
+                              ? 'bg-white text-gray-800 font-medium hover:bg-blue-100 shadow-sm'
+                              : 'bg-white/40 text-gray-600 hover:bg-white/70'
+                          }`}
+                          title={hasEvents ? `${dayEvents.length} event${dayEvents.length > 1 ? 's' : ''}` : ''}
+                        >
+                          <span className="text-[11px]">{day.getDate()}</span>
+                          {hasEvents && (
+                            <div className="flex gap-0.5 mt-0.5">
+                              {dayEvents.slice(0, 3).map((event, i) => (
+                                <div
+                                  key={i}
+                                  className="w-1 h-1 rounded-full"
+                                  style={{ backgroundColor: isToday ? '#fff' : event.color }}
+                                />
+                              ))}
+                            </div>
+                          )}
+                        </div>
+                      )
+                    })}
+                  </div>
+
+                  {/* Event Count */}
+                  <div className="mt-3 pt-2 border-t border-blue-200 flex items-center justify-between">
+                    <div className="text-xs text-gray-600">
+                      {calendarEvents.length} event{calendarEvents.length !== 1 ? 's' : ''}
+                    </div>
+                    <CalendarIcon size={14} className="text-blue-400" />
+                  </div>
+                </div>
+
                 {/* Knowledge Graph */}
                 {onOpenKnowledgeGraph && (
                   <div>
@@ -1048,17 +1218,17 @@ export default function UnifiedPanel({
 
       {/* Delete Confirmation Modal */}
       {showDeleteModal && (
-        <div className="fixed inset-0 z-[70] flex items-center justify-center p-4 bg-black/50">
-          <div className="bg-white rounded-xl shadow-2xl border border-gray-200 max-w-md w-full p-6">
-            <div className="flex items-start gap-4 mb-4">
-              <div className="flex-shrink-0 w-12 h-12 rounded-full bg-red-100 flex items-center justify-center">
-                <Trash2 size={24} className="text-red-600" />
+        <div className="fixed inset-0 z-[70] flex items-center justify-center p-3 sm:p-4 bg-black/50">
+          <div className="bg-white rounded-xl shadow-2xl border border-gray-200 max-w-md w-full p-4 sm:p-6 mx-4">
+            <div className="flex items-start gap-3 sm:gap-4 mb-3 sm:mb-4">
+              <div className="flex-shrink-0 w-10 h-10 sm:w-12 sm:h-12 rounded-full bg-red-100 flex items-center justify-center">
+                <Trash2 size={20} className="sm:w-6 sm:h-6 text-red-600" />
               </div>
               <div className="flex-1">
-                <h3 className="text-lg font-semibold text-gray-900 mb-1">
+                <h3 className="text-base sm:text-lg font-semibold text-gray-900 mb-1">
                   Delete {showDeleteModal.type === 'folder' ? 'Folder' : 'Note'}?
                 </h3>
-                <p className="text-sm text-gray-600">
+                <p className="text-xs sm:text-sm text-gray-600">
                   Are you sure you want to delete &quot;{showDeleteModal.name}&quot;?
                   {showDeleteModal.type === 'folder' && (
                     <span className="block mt-1 text-gray-500">
@@ -1072,13 +1242,13 @@ export default function UnifiedPanel({
             <div className="flex items-center justify-end gap-2">
               <button
                 onClick={() => setShowDeleteModal(null)}
-                className="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors"
+                className="px-3 sm:px-4 py-2 text-xs sm:text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors"
               >
                 Cancel
               </button>
               <button
                 onClick={handleConfirmDelete}
-                className="px-4 py-2 text-sm font-medium text-white bg-red-600 rounded-lg hover:bg-red-700 transition-colors"
+                className="px-3 sm:px-4 py-2 text-xs sm:text-sm font-medium text-white bg-red-600 rounded-lg hover:bg-red-700 transition-colors"
               >
                 Delete {showDeleteModal.type === 'folder' ? 'Folder' : 'Note'}
               </button>
@@ -1089,17 +1259,17 @@ export default function UnifiedPanel({
 
       {/* Rename Folder Modal */}
       {showRenameModal && (
-        <div className="fixed inset-0 z-[70] flex items-center justify-center p-4 bg-black/50">
-          <div className="bg-white rounded-xl shadow-2xl border border-gray-200 max-w-md w-full p-6">
-            <div className="flex items-start gap-4 mb-4">
-              <div className="flex-shrink-0 w-12 h-12 rounded-full bg-blue-100 flex items-center justify-center">
-                <Edit2 size={24} className="text-blue-600" />
+        <div className="fixed inset-0 z-[70] flex items-center justify-center p-3 sm:p-4 bg-black/50">
+          <div className="bg-white rounded-xl shadow-2xl border border-gray-200 max-w-md w-full p-4 sm:p-6 mx-4">
+            <div className="flex items-start gap-3 sm:gap-4 mb-3 sm:mb-4">
+              <div className="flex-shrink-0 w-10 h-10 sm:w-12 sm:h-12 rounded-full bg-blue-100 flex items-center justify-center">
+                <Edit2 size={20} className="sm:w-6 sm:h-6 text-blue-600" />
               </div>
               <div className="flex-1">
-                <h3 className="text-lg font-semibold text-gray-900 mb-1">
+                <h3 className="text-base sm:text-lg font-semibold text-gray-900 mb-1">
                   Rename Folder
                 </h3>
-                <p className="text-sm text-gray-600">
+                <p className="text-xs sm:text-sm text-gray-600">
                   Enter a new name for &quot;{showRenameModal.currentName}&quot;
                 </p>
               </div>
@@ -1110,7 +1280,7 @@ export default function UnifiedPanel({
               value={renameFolderInput}
               onChange={(e) => setRenameFolderInput(e.target.value)}
               placeholder="Folder name"
-              className="w-full px-3 py-2 border border-gray-200 rounded-lg mb-4 focus:outline-none focus:ring-2 focus:ring-blue-500"
+              className="w-full px-3 py-2 text-sm sm:text-base border border-gray-200 rounded-lg mb-3 sm:mb-4 focus:outline-none focus:ring-2 focus:ring-blue-500"
               onKeyDown={(e) => {
                 if (e.key === 'Enter') handleConfirmRename()
                 if (e.key === 'Escape') handleCancelRename()
@@ -1119,14 +1289,14 @@ export default function UnifiedPanel({
             <div className="flex items-center justify-end gap-2">
               <button
                 onClick={handleCancelRename}
-                className="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors"
+                className="px-3 sm:px-4 py-2 text-xs sm:text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors"
               >
                 Cancel
               </button>
               <button
                 onClick={handleConfirmRename}
                 disabled={!renameFolderInput.trim()}
-                className="px-4 py-2 text-sm font-medium text-white bg-blue-600 rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                className="px-3 sm:px-4 py-2 text-xs sm:text-sm font-medium text-white bg-blue-600 rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
               >
                 Rename
               </button>
