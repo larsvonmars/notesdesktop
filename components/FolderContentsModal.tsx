@@ -155,6 +155,14 @@ export default function FolderContentsModal({
 
         <div className="flex flex-col gap-4 overflow-y-auto px-4 py-4 sm:px-6 sm:py-6">
           <div className="flex flex-wrap items-center gap-1 text-xs text-gray-500">
+            <button
+              type="button"
+              onClick={() => onClose()}
+              className="rounded-md px-2 py-1 text-xs font-medium text-gray-500 hover:bg-gray-100 hover:text-gray-700"
+            >
+              Workspace
+            </button>
+            <ChevronRight size={12} className="text-gray-400" />
             {breadcrumb.map((item, index) => {
               const isLast = index === breadcrumb.length - 1
               return (
@@ -168,7 +176,7 @@ export default function FolderContentsModal({
                       {item.name}
                     </button>
                   ) : (
-                    <span className="rounded-md bg-gray-100 px-2 py-1 text-xs font-semibold text-gray-700">
+                    <span className="rounded-md bg-blue-50 px-2 py-1 text-xs font-semibold text-blue-700">
                       {item.name}
                     </span>
                   )}

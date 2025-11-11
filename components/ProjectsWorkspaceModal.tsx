@@ -1,6 +1,6 @@
 'use client'
 
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState, useRef } from 'react'
 import { usePathname, useRouter } from 'next/navigation'
 import {
   Target,
@@ -23,6 +23,12 @@ import {
   UploadCloud,
   Search,
   Check,
+  Filter,
+  XCircle,
+  ArrowUp,
+  Clock,
+  ChevronsDownUp,
+  ChevronsUpDown,
 } from 'lucide-react'
 import { useToast } from './ToastProvider'
 import {
@@ -97,6 +103,11 @@ export default function ProjectsWorkspaceModal({
   const [selectedFolderId, setSelectedFolderId] = useState<string | null>(null)
   const [expandedFolders, setExpandedFolders] = useState<Set<string>>(new Set())
   const [searchTerm, setSearchTerm] = useState('')
+  const [noteTypeFilter, setNoteTypeFilter] = useState<NoteType | 'all'>('all')
+  const [showFilterMenu, setShowFilterMenu] = useState(false)
+  const [recentFolderIds, setRecentFolderIds] = useState<string[]>([])
+  const [pinnedFolderIds, setPinnedFolderIds] = useState<string[]>([])
+  const searchInputRef = useRef<HTMLInputElement>(null)
 
   const [isLoading, setIsLoading] = useState(true)
   const [isRefreshing, setIsRefreshing] = useState(false)
@@ -204,8 +215,20 @@ export default function ProjectsWorkspaceModal({
     setSelectedFolderId(null)
     setExpandedFolders(new Set())
     setSearchTerm('')
+    setNoteTypeFilter('all')
+    setShowFilterMenu(false)
     setFolderContentsId(null)
     void loadAll(true)
+    
+    // Load pinned folders from localStorage
+    const stored = localStorage.getItem('pinnedFolders')
+    if (stored) {
+      try {
+        setPinnedFolderIds(JSON.parse(stored))
+      } catch (e) {
+        console.error('Failed to parse pinned folders', e)
+      }
+    }
   }, [isOpen, loadAll])
 
   useEffect(() => {
@@ -217,12 +240,50 @@ export default function ProjectsWorkspaceModal({
         setProjectMenuId(null)
         setFolderMenuId(null)
         setNoteMenuId(null)
+        setShowFilterMenu(false)
+      }
+    }
+
+    const handleKeyDown = (event: KeyboardEvent) => {
+      // Global keyboard shortcuts
+      if (event.key === 'Escape') {
+        // Close menus first, then modal
+        if (showFilterMenu || projectMenuId || folderMenuId || noteMenuId) {
+          setShowFilterMenu(false)
+          setProjectMenuId(null)
+          setFolderMenuId(null)
+          setNoteMenuId(null)
+        } else if (folderContentsId) {
+          setFolderContentsId(null)
+        } else {
+          onClose()
+        }
+        event.preventDefault()
+      } else if (event.key === '/' && !event.ctrlKey && !event.metaKey) {
+        // Focus search box unless already in an input
+        const target = event.target as HTMLElement
+        if (target.tagName !== 'INPUT' && target.tagName !== 'TEXTAREA') {
+          searchInputRef.current?.focus()
+          event.preventDefault()
+        }
+      } else if ((event.ctrlKey || event.metaKey) && event.key === 'k') {
+        // Cmd/Ctrl+K to focus search
+        searchInputRef.current?.focus()
+        event.preventDefault()
+      } else if ((event.ctrlKey || event.metaKey) && event.key === 'f') {
+        // Cmd/Ctrl+F to toggle filters
+        setShowFilterMenu(prev => !prev)
+        event.preventDefault()
       }
     }
 
     document.addEventListener('mousedown', handleClick)
-    return () => document.removeEventListener('mousedown', handleClick)
-  }, [isOpen])
+    document.addEventListener('keydown', handleKeyDown)
+    return () => {
+      document.removeEventListener('mousedown', handleClick)
+      document.removeEventListener('keydown', handleKeyDown)
+    }
+  }, [isOpen, showFilterMenu, projectMenuId, folderMenuId, noteMenuId, folderContentsId, onClose])
 
   useEffect(() => {
     if (!folderContentsId) return
@@ -319,18 +380,83 @@ export default function ProjectsWorkspaceModal({
 
   const normalizedSearch = searchTerm.trim().toLowerCase()
 
+  // Build folder path for breadcrumbs
+  const getFolderPath = useCallback((folderId: string): Folder[] => {
+    const path: Folder[] = []
+    let current = folderMap.get(folderId)
+    while (current) {
+      path.unshift(current)
+      current = current.parent_id ? folderMap.get(current.parent_id) : undefined
+    }
+    return path
+  }, [folderMap])
+
+  // Enhanced folder search - searches folder names in tree
+  const searchMatchesFolder = useCallback((folder: Folder, query: string): boolean => {
+    if (!query) return true
+    return folder.name.toLowerCase().includes(query)
+  }, [])
+
+  // Enhanced note search - searches both title and content
+  const searchMatchesNote = useCallback((note: Note, query: string): boolean => {
+    if (!query) return true
+    const titleMatch = (note.title || '').toLowerCase().includes(query)
+    const contentMatch = note.content.toLowerCase().includes(query)
+    return titleMatch || contentMatch
+  }, [])
+
+  // Toggle folder pin
+  const togglePinFolder = useCallback((folderId: string) => {
+    setPinnedFolderIds(prev => {
+      const next = prev.includes(folderId) 
+        ? prev.filter(id => id !== folderId)
+        : [...prev, folderId]
+      localStorage.setItem('pinnedFolders', JSON.stringify(next))
+      return next
+    })
+  }, [])
+
+  // Track recent folders
+  const addToRecentFolders = useCallback((folderId: string) => {
+    setRecentFolderIds(prev => {
+      const next = [folderId, ...prev.filter(id => id !== folderId)].slice(0, 5)
+      return next
+    })
+  }, [])
+
+  // Expand all folders in tree
+  const expandAllFolders = useCallback(() => {
+    const allIds = new Set(foldersForActiveProject.map(f => f.id))
+    setExpandedFolders(allIds)
+  }, [foldersForActiveProject])
+
+  // Collapse all folders
+  const collapseAllFolders = useCallback(() => {
+    setExpandedFolders(new Set())
+  }, [])
+
   const filteredNotes = useMemo(() => {
     let current = notesForActiveProject
+    
+    // Filter by selected folder
     if (selectedFolderId) {
       current = current.filter((note) => note.folder_id === selectedFolderId)
     }
-    if (normalizedSearch) {
-      current = current.filter((note) => (note.title || '').toLowerCase().includes(normalizedSearch))
+    
+    // Filter by note type
+    if (noteTypeFilter !== 'all') {
+      current = current.filter((note) => note.note_type === noteTypeFilter)
     }
+    
+    // Filter by search term (title and content)
+    if (normalizedSearch) {
+      current = current.filter((note) => searchMatchesNote(note, normalizedSearch))
+    }
+    
     return [...current].sort(
       (a, b) => new Date(b.updated_at).getTime() - new Date(a.updated_at).getTime(),
     )
-  }, [notesForActiveProject, selectedFolderId, normalizedSearch])
+  }, [notesForActiveProject, selectedFolderId, normalizedSearch, noteTypeFilter, searchMatchesNote])
 
   const canBrowseStructure = activeProjectId !== 'all'
 
@@ -349,20 +475,29 @@ export default function ProjectsWorkspaceModal({
   const renderFolder = (node: FolderNode, depth = 0): JSX.Element => {
     const isExpanded = expandedFolders.has(node.id)
     const isSelected = selectedFolderId === node.id
+    const isPinned = pinnedFolderIds.includes(node.id)
     const childCount = node.children.length
     const noteCount = noteCountsByFolder.get(node.id) ?? 0
+    const folderPath = getFolderPath(node.id)
+    const matchesSearch = searchMatchesFolder(node, normalizedSearch)
+
+    // Hide if doesn't match search
+    if (normalizedSearch && !matchesSearch && !node.children.some(child => searchMatchesFolder(child, normalizedSearch))) {
+      return <div key={node.id} className="hidden" />
+    }
 
     return (
       <div key={node.id} className="space-y-0.5">
         <div
           className={`group relative flex items-center gap-2 rounded-lg px-2 py-1.5 text-sm transition-colors ${
             isSelected ? 'bg-blue-100 text-blue-700 font-medium' : 'hover:bg-gray-100 text-gray-700'
-          }`}
+          } ${isPinned ? 'border-l-2 border-amber-400' : ''}`}
           style={{ paddingLeft: `${depth * 16 + 8}px` }}
           onClick={() => {
             setSelectedFolderId(node.id)
             setFolderMenuId(null)
             setFolderContentsId(node.id)
+            addToRecentFolders(node.id)
           }}
         >
           <button
@@ -383,8 +518,10 @@ export default function ProjectsWorkspaceModal({
               <span className="w-3" />
             )}
           </button>
-          <FolderTree size={14} className="text-amber-500" />
-          <span className="flex-1 truncate">{node.name}</span>
+          <FolderTree size={14} className={isPinned ? "text-amber-500" : "text-amber-500"} />
+          <span className="flex-1 truncate" title={folderPath.map(f => f.name).join(' / ')}>
+            {node.name}
+          </span>
           {noteCount > 0 && <span className="text-xs text-gray-400">{noteCount}</span>}
           <button
             type="button"
@@ -425,6 +562,30 @@ export default function ProjectsWorkspaceModal({
                 <FolderOpen size={14} />
                 View contents
               </button>
+              <button
+                className="flex w-full items-center gap-2 px-3 py-2 text-left text-sm hover:bg-gray-100"
+                onClick={() => {
+                  togglePinFolder(node.id)
+                  setFolderMenuId(null)
+                }}
+              >
+                {isPinned ? <XCircle size={14} /> : <Check size={14} />}
+                {isPinned ? 'Unpin folder' : 'Pin folder'}
+              </button>
+              {node.parent_id && (
+                <button
+                  className="flex w-full items-center gap-2 px-3 py-2 text-left text-sm hover:bg-gray-100"
+                  onClick={() => {
+                    setSelectedFolderId(node.parent_id)
+                    setFolderContentsId(node.parent_id)
+                    addToRecentFolders(node.parent_id!)
+                    setFolderMenuId(null)
+                  }}
+                >
+                  <ArrowUp size={14} />
+                  Go to parent folder
+                </button>
+              )}
               <button
                 className="flex w-full items-center gap-2 px-3 py-2 text-left text-sm hover:bg-gray-100"
                 onClick={() => {
@@ -863,14 +1024,108 @@ export default function ProjectsWorkspaceModal({
             {isRefreshing ? <Loader2 size={14} className="animate-spin text-blue-500" /> : <RefreshCw size={14} />}
             Refresh
           </button>
-          <div className="flex w-full items-center gap-2 rounded-lg border border-gray-200 bg-white px-3 py-1.5 text-gray-500 focus-within:border-blue-400 focus-within:ring-1 focus-within:ring-blue-400 sm:ml-auto sm:w-auto sm:bg-transparent sm:px-0 sm:py-0 sm:focus-within:ring-0 sm:focus-within:border-transparent">
+          <div className="flex w-full items-center gap-2 rounded-lg border border-gray-200 bg-white px-3 py-1.5 text-gray-500 focus-within:border-blue-400 focus-within:ring-1 focus-within:ring-blue-400 sm:ml-auto sm:w-auto sm:min-w-[280px] sm:bg-transparent sm:px-0 sm:py-0 sm:focus-within:ring-0 sm:focus-within:border-transparent">
             <Search size={14} className="text-gray-400" />
             <input
+              ref={searchInputRef}
               value={searchTerm}
               onChange={(event) => setSearchTerm(event.target.value)}
-              placeholder="Search notes..."
+              placeholder="Search notes & folders... (/ or ⌘K)"
               className="w-full bg-transparent text-sm text-gray-600 focus:outline-none"
             />
+            {searchTerm && (
+              <button
+                type="button"
+                onClick={() => setSearchTerm('')}
+                className="text-gray-400 hover:text-gray-600"
+                title="Clear search (Esc)"
+              >
+                <XCircle size={14} />
+              </button>
+            )}
+          </div>
+          <div className="relative">
+            <button
+              type="button"
+              data-projects-interactive="true"
+              className={`inline-flex items-center gap-2 rounded-full border px-3 py-1.5 text-gray-600 transition ${
+                noteTypeFilter !== 'all' || showFilterMenu
+                  ? 'border-blue-400 bg-blue-50 text-blue-600'
+                  : 'border-gray-200 hover:border-blue-400 hover:text-blue-600'
+              }`}
+              onClick={() => setShowFilterMenu(!showFilterMenu)}
+            >
+              <Filter size={14} />
+              Filters
+              {noteTypeFilter !== 'all' && <span className="flex h-2 w-2 rounded-full bg-blue-500" />}
+            </button>
+            {showFilterMenu && (
+              <div
+                data-projects-interactive="true"
+                className="absolute right-0 top-full z-40 mt-1 w-48 overflow-hidden rounded-lg border border-gray-200 bg-white shadow-lg"
+              >
+                <div className="px-3 py-2 text-xs font-semibold uppercase text-gray-500 border-b">
+                  Note Type
+                </div>
+                <button
+                  className={`flex w-full items-center justify-between px-3 py-2 text-left text-sm hover:bg-gray-100 ${
+                    noteTypeFilter === 'all' ? 'bg-blue-50 text-blue-600' : ''
+                  }`}
+                  onClick={() => {
+                    setNoteTypeFilter('all')
+                    setShowFilterMenu(false)
+                  }}
+                >
+                  <span>All types</span>
+                  {noteTypeFilter === 'all' && <Check size={14} />}
+                </button>
+                <button
+                  className={`flex w-full items-center justify-between gap-2 px-3 py-2 text-left text-sm hover:bg-gray-100 ${
+                    noteTypeFilter === 'rich-text' ? 'bg-blue-50 text-blue-600' : ''
+                  }`}
+                  onClick={() => {
+                    setNoteTypeFilter('rich-text')
+                    setShowFilterMenu(false)
+                  }}
+                >
+                  <span className="flex items-center gap-2">
+                    <FileText size={14} className="text-blue-500" />
+                    Rich Text
+                  </span>
+                  {noteTypeFilter === 'rich-text' && <Check size={14} />}
+                </button>
+                <button
+                  className={`flex w-full items-center justify-between gap-2 px-3 py-2 text-left text-sm hover:bg-gray-100 ${
+                    noteTypeFilter === 'drawing' ? 'bg-blue-50 text-blue-600' : ''
+                  }`}
+                  onClick={() => {
+                    setNoteTypeFilter('drawing')
+                    setShowFilterMenu(false)
+                  }}
+                >
+                  <span className="flex items-center gap-2">
+                    <PenTool size={14} className="text-purple-500" />
+                    Drawing
+                  </span>
+                  {noteTypeFilter === 'drawing' && <Check size={14} />}
+                </button>
+                <button
+                  className={`flex w-full items-center justify-between gap-2 px-3 py-2 text-left text-sm hover:bg-gray-100 ${
+                    noteTypeFilter === 'mindmap' ? 'bg-blue-50 text-blue-600' : ''
+                  }`}
+                  onClick={() => {
+                    setNoteTypeFilter('mindmap')
+                    setShowFilterMenu(false)
+                  }}
+                >
+                  <span className="flex items-center gap-2">
+                    <Network size={14} className="text-green-500" />
+                    Mind Map
+                  </span>
+                  {noteTypeFilter === 'mindmap' && <Check size={14} />}
+                </button>
+              </div>
+            )}
           </div>
         </div>
 
@@ -1008,36 +1263,151 @@ export default function ProjectsWorkspaceModal({
               <span className="text-xs font-semibold uppercase tracking-wide text-gray-500">
                 {canBrowseStructure ? `${activeProjectName} folders` : 'Folders'}
               </span>
-              {canBrowseStructure && (
-                <button
-                  type="button"
-                  className="inline-flex items-center gap-1 rounded-full border border-gray-300 px-2 py-1 text-xs font-medium text-gray-600 hover:border-blue-400 hover:text-blue-600"
-                  onClick={() => {
-                    const resolved = resolveProjectId(activeProjectId)
-                    setFolderDialog({
-                      mode: 'create',
-                      parentId: null,
-                      projectId: resolved ?? null,
-                    })
-                    setFolderNameInput('')
-                  }}
-                >
-                  <FolderPlus size={12} />
-                  New
-                </button>
-              )}
+              <div className="flex items-center gap-1">
+                {canBrowseStructure && folderTree.length > 0 && (
+                  <>
+                    <button
+                      type="button"
+                      className="inline-flex items-center gap-1 rounded px-2 py-1 text-xs text-gray-600 hover:bg-gray-200"
+                      onClick={expandAllFolders}
+                      title="Expand all folders"
+                    >
+                      <ChevronsDownUp size={12} />
+                    </button>
+                    <button
+                      type="button"
+                      className="inline-flex items-center gap-1 rounded px-2 py-1 text-xs text-gray-600 hover:bg-gray-200"
+                      onClick={collapseAllFolders}
+                      title="Collapse all folders"
+                    >
+                      <ChevronsUpDown size={12} />
+                    </button>
+                  </>
+                )}
+                {canBrowseStructure && (
+                  <button
+                    type="button"
+                    className="inline-flex items-center gap-1 rounded-full border border-gray-300 px-2 py-1 text-xs font-medium text-gray-600 hover:border-blue-400 hover:text-blue-600"
+                    onClick={() => {
+                      const resolved = resolveProjectId(activeProjectId)
+                      setFolderDialog({
+                        mode: 'create',
+                        parentId: null,
+                        projectId: resolved ?? null,
+                      })
+                      setFolderNameInput('')
+                    }}
+                  >
+                    <FolderPlus size={12} />
+                    New
+                  </button>
+                )}
+              </div>
             </div>
             <div className="flex-1 overflow-y-auto px-3 py-3">
               {!canBrowseStructure ? (
                 <div className="rounded-lg border border-dashed border-gray-300 bg-gray-50 px-3 py-6 text-center text-sm text-gray-500">
                   Select a project to browse its folders.
                 </div>
-              ) : folderTree.length === 0 ? (
-                <div className="rounded-lg border border-dashed border-gray-300 bg-gray-50 px-3 py-6 text-center text-sm text-gray-500">
-                  No folders yet. Create one to get started.
-                </div>
               ) : (
-                <div className="space-y-0.5">{folderTree.map((node) => renderFolder(node))}</div>
+                <>
+                  {/* Pinned folders section */}
+                  {pinnedFolderIds.length > 0 && (
+                    <div className="mb-4">
+                      <div className="mb-2 flex items-center gap-2 px-2 text-xs font-semibold uppercase tracking-wide text-amber-600">
+                        <Check size={12} />
+                        Pinned
+                      </div>
+                      <div className="space-y-0.5">
+                        {pinnedFolderIds
+                          .map(id => folderMap.get(id))
+                          .filter(Boolean)
+                          .map(folder => {
+                            const isPinned = true
+                            const folderPath = getFolderPath(folder!.id)
+                            return (
+                              <div
+                                key={folder!.id}
+                                className="group relative flex items-center gap-2 rounded-lg px-2 py-1.5 text-sm transition-colors hover:bg-gray-100 text-gray-700 border-l-2 border-amber-400 cursor-pointer"
+                                onClick={() => {
+                                  setSelectedFolderId(folder!.id)
+                                  setFolderContentsId(folder!.id)
+                                  addToRecentFolders(folder!.id)
+                                }}
+                              >
+                                <FolderTree size={14} className="text-amber-500" />
+                                <span className="flex-1 truncate" title={folderPath.map(f => f.name).join(' / ')}>
+                                  {folder!.name}
+                                </span>
+                                <button
+                                  type="button"
+                                  onClick={(e) => {
+                                    e.stopPropagation()
+                                    togglePinFolder(folder!.id)
+                                  }}
+                                  className="hidden rounded p-1 hover:bg-gray-200 group-hover:flex"
+                                  title="Unpin"
+                                >
+                                  <XCircle size={12} className="text-gray-500" />
+                                </button>
+                              </div>
+                            )
+                          })}
+                      </div>
+                    </div>
+                  )}
+                  
+                  {/* Recent folders section */}
+                  {recentFolderIds.length > 0 && (
+                    <div className="mb-4">
+                      <div className="mb-2 flex items-center gap-2 px-2 text-xs font-semibold uppercase tracking-wide text-gray-500">
+                        <Clock size={12} />
+                        Recent
+                      </div>
+                      <div className="space-y-0.5">
+                        {recentFolderIds
+                          .map(id => folderMap.get(id))
+                          .filter(Boolean)
+                          .filter(folder => foldersForActiveProject.some(f => f.id === folder!.id))
+                          .slice(0, 3)
+                          .map(folder => {
+                            const folderPath = getFolderPath(folder!.id)
+                            return (
+                              <div
+                                key={folder!.id}
+                                className="group relative flex items-center gap-2 rounded-lg px-2 py-1.5 text-sm transition-colors hover:bg-gray-100 text-gray-700 cursor-pointer"
+                                onClick={() => {
+                                  setSelectedFolderId(folder!.id)
+                                  setFolderContentsId(folder!.id)
+                                }}
+                              >
+                                <FolderTree size={14} className="text-amber-500" />
+                                <span className="flex-1 truncate text-xs" title={folderPath.map(f => f.name).join(' / ')}>
+                                  {folderPath.map(f => f.name).join(' / ')}
+                                </span>
+                              </div>
+                            )
+                          })}
+                      </div>
+                    </div>
+                  )}
+                  
+                  {/* All folders tree */}
+                  {folderTree.length === 0 ? (
+                    <div className="rounded-lg border border-dashed border-gray-300 bg-gray-50 px-3 py-6 text-center text-sm text-gray-500">
+                      No folders yet. Create one to get started.
+                    </div>
+                  ) : (
+                    <>
+                      {(pinnedFolderIds.length > 0 || recentFolderIds.length > 0) && (
+                        <div className="mb-2 px-2 text-xs font-semibold uppercase tracking-wide text-gray-500">
+                          All Folders
+                        </div>
+                      )}
+                      <div className="space-y-0.5">{folderTree.map((node) => renderFolder(node))}</div>
+                    </>
+                  )}
+                </>
               )}
             </div>
           </div>
@@ -1079,6 +1449,8 @@ export default function ProjectsWorkspaceModal({
                 filteredNotes.map((note) => {
                   const isMenuOpen = noteMenuId === note.id
                   const folderName = note.folder_id ? folderMap.get(note.folder_id)?.name : null
+                  const folderPath = note.folder_id ? getFolderPath(note.folder_id) : []
+                  const fullPath = folderPath.length > 0 ? folderPath.map(f => f.name).join(' / ') : null
 
                   return (
                     <div
@@ -1097,10 +1469,10 @@ export default function ProjectsWorkspaceModal({
                           <div className="flex-1 space-y-1">
                             <p className="text-sm font-semibold text-gray-900">{note.title || 'Untitled note'}</p>
                             <p className="text-xs text-gray-500">Updated {formatUpdatedAt(note.updated_at)}</p>
-                            {folderName && (
-                              <p className="flex items-center gap-1 text-xs text-gray-500">
+                            {fullPath && (
+                              <p className="flex items-center gap-1 text-xs text-gray-500" title={fullPath}>
                                 <FolderTree size={12} />
-                                {folderName}
+                                <span className="truncate">{fullPath}</span>
                               </p>
                             )}
                           </div>
@@ -1161,6 +1533,29 @@ export default function ProjectsWorkspaceModal({
                 })
               )}
             </div>
+          </div>
+        </div>
+        
+        {/* Keyboard shortcuts footer */}
+        <div className="border-t border-gray-200 bg-gray-50 px-4 py-2 sm:px-6">
+          <div className="flex flex-wrap items-center justify-between gap-2 text-xs text-gray-500">
+            <div className="flex flex-wrap items-center gap-3">
+              <span className="inline-flex items-center gap-1">
+                <kbd className="rounded bg-white px-1.5 py-0.5 font-mono text-xs border border-gray-300">Esc</kbd>
+                Close
+              </span>
+              <span className="inline-flex items-center gap-1">
+                <kbd className="rounded bg-white px-1.5 py-0.5 font-mono text-xs border border-gray-300">/</kbd>
+                or
+                <kbd className="rounded bg-white px-1.5 py-0.5 font-mono text-xs border border-gray-300">⌘K</kbd>
+                Search
+              </span>
+              <span className="inline-flex items-center gap-1">
+                <kbd className="rounded bg-white px-1.5 py-0.5 font-mono text-xs border border-gray-300">⌘F</kbd>
+                Filters
+              </span>
+            </div>
+            <span>{filteredNotes.length} of {notesForActiveProject.length} notes shown</span>
           </div>
         </div>
       </div>
