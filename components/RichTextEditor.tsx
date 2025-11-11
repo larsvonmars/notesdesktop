@@ -895,198 +895,88 @@ const RichTextEditor = forwardRef<RichTextEditorHandle, RichTextEditorProps>(
       }
     }, [disabled, emitChange])
 
-    // Improved applyHeading function with better stability and WebKit/WebView compatibility
+    // Simplified applyHeading function optimized for Tauri WebView
     const applyHeading = useCallback(
       (level: 1 | 2 | 3) => {
         if (disabled || !editorRef.current) return;
         
         try {
-          const selection = window.getSelection();
           const editor = editorRef.current;
+          let selection = window.getSelection();
           
-          // Helper to safely create and place cursor in heading
-          const createHeadingWithCursor = (heading: HTMLHeadingElement, targetNode?: Node) => {
-            try {
-              const textNode = document.createTextNode('');
-              heading.appendChild(textNode);
+          // Ensure we have focus and selection
+          if (!selection || selection.rangeCount === 0) {
+            editor.focus();
+            selection = window.getSelection();
+            
+            if (!selection || selection.rangeCount === 0) {
+              // Still no selection - create heading at end
+              const heading = document.createElement(`h${level}`);
+              heading.textContent = '';
               heading.id = generateHeadingId('');
+              editor.appendChild(heading);
               
-              if (targetNode && targetNode.parentNode) {
-                targetNode.parentNode.insertBefore(heading, targetNode.nextSibling);
-              } else {
-                editor.appendChild(heading);
-              }
-              
-              // Set cursor with error handling
               setTimeout(() => {
                 try {
                   const range = document.createRange();
-                  range.setStart(textNode, 0);
+                  range.selectNodeContents(heading);
                   range.collapse(true);
                   const sel = window.getSelection();
                   if (sel) {
                     sel.removeAllRanges();
                     sel.addRange(range);
                   }
-                  editor.focus();
+                  normalizeEditorContent(editor);
+                  emitChange();
                 } catch (e) {
-                  console.warn('Failed to set cursor in heading:', e);
+                  console.warn('Failed to position cursor:', e);
                 }
-              }, 0);
-            } catch (e) {
-              console.warn('Failed to create heading with cursor:', e);
+              }, 50);
+              return;
             }
-          };
-
-          // No selection - create heading at end
-          if (!selection || selection.rangeCount === 0) {
-            const heading = document.createElement(`h${level}`);
-            createHeadingWithCursor(heading);
-            setTimeout(() => {
-              if (editor) {
-                normalizeEditorContent(editor);
-                emitChange();
-              }
-            }, 20);
-            return;
           }
 
           const range = selection.getRangeAt(0);
-          let container = range.startContainer;
-
-          // Find the block-level element containing the cursor
-          const findBlockElement = (node: Node): Element | null => {
-            let current: Node | null = node;
-            while (current && current !== editor) {
-              if (current.nodeType === Node.ELEMENT_NODE) {
-                const tagName = (current as Element).tagName.toLowerCase();
-                if (['p', 'div', 'h1', 'h2', 'h3', 'blockquote', 'li'].includes(tagName)) {
-                  return current as Element;
-                }
+          
+          // Simple approach: find or create a block element to convert
+          let blockToConvert: Element | null = null;
+          let node: Node | null = range.startContainer;
+          
+          // Walk up to find a block element
+          while (node && node !== editor) {
+            if (node.nodeType === Node.ELEMENT_NODE) {
+              const tagName = (node as Element).tagName?.toLowerCase();
+              if (tagName && ['p', 'div', 'h1', 'h2', 'h3', 'blockquote'].includes(tagName)) {
+                blockToConvert = node as Element;
+                break;
               }
-              current = current.parentNode;
             }
-            return null;
-          };
-
-          // Handle collapsed selection (no text selected)
-          if (range.collapsed) {
-            const blockElement = findBlockElement(container);
+            node = node.parentNode;
+          }
+          
+          if (blockToConvert) {
+            // Convert existing block to heading
+            const heading = document.createElement(`h${level}`);
+            const textContent = blockToConvert.textContent || '';
+            heading.textContent = textContent;
+            heading.id = generateHeadingId(textContent);
             
-            if (blockElement) {
-              // Get the content of the block
-              const blockContent = blockElement.textContent?.trim() || '';
-              const isEmpty = blockContent === '' || blockContent === '\u200B';
+            // Replace the block
+            if (blockToConvert.parentNode) {
+              blockToConvert.parentNode.replaceChild(heading, blockToConvert);
               
-              // If empty, replace block with empty heading
-              if (isEmpty) {
-                const heading = document.createElement(`h${level}`);
-                const textNode = document.createTextNode('');
-                heading.appendChild(textNode);
-                heading.id = generateHeadingId('');
-                
-                if (blockElement.parentNode) {
-                  blockElement.parentNode.replaceChild(heading, blockElement);
-                  
-                  setTimeout(() => {
-                    try {
-                      const newRange = document.createRange();
-                      newRange.setStart(textNode, 0);
-                      newRange.collapse(true);
-                      const sel = window.getSelection();
-                      if (sel) {
-                        sel.removeAllRanges();
-                        sel.addRange(newRange);
-                      }
-                    } catch (e) {
-                      console.warn('Failed to set cursor after replacing block:', e);
-                    }
-                  }, 0);
-                }
-              } else {
-                // Block has content - convert it to heading
-                const heading = document.createElement(`h${level}`);
-                heading.id = generateHeadingId(blockContent);
-                
-                // Move all child nodes to heading
-                while (blockElement.firstChild) {
-                  heading.appendChild(blockElement.firstChild);
-                }
-                
-                if (blockElement.parentNode) {
-                  blockElement.parentNode.replaceChild(heading, blockElement);
-                  
-                  // Try to maintain cursor position
-                  setTimeout(() => {
-                    try {
-                      const newRange = document.createRange();
-                      newRange.selectNodeContents(heading);
-                      newRange.collapse(false);
-                      const sel = window.getSelection();
-                      if (sel) {
-                        sel.removeAllRanges();
-                        sel.addRange(newRange);
-                      }
-                    } catch (e) {
-                      console.warn('Failed to restore cursor position:', e);
-                    }
-                  }, 0);
-                }
-              }
-            } else {
-              // No block element found - insert new heading at cursor
-              const heading = document.createElement(`h${level}`);
-              const textNode = document.createTextNode('');
-              heading.appendChild(textNode);
-              heading.id = generateHeadingId('');
+              // CRITICAL FIX: Focus editor immediately after DOM change for Tauri
+              editor.focus();
               
-              try {
-                range.insertNode(heading);
-                
-                setTimeout(() => {
-                  try {
-                    const newRange = document.createRange();
-                    newRange.setStart(textNode, 0);
-                    newRange.collapse(true);
-                    const sel = window.getSelection();
-                    if (sel) {
-                      sel.removeAllRanges();
-                      sel.addRange(newRange);
-                    }
-                  } catch (e) {
-                    console.warn('Failed to set cursor after inserting heading:', e);
-                  }
-                }, 0);
-              } catch (e) {
-                console.warn('Failed to insert heading:', e);
-              }
-            }
-          } else {
-            // Text is selected - wrap it in heading
-            try {
-              const selectedText = range.toString();
-              const content = range.extractContents();
-              const heading = document.createElement(`h${level}`);
-              heading.id = generateHeadingId(selectedText);
-              
-              // Clean up the extracted content (remove nested block elements)
-              const tempDiv = document.createElement('div');
-              tempDiv.appendChild(content);
-              
-              // Extract just the text content if there are block elements
-              const hasBlockElements = tempDiv.querySelector('p, div, h1, h2, h3, blockquote, ul, ol');
-              if (hasBlockElements) {
-                const textContent = tempDiv.textContent || '';
-                heading.textContent = textContent;
-              } else {
-                heading.appendChild(content);
-              }
-              
-              range.insertNode(heading);
-              
-              // Move cursor to end of heading
+              // Position cursor at end of heading with longer delay for Tauri
               setTimeout(() => {
                 try {
+                  // Verify heading is still in DOM (Tauri safety check)
+                  if (!editor.contains(heading)) {
+                    console.warn('Heading was removed from DOM');
+                    return;
+                  }
+                  
                   const newRange = document.createRange();
                   newRange.selectNodeContents(heading);
                   newRange.collapse(false);
@@ -1095,44 +985,109 @@ const RichTextEditor = forwardRef<RichTextEditorHandle, RichTextEditorProps>(
                     sel.removeAllRanges();
                     sel.addRange(newRange);
                   }
+                  
+                  // Keep editor focused (not the heading itself)
+                  editor.focus();
                 } catch (e) {
-                  console.warn('Failed to move cursor after wrapping:', e);
+                  console.warn('Failed to position cursor after conversion:', e);
                 }
-              }, 0);
-            } catch (e) {
-              console.warn('Failed to wrap selection in heading:', e);
+              }, 80); // Increased from 50ms for better Tauri stability
+            }
+          } else {
+            // No block found - insert new heading
+            const heading = document.createElement(`h${level}`);
+            const selectedText = range.toString();
+            
+            if (selectedText) {
+              // User has selected text - use it
+              heading.textContent = selectedText;
+              heading.id = generateHeadingId(selectedText);
+              range.deleteContents();
+            } else {
+              // No selection - create empty heading
+              heading.textContent = '';
+              heading.id = generateHeadingId('');
+            }
+            
+            // Add a marker paragraph after heading to prevent cursor jump in Tauri
+            const markerP = document.createElement('p');
+            markerP.appendChild(document.createElement('br'));
+            
+            try {
+              range.insertNode(heading);
+              
+              // Insert marker paragraph immediately after heading
+              if (heading.nextSibling) {
+                heading.parentNode?.insertBefore(markerP, heading.nextSibling);
+              } else {
+                heading.parentNode?.appendChild(markerP);
+              }
+              
+              // CRITICAL FIX: Focus editor immediately after DOM change for Tauri
+              editor.focus();
+              
+              // Position cursor in heading with longer delay for Tauri
+              setTimeout(() => {
+                try {
+                  // Verify heading is still in DOM (Tauri safety check)
+                  if (!editor.contains(heading)) {
+                    console.warn('Heading was removed from DOM');
+                    return;
+                  }
+                  
+                  const newRange = document.createRange();
+                  newRange.selectNodeContents(heading);
+                  newRange.collapse(selectedText ? false : true);
+                  const sel = window.getSelection();
+                  if (sel) {
+                    sel.removeAllRanges();
+                    sel.addRange(newRange);
+                  }
+                  
+                  // Keep editor focused (not the heading itself)
+                  editor.focus();
+                } catch (e) {
+                  console.warn('Failed to position cursor after insert:', e);
+                }
+              }, 80); // Increased from 50ms for better Tauri stability
+            } catch (insertError) {
+              console.warn('Failed to insert heading, appending instead:', insertError);
+              editor.appendChild(heading);
+              editor.appendChild(markerP);
             }
           }
           
-          // Normalize and emit change with delay to ensure DOM is stable
+          // Normalize and emit change with longer delay for Tauri
           setTimeout(() => {
             try {
-              if (!editor) return;
-              
-              // Ensure all headings have IDs
-              const headings = editor.querySelectorAll('h1, h2, h3');
-              headings.forEach((heading) => {
-                if (!heading.id) {
-                  const text = heading.textContent || '';
-                  heading.id = generateHeadingId(text);
-                }
-              });
-              
-              normalizeEditorContent(editor);
-              emitChange();
+              if (editor) {
+                // Ensure all headings have IDs
+                const headings = editor.querySelectorAll('h1, h2, h3');
+                headings.forEach((h) => {
+                  if (!h.id) {
+                    h.id = generateHeadingId(h.textContent || '');
+                  }
+                });
+                
+                normalizeEditorContent(editor);
+                emitChange();
+              }
             } catch (e) {
               console.warn('Failed to normalize after heading creation:', e);
             }
-          }, 30);
+          }, 150); // Increased from 100ms for better Tauri stability
           
         } catch (error) {
           console.error('Error in applyHeading:', error);
-          // Try to recover by just appending a heading at the end
+          // Simple recovery: append heading at end
           try {
-            const heading = document.createElement(`h${level}`);
-            heading.appendChild(document.createTextNode(''));
-            heading.id = generateHeadingId('');
-            editorRef.current?.appendChild(heading);
+            if (editorRef.current) {
+              const heading = document.createElement(`h${level}`);
+              heading.textContent = '';
+              heading.id = generateHeadingId('');
+              editorRef.current.appendChild(heading);
+              emitChange();
+            }
           } catch (e) {
             console.error('Failed to recover from heading error:', e);
           }
@@ -1468,8 +1423,10 @@ const RichTextEditor = forwardRef<RichTextEditorHandle, RichTextEditorProps>(
       setSelectedCommandIndex(0);
 
       try {
-        // Remove the slash and filter text
+        // Store the current selection state before removing slash
         const selection = window.getSelection();
+        let cursorPosition: { container: Node; offset: number } | null = null;
+        
         if (selection && selection.rangeCount > 0) {
           const range = selection.getRangeAt(0);
           const startContainer = range.startContainer;
@@ -1480,6 +1437,12 @@ const RichTextEditor = forwardRef<RichTextEditorHandle, RichTextEditorProps>(
             
             if (slashIndex !== -1) {
               try {
+                // Store cursor position for heading commands
+                cursorPosition = {
+                  container: startContainer,
+                  offset: slashIndex
+                };
+                
                 // Remove everything from the slash onwards
                 startContainer.textContent = textContent.substring(0, slashIndex);
                 
@@ -1496,12 +1459,24 @@ const RichTextEditor = forwardRef<RichTextEditorHandle, RichTextEditorProps>(
           }
         }
 
+        // CRITICAL FIX for Tauri: Refocus editor immediately after slash removal
+        if (editorRef.current) {
+          editorRef.current.focus();
+        }
+
         // Use setTimeout to ensure DOM is updated before executing command
+        // Increased delay for better Tauri stability
         setTimeout(() => {
           try {
             // Special handling for headings - use the improved applyHeading function
             if (command.command === 'heading1' || command.command === 'heading2' || command.command === 'heading3') {
               const level = command.command === 'heading1' ? 1 : command.command === 'heading2' ? 2 : 3;
+              
+              // CRITICAL FIX: Ensure editor is focused before applying heading
+              if (editorRef.current) {
+                editorRef.current.focus();
+              }
+              
               applyHeading(level);
             } else if (typeof command.command === 'function') {
               // If there is a custom block registered with the same id/type as the slash command,
@@ -1589,7 +1564,7 @@ const RichTextEditor = forwardRef<RichTextEditorHandle, RichTextEditorProps>(
           }
           // Force focus for WebView compatibility
           forceWebViewFocus();
-        }, 20); // Slightly longer delay for WebKit
+        }, 50); // Increased delay for better Tauri stability
       } catch (outerError) {
         console.error('Critical error in executeSlashCommand:', outerError);
       }

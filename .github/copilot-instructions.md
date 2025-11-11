@@ -36,6 +36,7 @@ This is a Tauri desktop application with a Next.js frontend and Supabase authent
 - Use Tailwind CSS for styling
 - Follow Next.js 14 app directory conventions
 - Use async/await for Supabase calls
+- Everything must be WebView compatible
 
 ## Common Tasks
 
