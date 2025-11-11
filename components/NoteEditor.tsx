@@ -28,7 +28,9 @@ import {
   FolderOpen,
   Target,
   Edit2,
-  Network
+  Network,
+  Table as TableIcon,
+  FileText
 } from 'lucide-react'
 import RichTextEditor, {
   type RichTextCommand,
@@ -48,8 +50,7 @@ import { useToast } from './ToastProvider'
 import { Note as LibNote } from '../lib/notes'
 import NoteLinkDialog from './NoteLinkDialog'
 import KnowledgeGraphModal from './KnowledgeGraphModal'
-import { noteLinkBlock, registerNoteLinkCommand } from '../lib/editor/noteLinkBlock'
-import { FileText } from 'lucide-react'
+import { noteLinkBlock } from '../lib/editor/noteLinkBlock'
 
 export type { Note } from '../lib/notes'
 
@@ -752,11 +753,6 @@ export default function NoteEditor({
     scheduleActiveFormatsUpdate()
   }, [note, scheduleActiveFormatsUpdate])
 
-  // Register note link slash command
-  useEffect(() => {
-    registerNoteLinkCommand(<FileText size={16} />)
-  }, [])
-
   // Update last save display every 10 seconds
   useEffect(() => {
     if (!lastSaveTime) return
@@ -846,6 +842,16 @@ export default function NoteEditor({
     icon: React.ReactNode
     onClick?: () => void
   }> = [
+    { 
+      label: 'Table', 
+      icon: <TableIcon size={16} />, 
+      onClick: () => editorRef.current?.showTableDialog() 
+    },
+    { 
+      label: 'Note Link', 
+      icon: <FileText size={16} />, 
+      onClick: () => editorRef.current?.requestNoteLink() 
+    },
     { label: 'Undo', command: 'undo', icon: <Undo size={16} /> },
     { label: 'Redo', command: 'redo', icon: <Redo size={16} /> }
   ]
@@ -916,7 +922,7 @@ export default function NoteEditor({
                     onChange={handleContentChange}
                     disabled={isSaving || isDeleting}
                     placeholder="Start writing your note..."
-                    onCustomSlashCommand={(commandId) => {
+                    onCustomCommand={(commandId) => {
                       if (commandId === 'note-link') {
                         saveNoteLinkSelection()
                         setShowNoteLinkDialog(true)

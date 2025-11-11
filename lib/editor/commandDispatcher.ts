@@ -216,6 +216,21 @@ export function applyBlockFormat(
   
   const range = selection.getRangeAt(0)
   const block = getBlockAncestor(range.startContainer)
+
+  const shouldFallbackToExecCommand =
+    typeof document !== 'undefined' &&
+    typeof document.execCommand === 'function' &&
+    editorElement != null &&
+    (!block || block === editorElement)
+
+  if (shouldFallbackToExecCommand) {
+    try {
+      document.execCommand('formatBlock', false, `<${tagName}>`)
+      return
+    } catch (error) {
+      console.warn('formatBlock fallback via execCommand failed:', error)
+    }
+  }
   
   if (!block) {
     // No block found, create one
@@ -235,6 +250,11 @@ export function applyBlockFormat(
     selection.removeAllRanges()
     selection.addRange(newRange)
     
+    return
+  }
+
+  if (editorElement && block === editorElement) {
+    console.warn('Unable to identify block ancestor for formatBlock without execCommand fallback.')
     return
   }
   

@@ -1,4 +1,3 @@
-import { registerSlashCommand } from '../lib/editor/slashCommands'
 import type { CustomBlockDescriptor } from '../components/RichTextEditor'
 
 // Example callout descriptor
@@ -38,25 +37,15 @@ export const tableBlock: CustomBlockDescriptor = {
   }
 }
 
-// Helper to register both as slash commands (so they appear in the editor menu)
-export function registerExampleBlocks() {
-  registerSlashCommand({
-    id: 'callout',
-    label: 'Callout',
-    icon: undefined as any,
-    command: () => {},
-    description: 'Insert a callout block',
-    category: 'blocks',
-    keywords: ['callout', 'note', 'highlight']
-  })
-
-  registerSlashCommand({
-    id: 'table',
-    label: 'Table',
-    icon: undefined as any,
-    command: () => {},
-    description: 'Insert a table block',
-    category: 'blocks',
-    keywords: ['table', 'grid']
-  })
-}
+/**
+ * To use custom blocks in the editor:
+ * 
+ * 1. Pass custom blocks to the RichTextEditor:
+ *    <RichTextEditor customBlocks={[calloutBlock, tableBlock]} ... />
+ * 
+ * 2. Add toolbar buttons or call programmatically:
+ *    - Via toolbar: Add button that calls editorRef.current?.insertCustomBlock('callout', { text: 'Hello' })
+ *    - Programmatically: editorRef.current?.insertCustomBlock('table', { rows: 3, cols: 3 })
+ * 
+ * Custom blocks are now inserted via toolbar buttons or API calls, not slash commands.
+ */

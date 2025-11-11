@@ -4,7 +4,6 @@
  */
 
 import type { CustomBlockDescriptor } from '../../components/RichTextEditor'
-import { registerSlashCommand } from './slashCommands'
 
 export interface NoteLinkPayload {
   noteId: string
@@ -46,21 +45,6 @@ export const noteLinkBlock: CustomBlockDescriptor = {
       folderId: folderId || null
     }
   }
-}
-
-/**
- * Register the note link slash command
- */
-export function registerNoteLinkCommand(icon?: React.ReactNode): void {
-  registerSlashCommand({
-    id: 'note-link',
-    label: 'Note Link',
-    icon: icon || '📝',
-    command: () => {}, // Will be handled by the editor component
-    description: 'Link to another note',
-    category: 'media',
-    keywords: ['note', 'link', 'reference', 'internal', 'wiki']
-  })
 }
 
 /**
