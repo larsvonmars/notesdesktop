@@ -2,7 +2,7 @@
  * Example usage of the enhanced RichTextEditor features
  * Demonstrates:
  * 1. Markdown import/export helpers
- * 2. Slash command registration
+ * 2. Custom block integration
  * 3. Performance improvements with mutation observer
  */
 
@@ -11,13 +11,6 @@ import {
   htmlToMarkdown, 
   looksLikeMarkdown 
 } from '../lib/editor/markdownHelpers'
-import {
-  registerSlashCommand,
-  unregisterSlashCommand,
-  getSlashCommands,
-  filterSlashCommands,
-  type SlashCommand
-} from '../lib/editor/slashCommands'
 
 // Example 1: Markdown Detection and Conversion
 console.log('=== Markdown Helpers Demo ===')
@@ -52,69 +45,20 @@ markdownToHtml(sampleMarkdown).then(html => {
   console.log('Reconstructed Markdown:', reconstructedMarkdown.substring(0, 100) + '...')
 })
 
-// Example 2: Custom Slash Command Registration
-console.log('\n=== Slash Command Registration Demo ===')
-
-// Register a custom table command
-const tableCommand: SlashCommand = {
-  id: 'table',
-  label: 'Table',
-  icon: '📊', // In real usage, this would be a React component
-  command: () => {
-    console.log('Inserting table...')
-    // Custom table insertion logic would go here
-  },
-  description: 'Insert a table',
-  category: 'blocks',
-  keywords: ['grid', 'data', 'spreadsheet']
-}
-
-registerSlashCommand(tableCommand)
-
-// Register a custom embed command
-const embedCommand: SlashCommand = {
-  id: 'embed',
-  label: 'Embed',
-  icon: '🎬',
-  command: () => {
-    console.log('Inserting embed...')
-    // Custom embed insertion logic would go here
-  },
-  description: 'Embed external content',
-  category: 'media',
-  keywords: ['video', 'youtube', 'iframe']
-}
-
-registerSlashCommand(embedCommand)
-
-// Demonstrate filtering
-const allCommands = getSlashCommands({
-  Type: '📝',
-  List: '📋',
-  CheckSquare: '✅',
-  Quote: '💬',
-  Code: '💻',
-  Minus: '➖',
-  Link: '🔗'
-})
-
-console.log('Total commands available:', allCommands.length)
-
-const filteredByTable = filterSlashCommands(allCommands, 'table')
-console.log('Commands matching "table":', filteredByTable.map(c => c.label))
-
-const filteredByEmbed = filterSlashCommands(allCommands, 'embed')
-console.log('Commands matching "embed":', filteredByEmbed.map(c => c.label))
-
-// Clean up
-unregisterSlashCommand('table')
-unregisterSlashCommand('embed')
+// Example 2: Toolbar-based UI
+console.log('\n=== Toolbar-based Formatting Demo ===')
+console.log('The editor now uses a floating toolbar that appears on text selection')
+console.log('All formatting commands are accessible via:')
+console.log('  - Floating toolbar buttons (appears on text selection)')
+console.log('  - Keyboard shortcuts (Cmd/Ctrl+B for bold, etc.)')
+console.log('  - Programmatic API (editor.exec("bold"))')
 
 console.log('\n=== Feature Benefits ===')
 console.log('✅ Markdown conversion settings cached on module load')
 console.log('✅ Mutation observer debounces checklist normalization (150ms)')
-console.log('✅ Slash commands extensible without modifying core editor')
+console.log('✅ Toolbar UI provides visual, discoverable formatting options')
 console.log('✅ HTML to Markdown export available for backup/export features')
+console.log('✅ No slash commands - more intuitive text editor experience')
 
 // Example 3: Performance Improvement Demonstration
 console.log('\n=== Performance Improvements ===')
