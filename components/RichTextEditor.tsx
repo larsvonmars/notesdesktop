@@ -41,14 +41,25 @@ import {
   markdownToHtml,
   htmlToMarkdown
 } from '@/lib/editor/markdownHelpers'
-import {
-  getSlashCommands,
-  filterSlashCommands,
-  type SlashCommand,
-  type RichTextCommand
-} from '@/lib/editor/slashCommands'
 
-export type { RichTextCommand }
+// Re-export RichTextCommand type for external use
+export type RichTextCommand =
+  | 'bold'
+  | 'italic'
+  | 'underline'
+  | 'strike'
+  | 'code'
+  | 'unordered-list'
+  | 'ordered-list'
+  | 'blockquote'
+  | 'checklist'
+  | 'heading1'
+  | 'heading2'
+  | 'heading3'
+  | 'undo'
+  | 'redo'
+  | 'link'
+  | 'horizontal-rule'
 
 export interface RichTextEditorHandle {
   focus: () => void
@@ -60,6 +71,8 @@ export interface RichTextEditorHandle {
   queryCommandState: (command: string) => boolean
   showLinkDialog: () => void
   showSearchDialog: () => void
+  showTableDialog: () => void
+  requestNoteLink: () => void
   getRootElement: () => HTMLDivElement | null
   scrollToHeading: (headingId: string) => void
 }
@@ -71,8 +84,8 @@ interface RichTextEditorProps {
   placeholder?: string
   // Optional custom block descriptors that allow rendering and parsing of blocks
   customBlocks?: CustomBlockDescriptor[]
-  // Optional callback for handling custom slash commands that need UI interaction
-  onCustomSlashCommand?: (commandId: string) => void
+  // Optional callback for handling custom commands that need UI interaction (e.g., table insertion, note links)
+  onCustomCommand?: (commandId: string) => void
 }
 
 const SANITIZE_CONFIG: Config = {
@@ -153,20 +166,15 @@ const splitLinesToFragment = (text: string): DocumentFragment => {
 }
 
 const RichTextEditor = forwardRef<RichTextEditorHandle, RichTextEditorProps>(
-  ({ value, onChange, disabled, placeholder, customBlocks, onCustomSlashCommand }, ref) => {
+  ({ value, onChange, disabled, placeholder, customBlocks, onCustomCommand }, ref) => {
     // local ref to hold passed customBlocks (avoid re-creating callbacks when prop changes)
     const customBlocksRef = useRef<CustomBlockDescriptor[] | undefined>(undefined)
   const editorRef = useRef<HTMLDivElement | null>(null)
-    const slashMenuRef = useRef<HTMLDivElement | null>(null)
     const historyManagerRef = useRef<HistoryManager | null>(null)
     const debouncedCaptureRef = useRef<(() => void) | null>(null)
   const lastSyncedValueRef = useRef<string>('')
     const mutationObserverRef = useRef<MutationObserver | null>(null)
     const checklistNormalizationTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
-    const [showSlashMenu, setShowSlashMenu] = useState(false)
-    const [slashMenuPosition, setSlashMenuPosition] = useState({ top: 0, left: 0 })
-    const [slashMenuFilter, setSlashMenuFilter] = useState('')
-    const [selectedCommandIndex, setSelectedCommandIndex] = useState(0)
     const [showLinkDialog, setShowLinkDialog] = useState(false)
     const [linkUrl, setLinkUrl] = useState('')
     const [linkText, setLinkText] = useState('')
@@ -182,7 +190,6 @@ const RichTextEditor = forwardRef<RichTextEditorHandle, RichTextEditorProps>(
   const [hoverRows, setHoverRows] = useState<number | null>(null)
   const [hoverCols, setHoverCols] = useState<number | null>(null)
     const savedSelectionRef = useRef<Range | null>(null)
-    const slashPositionRef = useRef<{ container: Node; offset: number } | null>(null)
     
 
     const insertFragmentAtSelection = useCallback(
@@ -1175,93 +1182,9 @@ const RichTextEditor = forwardRef<RichTextEditorHandle, RichTextEditorProps>(
       emitChange()
     }, [disabled, emitChange])
 
-    // Slash commands menu
-    const slashCommands = getSlashCommands({
-      Type: <Type size={16} />,
-      List: <List size={16} />,
-      CheckSquare: <CheckSquare size={16} />,
-      Quote: <Quote size={16} />,
-      Code: <Code size={16} />,
-      Minus: <Minus size={16} />,
-      Link: <LinkIcon size={16} />
-    })
-
-    const filteredSlashCommands = filterSlashCommands(slashCommands, slashMenuFilter)
-
-    // Update menu position based on caret and viewport boundaries
-    const updateSlashMenuPosition = useCallback(() => {
-      if (!editorRef.current) return
-
-      const selection = window.getSelection()
-      if (!selection || selection.rangeCount === 0) return
-
-      const range = selection.getRangeAt(0)
-      const rect = range.getBoundingClientRect()
-      const editorRect = editorRef.current.getBoundingClientRect()
-
-      let top = rect.bottom - editorRect.top + editorRef.current.scrollTop + 4
-      let left = rect.left - editorRect.left + editorRef.current.scrollLeft
-
-      const isMobile = window.innerWidth < 640
-      const menuWidth = isMobile ? Math.min(window.innerWidth - 32, 280) : 288
-      const menuHeight = Math.min(filteredSlashCommands.length * 60 + 80, 384)
-
-      const editorWidth = editorRect.width
-      const maxLeft = editorWidth - menuWidth - 8
-      if (left > maxLeft) {
-        left = Math.max(8, maxLeft)
-      }
-      if (left < 0) {
-        left = 8
-      }
-
-      const viewportBottom = window.innerHeight
-      const menuBottom = rect.bottom + menuHeight + 4
-      
-      if (menuBottom > viewportBottom) {
-        const newTop = rect.top - editorRect.top + editorRef.current.scrollTop - menuHeight - 4
-        if (newTop > 0) {
-          top = newTop
-        } else {
-          top = Math.max(8, viewportBottom - editorRect.top - menuHeight - 8)
-        }
-      }
-
-      setSlashMenuPosition({ top, left })
-    }, [filteredSlashCommands.length])
-
-    const detectSlashCommand = useCallback((event: ReactKeyboardEvent<HTMLDivElement>) => {
-      if (event.key === '/' && !showSlashMenu) {
-        const selection = window.getSelection()
-        if (!selection || selection.rangeCount === 0) return
-
-        const range = selection.getRangeAt(0)
-        const textBeforeCursor = range.startContainer.textContent?.substring(0, range.startOffset) || ''
-        
-        const urlPattern = /https?:$/
-        if (urlPattern.test(textBeforeCursor.trim())) {
-          return
-        }
-        
-        if (textBeforeCursor.trim() === '' || textBeforeCursor.endsWith(' ') || textBeforeCursor.endsWith('\n')) {
-          slashPositionRef.current = {
-            container: range.startContainer,
-            offset: range.startOffset
-          }
-
-          setTimeout(() => {
-            updateSlashMenuPosition()
-            setShowSlashMenu(true)
-            setSlashMenuFilter('')
-            setSelectedCommandIndex(0)
-          }, 0)
-        }
-      }
-    }, [showSlashMenu, updateSlashMenuPosition])
-
     /**
      * Execute a rich text command
-     * Extracted for reuse by executeSlashCommand and imperative handle
+     * This is the main entry point for all formatting commands
      */
     const executeRichTextCommand = useCallback((cmd: RichTextCommand) => {
       switch (cmd) {
@@ -1315,70 +1238,6 @@ const RichTextEditor = forwardRef<RichTextEditorHandle, RichTextEditorProps>(
           break
       }
     }, [execCommand, applyCode, toggleChecklist, applyHeading, insertHorizontalRule, insertLink])
-
-    /**
-     * Execute slash command - simplified implementation
-     * Removes the slash text and executes the corresponding command
-     */
-    const executeSlashCommand = useCallback((command: SlashCommand) => {
-      if (!editorRef.current) return
-      
-      const editor = editorRef.current
-      
-      // Hide slash menu
-      setShowSlashMenu(false)
-      setSlashMenuFilter('')
-      setSelectedCommandIndex(0)
-
-      // Remove slash text from editor
-      const selection = window.getSelection()
-      if (selection && selection.rangeCount > 0) {
-        const range = selection.getRangeAt(0)
-        const textNode = range.startContainer
-        
-        if (textNode.nodeType === Node.TEXT_NODE && textNode.textContent) {
-          const slashIndex = textNode.textContent.lastIndexOf('/')
-          if (slashIndex !== -1) {
-            // Remove slash and any text after it
-            textNode.textContent = textNode.textContent.substring(0, slashIndex)
-            
-            // Position cursor after deletion
-            const newRange = document.createRange()
-            newRange.setStart(textNode, slashIndex)
-            newRange.collapse(true)
-            selection.removeAllRanges()
-            selection.addRange(newRange)
-          }
-        }
-      }
-
-      // Execute command based on type
-      editor.focus()
-      
-      if (typeof command.command === 'function') {
-        // Custom function command
-        const descriptors = customBlocksRef.current || []
-        const desc = descriptors.find((d) => d.type === command.id)
-        
-        if (desc) {
-          // Handle custom blocks
-          if (command.id === 'table') {
-            setTableRows(3)
-            setTableCols(3)
-            setShowTableDialog(true)
-          } else if (command.id === 'note-link' && onCustomSlashCommand) {
-            onCustomSlashCommand('note-link')
-          } else {
-            insertCustomBlock(command.id, undefined)
-          }
-        } else {
-          command.command()
-        }
-      } else {
-        // Built-in RichTextCommand
-        executeRichTextCommand(command.command as RichTextCommand)
-      }
-    }, [executeRichTextCommand, insertCustomBlock, onCustomSlashCommand])
 
     const scrollToHeading = useCallback((headingId: string) => {
       if (!editorRef.current || !headingId) return
@@ -1450,6 +1309,16 @@ const RichTextEditor = forwardRef<RichTextEditorHandle, RichTextEditorProps>(
         showSearchDialog: () => {
           setShowSearchDialog(true)
         },
+        showTableDialog: () => {
+          saveSelection()
+          setTableRows(3)
+          setTableCols(3)
+          setShowTableDialog(true)
+        },
+        requestNoteLink: () => {
+          saveSelection()
+          onCustomCommand?.('note-link')
+        },
         insertCustomBlock: (type: string, payload?: any) => {
           return insertCustomBlock(type, payload)
         },
@@ -1472,7 +1341,7 @@ const RichTextEditor = forwardRef<RichTextEditorHandle, RichTextEditorProps>(
           executeRichTextCommand(command)
         }
       }),
-      [applyCode, execCommand, sanitize, toggleChecklist, applyHeading, getHeadings, insertLink, insertHorizontalRule, scrollToHeading, executeRichTextCommand]
+      [applyCode, execCommand, sanitize, toggleChecklist, applyHeading, getHeadings, insertLink, insertHorizontalRule, scrollToHeading, executeRichTextCommand, insertCustomBlock, saveSelection, onCustomCommand]
     )
 
     // Initialize history manager
@@ -1526,76 +1395,10 @@ const RichTextEditor = forwardRef<RichTextEditorHandle, RichTextEditorProps>(
       }
     }, [emitChange])
 
-    // Close slash menu on click outside
-    useEffect(() => {
-      if (!showSlashMenu) return
-
-      const handleClickOutside = (event: MouseEvent) => {
-        if (
-          slashMenuRef.current &&
-          !slashMenuRef.current.contains(event.target as Node) &&
-          editorRef.current &&
-          !editorRef.current.contains(event.target as Node)
-        ) {
-          setShowSlashMenu(false)
-          setSlashMenuFilter('')
-          setSelectedCommandIndex(0)
-          slashPositionRef.current = null
-        }
-      }
-
-      document.addEventListener('mousedown', handleClickOutside)
-      return () => {
-        document.removeEventListener('mousedown', handleClickOutside)
-      }
-    }, [showSlashMenu])
-
-    // Update slash menu position on scroll/resize
-    useEffect(() => {
-      if (!showSlashMenu) return
-
-      const handleUpdate = () => {
-        updateSlashMenuPosition()
-      }
-
-      window.addEventListener('scroll', handleUpdate, true)
-      window.addEventListener('resize', handleUpdate)
-
-      return () => {
-        window.removeEventListener('scroll', handleUpdate, true)
-        window.removeEventListener('resize', handleUpdate)
-      }
-    }, [showSlashMenu, updateSlashMenuPosition])
-
-    // Reset selected index when filter changes
-    useEffect(() => {
-      if (selectedCommandIndex >= filteredSlashCommands.length) {
-        setSelectedCommandIndex(Math.max(0, filteredSlashCommands.length - 1))
-      }
-    }, [filteredSlashCommands.length, selectedCommandIndex])
-
-    // Scroll selected command into view
-    useEffect(() => {
-      if (!showSlashMenu || !slashMenuRef.current) return
-
-      const selectedElement = slashMenuRef.current.querySelector(
-        `[data-command-index="${selectedCommandIndex}"]`
-      ) as HTMLElement | null
-
-      if (selectedElement) {
-        selectedElement.scrollIntoView({
-          block: 'nearest',
-          behavior: 'smooth'
-        })
-      }
-    }, [selectedCommandIndex, showSlashMenu])
-
     const handleInput = () => emitChange()
 
   const handleKeyDown = (event: ReactKeyboardEvent<HTMLDivElement>) => {
-      // Detect slash command
-      detectSlashCommand(event)
-
+      // Handle Enter key for checklist items
       if (event.key === 'Enter' && !event.shiftKey) {
         const selection = window.getSelection()
         const currentListItem = getClosestListItem(selection?.anchorNode ?? null)
@@ -1662,70 +1465,7 @@ const RichTextEditor = forwardRef<RichTextEditorHandle, RichTextEditorProps>(
         }
       }
 
-      // Close slash menu on Escape
-      if (event.key === 'Escape' && showSlashMenu) {
-        event.preventDefault()
-        setShowSlashMenu(false)
-        setSlashMenuFilter('')
-        setSelectedCommandIndex(0)
-        slashPositionRef.current = null
-        return
-      }
-
-      // Navigate slash menu with arrow keys
-      if (showSlashMenu) {
-        if (event.key === 'ArrowDown') {
-          event.preventDefault()
-          setSelectedCommandIndex((prev) => 
-            prev < filteredSlashCommands.length - 1 ? prev + 1 : prev
-          )
-          return
-        }
-        if (event.key === 'ArrowUp') {
-          event.preventDefault()
-          setSelectedCommandIndex((prev) => (prev > 0 ? prev - 1 : prev))
-          return
-        }
-        if (event.key === 'Enter') {
-          event.preventDefault()
-          if (filteredSlashCommands.length > 0 && selectedCommandIndex < filteredSlashCommands.length) {
-            executeSlashCommand(filteredSlashCommands[selectedCommandIndex])
-          }
-          return
-        }
-        if (event.key === 'Tab') {
-          event.preventDefault()
-          if (filteredSlashCommands.length > 0 && selectedCommandIndex < filteredSlashCommands.length) {
-            executeSlashCommand(filteredSlashCommands[selectedCommandIndex])
-          }
-          return
-        }
-        // Handle backspace in filter
-        if (event.key === 'Backspace') {
-          if (slashMenuFilter.length > 0) {
-            setSlashMenuFilter((prev) => {
-              const newFilter = prev.slice(0, -1)
-              setSelectedCommandIndex(0)
-              return newFilter
-            })
-          } else {
-            setShowSlashMenu(false)
-            slashPositionRef.current = null
-          }
-          return
-        }
-        // Update filter as user types (only single printable characters)
-        if (event.key.length === 1 && !event.ctrlKey && !event.metaKey && !event.altKey) {
-          event.preventDefault()
-          setSlashMenuFilter((prev) => {
-            const newFilter = prev + event.key
-            setSelectedCommandIndex(0)
-            return newFilter
-          })
-          return
-        }
-      }
-
+      // Handle keyboard shortcuts
   if (!(event.metaKey || event.ctrlKey)) return
       const key = event.key.toLowerCase()
 
@@ -1926,81 +1666,6 @@ const RichTextEditor = forwardRef<RichTextEditorHandle, RichTextEditorProps>(
           suppressContentEditableWarning
           spellCheck
         />
-
-        {/* Slash Commands Menu */}
-        {showSlashMenu && (
-          <div
-            ref={slashMenuRef}
-            className="absolute z-50 bg-white border border-gray-200 rounded-lg shadow-xl overflow-hidden"
-            style={{
-              top: `${slashMenuPosition.top}px`,
-              left: `${slashMenuPosition.left}px`,
-              width: 'min(288px, calc(100vw - 2rem))',
-              maxHeight: 'min(384px, calc(100vh - 8rem))'
-            }}
-          >
-            {slashMenuFilter && (
-              <div className="px-3 py-2 text-xs text-gray-500 border-b border-gray-100 bg-gray-50">
-                Searching: <span className="font-semibold text-gray-700">/{slashMenuFilter}</span>
-              </div>
-            )}
-            <div className="overflow-y-auto max-h-80">
-              {filteredSlashCommands.length > 0 ? (
-                <div className="py-1">
-                  {filteredSlashCommands.map((cmd, index) => (
-                    <button
-                      key={cmd.id}
-                      data-command-index={index}
-                      className={`w-full px-3 py-2.5 text-left flex items-center gap-3 transition-all ${
-                        index === selectedCommandIndex
-                          ? 'bg-blue-50 text-blue-700 border-l-2 border-blue-500'
-                          : 'text-gray-700 hover:bg-gray-50 border-l-2 border-transparent'
-                      }`}
-                      onClick={() => executeSlashCommand(cmd)}
-                      onMouseEnter={() => setSelectedCommandIndex(index)}
-                    >
-                      <span className={`flex-shrink-0 ${index === selectedCommandIndex ? 'text-blue-600' : 'text-gray-400'}`}>
-                        {cmd.icon}
-                      </span>
-                      <div className="flex-1 min-w-0">
-                        <div className="text-sm font-medium truncate">{cmd.label}</div>
-                        <div className="text-xs text-gray-500 truncate">{cmd.description}</div>
-                      </div>
-                      {index === selectedCommandIndex && (
-                        <span className="flex-shrink-0 text-xs text-blue-600 font-semibold">↵</span>
-                      )}
-                    </button>
-                  ))}
-                </div>
-              ) : (
-                <div className="px-3 py-6 text-sm text-center text-gray-500">
-                  <div className="mb-1 font-medium">No commands found</div>
-                  {slashMenuFilter && (
-                    <div className="text-xs">for &quot;{slashMenuFilter}&quot;</div>
-                  )}
-                </div>
-              )}
-            </div>
-            <div className="px-3 py-2 text-xs text-gray-400 border-t border-gray-100 bg-gray-50 flex-shrink-0">
-              <div className="flex flex-wrap gap-x-2 gap-y-1 justify-center sm:justify-start">
-                <span className="inline-flex items-center gap-1">
-                  <kbd className="px-1 py-0.5 bg-gray-200 rounded text-[10px] font-semibold">↑↓</kbd>
-                  <span className="hidden sm:inline">navigate</span>
-                </span>
-                <span className="hidden sm:inline text-gray-300">•</span>
-                <span className="inline-flex items-center gap-1">
-                  <kbd className="px-1 py-0.5 bg-gray-200 rounded text-[10px] font-semibold">↵</kbd>
-                  <span className="hidden sm:inline">select</span>
-                </span>
-                <span className="hidden sm:inline text-gray-300">•</span>
-                <span className="inline-flex items-center gap-1">
-                  <kbd className="px-1 py-0.5 bg-gray-200 rounded text-[10px] font-semibold">Esc</kbd>
-                  <span className="hidden sm:inline">close</span>
-                </span>
-              </div>
-            </div>
-          </div>
-        )}
 
         {/* Link Dialog */}
         {showLinkDialog && (
