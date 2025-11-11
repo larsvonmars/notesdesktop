@@ -838,6 +838,14 @@ export default function ProjectsWorkspaceModal({
     if (targetProject === 'all') return
 
     const resolved = resolveProjectId(targetProject) ?? null
+    const targetProjectName = targetProject === 'unassigned' 
+      ? 'No Project' 
+      : projectMap.get(targetProject)?.name ?? 'project'
+    
+    const itemType = relocateTarget.type === 'folder' ? 'Folder' : 'Note'
+    const itemName = relocateTarget.type === 'folder'
+      ? folderMap.get(relocateTarget.id)?.name
+      : noteMap.get(relocateTarget.id)?.title
 
     setActionLoading(true)
     try {
@@ -846,10 +854,13 @@ export default function ProjectsWorkspaceModal({
       } else {
         await moveNoteToProject(relocateTarget.id, resolved)
       }
+      
       toast.push({
-        title: 'Move complete',
-        description: 'Item moved to the selected project.',
+        title: `${itemType} moved successfully`,
+        description: `"${itemName || 'Untitled'}" has been moved to ${targetProjectName}.`,
       })
+      
+      // Reset selection if we moved the currently selected folder
       if (
         relocateTarget.type === 'folder' &&
         activeProjectId !== 'all' &&
@@ -858,12 +869,24 @@ export default function ProjectsWorkspaceModal({
       ) {
         setSelectedFolderId(null)
       }
+      
+      // Reload data to reflect changes
       await loadAll()
+      
+      // If user is viewing a specific project and moved item to a different project,
+      // switch to the target project so user can see where the item went
+      if (activeProjectId !== 'all' && activeProjectId !== targetProject) {
+        setActiveProjectId(targetProject)
+        toast.push({
+          title: 'View switched',
+          description: `Now viewing ${targetProjectName} where the ${itemType.toLowerCase()} was moved.`,
+        })
+      }
     } catch (error) {
       console.error('Failed to relocate item', error)
       toast.push({
         title: 'Move failed',
-        description: 'Unable to move to the selected project.',
+        description: error instanceof Error ? error.message : 'Unable to move to the selected project.',
       })
     } finally {
       setActionLoading(false)
@@ -1810,46 +1833,85 @@ export default function ProjectsWorkspaceModal({
             <h3 className="text-lg font-semibold text-gray-900">
               Move {relocateTarget.type === 'folder' ? 'folder' : 'note'} to project
             </h3>
-            <p className="mt-1 text-sm text-gray-600">Choose a destination project.</p>
+            <p className="mt-1 text-sm text-gray-600">
+              {relocationOriginProjectId === null 
+                ? 'Currently in: No Project' 
+                : relocationOriginProjectId 
+                ? `Currently in: ${projectMap.get(relocationOriginProjectId)?.name ?? 'Unknown'}` 
+                : 'Select destination project'}
+            </p>
+            
+            {relocateTarget.type === 'note' && (() => {
+              const note = noteMap.get(relocateTarget.id)
+              const folder = note?.folder_id ? folderMap.get(note.folder_id) : null
+              const folderBelongsToDifferentProject = folder && folder.project_id !== relocationOriginProjectId
+              
+              if (folder) {
+                return (
+                  <div className="mt-3 rounded-lg bg-blue-50 border border-blue-200 p-3">
+                    <p className="text-xs text-blue-700">
+                      <strong>Note:</strong> This note is in folder &ldquo;{folder.name}&rdquo;.
+                      {folderBelongsToDifferentProject && (
+                        <span className="block mt-1">
+                          The folder belongs to &ldquo;{projectMap.get(folder.project_id!)?.name ?? 'another project'}&rdquo;, 
+                          but the note will be moved independently.
+                        </span>
+                      )}
+                    </p>
+                  </div>
+                )
+              }
+              return null
+            })()}
+            
             <div className="mt-4 max-h-60 space-y-2 overflow-y-auto">
               <button
                 type="button"
                 className={`flex w-full items-center justify-between rounded-lg border px-3 py-2 text-left text-sm transition ${
-                  relocationOriginProjectId === null ? 'border-blue-500 bg-blue-50' : 'border-gray-200 hover:border-blue-400'
+                  relocationOriginProjectId === null 
+                    ? 'border-gray-300 bg-gray-50 text-gray-400 cursor-not-allowed' 
+                    : 'border-gray-200 hover:border-blue-400'
                 }`}
                 onClick={() => handleRelocateToProject('unassigned')}
-                disabled={actionLoading}
+                disabled={actionLoading || relocationOriginProjectId === null}
               >
                 <span>No project</span>
-                {relocationOriginProjectId === null && <Check size={14} className="text-blue-500" />}
+                {relocationOriginProjectId === null && (
+                  <span className="text-xs text-gray-500">(current)</span>
+                )}
               </button>
-              {projects.map((project) => (
-                <button
-                  key={project.id}
-                  type="button"
-                  className={`flex w-full items-center justify-between rounded-lg border px-3 py-2 text-left text-sm transition ${
-                    relocationOriginProjectId === project.id
-                      ? 'border-blue-500 bg-blue-50'
-                      : 'border-gray-200 hover:border-blue-400'
-                  }`}
-                  onClick={() => handleRelocateToProject(project.id)}
-                  disabled={actionLoading}
-                >
-                  <span className="flex items-center gap-2">
-                    <span
-                      className="h-3 w-3 rounded-full border border-white shadow"
-                      style={{ backgroundColor: project.color }}
-                    />
-                    {project.name}
-                  </span>
-                  {relocationOriginProjectId === project.id && <Check size={14} className="text-blue-500" />}
-                </button>
-              ))}
+              {projects.map((project) => {
+                const isCurrent = relocationOriginProjectId === project.id
+                return (
+                  <button
+                    key={project.id}
+                    type="button"
+                    className={`flex w-full items-center justify-between rounded-lg border px-3 py-2 text-left text-sm transition ${
+                      isCurrent
+                        ? 'border-gray-300 bg-gray-50 text-gray-400 cursor-not-allowed'
+                        : 'border-gray-200 hover:border-blue-400'
+                    }`}
+                    onClick={() => handleRelocateToProject(project.id)}
+                    disabled={actionLoading || isCurrent}
+                  >
+                    <span className="flex items-center gap-2">
+                      <span
+                        className="h-3 w-3 rounded-full border border-white shadow"
+                        style={{ backgroundColor: project.color }}
+                      />
+                      {project.name}
+                    </span>
+                    {isCurrent && (
+                      <span className="text-xs text-gray-500">(current)</span>
+                    )}
+                  </button>
+                )
+              })}
             </div>
-            <div className="mt-6 flex justify-end">
+            <div className="mt-6 flex justify-end gap-2">
               <button
                 type="button"
-                className="rounded-md border border-gray-300 px-4 py-2 text-sm font-medium text-gray-600 hover:bg-gray-100"
+                className="rounded-md border border-gray-300 px-4 py-2 text-sm font-medium text-gray-600 hover:bg-gray-100 disabled:opacity-50"
                 onClick={() => setRelocateTarget(null)}
                 disabled={actionLoading}
               >

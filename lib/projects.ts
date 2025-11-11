@@ -133,7 +133,10 @@ export async function moveFolderToProject(
 ): Promise<void> {
   const { error } = await supabase
     .from('folders')
-    .update({ project_id: projectId })
+    .update({ 
+      project_id: projectId,
+      updated_at: new Date().toISOString()
+    })
     .eq('id', folderId)
 
   if (error) throw error
@@ -148,7 +151,10 @@ export async function moveNoteToProject(
 ): Promise<void> {
   const { error } = await supabase
     .from('notes')
-    .update({ project_id: projectId })
+    .update({ 
+      project_id: projectId,
+      updated_at: new Date().toISOString()
+    })
     .eq('id', noteId)
 
   if (error) throw error

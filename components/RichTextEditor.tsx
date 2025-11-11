@@ -808,178 +808,335 @@ const RichTextEditor = forwardRef<RichTextEditorHandle, RichTextEditorProps>(
       (command: string, valueArg?: string) => {
         if (disabled || !editorRef.current) return
         
-        const selection = window.getSelection()
-        if (selection && selection.rangeCount > 0) {
-          const range = selection.getRangeAt(0)
-          sanitizeInlineNodes(range)
-        }
-        
-        switch (command) {
-          case 'bold':
-            applyInlineStyle('strong')
-            break
-          case 'italic':
-            applyInlineStyle('em')
-            break
-          case 'underline':
-            applyInlineStyle('u')
-            break
-          case 'strikeThrough':
-            applyInlineStyle('s')
-            break
-          case 'formatBlock':
-            if (valueArg) {
-              const tag = valueArg.toLowerCase().replace(/[<>]/g, '')
-              if (['p', 'h1', 'h2', 'h3', 'blockquote'].includes(tag)) {
-                applyBlockFormat(tag as 'p' | 'h1' | 'h2' | 'h3' | 'blockquote', editorRef.current)
+        try {
+          const selection = window.getSelection()
+          if (selection && selection.rangeCount > 0) {
+            const range = selection.getRangeAt(0)
+            sanitizeInlineNodes(range)
+          }
+          
+          switch (command) {
+            case 'bold':
+              applyInlineStyle('strong')
+              break
+            case 'italic':
+              applyInlineStyle('em')
+              break
+            case 'underline':
+              applyInlineStyle('u')
+              break
+            case 'strikeThrough':
+              applyInlineStyle('s')
+              break
+            case 'formatBlock':
+              if (valueArg) {
+                const tag = valueArg.toLowerCase().replace(/[<>]/g, '')
+                if (['p', 'h1', 'h2', 'h3', 'blockquote'].includes(tag)) {
+                  applyBlockFormat(tag as 'p' | 'h1' | 'h2' | 'h3' | 'blockquote', editorRef.current)
+                }
               }
+              break
+            case 'insertUnorderedList':
+              toggleListType('ul', editorRef.current)
+              break
+            case 'insertOrderedList':
+              toggleListType('ol', editorRef.current)
+              break
+            default:
+              console.warn(`Unsupported rich text command: ${command}`)
+          }
+          
+          if (editorRef.current) {
+            normalizeEditorContent(editorRef.current)
+            mergeAdjacentLists(editorRef.current)
+          }
+          
+          emitChange()
+        } catch (error) {
+          console.error('Error in execCommand:', error);
+          // Try to recover gracefully
+          try {
+            if (editorRef.current) {
+              normalizeEditorContent(editorRef.current);
             }
-            break
-          case 'insertUnorderedList':
-            toggleListType('ul', editorRef.current)
-            break
-          case 'insertOrderedList':
-            toggleListType('ol', editorRef.current)
-            break
-          default:
-            console.warn(`Unsupported rich text command: ${command}`)
+          } catch (e) {
+            console.error('Failed to recover from execCommand error:', e);
+          }
         }
-        
-        if (editorRef.current) {
-          normalizeEditorContent(editorRef.current)
-          mergeAdjacentLists(editorRef.current)
-        }
-        
-        emitChange()
       },
       [disabled, emitChange]
     )
 
     const applyCode = useCallback(() => {
       if (disabled) return
-      applyInlineStyle('code')
-      if (editorRef.current) {
-        normalizeEditorContent(editorRef.current)
+      try {
+        applyInlineStyle('code')
+        if (editorRef.current) {
+          normalizeEditorContent(editorRef.current)
+        }
+        emitChange()
+      } catch (error) {
+        console.error('Error in applyCode:', error);
       }
-      emitChange()
     }, [disabled, emitChange])
 
     const toggleChecklist = useCallback(() => {
       if (disabled || !editorRef.current) return
       
-      toggleChecklistState(editorRef.current)
-      
-      normalizeEditorContent(editorRef.current)
-      mergeAdjacentLists(editorRef.current)
-      
-      emitChange()
+      try {
+        toggleChecklistState(editorRef.current)
+        
+        normalizeEditorContent(editorRef.current)
+        mergeAdjacentLists(editorRef.current)
+        
+        emitChange()
+      } catch (error) {
+        console.error('Error in toggleChecklist:', error);
+      }
     }, [disabled, emitChange])
 
-    // FIXED applyHeading function with WebKit/WebView compatibility
+    // Improved applyHeading function with better stability and WebKit/WebView compatibility
     const applyHeading = useCallback(
       (level: 1 | 2 | 3) => {
         if (disabled || !editorRef.current) return;
         
-        const selection = window.getSelection();
-        if (!selection || selection.rangeCount === 0) {
-          // Fallback: create heading at end
-          const heading = document.createElement(`h${level}`);
-          const textNode = document.createTextNode('');
-          heading.appendChild(textNode);
-          editorRef.current.appendChild(heading);
+        try {
+          const selection = window.getSelection();
+          const editor = editorRef.current;
           
-          // WebKit-compatible cursor placement
-          const range = document.createRange();
-          range.setStart(textNode, 0);
-          range.collapse(true);
-          selection?.removeAllRanges();
-          selection?.addRange(range);
-          
-          // Generate ID and normalize
-          setTimeout(() => {
-            if (!editorRef.current) return;
-            heading.id = generateHeadingId('');
-            normalizeEditorContent(editorRef.current);
-            emitChange();
-          }, 10);
-          return;
-        }
-
-        const range = selection.getRangeAt(0);
-        let container = range.startContainer;
-        let offset = range.startOffset;
-
-        // Handle WebKit specific behavior for empty blocks
-        if (range.collapsed) {
-          const blockElement = container.nodeType === Node.TEXT_NODE 
-            ? container.parentElement 
-            : container as Element;
-          
-          // Check if we're in an empty block or at the beginning
-          const isEmptyBlock = blockElement && 
-            (blockElement.textContent === '' || 
-             (blockElement.textContent === '\u200B' || 
-              blockElement.innerHTML === '<br>'));
-          
-          if (isEmptyBlock) {
-            // Replace the empty block with a heading
-            const heading = document.createElement(`h${level}`);
-            const textNode = document.createTextNode('');
-            heading.appendChild(textNode);
-            
-            if (blockElement.parentNode) {
-              blockElement.parentNode.replaceChild(heading, blockElement);
+          // Helper to safely create and place cursor in heading
+          const createHeadingWithCursor = (heading: HTMLHeadingElement, targetNode?: Node) => {
+            try {
+              const textNode = document.createTextNode('');
+              heading.appendChild(textNode);
+              heading.id = generateHeadingId('');
               
-              // Set cursor inside the new heading
-              const newRange = document.createRange();
-              newRange.setStart(textNode, 0);
-              newRange.collapse(true);
-              selection.removeAllRanges();
-              selection.addRange(newRange);
+              if (targetNode && targetNode.parentNode) {
+                targetNode.parentNode.insertBefore(heading, targetNode.nextSibling);
+              } else {
+                editor.appendChild(heading);
+              }
+              
+              // Set cursor with error handling
+              setTimeout(() => {
+                try {
+                  const range = document.createRange();
+                  range.setStart(textNode, 0);
+                  range.collapse(true);
+                  const sel = window.getSelection();
+                  if (sel) {
+                    sel.removeAllRanges();
+                    sel.addRange(range);
+                  }
+                  editor.focus();
+                } catch (e) {
+                  console.warn('Failed to set cursor in heading:', e);
+                }
+              }, 0);
+            } catch (e) {
+              console.warn('Failed to create heading with cursor:', e);
+            }
+          };
+
+          // No selection - create heading at end
+          if (!selection || selection.rangeCount === 0) {
+            const heading = document.createElement(`h${level}`);
+            createHeadingWithCursor(heading);
+            setTimeout(() => {
+              if (editor) {
+                normalizeEditorContent(editor);
+                emitChange();
+              }
+            }, 20);
+            return;
+          }
+
+          const range = selection.getRangeAt(0);
+          let container = range.startContainer;
+
+          // Find the block-level element containing the cursor
+          const findBlockElement = (node: Node): Element | null => {
+            let current: Node | null = node;
+            while (current && current !== editor) {
+              if (current.nodeType === Node.ELEMENT_NODE) {
+                const tagName = (current as Element).tagName.toLowerCase();
+                if (['p', 'div', 'h1', 'h2', 'h3', 'blockquote', 'li'].includes(tagName)) {
+                  return current as Element;
+                }
+              }
+              current = current.parentNode;
+            }
+            return null;
+          };
+
+          // Handle collapsed selection (no text selected)
+          if (range.collapsed) {
+            const blockElement = findBlockElement(container);
+            
+            if (blockElement) {
+              // Get the content of the block
+              const blockContent = blockElement.textContent?.trim() || '';
+              const isEmpty = blockContent === '' || blockContent === '\u200B';
+              
+              // If empty, replace block with empty heading
+              if (isEmpty) {
+                const heading = document.createElement(`h${level}`);
+                const textNode = document.createTextNode('');
+                heading.appendChild(textNode);
+                heading.id = generateHeadingId('');
+                
+                if (blockElement.parentNode) {
+                  blockElement.parentNode.replaceChild(heading, blockElement);
+                  
+                  setTimeout(() => {
+                    try {
+                      const newRange = document.createRange();
+                      newRange.setStart(textNode, 0);
+                      newRange.collapse(true);
+                      const sel = window.getSelection();
+                      if (sel) {
+                        sel.removeAllRanges();
+                        sel.addRange(newRange);
+                      }
+                    } catch (e) {
+                      console.warn('Failed to set cursor after replacing block:', e);
+                    }
+                  }, 0);
+                }
+              } else {
+                // Block has content - convert it to heading
+                const heading = document.createElement(`h${level}`);
+                heading.id = generateHeadingId(blockContent);
+                
+                // Move all child nodes to heading
+                while (blockElement.firstChild) {
+                  heading.appendChild(blockElement.firstChild);
+                }
+                
+                if (blockElement.parentNode) {
+                  blockElement.parentNode.replaceChild(heading, blockElement);
+                  
+                  // Try to maintain cursor position
+                  setTimeout(() => {
+                    try {
+                      const newRange = document.createRange();
+                      newRange.selectNodeContents(heading);
+                      newRange.collapse(false);
+                      const sel = window.getSelection();
+                      if (sel) {
+                        sel.removeAllRanges();
+                        sel.addRange(newRange);
+                      }
+                    } catch (e) {
+                      console.warn('Failed to restore cursor position:', e);
+                    }
+                  }, 0);
+                }
+              }
+            } else {
+              // No block element found - insert new heading at cursor
+              const heading = document.createElement(`h${level}`);
+              const textNode = document.createTextNode('');
+              heading.appendChild(textNode);
+              heading.id = generateHeadingId('');
+              
+              try {
+                range.insertNode(heading);
+                
+                setTimeout(() => {
+                  try {
+                    const newRange = document.createRange();
+                    newRange.setStart(textNode, 0);
+                    newRange.collapse(true);
+                    const sel = window.getSelection();
+                    if (sel) {
+                      sel.removeAllRanges();
+                      sel.addRange(newRange);
+                    }
+                  } catch (e) {
+                    console.warn('Failed to set cursor after inserting heading:', e);
+                  }
+                }, 0);
+              } catch (e) {
+                console.warn('Failed to insert heading:', e);
+              }
             }
           } else {
-            // Regular insertion for non-empty content
+            // Text is selected - wrap it in heading
+            try {
+              const selectedText = range.toString();
+              const content = range.extractContents();
+              const heading = document.createElement(`h${level}`);
+              heading.id = generateHeadingId(selectedText);
+              
+              // Clean up the extracted content (remove nested block elements)
+              const tempDiv = document.createElement('div');
+              tempDiv.appendChild(content);
+              
+              // Extract just the text content if there are block elements
+              const hasBlockElements = tempDiv.querySelector('p, div, h1, h2, h3, blockquote, ul, ol');
+              if (hasBlockElements) {
+                const textContent = tempDiv.textContent || '';
+                heading.textContent = textContent;
+              } else {
+                heading.appendChild(content);
+              }
+              
+              range.insertNode(heading);
+              
+              // Move cursor to end of heading
+              setTimeout(() => {
+                try {
+                  const newRange = document.createRange();
+                  newRange.selectNodeContents(heading);
+                  newRange.collapse(false);
+                  const sel = window.getSelection();
+                  if (sel) {
+                    sel.removeAllRanges();
+                    sel.addRange(newRange);
+                  }
+                } catch (e) {
+                  console.warn('Failed to move cursor after wrapping:', e);
+                }
+              }, 0);
+            } catch (e) {
+              console.warn('Failed to wrap selection in heading:', e);
+            }
+          }
+          
+          // Normalize and emit change with delay to ensure DOM is stable
+          setTimeout(() => {
+            try {
+              if (!editor) return;
+              
+              // Ensure all headings have IDs
+              const headings = editor.querySelectorAll('h1, h2, h3');
+              headings.forEach((heading) => {
+                if (!heading.id) {
+                  const text = heading.textContent || '';
+                  heading.id = generateHeadingId(text);
+                }
+              });
+              
+              normalizeEditorContent(editor);
+              emitChange();
+            } catch (e) {
+              console.warn('Failed to normalize after heading creation:', e);
+            }
+          }, 30);
+          
+        } catch (error) {
+          console.error('Error in applyHeading:', error);
+          // Try to recover by just appending a heading at the end
+          try {
             const heading = document.createElement(`h${level}`);
             heading.appendChild(document.createTextNode(''));
-            
-            // Insert at current position
-            range.insertNode(heading);
-            
-            // Move cursor inside the heading
-            const newRange = document.createRange();
-            newRange.selectNodeContents(heading);
-            newRange.collapse(true);
-            selection.removeAllRanges();
-            selection.addRange(newRange);
+            heading.id = generateHeadingId('');
+            editorRef.current?.appendChild(heading);
+          } catch (e) {
+            console.error('Failed to recover from heading error:', e);
           }
-        } else {
-          // Wrap selected content in heading
-          const content = range.extractContents();
-          const heading = document.createElement(`h${level}`);
-          heading.appendChild(content);
-          range.insertNode(heading);
-          
-          // Move cursor to end of heading
-          const newRange = document.createRange();
-          newRange.selectNodeContents(heading);
-          newRange.collapse(false);
-          selection.removeAllRanges();
-          selection.addRange(newRange);
         }
-        
-        // Generate IDs and normalize
-        setTimeout(() => {
-          if (!editorRef.current) return;
-          const headings = editorRef.current.querySelectorAll('h1, h2, h3');
-          headings.forEach((heading) => {
-            if (!heading.id) {
-              const text = heading.textContent || '';
-              heading.id = generateHeadingId(text);
-            }
-          });
-          normalizeEditorContent(editorRef.current);
-          emitChange();
-        }, 10);
       },
       [disabled, emitChange]
     )
@@ -1302,7 +1459,7 @@ const RichTextEditor = forwardRef<RichTextEditorHandle, RichTextEditorProps>(
       }
     }, [showSlashMenu, updateSlashMenuPosition])
 
-    // FIXED executeSlashCommand with WebKit-compatible heading handling
+    // Improved executeSlashCommand with better stability and error handling
     const executeSlashCommand = useCallback((command: SlashCommand) => {
       if (!editorRef.current) return;
       
@@ -1310,151 +1467,133 @@ const RichTextEditor = forwardRef<RichTextEditorHandle, RichTextEditorProps>(
       setSlashMenuFilter('');
       setSelectedCommandIndex(0);
 
-      // Use a simpler approach for WebKit - just remove the slash and text after it
-      const selection = window.getSelection();
-      if (selection && selection.rangeCount > 0) {
-        const range = selection.getRangeAt(0);
-        const startContainer = range.startContainer;
-        
-        if (startContainer.nodeType === Node.TEXT_NODE) {
-          const textContent = startContainer.textContent || '';
-          const slashIndex = textContent.lastIndexOf('/');
+      try {
+        // Remove the slash and filter text
+        const selection = window.getSelection();
+        if (selection && selection.rangeCount > 0) {
+          const range = selection.getRangeAt(0);
+          const startContainer = range.startContainer;
           
-          if (slashIndex !== -1) {
-            // Simply remove everything from the slash onwards
-            startContainer.textContent = textContent.substring(0, slashIndex);
+          if (startContainer.nodeType === Node.TEXT_NODE) {
+            const textContent = startContainer.textContent || '';
+            const slashIndex = textContent.lastIndexOf('/');
             
-            // Set cursor right after where the slash was
-            const newRange = document.createRange();
-            newRange.setStart(startContainer, slashIndex);
-            newRange.collapse(true);
-            selection.removeAllRanges();
-            selection.addRange(newRange);
+            if (slashIndex !== -1) {
+              try {
+                // Remove everything from the slash onwards
+                startContainer.textContent = textContent.substring(0, slashIndex);
+                
+                // Set cursor right after where the slash was
+                const newRange = document.createRange();
+                newRange.setStart(startContainer, slashIndex);
+                newRange.collapse(true);
+                selection.removeAllRanges();
+                selection.addRange(newRange);
+              } catch (e) {
+                console.warn('Failed to remove slash text:', e);
+              }
+            }
           }
         }
-      }
 
-      // Use setTimeout to ensure DOM is updated before executing command
-      setTimeout(() => {
-        try {
-          // Special handling for headings in WebKit
-          if (command.command === 'heading1' || command.command === 'heading2' || command.command === 'heading3') {
-            const level = command.command === 'heading1' ? 1 : command.command === 'heading2' ? 2 : 3;
-            // Insert heading with sample text
-            const sampleText = level === 1 ? 'Heading 1' : level === 2 ? 'Heading 2' : 'Heading 3';
-            const selection = window.getSelection();
-            if (selection && selection.rangeCount > 0) {
-              const range = selection.getRangeAt(0);
-              // Create heading element
-              const heading = document.createElement(`h${level}`);
-              const textNode = document.createTextNode(sampleText);
-              heading.appendChild(textNode);
-              range.insertNode(heading);
-              // Move cursor to end of heading
-              const newRange = document.createRange();
-              newRange.setStart(heading, 1);
-              newRange.collapse(true);
-              selection.removeAllRanges();
-              selection.addRange(newRange);
-            }
-            // Generate IDs and normalize
-            setTimeout(() => {
-              if (!editorRef.current) return;
-              const headings = editorRef.current.querySelectorAll('h1, h2, h3');
-              headings.forEach((heading) => {
-                if (!heading.id) {
-                  const text = heading.textContent || '';
-                  heading.id = generateHeadingId(text);
+        // Use setTimeout to ensure DOM is updated before executing command
+        setTimeout(() => {
+          try {
+            // Special handling for headings - use the improved applyHeading function
+            if (command.command === 'heading1' || command.command === 'heading2' || command.command === 'heading3') {
+              const level = command.command === 'heading1' ? 1 : command.command === 'heading2' ? 2 : 3;
+              applyHeading(level);
+            } else if (typeof command.command === 'function') {
+              // If there is a custom block registered with the same id/type as the slash command,
+              // insert it via the custom block API. This allows slash commands to map to custom blocks.
+              const descriptors = customBlocksRef.current || []
+              const desc = descriptors.find((d) => d.type === command.id)
+              if (desc) {
+                // If it's table, show dialog to configure rows/cols first
+                if (command.id === 'table') {
+                  setTableRows(3)
+                  setTableCols(3)
+                  setShowTableDialog(true)
+                } else if (command.id === 'note-link' && onCustomSlashCommand) {
+                  // For note-link, call the parent's handler to show note selector
+                  onCustomSlashCommand('note-link')
+                } else {
+                  // Provide a few sensible defaults for known block types
+                  let payload: any = undefined
+                  insertCustomBlock(command.id, payload)
                 }
-              });
-              normalizeEditorContent(editorRef.current);
-              emitChange();
-            }, 10);
-          } else if (typeof command.command === 'function') {
-            // If there is a custom block registered with the same id/type as the slash command,
-            // insert it via the custom block API. This allows slash commands to map to custom blocks.
-            const descriptors = customBlocksRef.current || []
-            const desc = descriptors.find((d) => d.type === command.id)
-            if (desc) {
-              // If it's table, show dialog to configure rows/cols first
-              if (command.id === 'table') {
-                setTableRows(3)
-                setTableCols(3)
-                setShowTableDialog(true)
-              } else if (command.id === 'note-link' && onCustomSlashCommand) {
-                // For note-link, call the parent's handler to show note selector
-                onCustomSlashCommand('note-link')
               } else {
-                // Provide a few sensible defaults for known block types
-                let payload: any = undefined
-                insertCustomBlock(command.id, payload)
+                command.command();
               }
             } else {
-              command.command();
+              // Use the exec method from imperative handle
+              const execFn = (cmd: RichTextCommand) => {
+                switch (cmd) {
+                  case 'bold':
+                    execCommand('bold');
+                    break;
+                  case 'italic':
+                    execCommand('italic');
+                    break;
+                  case 'underline':
+                    execCommand('underline');
+                    break;
+                  case 'strike':
+                    execCommand('strikeThrough');
+                    break;
+                  case 'code':
+                    applyCode();
+                    break;
+                  case 'unordered-list':
+                    execCommand('insertUnorderedList');
+                    break;
+                  case 'ordered-list':
+                    execCommand('insertOrderedList');
+                    break;
+                  case 'blockquote':
+                    execCommand('formatBlock', 'blockquote');
+                    break;
+                  case 'checklist':
+                    toggleChecklist();
+                    break;
+                  case 'heading1':
+                    applyHeading(1);
+                    break;
+                  case 'heading2':
+                    applyHeading(2);
+                    break;
+                  case 'heading3':
+                    applyHeading(3);
+                    break;
+                  case 'horizontal-rule':
+                    insertHorizontalRule();
+                    break;
+                  case 'link':
+                    insertLink();
+                    break;
+                }
+              };
+              execFn(command.command as RichTextCommand);
             }
-          } else {
-            // Use the exec method from imperative handle
-            const execFn = (cmd: RichTextCommand) => {
-              switch (cmd) {
-                case 'bold':
-                  execCommand('bold');
-                  break;
-                case 'italic':
-                  execCommand('italic');
-                  break;
-                case 'underline':
-                  execCommand('underline');
-                  break;
-                case 'strike':
-                  execCommand('strikeThrough');
-                  break;
-                case 'code':
-                  applyCode();
-                  break;
-                case 'unordered-list':
-                  execCommand('insertUnorderedList');
-                  break;
-                case 'ordered-list':
-                  execCommand('insertOrderedList');
-                  break;
-                case 'blockquote':
-                  execCommand('formatBlock', 'blockquote');
-                  break;
-                case 'checklist':
-                  toggleChecklist();
-                  break;
-                case 'heading1':
-                  applyHeading(1);
-                  break;
-                case 'heading2':
-                  applyHeading(2);
-                  break;
-                case 'heading3':
-                  applyHeading(3);
-                  break;
-                case 'horizontal-rule':
-                  insertHorizontalRule();
-                  break;
-                case 'link':
-                  insertLink();
-                  break;
+          } catch (error) {
+            console.error('Slash command execution failed:', error);
+            // Try to recover gracefully
+            try {
+              if (editorRef.current) {
+                normalizeEditorContent(editorRef.current);
+                emitChange();
               }
-            };
-            execFn(command.command as RichTextCommand);
+            } catch (e) {
+              console.error('Failed to recover from slash command error:', e);
+            }
           }
-        } catch (error) {
-          console.error('Slash command execution failed:', error);
-          // Fallback: insert plain text representation
-          const fallbackText = command.command === 'heading1' ? '# Heading 1\n' : 
-                              command.command === 'heading2' ? '## Heading 2\n' : 
-                              command.command === 'heading3' ? '### Heading 3\n' : 
-                              `# ${command.label}\n`;
-          insertPlainTextAtSelection(fallbackText);
-        }
-        // Force focus for WebView compatibility
-        forceWebViewFocus();
-      }, 20); // Slightly longer delay for WebKit
-    }, [execCommand, applyCode, toggleChecklist, applyHeading, insertHorizontalRule, insertLink, insertPlainTextAtSelection, forceWebViewFocus])
+          // Force focus for WebView compatibility
+          forceWebViewFocus();
+        }, 20); // Slightly longer delay for WebKit
+      } catch (outerError) {
+        console.error('Critical error in executeSlashCommand:', outerError);
+      }
+    }, [execCommand, applyCode, toggleChecklist, applyHeading, insertHorizontalRule, insertLink, insertPlainTextAtSelection, forceWebViewFocus, emitChange, insertCustomBlock, onCustomSlashCommand])
 
     const scrollToHeading = useCallback((headingId: string) => {
       if (!editorRef.current || !headingId) return
@@ -1912,93 +2051,131 @@ const RichTextEditor = forwardRef<RichTextEditorHandle, RichTextEditorProps>(
       if (disabled) return
       event.preventDefault()
 
-      const finalizeInsertion = () => {
-        if (editorRef.current) {
-          normalizeEditorContent(editorRef.current)
-          mergeAdjacentLists(editorRef.current)
+      try {
+        const finalizeInsertion = () => {
+          try {
+            if (editorRef.current) {
+              normalizeEditorContent(editorRef.current)
+              mergeAdjacentLists(editorRef.current)
+            }
+            scheduleChecklistNormalization()
+            emitChange()
+          } catch (error) {
+            console.error('Error finalizing paste:', error);
+          }
         }
-        scheduleChecklistNormalization()
-        emitChange()
-      }
 
-      const html = event.clipboardData.getData('text/html')
-      const text = event.clipboardData.getData('text/plain')
+        const html = event.clipboardData.getData('text/html')
+        const text = event.clipboardData.getData('text/plain')
 
-      if (html) {
-        const sanitized = sanitize(html)
-        if (insertHTMLAtSelection(sanitized)) {
-          finalizeInsertion()
-        }
-        return
-      }
-
-      if (!text) {
-        return
-      }
-
-      if (looksLikeMarkdown(text)) {
-        const selectionSnapshot = saveSelectionUtil()
-        markdownToHtml(text).then((convertedHtml) => {
-          if (selectionSnapshot) {
-            restoreSelectionUtil(selectionSnapshot)
+        if (html) {
+          try {
+            const sanitized = sanitize(html)
+            if (insertHTMLAtSelection(sanitized)) {
+              finalizeInsertion()
+            }
+          } catch (error) {
+            console.error('Error pasting HTML:', error);
+            // Fallback to plain text
+            if (text && insertPlainTextAtSelection(text)) {
+              finalizeInsertion()
+            }
           }
-
-          const sanitized = sanitize(convertedHtml)
-          if (insertHTMLAtSelection(sanitized)) {
-            finalizeInsertion()
-          }
-        })
-        return
-      }
-
-      const trimmed = text.trim()
-      const urlPattern = /^https?:\/\/.+/i
-
-      if (urlPattern.test(trimmed)) {
-        const selection = window.getSelection()
-        const selectedText = selection?.toString()
-
-        if (selectedText && selectedText.length > 0 && selection && selection.rangeCount > 0) {
-          const link = document.createElement('a')
-          link.href = trimmed
-          link.target = '_blank'
-          link.rel = 'noopener noreferrer'
-          link.textContent = selectedText
-
-          const range = selection.getRangeAt(0)
-          range.deleteContents()
-          range.insertNode(link)
-
-          const newRange = document.createRange()
-          if (link.childNodes.length > 0) {
-            newRange.setStart(link, link.childNodes.length)
-          } else {
-            newRange.setStartAfter(link)
-          }
-          newRange.collapse(true)
-          selection.removeAllRanges()
-          selection.addRange(newRange)
-
-          finalizeInsertion()
           return
         }
 
-        const fragment = document.createDocumentFragment()
-        const anchor = document.createElement('a')
-        anchor.href = trimmed
-        anchor.target = '_blank'
-        anchor.rel = 'noopener noreferrer'
-        anchor.textContent = trimmed
-        fragment.appendChild(anchor)
+        if (!text) {
+          return
+        }
 
-        if (insertFragmentAtSelection(fragment)) {
+        if (looksLikeMarkdown(text)) {
+          const selectionSnapshot = saveSelectionUtil()
+          markdownToHtml(text).then((convertedHtml) => {
+            try {
+              if (selectionSnapshot) {
+                restoreSelectionUtil(selectionSnapshot)
+              }
+
+              const sanitized = sanitize(convertedHtml)
+              if (insertHTMLAtSelection(sanitized)) {
+                finalizeInsertion()
+              }
+            } catch (error) {
+              console.error('Error pasting markdown:', error);
+            }
+          }).catch(error => {
+            console.error('Error converting markdown:', error);
+            // Fallback to plain text
+            try {
+              if (insertPlainTextAtSelection(text)) {
+                finalizeInsertion()
+              }
+            } catch (e) {
+              console.error('Error in markdown fallback:', e);
+            }
+          })
+          return
+        }
+
+        const trimmed = text.trim()
+        const urlPattern = /^https?:\/\/.+/i
+
+        if (urlPattern.test(trimmed)) {
+          try {
+            const selection = window.getSelection()
+            const selectedText = selection?.toString()
+
+            if (selectedText && selectedText.length > 0 && selection && selection.rangeCount > 0) {
+              const link = document.createElement('a')
+              link.href = trimmed
+              link.target = '_blank'
+              link.rel = 'noopener noreferrer'
+              link.textContent = selectedText
+
+              const range = selection.getRangeAt(0)
+              range.deleteContents()
+              range.insertNode(link)
+
+              const newRange = document.createRange()
+              if (link.childNodes.length > 0) {
+                newRange.setStart(link, link.childNodes.length)
+              } else {
+                newRange.setStartAfter(link)
+              }
+              newRange.collapse(true)
+              selection.removeAllRanges()
+              selection.addRange(newRange)
+
+              finalizeInsertion()
+              return
+            }
+
+            const fragment = document.createDocumentFragment()
+            const anchor = document.createElement('a')
+            anchor.href = trimmed
+            anchor.target = '_blank'
+            anchor.rel = 'noopener noreferrer'
+            anchor.textContent = trimmed
+            fragment.appendChild(anchor)
+
+            if (insertFragmentAtSelection(fragment)) {
+              finalizeInsertion()
+            }
+          } catch (error) {
+            console.error('Error pasting URL:', error);
+            // Fallback to plain text
+            if (insertPlainTextAtSelection(text)) {
+              finalizeInsertion()
+            }
+          }
+          return
+        }
+
+        if (insertPlainTextAtSelection(text)) {
           finalizeInsertion()
         }
-        return
-      }
-
-      if (insertPlainTextAtSelection(text)) {
-        finalizeInsertion()
+      } catch (error) {
+        console.error('Critical error in handlePaste:', error);
       }
     }
 
