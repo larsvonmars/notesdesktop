@@ -965,9 +965,18 @@ const RichTextEditor = forwardRef<RichTextEditorHandle, RichTextEditorProps>(
             if (blockToConvert.parentNode) {
               blockToConvert.parentNode.replaceChild(heading, blockToConvert);
               
-              // Position cursor at end of heading
+              // CRITICAL FIX: Focus editor immediately after DOM change for Tauri
+              editor.focus();
+              
+              // Position cursor at end of heading with longer delay for Tauri
               setTimeout(() => {
                 try {
+                  // Verify heading is still in DOM (Tauri safety check)
+                  if (!editor.contains(heading)) {
+                    console.warn('Heading was removed from DOM');
+                    return;
+                  }
+                  
                   const newRange = document.createRange();
                   newRange.selectNodeContents(heading);
                   newRange.collapse(false);
@@ -976,10 +985,13 @@ const RichTextEditor = forwardRef<RichTextEditorHandle, RichTextEditorProps>(
                     sel.removeAllRanges();
                     sel.addRange(newRange);
                   }
+                  
+                  // Keep editor focused (not the heading itself)
+                  editor.focus();
                 } catch (e) {
                   console.warn('Failed to position cursor after conversion:', e);
                 }
-              }, 50);
+              }, 80); // Increased from 50ms for better Tauri stability
             }
           } else {
             // No block found - insert new heading
@@ -997,12 +1009,32 @@ const RichTextEditor = forwardRef<RichTextEditorHandle, RichTextEditorProps>(
               heading.id = generateHeadingId('');
             }
             
+            // Add a marker paragraph after heading to prevent cursor jump in Tauri
+            const markerP = document.createElement('p');
+            markerP.appendChild(document.createElement('br'));
+            
             try {
               range.insertNode(heading);
               
-              // Position cursor in heading
+              // Insert marker paragraph immediately after heading
+              if (heading.nextSibling) {
+                heading.parentNode?.insertBefore(markerP, heading.nextSibling);
+              } else {
+                heading.parentNode?.appendChild(markerP);
+              }
+              
+              // CRITICAL FIX: Focus editor immediately after DOM change for Tauri
+              editor.focus();
+              
+              // Position cursor in heading with longer delay for Tauri
               setTimeout(() => {
                 try {
+                  // Verify heading is still in DOM (Tauri safety check)
+                  if (!editor.contains(heading)) {
+                    console.warn('Heading was removed from DOM');
+                    return;
+                  }
+                  
                   const newRange = document.createRange();
                   newRange.selectNodeContents(heading);
                   newRange.collapse(selectedText ? false : true);
@@ -1011,17 +1043,21 @@ const RichTextEditor = forwardRef<RichTextEditorHandle, RichTextEditorProps>(
                     sel.removeAllRanges();
                     sel.addRange(newRange);
                   }
+                  
+                  // Keep editor focused (not the heading itself)
+                  editor.focus();
                 } catch (e) {
                   console.warn('Failed to position cursor after insert:', e);
                 }
-              }, 50);
+              }, 80); // Increased from 50ms for better Tauri stability
             } catch (insertError) {
               console.warn('Failed to insert heading, appending instead:', insertError);
               editor.appendChild(heading);
+              editor.appendChild(markerP);
             }
           }
           
-          // Normalize and emit change
+          // Normalize and emit change with longer delay for Tauri
           setTimeout(() => {
             try {
               if (editor) {
@@ -1039,7 +1075,7 @@ const RichTextEditor = forwardRef<RichTextEditorHandle, RichTextEditorProps>(
             } catch (e) {
               console.warn('Failed to normalize after heading creation:', e);
             }
-          }, 100);
+          }, 150); // Increased from 100ms for better Tauri stability
           
         } catch (error) {
           console.error('Error in applyHeading:', error);
@@ -1387,8 +1423,10 @@ const RichTextEditor = forwardRef<RichTextEditorHandle, RichTextEditorProps>(
       setSelectedCommandIndex(0);
 
       try {
-        // Remove the slash and filter text
+        // Store the current selection state before removing slash
         const selection = window.getSelection();
+        let cursorPosition: { container: Node; offset: number } | null = null;
+        
         if (selection && selection.rangeCount > 0) {
           const range = selection.getRangeAt(0);
           const startContainer = range.startContainer;
@@ -1399,6 +1437,12 @@ const RichTextEditor = forwardRef<RichTextEditorHandle, RichTextEditorProps>(
             
             if (slashIndex !== -1) {
               try {
+                // Store cursor position for heading commands
+                cursorPosition = {
+                  container: startContainer,
+                  offset: slashIndex
+                };
+                
                 // Remove everything from the slash onwards
                 startContainer.textContent = textContent.substring(0, slashIndex);
                 
@@ -1415,12 +1459,24 @@ const RichTextEditor = forwardRef<RichTextEditorHandle, RichTextEditorProps>(
           }
         }
 
+        // CRITICAL FIX for Tauri: Refocus editor immediately after slash removal
+        if (editorRef.current) {
+          editorRef.current.focus();
+        }
+
         // Use setTimeout to ensure DOM is updated before executing command
+        // Increased delay for better Tauri stability
         setTimeout(() => {
           try {
             // Special handling for headings - use the improved applyHeading function
             if (command.command === 'heading1' || command.command === 'heading2' || command.command === 'heading3') {
               const level = command.command === 'heading1' ? 1 : command.command === 'heading2' ? 2 : 3;
+              
+              // CRITICAL FIX: Ensure editor is focused before applying heading
+              if (editorRef.current) {
+                editorRef.current.focus();
+              }
+              
               applyHeading(level);
             } else if (typeof command.command === 'function') {
               // If there is a custom block registered with the same id/type as the slash command,
@@ -1508,7 +1564,7 @@ const RichTextEditor = forwardRef<RichTextEditorHandle, RichTextEditorProps>(
           }
           // Force focus for WebView compatibility
           forceWebViewFocus();
-        }, 20); // Slightly longer delay for WebKit
+        }, 50); // Increased delay for better Tauri stability
       } catch (outerError) {
         console.error('Critical error in executeSlashCommand:', outerError);
       }
