@@ -1,6 +1,6 @@
 'use client'
 
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState, useRef } from 'react'
 import { usePathname, useRouter } from 'next/navigation'
 import {
   Target,
@@ -107,6 +107,7 @@ export default function ProjectsWorkspaceModal({
   const [showFilterMenu, setShowFilterMenu] = useState(false)
   const [recentFolderIds, setRecentFolderIds] = useState<string[]>([])
   const [pinnedFolderIds, setPinnedFolderIds] = useState<string[]>([])
+  const searchInputRef = useRef<HTMLInputElement>(null)
 
   const [isLoading, setIsLoading] = useState(true)
   const [isRefreshing, setIsRefreshing] = useState(false)
@@ -243,9 +244,46 @@ export default function ProjectsWorkspaceModal({
       }
     }
 
+    const handleKeyDown = (event: KeyboardEvent) => {
+      // Global keyboard shortcuts
+      if (event.key === 'Escape') {
+        // Close menus first, then modal
+        if (showFilterMenu || projectMenuId || folderMenuId || noteMenuId) {
+          setShowFilterMenu(false)
+          setProjectMenuId(null)
+          setFolderMenuId(null)
+          setNoteMenuId(null)
+        } else if (folderContentsId) {
+          setFolderContentsId(null)
+        } else {
+          onClose()
+        }
+        event.preventDefault()
+      } else if (event.key === '/' && !event.ctrlKey && !event.metaKey) {
+        // Focus search box unless already in an input
+        const target = event.target as HTMLElement
+        if (target.tagName !== 'INPUT' && target.tagName !== 'TEXTAREA') {
+          searchInputRef.current?.focus()
+          event.preventDefault()
+        }
+      } else if ((event.ctrlKey || event.metaKey) && event.key === 'k') {
+        // Cmd/Ctrl+K to focus search
+        searchInputRef.current?.focus()
+        event.preventDefault()
+      } else if ((event.ctrlKey || event.metaKey) && event.key === 'f') {
+        // Cmd/Ctrl+F to toggle filters
+        setShowFilterMenu(prev => !prev)
+        event.preventDefault()
+      }
+    }
+
     document.addEventListener('mousedown', handleClick)
-    return () => document.removeEventListener('mousedown', handleClick)
-  }, [isOpen])
+    document.addEventListener('keydown', handleKeyDown)
+    return () => {
+      document.removeEventListener('mousedown', handleClick)
+      document.removeEventListener('keydown', handleKeyDown)
+    }
+  }, [isOpen, showFilterMenu, projectMenuId, folderMenuId, noteMenuId, folderContentsId, onClose])
 
   useEffect(() => {
     if (!folderContentsId) return
@@ -989,9 +1027,10 @@ export default function ProjectsWorkspaceModal({
           <div className="flex w-full items-center gap-2 rounded-lg border border-gray-200 bg-white px-3 py-1.5 text-gray-500 focus-within:border-blue-400 focus-within:ring-1 focus-within:ring-blue-400 sm:ml-auto sm:w-auto sm:min-w-[280px] sm:bg-transparent sm:px-0 sm:py-0 sm:focus-within:ring-0 sm:focus-within:border-transparent">
             <Search size={14} className="text-gray-400" />
             <input
+              ref={searchInputRef}
               value={searchTerm}
               onChange={(event) => setSearchTerm(event.target.value)}
-              placeholder="Search notes & folders..."
+              placeholder="Search notes & folders... (/ or ⌘K)"
               className="w-full bg-transparent text-sm text-gray-600 focus:outline-none"
             />
             {searchTerm && (
@@ -999,7 +1038,7 @@ export default function ProjectsWorkspaceModal({
                 type="button"
                 onClick={() => setSearchTerm('')}
                 className="text-gray-400 hover:text-gray-600"
-                title="Clear search"
+                title="Clear search (Esc)"
               >
                 <XCircle size={14} />
               </button>
@@ -1494,6 +1533,29 @@ export default function ProjectsWorkspaceModal({
                 })
               )}
             </div>
+          </div>
+        </div>
+        
+        {/* Keyboard shortcuts footer */}
+        <div className="border-t border-gray-200 bg-gray-50 px-4 py-2 sm:px-6">
+          <div className="flex flex-wrap items-center justify-between gap-2 text-xs text-gray-500">
+            <div className="flex flex-wrap items-center gap-3">
+              <span className="inline-flex items-center gap-1">
+                <kbd className="rounded bg-white px-1.5 py-0.5 font-mono text-xs border border-gray-300">Esc</kbd>
+                Close
+              </span>
+              <span className="inline-flex items-center gap-1">
+                <kbd className="rounded bg-white px-1.5 py-0.5 font-mono text-xs border border-gray-300">/</kbd>
+                or
+                <kbd className="rounded bg-white px-1.5 py-0.5 font-mono text-xs border border-gray-300">⌘K</kbd>
+                Search
+              </span>
+              <span className="inline-flex items-center gap-1">
+                <kbd className="rounded bg-white px-1.5 py-0.5 font-mono text-xs border border-gray-300">⌘F</kbd>
+                Filters
+              </span>
+            </div>
+            <span>{filteredNotes.length} of {notesForActiveProject.length} notes shown</span>
           </div>
         </div>
       </div>
