@@ -895,203 +895,48 @@ const RichTextEditor = forwardRef<RichTextEditorHandle, RichTextEditorProps>(
       }
     }, [disabled, emitChange])
 
-    // Simplified applyHeading function optimized for Tauri WebView
+    /**
+     * Apply heading format - simplified and cleaner implementation
+     * Uses applyBlockFormat from commandDispatcher with proper ID generation
+     */
     const applyHeading = useCallback(
       (level: 1 | 2 | 3) => {
-        if (disabled || !editorRef.current) return;
+        if (disabled || !editorRef.current) return
         
-        try {
-          const editor = editorRef.current;
-          let selection = window.getSelection();
-          
-          // Ensure we have focus and selection
-          if (!selection || selection.rangeCount === 0) {
-            editor.focus();
-            selection = window.getSelection();
+        const editor = editorRef.current
+        
+        // Ensure focus before any operations
+        editor.focus()
+        
+        // Use the commandDispatcher's applyBlockFormat function
+        applyBlockFormat(`h${level}` as 'h1' | 'h2' | 'h3', editor)
+        
+        // Add heading ID after the block format is applied
+        requestAnimationFrame(() => {
+          const selection = window.getSelection()
+          if (selection && selection.rangeCount > 0) {
+            const range = selection.getRangeAt(0)
+            let node: Node | null = range.startContainer
             
-            if (!selection || selection.rangeCount === 0) {
-              // Still no selection - create heading at end
-              const heading = document.createElement(`h${level}`);
-              heading.textContent = '';
-              heading.id = generateHeadingId('');
-              editor.appendChild(heading);
-              
-              setTimeout(() => {
-                try {
-                  const range = document.createRange();
-                  range.selectNodeContents(heading);
-                  range.collapse(true);
-                  const sel = window.getSelection();
-                  if (sel) {
-                    sel.removeAllRanges();
-                    sel.addRange(range);
-                  }
-                  normalizeEditorContent(editor);
-                  emitChange();
-                } catch (e) {
-                  console.warn('Failed to position cursor:', e);
+            // Find the heading element
+            while (node && node !== editor) {
+              if (node.nodeType === Node.ELEMENT_NODE) {
+                const element = node as HTMLElement
+                const tagName = element.tagName?.toLowerCase()
+                if (tagName === `h${level}` && !element.id) {
+                  // Generate and assign ID
+                  element.id = generateHeadingId(element.textContent || '')
+                  break
                 }
-              }, 50);
-              return;
-            }
-          }
-
-          const range = selection.getRangeAt(0);
-          
-          // Simple approach: find or create a block element to convert
-          let blockToConvert: Element | null = null;
-          let node: Node | null = range.startContainer;
-          
-          // Walk up to find a block element
-          while (node && node !== editor) {
-            if (node.nodeType === Node.ELEMENT_NODE) {
-              const tagName = (node as Element).tagName?.toLowerCase();
-              if (tagName && ['p', 'div', 'h1', 'h2', 'h3', 'blockquote'].includes(tagName)) {
-                blockToConvert = node as Element;
-                break;
               }
-            }
-            node = node.parentNode;
-          }
-          
-          if (blockToConvert) {
-            // Convert existing block to heading
-            const heading = document.createElement(`h${level}`);
-            const textContent = blockToConvert.textContent || '';
-            heading.textContent = textContent;
-            heading.id = generateHeadingId(textContent);
-            
-            // Replace the block
-            if (blockToConvert.parentNode) {
-              blockToConvert.parentNode.replaceChild(heading, blockToConvert);
-              
-              // CRITICAL FIX: Focus editor immediately after DOM change for Tauri
-              editor.focus();
-              
-              // Position cursor at end of heading with longer delay for Tauri
-              setTimeout(() => {
-                try {
-                  // Verify heading is still in DOM (Tauri safety check)
-                  if (!editor.contains(heading)) {
-                    console.warn('Heading was removed from DOM');
-                    return;
-                  }
-                  
-                  const newRange = document.createRange();
-                  newRange.selectNodeContents(heading);
-                  newRange.collapse(false);
-                  const sel = window.getSelection();
-                  if (sel) {
-                    sel.removeAllRanges();
-                    sel.addRange(newRange);
-                  }
-                  
-                  // Keep editor focused (not the heading itself)
-                  editor.focus();
-                } catch (e) {
-                  console.warn('Failed to position cursor after conversion:', e);
-                }
-              }, 80); // Increased from 50ms for better Tauri stability
-            }
-          } else {
-            // No block found - insert new heading
-            const heading = document.createElement(`h${level}`);
-            const selectedText = range.toString();
-            
-            if (selectedText) {
-              // User has selected text - use it
-              heading.textContent = selectedText;
-              heading.id = generateHeadingId(selectedText);
-              range.deleteContents();
-            } else {
-              // No selection - create empty heading
-              heading.textContent = '';
-              heading.id = generateHeadingId('');
-            }
-            
-            // Add a marker paragraph after heading to prevent cursor jump in Tauri
-            const markerP = document.createElement('p');
-            markerP.appendChild(document.createElement('br'));
-            
-            try {
-              range.insertNode(heading);
-              
-              // Insert marker paragraph immediately after heading
-              if (heading.nextSibling) {
-                heading.parentNode?.insertBefore(markerP, heading.nextSibling);
-              } else {
-                heading.parentNode?.appendChild(markerP);
-              }
-              
-              // CRITICAL FIX: Focus editor immediately after DOM change for Tauri
-              editor.focus();
-              
-              // Position cursor in heading with longer delay for Tauri
-              setTimeout(() => {
-                try {
-                  // Verify heading is still in DOM (Tauri safety check)
-                  if (!editor.contains(heading)) {
-                    console.warn('Heading was removed from DOM');
-                    return;
-                  }
-                  
-                  const newRange = document.createRange();
-                  newRange.selectNodeContents(heading);
-                  newRange.collapse(selectedText ? false : true);
-                  const sel = window.getSelection();
-                  if (sel) {
-                    sel.removeAllRanges();
-                    sel.addRange(newRange);
-                  }
-                  
-                  // Keep editor focused (not the heading itself)
-                  editor.focus();
-                } catch (e) {
-                  console.warn('Failed to position cursor after insert:', e);
-                }
-              }, 80); // Increased from 50ms for better Tauri stability
-            } catch (insertError) {
-              console.warn('Failed to insert heading, appending instead:', insertError);
-              editor.appendChild(heading);
-              editor.appendChild(markerP);
+              node = node.parentElement
             }
           }
           
-          // Normalize and emit change with longer delay for Tauri
-          setTimeout(() => {
-            try {
-              if (editor) {
-                // Ensure all headings have IDs
-                const headings = editor.querySelectorAll('h1, h2, h3');
-                headings.forEach((h) => {
-                  if (!h.id) {
-                    h.id = generateHeadingId(h.textContent || '');
-                  }
-                });
-                
-                normalizeEditorContent(editor);
-                emitChange();
-              }
-            } catch (e) {
-              console.warn('Failed to normalize after heading creation:', e);
-            }
-          }, 150); // Increased from 100ms for better Tauri stability
-          
-        } catch (error) {
-          console.error('Error in applyHeading:', error);
-          // Simple recovery: append heading at end
-          try {
-            if (editorRef.current) {
-              const heading = document.createElement(`h${level}`);
-              heading.textContent = '';
-              heading.id = generateHeadingId('');
-              editorRef.current.appendChild(heading);
-              emitChange();
-            }
-          } catch (e) {
-            console.error('Failed to recover from heading error:', e);
-          }
-        }
+          // Emit change after heading is created
+          normalizeEditorContent(editor)
+          emitChange()
+        })
       },
       [disabled, emitChange]
     )
@@ -1414,161 +1259,126 @@ const RichTextEditor = forwardRef<RichTextEditorHandle, RichTextEditorProps>(
       }
     }, [showSlashMenu, updateSlashMenuPosition])
 
-    // Improved executeSlashCommand with better stability and error handling
-    const executeSlashCommand = useCallback((command: SlashCommand) => {
-      if (!editorRef.current) return;
-      
-      setShowSlashMenu(false);
-      setSlashMenuFilter('');
-      setSelectedCommandIndex(0);
-
-      try {
-        // Store the current selection state before removing slash
-        const selection = window.getSelection();
-        let cursorPosition: { container: Node; offset: number } | null = null;
-        
-        if (selection && selection.rangeCount > 0) {
-          const range = selection.getRangeAt(0);
-          const startContainer = range.startContainer;
-          
-          if (startContainer.nodeType === Node.TEXT_NODE) {
-            const textContent = startContainer.textContent || '';
-            const slashIndex = textContent.lastIndexOf('/');
-            
-            if (slashIndex !== -1) {
-              try {
-                // Store cursor position for heading commands
-                cursorPosition = {
-                  container: startContainer,
-                  offset: slashIndex
-                };
-                
-                // Remove everything from the slash onwards
-                startContainer.textContent = textContent.substring(0, slashIndex);
-                
-                // Set cursor right after where the slash was
-                const newRange = document.createRange();
-                newRange.setStart(startContainer, slashIndex);
-                newRange.collapse(true);
-                selection.removeAllRanges();
-                selection.addRange(newRange);
-              } catch (e) {
-                console.warn('Failed to remove slash text:', e);
-              }
-            }
-          }
-        }
-
-        // CRITICAL FIX for Tauri: Refocus editor immediately after slash removal
-        if (editorRef.current) {
-          editorRef.current.focus();
-        }
-
-        // Use setTimeout to ensure DOM is updated before executing command
-        // Increased delay for better Tauri stability
-        setTimeout(() => {
-          try {
-            // Special handling for headings - use the improved applyHeading function
-            if (command.command === 'heading1' || command.command === 'heading2' || command.command === 'heading3') {
-              const level = command.command === 'heading1' ? 1 : command.command === 'heading2' ? 2 : 3;
-              
-              // CRITICAL FIX: Ensure editor is focused before applying heading
-              if (editorRef.current) {
-                editorRef.current.focus();
-              }
-              
-              applyHeading(level);
-            } else if (typeof command.command === 'function') {
-              // If there is a custom block registered with the same id/type as the slash command,
-              // insert it via the custom block API. This allows slash commands to map to custom blocks.
-              const descriptors = customBlocksRef.current || []
-              const desc = descriptors.find((d) => d.type === command.id)
-              if (desc) {
-                // If it's table, show dialog to configure rows/cols first
-                if (command.id === 'table') {
-                  setTableRows(3)
-                  setTableCols(3)
-                  setShowTableDialog(true)
-                } else if (command.id === 'note-link' && onCustomSlashCommand) {
-                  // For note-link, call the parent's handler to show note selector
-                  onCustomSlashCommand('note-link')
-                } else {
-                  // Provide a few sensible defaults for known block types
-                  let payload: any = undefined
-                  insertCustomBlock(command.id, payload)
-                }
-              } else {
-                command.command();
-              }
-            } else {
-              // Use the exec method from imperative handle
-              const execFn = (cmd: RichTextCommand) => {
-                switch (cmd) {
-                  case 'bold':
-                    execCommand('bold');
-                    break;
-                  case 'italic':
-                    execCommand('italic');
-                    break;
-                  case 'underline':
-                    execCommand('underline');
-                    break;
-                  case 'strike':
-                    execCommand('strikeThrough');
-                    break;
-                  case 'code':
-                    applyCode();
-                    break;
-                  case 'unordered-list':
-                    execCommand('insertUnorderedList');
-                    break;
-                  case 'ordered-list':
-                    execCommand('insertOrderedList');
-                    break;
-                  case 'blockquote':
-                    execCommand('formatBlock', 'blockquote');
-                    break;
-                  case 'checklist':
-                    toggleChecklist();
-                    break;
-                  case 'heading1':
-                    applyHeading(1);
-                    break;
-                  case 'heading2':
-                    applyHeading(2);
-                    break;
-                  case 'heading3':
-                    applyHeading(3);
-                    break;
-                  case 'horizontal-rule':
-                    insertHorizontalRule();
-                    break;
-                  case 'link':
-                    insertLink();
-                    break;
-                }
-              };
-              execFn(command.command as RichTextCommand);
-            }
-          } catch (error) {
-            console.error('Slash command execution failed:', error);
-            // Try to recover gracefully
-            try {
-              if (editorRef.current) {
-                normalizeEditorContent(editorRef.current);
-                emitChange();
-              }
-            } catch (e) {
-              console.error('Failed to recover from slash command error:', e);
-            }
-          }
-          // Force focus for WebView compatibility
-          forceWebViewFocus();
-        }, 50); // Increased delay for better Tauri stability
-      } catch (outerError) {
-        console.error('Critical error in executeSlashCommand:', outerError);
+    /**
+     * Execute a rich text command
+     * Extracted for reuse by executeSlashCommand and imperative handle
+     */
+    const executeRichTextCommand = useCallback((cmd: RichTextCommand) => {
+      switch (cmd) {
+        case 'bold':
+          execCommand('bold')
+          break
+        case 'italic':
+          execCommand('italic')
+          break
+        case 'underline':
+          execCommand('underline')
+          break
+        case 'strike':
+          execCommand('strikeThrough')
+          break
+        case 'code':
+          applyCode()
+          break
+        case 'unordered-list':
+          execCommand('insertUnorderedList')
+          break
+        case 'ordered-list':
+          execCommand('insertOrderedList')
+          break
+        case 'blockquote':
+          execCommand('formatBlock', 'blockquote')
+          break
+        case 'checklist':
+          toggleChecklist()
+          break
+        case 'heading1':
+          applyHeading(1)
+          break
+        case 'heading2':
+          applyHeading(2)
+          break
+        case 'heading3':
+          applyHeading(3)
+          break
+        case 'horizontal-rule':
+          insertHorizontalRule()
+          break
+        case 'link':
+          insertLink()
+          break
+        case 'undo':
+          historyManagerRef.current?.undo()
+          break
+        case 'redo':
+          historyManagerRef.current?.redo()
+          break
       }
-    }, [execCommand, applyCode, toggleChecklist, applyHeading, insertHorizontalRule, insertLink, insertPlainTextAtSelection, forceWebViewFocus, emitChange, insertCustomBlock, onCustomSlashCommand])
+    }, [execCommand, applyCode, toggleChecklist, applyHeading, insertHorizontalRule, insertLink])
+
+    /**
+     * Execute slash command - simplified implementation
+     * Removes the slash text and executes the corresponding command
+     */
+    const executeSlashCommand = useCallback((command: SlashCommand) => {
+      if (!editorRef.current) return
+      
+      const editor = editorRef.current
+      
+      // Hide slash menu
+      setShowSlashMenu(false)
+      setSlashMenuFilter('')
+      setSelectedCommandIndex(0)
+
+      // Remove slash text from editor
+      const selection = window.getSelection()
+      if (selection && selection.rangeCount > 0) {
+        const range = selection.getRangeAt(0)
+        const textNode = range.startContainer
+        
+        if (textNode.nodeType === Node.TEXT_NODE && textNode.textContent) {
+          const slashIndex = textNode.textContent.lastIndexOf('/')
+          if (slashIndex !== -1) {
+            // Remove slash and any text after it
+            textNode.textContent = textNode.textContent.substring(0, slashIndex)
+            
+            // Position cursor after deletion
+            const newRange = document.createRange()
+            newRange.setStart(textNode, slashIndex)
+            newRange.collapse(true)
+            selection.removeAllRanges()
+            selection.addRange(newRange)
+          }
+        }
+      }
+
+      // Execute command based on type
+      editor.focus()
+      
+      if (typeof command.command === 'function') {
+        // Custom function command
+        const descriptors = customBlocksRef.current || []
+        const desc = descriptors.find((d) => d.type === command.id)
+        
+        if (desc) {
+          // Handle custom blocks
+          if (command.id === 'table') {
+            setTableRows(3)
+            setTableCols(3)
+            setShowTableDialog(true)
+          } else if (command.id === 'note-link' && onCustomSlashCommand) {
+            onCustomSlashCommand('note-link')
+          } else {
+            insertCustomBlock(command.id, undefined)
+          }
+        } else {
+          command.command()
+        }
+      } else {
+        // Built-in RichTextCommand
+        executeRichTextCommand(command.command as RichTextCommand)
+      }
+    }, [executeRichTextCommand, insertCustomBlock, onCustomSlashCommand])
 
     const scrollToHeading = useCallback((headingId: string) => {
       if (!editorRef.current || !headingId) return
@@ -1659,61 +1469,10 @@ const RichTextEditor = forwardRef<RichTextEditorHandle, RichTextEditorProps>(
           })
         },
         exec: (command: RichTextCommand) => {
-          switch (command) {
-            case 'bold':
-              execCommand('bold')
-              break
-            case 'italic':
-              execCommand('italic')
-              break
-            case 'underline':
-              execCommand('underline')
-              break
-            case 'strike':
-              execCommand('strikeThrough')
-              break
-            case 'code':
-              applyCode()
-              break
-            case 'unordered-list':
-              execCommand('insertUnorderedList')
-              break
-            case 'ordered-list':
-              execCommand('insertOrderedList')
-              break
-            case 'blockquote':
-              execCommand('formatBlock', 'blockquote')
-              break
-            case 'checklist':
-              toggleChecklist()
-              break
-            case 'heading1':
-              applyHeading(1)
-              break
-            case 'heading2':
-              applyHeading(2)
-              break
-            case 'heading3':
-              applyHeading(3)
-              break
-            case 'horizontal-rule':
-              insertHorizontalRule()
-              break
-            case 'link':
-              insertLink()
-              break
-            case 'undo':
-              historyManagerRef.current?.undo()
-              break
-            case 'redo':
-              historyManagerRef.current?.redo()
-              break
-            default:
-              break
-          }
+          executeRichTextCommand(command)
         }
       }),
-      [applyCode, execCommand, sanitize, toggleChecklist, applyHeading, getHeadings, insertLink, insertHorizontalRule, scrollToHeading]
+      [applyCode, execCommand, sanitize, toggleChecklist, applyHeading, getHeadings, insertLink, insertHorizontalRule, scrollToHeading, executeRichTextCommand]
     )
 
     // Initialize history manager
