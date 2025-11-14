@@ -4,7 +4,14 @@ import { useAuth } from '@/lib/auth-context'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { useEffect, useState, useRef, useCallback, Suspense } from 'react'
 import NoteEditor, { Note } from '@/components/NoteEditor'
-import { Loader2, FileEdit, Sparkles } from 'lucide-react'
+import TaskCalendarModal from '@/components/TaskCalendarModal'
+import { Loader2, FileEdit, Sparkles, FileText, PenTool, Network, X } from 'lucide-react'
+import type { NoteType } from '@/lib/notes'
+
+type NoteCreationContext = {
+  folderArg?: string | null
+  projectArg?: string | null
+}
 import { useToast } from '@/components/ToastProvider'
 import {
   getNotesByFolder,
@@ -41,12 +48,16 @@ function WorkspaceContent() {
   const [isLoadingFolders, setIsLoadingFolders] = useState(true)
   const [isCreatingNew, setIsCreatingNew] = useState(false)
   const [newNoteType, setNewNoteType] = useState<'rich-text' | 'drawing' | 'mindmap'>('rich-text')
+  const [pendingNoteContext, setPendingNoteContext] = useState<NoteCreationContext | null>(null)
   // Create-folder modal state (replace window.prompt for Tauri compatibility)
   const suppressRealtimeRef = useRef(false)
   const [showCreateFolderModal, setShowCreateFolderModal] = useState(false)
   const [createFolderParentId, setCreateFolderParentId] = useState<string | null>(null)
   const [newFolderName, setNewFolderName] = useState('')
   const createFolderInputRef = useRef<HTMLInputElement | null>(null)
+  
+  // Task Calendar modal state
+  const [showTaskCalendar, setShowTaskCalendar] = useState(false)
 
   const updateFolderParam = useCallback((folderId: string | null) => {
     if (typeof window === 'undefined') return
@@ -121,6 +132,22 @@ function WorkspaceContent() {
       loadNotesInFolder(selectedFolderId)
     }
   }, [selectedFolderId, user])
+
+  useEffect(() => {
+    if (!pendingNoteContext) return
+
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        event.preventDefault()
+        setPendingNoteContext(null)
+      }
+    }
+
+    document.addEventListener('keydown', handleKeyDown)
+    return () => {
+      document.removeEventListener('keydown', handleKeyDown)
+    }
+  }, [pendingNoteContext])
 
   // Subscribe to real-time updates
   useEffect(() => {
@@ -286,22 +313,59 @@ function WorkspaceContent() {
     }
   }
 
-  const handleNewNote = (
-    noteType: 'rich-text' | 'drawing' | 'mindmap' = 'rich-text',
-    folderId?: string | null,
-    projectId?: string | null
-  ) => {
-    if (folderId !== undefined) {
-      const options = projectId !== undefined ? { projectId, preserveDraftState: true } : { preserveDraftState: true }
-      applyFolderSelection(folderId, options)
-    } else if (projectId !== undefined) {
-      setSelectedProjectId(projectId)
+  const startNewNote = (type: NoteType, context: NoteCreationContext = {}) => {
+    setPendingNoteContext(null)
+    const { folderArg, projectArg } = context
+
+    if (folderArg !== undefined) {
+      const options = projectArg !== undefined
+        ? { projectId: projectArg, preserveDraftState: true }
+        : { preserveDraftState: true }
+      applyFolderSelection(folderArg, options)
+    } else if (projectArg !== undefined) {
+      setSelectedProjectId(projectArg)
       updateFolderParam(selectedFolderId)
     }
 
     setSelectedNote(null)
     setIsCreatingNew(true)
-    setNewNoteType(noteType)
+    setNewNoteType(type)
+  }
+
+  const handleNewNote = (
+    noteType?: NoteType,
+    folderId?: string | null,
+    projectId?: string | null
+  ) => {
+    const context: NoteCreationContext = {}
+    if (folderId !== undefined) {
+      context.folderArg = folderId
+    }
+    if (projectId !== undefined) {
+      context.projectArg = projectId
+    }
+
+    if (!noteType) {
+      setPendingNoteContext(context)
+      return
+    }
+
+    startNewNote(noteType, context)
+  }
+
+  const handleSelectNoteType = (type: NoteType) => {
+    if (!pendingNoteContext) {
+      startNewNote(type)
+      return
+    }
+
+    const context = pendingNoteContext
+    setPendingNoteContext(null)
+    startNewNote(type, context)
+  }
+
+  const handleCancelNoteTypePrompt = () => {
+    setPendingNoteContext(null)
   }
 
   const handleSelectNote = (note: Note) => {
@@ -526,6 +590,30 @@ function WorkspaceContent() {
 
   const autoOpenPanelKey = !isCreatingNew && !selectedNote && selectedFolderId !== null ? selectedFolderId : undefined
 
+  const noteTypeOptions = [
+    {
+      type: 'rich-text' as NoteType,
+      label: 'Text Note',
+      description: 'Write with rich formatting, tables, and note links.',
+      icon: FileText,
+      iconBg: 'bg-blue-100 text-blue-600',
+    },
+    {
+      type: 'drawing' as NoteType,
+      label: 'Drawing Note',
+      description: 'Sketch ideas with multi-page canvas tools.',
+      icon: PenTool,
+      iconBg: 'bg-purple-100 text-purple-600',
+    },
+    {
+      type: 'mindmap' as NoteType,
+      label: 'Mind Map',
+      description: 'Visualize concepts and relationships quickly.',
+      icon: Network,
+      iconBg: 'bg-green-100 text-green-600',
+    },
+  ]
+
   return (
     <div className="min-h-screen bg-white flex flex-col">
       {/* Main content area - completely clean */}
@@ -554,6 +642,7 @@ function WorkspaceContent() {
             onSignOut={handleSignOut}
             userEmail={user.email}
             autoOpenPanelKey={autoOpenPanelKey}
+            onOpenTaskCalendar={() => setShowTaskCalendar(true)}
           />
         ) : (
           <div className="flex items-center justify-center h-full">
@@ -568,7 +657,7 @@ function WorkspaceContent() {
               </p>
               <div className="space-y-3">
                 <button
-                  onClick={() => handleNewNote('rich-text')}
+                  onClick={() => handleNewNote()}
                   className="w-full inline-flex items-center justify-center gap-3 px-6 py-3 bg-blue-600 text-white font-medium rounded-lg hover:bg-blue-700 transition-all duration-150 shadow-sm hover:shadow active:scale-95"
                 >
                   <Sparkles size={20} />
@@ -580,6 +669,61 @@ function WorkspaceContent() {
           </div>
         )}
       </main>
+
+      {pendingNoteContext !== null && (
+        <div
+          className="fixed inset-0 z-[60] flex items-center justify-center bg-black/50 p-4"
+          onClick={(event) => {
+            if (event.target === event.currentTarget) {
+              handleCancelNoteTypePrompt()
+            }
+          }}
+        >
+          <div
+            className="w-full max-w-3xl rounded-2xl border border-gray-200 bg-white p-6 shadow-2xl"
+            onClick={(event) => event.stopPropagation()}
+          >
+            <div className="flex items-start justify-between gap-4">
+              <div>
+                <h3 className="text-lg font-semibold text-gray-900">Choose a note type</h3>
+                <p className="mt-1 text-sm text-gray-600">Pick how you want to start so we can set up the right editor.</p>
+              </div>
+              <button
+                onClick={handleCancelNoteTypePrompt}
+                className="rounded-full p-2 text-gray-500 transition hover:bg-gray-100 hover:text-gray-900"
+                aria-label="Close note type picker"
+              >
+                <X size={18} />
+              </button>
+            </div>
+            <div className="mt-6 grid gap-3 sm:grid-cols-3">
+              {noteTypeOptions.map(({ type, label, description, icon: Icon, iconBg }) => (
+                <button
+                  key={type}
+                  onClick={() => handleSelectNoteType(type)}
+                  className="flex h-full flex-col gap-4 rounded-xl border border-gray-200 bg-white p-4 text-left transition hover:border-blue-300 hover:shadow"
+                >
+                  <span className={`inline-flex h-10 w-10 items-center justify-center rounded-full ${iconBg}`}>
+                    <Icon size={18} />
+                  </span>
+                  <div>
+                    <div className="text-sm font-semibold text-gray-900">{label}</div>
+                    <p className="mt-1 text-xs text-gray-500">{description}</p>
+                  </div>
+                </button>
+              ))}
+            </div>
+            <div className="mt-6 flex justify-end">
+              <button
+                onClick={handleCancelNoteTypePrompt}
+                className="rounded-lg border border-gray-300 px-4 py-2 text-sm font-medium text-gray-600 transition hover:bg-gray-50"
+              >
+                Cancel
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Create Folder Modal (in-app) */}
       {showCreateFolderModal && (
@@ -616,6 +760,14 @@ function WorkspaceContent() {
           </div>
         </div>
       )}
+      
+      {/* Task & Calendar Modal */}
+      <TaskCalendarModal
+        isOpen={showTaskCalendar}
+        onClose={() => setShowTaskCalendar(false)}
+        linkedNoteId={selectedNote?.id}
+        linkedProjectId={selectedProjectId || undefined}
+      />
     </div>
   )
 }
