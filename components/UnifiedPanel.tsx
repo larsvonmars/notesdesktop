@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useRef, useEffect, useCallback } from 'react'
+import { useState, useRef, useEffect, useCallback, useMemo } from 'react'
 import {
   Menu,
   X,
@@ -137,8 +137,9 @@ export default function UnifiedPanel({
   const [taskStats, setTaskStats] = useState<TaskStats | null>(null)
   const [isLoadingTasks, setIsLoadingTasks] = useState(false)
   const [quickTaskTitle, setQuickTaskTitle] = useState('')
+  const [taskFilter, setTaskFilter] = useState<'all' | 'starred' | 'today' | 'overdue'>('all')
   const ALL_FOLDER_KEY = '__ALL__'
-  const folderKey = (folderId: string | null) => folderId ?? ALL_FOLDER_KEY
+  const folderKey = useCallback((folderId: string | null) => folderId ?? ALL_FOLDER_KEY, [])
   const [expandedFolders, setExpandedFolders] = useState<Set<string>>(
     () => new Set([ALL_FOLDER_KEY])
   )
@@ -167,14 +168,7 @@ export default function UnifiedPanel({
   const [hoverFolderId, setHoverFolderId] = useState<string | null>(null)
   const lastAutoOpenKey = useRef<string | number | undefined>(undefined)
 
-  // Load tasks when panel opens or tab changes
-  useEffect(() => {
-    if (isOpen && activeTab === 'tasks') {
-      loadTasks()
-    }
-  }, [isOpen, activeTab])
-
-  const loadTasks = async () => {
+  const loadTasks = useCallback(async () => {
     setIsLoadingTasks(true)
     try {
       const [tasksData, statsData] = await Promise.all([
@@ -192,9 +186,16 @@ export default function UnifiedPanel({
     } finally {
       setIsLoadingTasks(false)
     }
-  }
+  }, [note?.id, note?.project_id])
 
-  const handleQuickAddTask = async () => {
+  // Load tasks when panel opens or tab changes
+  useEffect(() => {
+    if (isOpen && activeTab === 'tasks') {
+      loadTasks()
+    }
+  }, [isOpen, activeTab, loadTasks])
+
+  const handleQuickAddTask = useCallback(async () => {
     if (!quickTaskTitle.trim()) return
 
     try {
@@ -207,9 +208,9 @@ export default function UnifiedPanel({
     } catch (error) {
       console.error('Failed to create task:', error)
     }
-  }
+  }, [quickTaskTitle, note?.id, note?.project_id, loadTasks])
 
-  const handleToggleTaskComplete = async (taskId: string, isCompleted: boolean) => {
+  const handleToggleTaskComplete = useCallback(async (taskId: string, isCompleted: boolean) => {
     try {
       if (isCompleted) {
         await uncompleteTask(taskId)
@@ -220,16 +221,40 @@ export default function UnifiedPanel({
     } catch (error) {
       console.error('Failed to toggle task:', error)
     }
-  }
+  }, [loadTasks])
 
-  const handleToggleTaskStar = async (taskId: string, isStarred: boolean) => {
+  const handleToggleTaskStar = useCallback(async (taskId: string, isStarred: boolean) => {
     try {
       await toggleTaskStar(taskId, !isStarred)
       await loadTasks()
     } catch (error) {
       console.error('Failed to toggle star:', error)
     }
-  }
+  }, [loadTasks])
+
+  // Filter tasks based on selected filter
+  const filteredTasks = useMemo(() => {
+    const now = new Date()
+    const today = new Date(now.getFullYear(), now.getMonth(), now.getDate())
+    
+    return tasks.filter(task => {
+      switch (taskFilter) {
+        case 'starred':
+          return task.is_starred
+        case 'today':
+          if (!task.due_date) return false
+          const dueDate = new Date(task.due_date)
+          const dueDateOnly = new Date(dueDate.getFullYear(), dueDate.getMonth(), dueDate.getDate())
+          return dueDateOnly.getTime() === today.getTime()
+        case 'overdue':
+          if (!task.due_date || task.status === 'completed') return false
+          return new Date(task.due_date) < now
+        case 'all':
+        default:
+          return true
+      }
+    })
+  }, [tasks, taskFilter])
 
   // Keyboard shortcuts
   useEffect(() => {
@@ -280,7 +305,7 @@ export default function UnifiedPanel({
         error: undefined,
       },
     }))
-  }, [notes, selectedFolderId, isLoadingNotes])
+  }, [notes, selectedFolderId, isLoadingNotes, folderKey])
 
   const loadFolderNotes = useCallback(
     async (targetFolderId: string | null) => {
@@ -321,10 +346,10 @@ export default function UnifiedPanel({
         }))
       }
     },
-    [folderNotesData, notes, selectedFolderId]
+    [folderNotesData, notes, selectedFolderId, folderKey]
   )
 
-  const handleFolderToggle = (targetFolderId: string | null) => {
+  const handleFolderToggle = useCallback((targetFolderId: string | null) => {
     const key = folderKey(targetFolderId)
     const isExpanded = expandedFolders.has(key)
     setExpandedFolders((prev) => {
@@ -340,7 +365,7 @@ export default function UnifiedPanel({
     if (!isExpanded) {
       loadFolderNotes(targetFolderId)
     }
-  }
+  }, [folderKey, expandedFolders, loadFolderNotes])
 
   const getFolderPathKeys = useCallback(
     (targetId: string): string[] | null => {
@@ -359,7 +384,7 @@ export default function UnifiedPanel({
 
       return traverse(folders)
     },
-    [folders]
+    [folders, folderKey]
   )
 
   const getFolderPathNames = useCallback(
@@ -429,7 +454,112 @@ export default function UnifiedPanel({
     }
   }, [getFolderPathKeys, selectedFolderId])
 
-  const renderFolder = (folder: FolderNode, level: number = 0) => {
+  // Context menu handlers with smart positioning
+  const handleFolderContextMenu = useCallback((e: React.MouseEvent, folderId: string, folderName: string) => {
+    e.preventDefault()
+    e.stopPropagation()
+    
+    // Calculate position to keep menu in viewport
+    const menuWidth = 200
+    const menuHeight = 250 // Approximate max height
+    const x = Math.min(e.clientX, window.innerWidth - menuWidth - 10)
+    const y = Math.min(e.clientY, window.innerHeight - menuHeight - 10)
+    
+    setContextMenu({
+      x,
+      y,
+      type: 'folder',
+      id: folderId,
+      name: folderName,
+    })
+  }, [])
+
+  const handleNoteContextMenu = useCallback((e: React.MouseEvent, note: Note) => {
+    e.preventDefault()
+    e.stopPropagation()
+    
+    // Calculate position to keep menu in viewport
+    const menuWidth = 200
+    const menuHeight = 180 // Approximate max height
+    const x = Math.min(e.clientX, window.innerWidth - menuWidth - 10)
+    const y = Math.min(e.clientY, window.innerHeight - menuHeight - 10)
+    
+    setContextMenu({
+      x,
+      y,
+      type: 'note',
+      id: note.id,
+      name: note.title || 'Untitled',
+    })
+  }, [])
+
+  // Drag and drop handlers for moving notes
+  const handleNoteDragStart = useCallback((e: React.DragEvent, noteId: string) => {
+    e.dataTransfer.setData('text/plain', noteId)
+    e.dataTransfer.effectAllowed = 'move'
+    // Add visual feedback
+    if (e.currentTarget instanceof HTMLElement) {
+      e.currentTarget.style.opacity = '0.5'
+    }
+  }, [])
+  
+  const handleNoteDragEnd = useCallback((e: React.DragEvent) => {
+    // Reset visual feedback
+    if (e.currentTarget instanceof HTMLElement) {
+      e.currentTarget.style.opacity = '1'
+    }
+    setHoverFolderId(null)
+  }, [])
+
+  const handleFolderDragOver = useCallback((e: React.DragEvent) => {
+    e.preventDefault()
+    e.dataTransfer.dropEffect = 'move'
+  }, [])
+
+  const handleFolderDragEnter = useCallback((e: React.DragEvent, targetFolderId: string | null) => {
+    e.preventDefault()
+    // Only set hover if we're entering the target element itself
+    if (e.currentTarget === e.target) {
+      setHoverFolderId(targetFolderId === null ? ALL_FOLDER_KEY : folderKey(targetFolderId))
+    }
+  }, [folderKey, ALL_FOLDER_KEY])
+
+  const handleFolderDragLeave = useCallback((e: React.DragEvent) => {
+    e.preventDefault()
+    // Only clear hover if we're actually leaving the element
+    if (e.currentTarget === e.target || !e.currentTarget.contains(e.relatedTarget as Node)) {
+      setHoverFolderId(null)
+    }
+  }, [])
+
+  const handleFolderDrop = useCallback(async (e: React.DragEvent, targetFolderId: string | null) => {
+    e.preventDefault()
+    setHoverFolderId(null)
+    
+    const noteId = e.dataTransfer.getData('text/plain')
+    if (!noteId) return
+    
+    // Avoid moving into same folder if we can determine it
+    const note = notes.find(n => n.id === noteId)
+    const currentFolder = note?.folder_id ?? null
+    
+    if (currentFolder === targetFolderId) {
+      // Note is already in this folder
+      return
+    }
+    
+    if (onMoveNote) {
+      try {
+        await onMoveNote(noteId, targetFolderId)
+      } catch (error) {
+        console.error('Failed to move note:', error)
+        // Error handling is done in the parent component
+      }
+    }
+    setContextMenu(null)
+  }, [notes, onMoveNote])
+
+  const renderFolder = useCallback((folder: FolderNode, level: number = 0) => {
     const key = folderKey(folder.id)
     const isExpanded = expandedFolders.has(key)
     const isSelected = selectedFolderId === folder.id
@@ -464,12 +594,15 @@ export default function UnifiedPanel({
               isSelected ? 'bg-blue-50 text-blue-700 font-medium shadow-sm' : 'hover:bg-gray-50 text-gray-700'
             } ${hoverFolderId === folderKey(folder.id) ? 'ring-2 ring-blue-400 bg-blue-50 shadow-sm' : ''}`}
             style={{ paddingLeft: `${level * 12 + 8}px` }}
+            aria-expanded={isExpanded}
+            aria-label={`Folder: ${folder.name}, ${noteCount} notes`}
           >
             <ChevronRight
               size={14}
               className={`flex-shrink-0 transition-transform duration-200 ${isExpanded ? 'rotate-90' : ''} ${hasChildren ? 'text-gray-600' : 'text-gray-300'}`}
+              aria-hidden="true"
             />
-            <FolderTreeIcon size={14} className={`flex-shrink-0 ${isExpanded ? 'text-blue-500' : 'text-gray-500'}`} />
+            <FolderTreeIcon size={14} className={`flex-shrink-0 ${isExpanded ? 'text-blue-500' : 'text-gray-500'}`} aria-hidden="true" />
             <span className="text-sm truncate flex-1">{folder.name}</span>
             {isLoadingFolder && <span className="text-xs text-gray-400">Loading...</span>}
             {noteCount > 0 && !isLoadingFolder && (
@@ -484,6 +617,7 @@ export default function UnifiedPanel({
               }}
               className="hidden group-hover:flex p-1 hover:bg-gray-200 rounded transition-colors"
               title="Folder options"
+              aria-label={`Options for ${folder.name}`}
             >
               <MoreVertical size={14} />
             </button>
@@ -498,7 +632,7 @@ export default function UnifiedPanel({
                   Loading notes...
                 </div>
               ) : folderError ? (
-                <div className="text-xs text-red-500 py-1.5 px-2">
+                <div className="text-xs text-red-500 py-1.5 px-2" role="alert">
                   {folderError}
                 </div>
               ) : visibleNotes.length === 0 ? (
@@ -522,15 +656,17 @@ export default function UnifiedPanel({
                         ? 'bg-blue-100 text-blue-700 font-medium shadow-sm'
                         : 'hover:bg-gray-50 text-gray-700 hover:shadow-sm'
                     }`}
+                    aria-label={`Note: ${n.title || 'Untitled'}`}
+                    aria-current={selectedNoteId === n.id ? 'page' : undefined}
                   >
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center gap-1.5">
                         {n.note_type === 'drawing' ? (
-                          <PenTool size={12} className="text-purple-500 flex-shrink-0" />
+                          <PenTool size={12} className="text-purple-500 flex-shrink-0" aria-hidden="true" />
                         ) : n.note_type === 'mindmap' ? (
-                          <Network size={12} className="text-green-500 flex-shrink-0" />
+                          <Network size={12} className="text-green-500 flex-shrink-0" aria-hidden="true" />
                         ) : (
-                          <FileText size={12} className="text-blue-500 flex-shrink-0" />
+                          <FileText size={12} className="text-blue-500 flex-shrink-0" aria-hidden="true" />
                         )}
                         <div className="text-sm truncate">{n.title || 'Untitled'}</div>
                       </div>
@@ -545,6 +681,7 @@ export default function UnifiedPanel({
                       }}
                       className="hidden group-hover:flex p-0.5 hover:bg-gray-200 rounded transition-colors flex-shrink-0"
                       title="Note options"
+                      aria-label={`Options for ${n.title || 'Untitled'}`}
                     >
                       <MoreVertical size={12} />
                     </button>
@@ -563,7 +700,7 @@ export default function UnifiedPanel({
         </div>
       </div>
     )
-  }
+  }, [expandedFolders, selectedFolderId, folderNotesData, hoverFolderId, selectedNoteId, handleFolderToggle, handleFolderContextMenu, handleFolderDragOver, handleFolderDragEnter, handleFolderDragLeave, handleFolderDrop, handleNoteDragStart, handleNoteDragEnd, onSelectNote, handleNoteContextMenu, folderKey])
 
   const allNotesEntry = folderNotesData[ALL_FOLDER_KEY]
   const isAllExpanded = expandedFolders.has(ALL_FOLDER_KEY)
@@ -572,111 +709,6 @@ export default function UnifiedPanel({
   const allNotes = allNotesEntry?.notes ?? []
   const displayedAllNotes = allNotes
   const allError = allNotesEntry?.error
-
-  // Context menu handlers with smart positioning
-  const handleFolderContextMenu = (e: React.MouseEvent, folderId: string, folderName: string) => {
-    e.preventDefault()
-    e.stopPropagation()
-    
-    // Calculate position to keep menu in viewport
-    const menuWidth = 200
-    const menuHeight = 250 // Approximate max height
-    const x = Math.min(e.clientX, window.innerWidth - menuWidth - 10)
-    const y = Math.min(e.clientY, window.innerHeight - menuHeight - 10)
-    
-    setContextMenu({
-      x,
-      y,
-      type: 'folder',
-      id: folderId,
-      name: folderName,
-    })
-  }
-
-  const handleNoteContextMenu = (e: React.MouseEvent, note: Note) => {
-    e.preventDefault()
-    e.stopPropagation()
-    
-    // Calculate position to keep menu in viewport
-    const menuWidth = 200
-    const menuHeight = 180 // Approximate max height
-    const x = Math.min(e.clientX, window.innerWidth - menuWidth - 10)
-    const y = Math.min(e.clientY, window.innerHeight - menuHeight - 10)
-    
-    setContextMenu({
-      x,
-      y,
-      type: 'note',
-      id: note.id,
-      name: note.title || 'Untitled',
-    })
-  }
-
-  // Drag and drop handlers for moving notes
-  const handleNoteDragStart = (e: React.DragEvent, noteId: string) => {
-    e.dataTransfer.setData('text/plain', noteId)
-    e.dataTransfer.effectAllowed = 'move'
-    // Add visual feedback
-    if (e.currentTarget instanceof HTMLElement) {
-      e.currentTarget.style.opacity = '0.5'
-    }
-  }
-  
-  const handleNoteDragEnd = (e: React.DragEvent) => {
-    // Reset visual feedback
-    if (e.currentTarget instanceof HTMLElement) {
-      e.currentTarget.style.opacity = '1'
-    }
-    setHoverFolderId(null)
-  }
-
-  const handleFolderDragOver = (e: React.DragEvent) => {
-    e.preventDefault()
-    e.dataTransfer.dropEffect = 'move'
-  }
-
-  const handleFolderDragEnter = (e: React.DragEvent, targetFolderId: string | null) => {
-    e.preventDefault()
-    // Only set hover if we're entering the target element itself
-    if (e.currentTarget === e.target) {
-      setHoverFolderId(targetFolderId === null ? ALL_FOLDER_KEY : folderKey(targetFolderId))
-    }
-  }
-
-  const handleFolderDragLeave = (e: React.DragEvent) => {
-    e.preventDefault()
-    // Only clear hover if we're actually leaving the element
-    if (e.currentTarget === e.target || !e.currentTarget.contains(e.relatedTarget as Node)) {
-      setHoverFolderId(null)
-    }
-  }
-
-  const handleFolderDrop = async (e: React.DragEvent, targetFolderId: string | null) => {
-    e.preventDefault()
-    setHoverFolderId(null)
-    
-    const noteId = e.dataTransfer.getData('text/plain')
-    if (!noteId) return
-    
-    // Avoid moving into same folder if we can determine it
-    const note = notes.find(n => n.id === noteId)
-    const currentFolder = note?.folder_id ?? null
-    
-    if (currentFolder === targetFolderId) {
-      // Note is already in this folder
-      return
-    }
-    
-    if (onMoveNote) {
-      try {
-        await onMoveNote(noteId, targetFolderId)
-      } catch (error) {
-        console.error('Failed to move note:', error)
-        // Error handling is done in the parent component
-      }
-    }
-    setContextMenu(null)
-  }
 
   const handleRenameFromContext = () => {
     if (!contextMenu) return
@@ -782,7 +814,7 @@ export default function UnifiedPanel({
       {isOpen && (
         <div
           ref={panelRef}
-          className="fixed top-24 right-6 z-40 w-80 max-h-[calc(100vh-6rem)] bg-white rounded-xl shadow-2xl border border-gray-200 flex flex-col overflow-hidden"
+          className="fixed top-24 right-6 z-40 w-80 max-h-[calc(100vh-6rem)] bg-white rounded-xl shadow-2xl border border-gray-200 flex flex-col overflow-hidden animate-in slide-in-from-right duration-200"
         >
           {/* User Info & Sign Out */}
           {userEmail && onSignOut && (
@@ -819,10 +851,18 @@ export default function UnifiedPanel({
               <button
                 onClick={onSave}
                 disabled={isSaving || isDeleting || !hasChanges}
-                className="flex-1 inline-flex items-center justify-center gap-1.5 px-3 py-1.5 bg-blue-600 text-white text-sm font-medium rounded-md hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                className="flex-1 inline-flex items-center justify-center gap-1.5 px-3 py-1.5 bg-blue-600 text-white text-sm font-medium rounded-md hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors relative group"
+                title="Save note (⌘S)"
               >
-                <Save size={14} />
+                {isSaving ? (
+                  <Loader2 size={14} className="animate-spin" />
+                ) : (
+                  <Save size={14} />
+                )}
                 {isSaving ? 'Saving...' : 'Save'}
+                {!isSaving && hasChanges && (
+                  <kbd className="hidden group-hover:inline-block ml-1 px-1 py-0.5 bg-blue-700 rounded text-xs">⌘S</kbd>
+                )}
               </button>
               
               {note && onDelete && (
@@ -925,7 +965,7 @@ export default function UnifiedPanel({
 
                 {/* Quick info about current note */}
                 {note && (
-                  <div className="bg-gray-50 rounded-lg p-3 border border-gray-200">
+                  <div className="bg-gradient-to-br from-gray-50 to-blue-50 rounded-lg p-3 border border-gray-200">
                     <div className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">
                       Current Note
                     </div>
@@ -948,6 +988,20 @@ export default function UnifiedPanel({
                           <span>{currentFolderName}</span>
                         </div>
                       )}
+                      <div className="pt-2 border-t border-gray-200">
+                        <div className="text-xs text-gray-500 space-y-1">
+                          <div className="flex justify-between">
+                            <span>Last edited:</span>
+                            <span className="font-medium">{new Date(note.updated_at).toLocaleDateString()}</span>
+                          </div>
+                          {stats.words > 0 && (
+                            <div className="flex justify-between">
+                              <span>Word count:</span>
+                              <span className="font-medium">{stats.words.toLocaleString()}</span>
+                            </div>
+                          )}
+                        </div>
+                      </div>
                     </div>
                   </div>
                 )}
@@ -1037,20 +1091,73 @@ export default function UnifiedPanel({
                     </div>
                   </div>
 
+                  {/* Task Filter Buttons */}
+                  <div className="flex gap-1 mb-3 flex-wrap">
+                    <button
+                      onClick={() => setTaskFilter('all')}
+                      className={`px-2 py-1 text-xs rounded-md transition-colors ${
+                        taskFilter === 'all'
+                          ? 'bg-blue-600 text-white'
+                          : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+                      }`}
+                    >
+                      All
+                    </button>
+                    <button
+                      onClick={() => setTaskFilter('starred')}
+                      className={`px-2 py-1 text-xs rounded-md transition-colors flex items-center gap-1 ${
+                        taskFilter === 'starred'
+                          ? 'bg-yellow-500 text-white'
+                          : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+                      }`}
+                    >
+                      <Star size={10} fill={taskFilter === 'starred' ? 'currentColor' : 'none'} />
+                      Starred
+                    </button>
+                    <button
+                      onClick={() => setTaskFilter('today')}
+                      className={`px-2 py-1 text-xs rounded-md transition-colors flex items-center gap-1 ${
+                        taskFilter === 'today'
+                          ? 'bg-blue-600 text-white'
+                          : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+                      }`}
+                    >
+                      <Clock size={10} />
+                      Today
+                    </button>
+                    <button
+                      onClick={() => setTaskFilter('overdue')}
+                      className={`px-2 py-1 text-xs rounded-md transition-colors ${
+                        taskFilter === 'overdue'
+                          ? 'bg-red-600 text-white'
+                          : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+                      }`}
+                    >
+                      Overdue
+                    </button>
+                  </div>
+
                   {isLoadingTasks ? (
                     <div className="text-center py-6">
                       <Loader2 size={24} className="animate-spin mx-auto text-blue-600 mb-2" />
                       <p className="text-sm text-gray-500">Loading tasks...</p>
                     </div>
-                  ) : tasks.length === 0 ? (
+                  ) : filteredTasks.length === 0 ? (
                     <div className="text-center py-6 bg-gray-50 rounded-lg border border-dashed border-gray-300">
                       <CheckSquare size={32} className="mx-auto text-gray-300 mb-2" />
-                      <p className="text-sm text-gray-500">No tasks yet</p>
-                      <p className="text-xs text-gray-400 mt-1">Add one above to get started</p>
+                      <p className="text-sm text-gray-500">
+                        {taskFilter === 'all' ? 'No tasks yet' : 
+                         taskFilter === 'starred' ? 'No starred tasks' :
+                         taskFilter === 'today' ? 'No tasks due today' :
+                         'No overdue tasks'}
+                      </p>
+                      {taskFilter === 'all' && (
+                        <p className="text-xs text-gray-400 mt-1">Add one above to get started</p>
+                      )}
                     </div>
                   ) : (
                     <div className="space-y-2">
-                      {tasks.slice(0, 10).map((task) => {
+                      {filteredTasks.slice(0, 10).map((task) => {
                         const isOverdue = task.due_date && new Date(task.due_date) < new Date() && task.status !== 'completed'
                         
                         return (
@@ -1109,7 +1216,7 @@ export default function UnifiedPanel({
                         )
                       })}
 
-                      {tasks.length > 10 && (
+                      {filteredTasks.length > 10 && (
                         <button
                           onClick={() => {
                             if (onOpenTaskCalendar) {
@@ -1119,7 +1226,7 @@ export default function UnifiedPanel({
                           }}
                           className="w-full px-3 py-2 text-sm text-blue-600 hover:bg-blue-50 rounded-lg transition-colors font-medium"
                         >
-                          View all {tasks.length} tasks →
+                          View all {filteredTasks.length} {taskFilter !== 'all' ? taskFilter : ''} tasks →
                         </button>
                       )}
                     </div>
@@ -1137,21 +1244,33 @@ export default function UnifiedPanel({
                     <p className="text-xs text-gray-400 mt-1.5">Use H1, H2, or H3 to create headings</p>
                   </div>
                 ) : (
-                  <div className="space-y-0.5">
-                    {headings.map((heading, index) => (
-                      <button
-                        key={heading.id || `${heading.level}-${index}`}
-                        onClick={() => {
-                          onScrollToHeading(heading.id)
-                          setIsOpen(false)
-                        }}
-                        className="w-full text-left block px-2.5 py-1.5 text-sm hover:bg-blue-50 hover:text-blue-700 rounded-md transition-colors"
-                        style={{ paddingLeft: `${(heading.level - 1) * 12 + 10}px` }}
-                      >
-                        <span className="truncate block">{heading.text}</span>
-                      </button>
-                    ))}
-                  </div>
+                  <>
+                    <div className="text-xs text-gray-500 mb-2 px-1">
+                      {headings.length} heading{headings.length !== 1 ? 's' : ''} found
+                    </div>
+                    <div className="space-y-0.5">
+                      {headings.map((heading, index) => {
+                        const levelLabel = heading.level === 1 ? 'H1' : heading.level === 2 ? 'H2' : 'H3'
+                        return (
+                          <button
+                            key={heading.id || `${heading.level}-${index}`}
+                            onClick={() => {
+                              onScrollToHeading(heading.id)
+                              setIsOpen(false)
+                            }}
+                            className="w-full text-left block px-2.5 py-1.5 text-sm hover:bg-blue-50 hover:text-blue-700 rounded-md transition-colors group"
+                            style={{ paddingLeft: `${(heading.level - 1) * 12 + 10}px` }}
+                            title={`Jump to ${levelLabel}: ${heading.text}`}
+                          >
+                            <div className="flex items-center gap-2">
+                              <span className="text-xs text-gray-400 group-hover:text-blue-500 font-mono">{levelLabel}</span>
+                              <span className="truncate block flex-1">{heading.text}</span>
+                            </div>
+                          </button>
+                        )
+                      })}
+                    </div>
+                  </>
                 )}
               </div>
             )}
@@ -1170,20 +1289,23 @@ export default function UnifiedPanel({
                 >
                   <Search size={14} />
                   Find & Replace
+                  <kbd className="ml-auto px-1.5 py-0.5 bg-gray-100 border border-gray-300 rounded text-xs text-gray-600">⌘F</kbd>
                 </button>
                 <div className="flex justify-between items-center text-xs text-gray-500 px-1">
                   <div className="flex items-center gap-2.5">
-                    <span>{stats.words} words</span>
+                    <span title="Word count">{stats.words} words</span>
                     <span className="text-gray-300">•</span>
-                    <span>{stats.characters} chars</span>
+                    <span title="Character count">{stats.characters} chars</span>
                   </div>
-                  <span className="text-gray-400">{new Date(note.updated_at).toLocaleDateString()}</span>
+                  <span className="text-gray-400" title="Last modified">
+                    {new Date(note.updated_at).toLocaleDateString()}
+                  </span>
                 </div>
               </>
             )}
             {!note && (
               <div className="text-center text-xs text-gray-400 py-0.5">
-                Press <kbd className="px-1.5 py-0.5 bg-white border border-gray-300 rounded text-gray-600">⌘\</kbd> to toggle menu
+                Press <kbd className="px-1.5 py-0.5 bg-white border border-gray-300 rounded text-gray-600 font-mono">⌘\</kbd> to toggle menu
               </div>
             )}
           </div>
