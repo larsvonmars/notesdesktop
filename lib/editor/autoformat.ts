@@ -19,9 +19,9 @@ export const AUTOFORMAT_PATTERNS: AutoformatPattern[] = [
     replacement: (match, text) => `<strong>${text}</strong>`,
     requiresSpace: true
   },
-  // Italic with *
+  // Italic with * (ensure not adjacent to another *)
   {
-    pattern: /(?<!\*)\*([^*]+)\*(?!\*)$/,
+    pattern: /(?<!\*)\*([^*]+)\*$/,
     replacement: (match, text) => `<em>${text}</em>`,
     requiresSpace: true
   },
