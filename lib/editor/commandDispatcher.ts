@@ -3,6 +3,13 @@
  * Replaces document.execCommand with manual DOM manipulation
  */
 
+import { 
+  getTextOffsetInBlock,
+  restoreTextOffsetInBlock,
+  positionCursorInElement,
+  CURSOR_TIMING
+} from './cursorPosition'
+
 export interface SelectionSnapshot {
   startContainer: Node
   startOffset: number
@@ -94,6 +101,7 @@ function getTextNodesInRange(range: Range): Text[] {
 
 /**
  * Apply inline style by wrapping selection with a semantic tag
+ * Improved cursor positioning for collapsed ranges
  */
 export function applyInlineStyle(tagName: 'strong' | 'em' | 'code' | 'u' | 's'): void {
   const selection = window.getSelection()
@@ -118,13 +126,13 @@ export function applyInlineStyle(tagName: 'strong' | 'em' | 'code' | 'u' | 's'):
   
   // Apply the style
   if (range.collapsed) {
-    // No selection - insert placeholder
+    // No selection - insert placeholder with improved cursor positioning
     const element = document.createElement(tagName)
     const textNode = document.createTextNode(tagName)
     element.appendChild(textNode)
     range.insertNode(element)
     
-    // Select the text inside
+    // Select the text inside for better UX - user can immediately type to replace
     const newRange = document.createRange()
     newRange.setStart(textNode, 0)
     newRange.setEnd(textNode, textNode.length)
@@ -206,6 +214,7 @@ function getBlockAncestor(node: Node | null): HTMLElement | null {
 
 /**
  * Apply block format by swapping the tag of the block ancestor
+ * Improved cursor positioning with WebView compatibility
  */
 export function applyBlockFormat(
   tagName: 'p' | 'h1' | 'h2' | 'h3' | 'blockquote',
@@ -226,6 +235,13 @@ export function applyBlockFormat(
   if (shouldFallbackToExecCommand) {
     try {
       document.execCommand('formatBlock', false, `<${tagName}>`)
+      
+      // Ensure cursor is properly positioned after execCommand
+      if (editorElement) {
+        setTimeout(() => {
+          editorElement.focus()
+        }, CURSOR_TIMING.SHORT)
+      }
       return
     } catch (error) {
       console.warn('formatBlock fallback via execCommand failed:', error)
@@ -239,16 +255,12 @@ export function applyBlockFormat(
     
     if (editorElement) {
       editorElement.appendChild(newBlock)
+      // Use improved cursor positioning
+      positionCursorInElement(newBlock, 'start', editorElement)
     } else {
       range.insertNode(newBlock)
+      positionCursorInElement(newBlock, 'start')
     }
-    
-    // Move cursor to the new block
-    const newRange = document.createRange()
-    newRange.setStart(newBlock, 0)
-    newRange.collapse(true)
-    selection.removeAllRanges()
-    selection.addRange(newRange)
     
     return
   }
@@ -261,8 +273,8 @@ export function applyBlockFormat(
   // If already the same tag, convert to paragraph
   const targetTag = block.tagName.toLowerCase() === tagName ? 'p' : tagName
   
-  // Save selection offset within the block
-  const offset = getOffsetWithinBlock(range.startContainer, range.startOffset, block)
+  // Save text offset within the block for better cursor restoration
+  const textOffset = getTextOffsetInBlock(block)
   
   // Create new block with the target tag
   const newBlock = document.createElement(targetTag)
@@ -280,8 +292,21 @@ export function applyBlockFormat(
   // Replace the old block with the new one
   block.parentNode?.replaceChild(newBlock, block)
   
-  // Restore selection
-  restoreOffsetWithinBlock(newBlock, offset, selection)
+  // Focus editor first (critical for WebView)
+  if (editorElement) {
+    editorElement.focus()
+  }
+  
+  // Restore cursor position with improved timing
+  setTimeout(() => {
+    // Verify block is still in DOM
+    if (!newBlock.isConnected) {
+      console.warn('Block was removed from DOM after creation')
+      return
+    }
+    
+    restoreTextOffsetInBlock(newBlock, textOffset)
+  }, CURSOR_TIMING.LONG)
 }
 
 /**

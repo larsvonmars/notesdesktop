@@ -4,6 +4,7 @@
  */
 
 import { saveSelection, restoreSelection, type SelectionSnapshot } from './commandDispatcher'
+import { CURSOR_TIMING } from './cursorPosition'
 
 interface HistorySnapshot {
   content: string
@@ -104,6 +105,7 @@ export class HistoryManager {
   
   /**
    * Restore a snapshot
+   * Improved with better timing for cursor restoration
    */
   private restore(snapshot: HistorySnapshot): void {
     // Disable capturing during restore
@@ -113,22 +115,27 @@ export class HistoryManager {
       // Restore content
       this.editorElement.innerHTML = snapshot.content
       
-      // Restore selection
+      // Ensure editor has focus
+      this.editorElement.focus()
+      
+      // Restore selection with improved timing
       if (snapshot.selection) {
-        // Small delay to ensure DOM is updated
+        // Use medium delay to ensure DOM is updated and ready
         setTimeout(() => {
           try {
             restoreSelection(snapshot.selection!)
+            // Ensure focus is maintained
+            this.editorElement.focus()
           } catch (error) {
             console.warn('Failed to restore selection:', error)
           }
-        }, 0)
+        }, CURSOR_TIMING.MEDIUM)
       }
     } finally {
-      // Re-enable capturing
+      // Re-enable capturing with longer delay to prevent immediate re-capture
       setTimeout(() => {
         this.isCapturing = true
-      }, 100)
+      }, CURSOR_TIMING.EXTRA_LONG)
     }
   }
   
