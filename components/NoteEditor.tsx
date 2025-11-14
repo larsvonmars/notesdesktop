@@ -697,6 +697,13 @@ export default function NoteEditor({
 
   useEffect(() => {
     const handler = (event: KeyboardEvent) => {
+      // Handle "+" key to open content blocks menu (for rich text notes only)
+      if (event.key === '+' && noteType === 'rich-text' && !isSaving && !isDeleting) {
+        event.preventDefault()
+        setShowContentBlocksMenu(true)
+        return
+      }
+
       if (!(event.metaKey || event.ctrlKey)) return
       const key = event.key.toLowerCase()
 
@@ -718,7 +725,7 @@ export default function NoteEditor({
 
     window.addEventListener('keydown', handler)
     return () => window.removeEventListener('keydown', handler)
-  }, [handleSave, hasChanges, isSaving])
+  }, [handleSave, hasChanges, isSaving, noteType, isDeleting])
 
   // Listen for selection changes to update active format states
   useEffect(() => {
