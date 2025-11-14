@@ -53,7 +53,7 @@ import {
   shouldApplyAutoformat,
   checkListPrefixPattern
 } from '@/lib/editor/autoformat'
-import SelectionToolbar from './SelectionToolbar'
+
 
 // Re-export RichTextCommand type for external use
 export type RichTextCommand =
@@ -204,7 +204,6 @@ const RichTextEditor = forwardRef<RichTextEditorHandle, RichTextEditorProps>(
   const [hoverCols, setHoverCols] = useState<number | null>(null)
     const savedSelectionRef = useRef<Range | null>(null)
     const [autoformatEnabled, setAutoformatEnabled] = useState(true)
-    const [selectionToolbarEnabled, setSelectionToolbarEnabled] = useState(true)
     
 
     const insertFragmentAtSelection = useCallback(
@@ -1764,63 +1763,6 @@ const RichTextEditor = forwardRef<RichTextEditorHandle, RichTextEditorProps>(
           aria-multiline="true"
           aria-disabled={disabled}
         />
-
-        {/* Selection Toolbar - floating formatting toolbar on text selection */}
-        {selectionToolbarEnabled && !disabled && (
-          <SelectionToolbar
-            onCommand={(cmd) => {
-              switch (cmd) {
-                case 'bold':
-                  execCommand('bold')
-                  break
-                case 'italic':
-                  execCommand('italic')
-                  break
-                case 'underline':
-                  execCommand('underline')
-                  break
-                case 'strike':
-                  execCommand('strikeThrough')
-                  break
-                case 'code':
-                  applyCode()
-                  break
-                case 'link':
-                  insertLink()
-                  break
-              }
-            }}
-            queryCommandState={(command) => {
-              try {
-                const selection = window.getSelection()
-                if (!selection || selection.rangeCount === 0) return false
-                
-                const range = selection.getRangeAt(0)
-                const node = range.commonAncestorContainer
-                const element = node.nodeType === Node.TEXT_NODE ? node.parentElement : (node as Element)
-                
-                switch (command) {
-                  case 'bold':
-                    return !!element?.closest('strong, b')
-                  case 'italic':
-                    return !!element?.closest('em, i')
-                  case 'underline':
-                    return !!element?.closest('u')
-                  case 'strikeThrough':
-                  case 'strike':
-                    return !!element?.closest('s, strike')
-                  case 'code':
-                    return !!element?.closest('code')
-                  default:
-                    return false
-                }
-              } catch {
-                return false
-              }
-            }}
-            isDisabled={disabled}
-          />
-        )}
 
         {/* Link Dialog */}
         {showLinkDialog && (
