@@ -41,6 +41,12 @@ import {
   markdownToHtml,
   htmlToMarkdown
 } from '@/lib/editor/markdownHelpers'
+import {
+  applyAutoformat,
+  shouldApplyAutoformat,
+  checkListPrefixPattern
+} from '@/lib/editor/autoformat'
+import SelectionToolbar from './SelectionToolbar'
 
 // Re-export RichTextCommand type for external use
 export type RichTextCommand =
@@ -190,6 +196,8 @@ const RichTextEditor = forwardRef<RichTextEditorHandle, RichTextEditorProps>(
   const [hoverRows, setHoverRows] = useState<number | null>(null)
   const [hoverCols, setHoverCols] = useState<number | null>(null)
     const savedSelectionRef = useRef<Range | null>(null)
+    const [autoformatEnabled, setAutoformatEnabled] = useState(true)
+    const [selectionToolbarEnabled, setSelectionToolbarEnabled] = useState(true)
     
 
     const insertFragmentAtSelection = useCallback(
@@ -532,7 +540,7 @@ const RichTextEditor = forwardRef<RichTextEditorHandle, RichTextEditorProps>(
       // update payload on the containing block element
       updateTablePayload()
       emitChange()
-    }, [emitChange])
+    }, [emitChange, updateTablePayload])
 
     const deleteTableRow = useCallback(() => {
       const table = tableNodeRef.current as HTMLTableElement | null
@@ -543,7 +551,7 @@ const RichTextEditor = forwardRef<RichTextEditorHandle, RichTextEditorProps>(
       last.remove()
       updateTablePayload()
       emitChange()
-    }, [emitChange])
+    }, [emitChange, updateTablePayload])
 
     const addTableCol = useCallback(() => {
       const table = tableNodeRef.current as HTMLTableElement | null
@@ -557,7 +565,7 @@ const RichTextEditor = forwardRef<RichTextEditorHandle, RichTextEditorProps>(
       })
       updateTablePayload()
       emitChange()
-    }, [emitChange])
+    }, [emitChange, updateTablePayload])
 
     const deleteTableCol = useCallback(() => {
       const table = tableNodeRef.current as HTMLTableElement | null
@@ -571,7 +579,7 @@ const RichTextEditor = forwardRef<RichTextEditorHandle, RichTextEditorProps>(
       })
       updateTablePayload()
       emitChange()
-    }, [emitChange])
+    }, [emitChange, updateTablePayload])
 
     const deleteTable = useCallback(() => {
       const table = tableNodeRef.current as HTMLElement | null
@@ -1341,7 +1349,7 @@ const RichTextEditor = forwardRef<RichTextEditorHandle, RichTextEditorProps>(
           executeRichTextCommand(command)
         }
       }),
-      [applyCode, execCommand, sanitize, toggleChecklist, applyHeading, getHeadings, insertLink, insertHorizontalRule, scrollToHeading, executeRichTextCommand, insertCustomBlock, saveSelection, onCustomCommand]
+      [sanitize, getHeadings, scrollToHeading, executeRichTextCommand, insertCustomBlock, saveSelection, onCustomCommand, insertLink]
     )
 
     // Initialize history manager
@@ -1398,6 +1406,80 @@ const RichTextEditor = forwardRef<RichTextEditorHandle, RichTextEditorProps>(
     const handleInput = () => emitChange()
 
   const handleKeyDown = (event: ReactKeyboardEvent<HTMLDivElement>) => {
+      // Handle autoformatting
+      if (autoformatEnabled && shouldApplyAutoformat(event.nativeEvent)) {
+        const selection = window.getSelection()
+        if (selection && selection.rangeCount > 0) {
+          const range = selection.getRangeAt(0)
+          const node = range.startContainer
+          
+          // Check for inline autoformatting (bold, italic, etc.)
+          if (node.nodeType === Node.TEXT_NODE && event.key === ' ') {
+            const textNode = node as Text
+            const cursorOffset = range.startOffset
+            
+            if (applyAutoformat(textNode, cursorOffset)) {
+              event.preventDefault()
+              emitChange()
+              return
+            }
+          }
+          
+          // Check for list prefix patterns (at start of line)
+          if (event.key === ' ') {
+            const textNode = node.nodeType === Node.TEXT_NODE ? node as Text : null
+            if (textNode) {
+              const text = textNode.textContent?.substring(0, range.startOffset) || ''
+              const lineStart = text.lastIndexOf('\n') + 1
+              const lineText = text.substring(lineStart)
+              const action = checkListPrefixPattern(lineText)
+              
+              if (action) {
+                event.preventDefault()
+                
+                // Remove the pattern text
+                const patternLength = lineText.length
+                const removeRange = document.createRange()
+                removeRange.setStart(textNode, range.startOffset - patternLength)
+                removeRange.setEnd(textNode, range.startOffset)
+                removeRange.deleteContents()
+                
+                // Apply the formatting
+                switch (action) {
+                  case 'unordered-list':
+                    execCommand('insertUnorderedList')
+                    break
+                  case 'ordered-list':
+                    execCommand('insertOrderedList')
+                    break
+                  case 'checklist':
+                    toggleChecklist()
+                    break
+                  case 'heading1':
+                    applyHeading(1)
+                    break
+                  case 'heading2':
+                    applyHeading(2)
+                    break
+                  case 'heading3':
+                    applyHeading(3)
+                    break
+                  case 'blockquote':
+                    execCommand('formatBlock', 'blockquote')
+                    break
+                  case 'horizontal-rule':
+                    insertHorizontalRule()
+                    break
+                }
+                
+                emitChange()
+                return
+              }
+            }
+          }
+        }
+      }
+      
       // Handle Enter key for checklist items
       if (event.key === 'Enter' && !event.shiftKey) {
         const selection = window.getSelection()
@@ -1665,7 +1747,68 @@ const RichTextEditor = forwardRef<RichTextEditorHandle, RichTextEditorProps>(
           onPaste={handlePaste}
           suppressContentEditableWarning
           spellCheck
+          role="textbox"
+          aria-label="Rich text editor"
+          aria-multiline="true"
+          aria-disabled={disabled}
         />
+
+        {/* Selection Toolbar - floating formatting toolbar on text selection */}
+        {selectionToolbarEnabled && !disabled && (
+          <SelectionToolbar
+            onCommand={(cmd) => {
+              switch (cmd) {
+                case 'bold':
+                  execCommand('bold')
+                  break
+                case 'italic':
+                  execCommand('italic')
+                  break
+                case 'underline':
+                  execCommand('underline')
+                  break
+                case 'strike':
+                  execCommand('strikeThrough')
+                  break
+                case 'code':
+                  applyCode()
+                  break
+                case 'link':
+                  insertLink()
+                  break
+              }
+            }}
+            queryCommandState={(command) => {
+              try {
+                const selection = window.getSelection()
+                if (!selection || selection.rangeCount === 0) return false
+                
+                const range = selection.getRangeAt(0)
+                const node = range.commonAncestorContainer
+                const element = node.nodeType === Node.TEXT_NODE ? node.parentElement : (node as Element)
+                
+                switch (command) {
+                  case 'bold':
+                    return !!element?.closest('strong, b')
+                  case 'italic':
+                    return !!element?.closest('em, i')
+                  case 'underline':
+                    return !!element?.closest('u')
+                  case 'strikeThrough':
+                  case 'strike':
+                    return !!element?.closest('s, strike')
+                  case 'code':
+                    return !!element?.closest('code')
+                  default:
+                    return false
+                }
+              } catch {
+                return false
+              }
+            }}
+            isDisabled={disabled}
+          />
+        )}
 
         {/* Link Dialog */}
         {showLinkDialog && (
