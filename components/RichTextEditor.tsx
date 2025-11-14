@@ -14,7 +14,14 @@ import type {
 } from 'react'
 import DOMPurify from 'dompurify'
 import type { Config } from 'dompurify'
-import { X, Search, Link as LinkIcon, Type, List, CheckSquare, Quote, Code, Minus, Plus, Trash2 } from 'lucide-react'
+import {
+  X,
+  Search,
+  Plus,
+  Trash2,
+  Minus
+} from 'lucide-react'
+import EditorToolbar from './EditorToolbar'
 import {
   applyInlineStyle,
   applyBlockFormat,
@@ -164,6 +171,13 @@ interface SearchMatch {
   text: string
 }
 
+interface BlockMetadata {
+  id: string
+  type: string
+  textPreview: string
+  index: number
+}
+
 const splitLinesToFragment = (text: string): DocumentFragment => {
   const fragment = document.createDocumentFragment()
   const lines = text.split(/\r?\n|\r/g)
@@ -204,6 +218,87 @@ const RichTextEditor = forwardRef<RichTextEditorHandle, RichTextEditorProps>(
   const [hoverCols, setHoverCols] = useState<number | null>(null)
     const savedSelectionRef = useRef<Range | null>(null)
     const [autoformatEnabled, setAutoformatEnabled] = useState(true)
+    const [blockMetadata, setBlockMetadata] = useState<BlockMetadata[]>([])
+    const [blockPanelOpen, setBlockPanelOpen] = useState(false)
+    const [activeBlockId, setActiveBlockId] = useState<string | null>(null)
+    const [showBlockOutlines, setShowBlockOutlines] = useState(false)
+    const blockIdCounterRef = useRef(0)
+
+    const ensureBlockId = useCallback((node: HTMLElement | null) => {
+      if (!node) return ''
+      let id = node.getAttribute('data-block-id')
+      if (!id) {
+        blockIdCounterRef.current += 1
+        id = `block-${blockIdCounterRef.current}`
+        node.setAttribute('data-block-id', id)
+      }
+      return id
+    }, [])
+
+    const updateBlockMetadata = useCallback(() => {
+      if (!editorRef.current) return
+      const blockNodes = Array.from(editorRef.current.children) as HTMLElement[]
+      const metadata = blockNodes.map((node, idx) => {
+        const id = ensureBlockId(node)
+        const type = node.getAttribute('data-block-type') ?? node.tagName.toLowerCase()
+        const textPreview = (node.textContent || '').replace(/\s+/g, ' ').trim().slice(0, 120)
+        return {
+          id,
+          type,
+          textPreview: textPreview || '(empty)',
+          index: idx + 1
+        }
+      })
+      setBlockMetadata(metadata)
+    }, [ensureBlockId])
+
+    const refreshActiveBlock = useCallback(() => {
+      if (!editorRef.current) {
+        setActiveBlockId(null)
+        return
+      }
+      const selection = window.getSelection()
+      if (!selection || selection.rangeCount === 0) {
+        setActiveBlockId(null)
+        return
+      }
+      const anchorNode = selection.getRangeAt(0).startContainer
+      const element = anchorNode instanceof HTMLElement ? anchorNode : anchorNode.parentElement
+      if (!element) {
+        setActiveBlockId(null)
+        return
+      }
+      const blockElement = element.closest('[data-block-id]') || element.closest('[data-block="true"]')
+      if (blockElement instanceof HTMLElement) {
+        const id = ensureBlockId(blockElement)
+        setActiveBlockId(id)
+      } else {
+        setActiveBlockId(null)
+      }
+    }, [ensureBlockId])
+
+    const focusBlockById = useCallback(
+      (blockId: string) => {
+        if (!editorRef.current || !blockId) return
+        const escapeSelector = (value: string) => {
+          if (typeof CSS !== 'undefined' && CSS.escape) {
+            return CSS.escape(value)
+          }
+          return value.replace(/(["#.;?+*~':!^$\[\]()=>|/@])/g, '\\$1')
+        }
+        const selectorId = escapeSelector(blockId)
+        const block = editorRef.current.querySelector(
+          `[data-block-id="${selectorId}"]`
+        ) as HTMLElement | null
+        if (!block) return
+
+        const focusTarget = (block.querySelector('p, div, span, li, blockquote') as HTMLElement | null) ?? block
+        positionCursorInElement(focusTarget, 'start', editorRef.current)
+        block.scrollIntoView({ behavior: 'smooth', block: 'center' })
+        setActiveBlockId(blockId)
+      },
+      []
+    )
     
 
     const insertFragmentAtSelection = useCallback(
@@ -308,6 +403,28 @@ const RichTextEditor = forwardRef<RichTextEditorHandle, RichTextEditorProps>(
       customBlocksRef.current = customBlocks
     }, [customBlocks])
 
+    useEffect(() => {
+      updateBlockMetadata()
+    }, [updateBlockMetadata])
+
+    useEffect(() => {
+      const handleSelection = () => refreshActiveBlock()
+      document.addEventListener('selectionchange', handleSelection)
+      return () => document.removeEventListener('selectionchange', handleSelection)
+    }, [refreshActiveBlock])
+
+    useEffect(() => {
+      if (!editorRef.current) return
+      const nodes = editorRef.current.querySelectorAll('[data-block-id]')
+      nodes.forEach((node) => {
+        if (showBlockOutlines) {
+          node.setAttribute('data-block-outline', 'true')
+        } else {
+          node.removeAttribute('data-block-outline')
+        }
+      })
+    }, [showBlockOutlines, blockMetadata])
+
     const sanitize = useCallback(
       (html: string) => {
         if (typeof window === 'undefined') return html
@@ -391,7 +508,8 @@ const RichTextEditor = forwardRef<RichTextEditorHandle, RichTextEditorProps>(
           debouncedCaptureRef.current()
         }
       }
-    }, [onChange, sanitize, value])
+      updateBlockMetadata()
+    }, [onChange, sanitize, updateBlockMetadata, value])
 
     // Public API: insert a custom block by type and optional payload
     const insertCustomBlock = useCallback(
@@ -1206,6 +1324,41 @@ const RichTextEditor = forwardRef<RichTextEditorHandle, RichTextEditorProps>(
       emitChange()
     }, [disabled, emitChange])
 
+    const createRootLevelBlock = useCallback(() => {
+      if (!editorRef.current) return null
+
+      const newBlock = document.createElement('div')
+      newBlock.setAttribute('data-block', 'true')
+      newBlock.className = 'block-root rounded-xl border border-slate-200 bg-white/80 px-3 py-2 my-3 shadow-sm'
+
+      const paragraph = document.createElement('p')
+      paragraph.appendChild(document.createElement('br'))
+      newBlock.appendChild(paragraph)
+
+      const selection = window.getSelection()
+      let anchorBlock: HTMLElement | null = null
+      if (selection && selection.rangeCount > 0) {
+        const anchorNode = selection.getRangeAt(0).startContainer
+        anchorBlock = (anchorNode instanceof HTMLElement ? anchorNode : anchorNode.parentElement)?.closest(
+          '[data-block-id]'
+        ) as HTMLElement | null
+      }
+
+      if (anchorBlock && anchorBlock.parentElement === editorRef.current) {
+        anchorBlock.insertAdjacentElement('afterend', newBlock)
+      } else {
+        editorRef.current.appendChild(newBlock)
+      }
+
+      ensureBlockId(newBlock)
+      const target = (newBlock.querySelector('p, div, span') as HTMLElement | null) ?? newBlock
+      positionCursorInElement(target, 'start', editorRef.current)
+      normalizeEditorContent(editorRef.current)
+      emitChange()
+      updateBlockMetadata()
+      return newBlock
+    }, [emitChange, ensureBlockId, updateBlockMetadata])
+
     /**
      * Execute a rich text command
      * This is the main entry point for all formatting commands
@@ -1262,6 +1415,25 @@ const RichTextEditor = forwardRef<RichTextEditorHandle, RichTextEditorProps>(
           break
       }
     }, [execCommand, applyCode, toggleChecklist, applyHeading, insertHorizontalRule, insertLink])
+
+    const handleBlockTypeChange = useCallback((value: string) => {
+      switch (value) {
+        case 'heading1':
+          applyHeading(1)
+          break
+        case 'heading2':
+          applyHeading(2)
+          break
+        case 'heading3':
+          applyHeading(3)
+          break
+        case 'blockquote':
+          execCommand('formatBlock', 'blockquote')
+          break
+        default:
+          execCommand('formatBlock', 'p')
+      }
+    }, [applyHeading, execCommand])
 
     const scrollToHeading = useCallback((headingId: string) => {
       if (!editorRef.current || !headingId) return
@@ -1395,7 +1567,8 @@ const RichTextEditor = forwardRef<RichTextEditorHandle, RichTextEditorProps>(
       scheduleChecklistNormalization()
       // attempt to rehydrate any custom blocks that came from loaded HTML
       rehydrateExistingBlocks()
-    }, [sanitize, value, scheduleChecklistNormalization, rehydrateExistingBlocks])
+      updateBlockMetadata()
+    }, [sanitize, value, scheduleChecklistNormalization, rehydrateExistingBlocks, updateBlockMetadata])
 
     useEffect(() => {
       if (!editorRef.current) return
@@ -1496,6 +1669,12 @@ const RichTextEditor = forwardRef<RichTextEditorHandle, RichTextEditorProps>(
         }
       }
       
+      if (event.key === 'Enter' && (event.metaKey || event.ctrlKey)) {
+        event.preventDefault()
+        createRootLevelBlock()
+        return
+      }
+
       // Handle Enter key for checklist items
       if (event.key === 'Enter' && !event.shiftKey) {
         const selection = window.getSelection()
@@ -1746,23 +1925,84 @@ const RichTextEditor = forwardRef<RichTextEditorHandle, RichTextEditorProps>(
       }
     }
 
+    const toolbarButtonClass =
+      'inline-flex h-9 w-9 items-center justify-center rounded-lg border border-transparent bg-white text-slate-600 shadow-sm hover:bg-slate-100 hover:text-slate-900 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-500 disabled:opacity-40'
+
     return (
-      <div className="relative h-full">
-        <div
-          ref={editorRef}
-          className="w-full h-full overflow-y-auto whitespace-pre-wrap break-words focus:outline-none p-3 sm:p-4"
-          contentEditable={!disabled}
-          data-placeholder={placeholder}
-          onInput={handleInput}
-          onKeyDown={handleKeyDown}
-          onPaste={handlePaste}
-          suppressContentEditableWarning
-          spellCheck
-          role="textbox"
-          aria-label="Rich text editor"
-          aria-multiline="true"
-          aria-disabled={disabled}
+      <div className="flex h-full min-h-0 flex-col overflow-hidden">
+        <EditorToolbar
+          onCommand={executeRichTextCommand}
+          onBlockTypeChange={handleBlockTypeChange}
+          onUndo={() => historyManagerRef.current?.undo()}
+          onRedo={() => historyManagerRef.current?.redo()}
+          onNewBlock={createRootLevelBlock}
+          onToggleBlockPanel={() => setBlockPanelOpen((prev) => !prev)}
+          onToggleBlockOutlines={() => setShowBlockOutlines((prev) => !prev)}
+          blockPanelOpen={blockPanelOpen}
+          showBlockOutlines={showBlockOutlines}
+          activeBlockId={activeBlockId}
+          activeBlockType={blockMetadata.find((block) => block.id === activeBlockId)?.type}
+          disabled={disabled}
         />
+
+        <div className="flex-1 min-h-0 overflow-hidden">
+          <div
+            ref={editorRef}
+            className="h-full w-full overflow-y-auto whitespace-pre-wrap break-words p-3 focus:outline-none sm:p-4"
+            contentEditable={!disabled}
+            data-placeholder={placeholder}
+            onInput={handleInput}
+            onKeyDown={handleKeyDown}
+            onPaste={handlePaste}
+            suppressContentEditableWarning
+            spellCheck
+            role="textbox"
+            aria-label="Rich text editor"
+            aria-multiline="true"
+            aria-disabled={disabled}
+          />
+
+          {blockPanelOpen && (
+            <div className="fixed right-4 top-24 z-50 w-80 max-h-[70vh] overflow-y-auto rounded-2xl border border-slate-200 bg-white/95 shadow-2xl">
+              <div className="flex items-center justify-between border-b border-slate-100 px-4 py-3">
+                <div>
+                  <p className="text-sm font-semibold text-slate-900">Block navigator</p>
+                  <p className="text-xs text-slate-500">{blockMetadata.length} blocks</p>
+                </div>
+                <button
+                  className="text-slate-400 transition hover:text-slate-600"
+                  onClick={() => setBlockPanelOpen(false)}
+                  aria-label="Close block navigator"
+                >
+                  <X size={16} />
+                </button>
+              </div>
+              <div className="divide-y divide-slate-100">
+                {blockMetadata.length === 0 ? (
+                  <p className="px-4 py-6 text-sm text-slate-500">Start typing to create blocks.</p>
+                ) : (
+                  blockMetadata.map((block) => (
+                    <button
+                      key={block.id}
+                      className={`flex w-full flex-col gap-1 px-4 py-3 text-left transition hover:bg-slate-50 ${
+                        activeBlockId === block.id ? 'bg-blue-50/80 ring-1 ring-blue-200' : ''
+                      }`}
+                      onClick={() => focusBlockById(block.id)}
+                    >
+                      <div className="flex items-center justify-between text-[11px] font-semibold uppercase tracking-wide text-slate-500">
+                        <span>Block {block.index}</span>
+                        <span>{block.type}</span>
+                      </div>
+                      <p className="text-sm text-slate-700">
+                        {block.textPreview}
+                      </p>
+                    </button>
+                  ))
+                )}
+              </div>
+            </div>
+          )}
+        </div>
 
         {/* Link Dialog */}
         {showLinkDialog && (
@@ -2021,6 +2261,13 @@ const RichTextEditor = forwardRef<RichTextEditorHandle, RichTextEditorProps>(
             </button>
           </div>
         )}
+        <style jsx global>{`
+          [data-block-outline='true'] {
+            outline: 2px dashed rgba(59, 130, 246, 0.75);
+            outline-offset: 6px;
+            border-radius: 12px;
+          }
+        `}</style>
       </div>
     )
   }

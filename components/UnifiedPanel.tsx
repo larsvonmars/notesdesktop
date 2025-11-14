@@ -803,7 +803,7 @@ export default function UnifiedPanel({
       {/* Floating Menu Button */}
       <button
         onClick={() => setIsOpen(!isOpen)}
-        className="fixed top-14 right-6 z-50 p-3 bg-white border-2 border-gray-200 rounded-full shadow-lg hover:shadow-xl hover:scale-105 transition-all duration-200"
+        className="fixed top-28 right-6 z-50 p-3 bg-white border-2 border-gray-200 rounded-full shadow-lg hover:shadow-xl hover:scale-105 transition-all duration-200"
         aria-label={isOpen ? 'Close menu' : 'Open menu (⌘\\)'}
         title={isOpen ? 'Close menu' : 'Open menu (⌘\\)'}
       >
@@ -814,7 +814,7 @@ export default function UnifiedPanel({
       {isOpen && (
         <div
           ref={panelRef}
-          className="fixed top-24 right-6 z-40 w-80 max-h-[calc(100vh-6rem)] bg-white rounded-xl shadow-2xl border border-gray-200 flex flex-col overflow-hidden animate-in slide-in-from-right duration-200"
+          className="fixed top-40 right-6 z-40 w-80 max-h-[calc(100vh-14rem)] bg-white rounded-xl shadow-2xl border border-gray-200 flex flex-col overflow-hidden animate-in slide-in-from-right duration-200"
         >
           {/* User Info & Sign Out */}
           {userEmail && onSignOut && (

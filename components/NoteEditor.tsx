@@ -21,7 +21,7 @@ import {
   Heading3,
   ListTree,
   Link as LinkIcon,
-  Search,
+  Search as SearchIcon,
   PenTool,
   Check,
   Loader2,
@@ -54,7 +54,6 @@ import { Note as LibNote } from '../lib/notes'
 import NoteLinkDialog from './NoteLinkDialog'
 import KnowledgeGraphModal from './KnowledgeGraphModal'
 import { noteLinkBlock } from '../lib/editor/noteLinkBlock'
-import FixedToolbar from './FixedToolbar'
 
 export type { Note } from '../lib/notes'
 
@@ -168,9 +167,61 @@ export default function NoteEditor({
   const [showNoteLinkDialog, setShowNoteLinkDialog] = useState(false)
   const savedNoteLinkSelection = useRef<Range | null>(null)
   const [showContentBlocksMenu, setShowContentBlocksMenu] = useState(false)
+  const [blockSearchQuery, setBlockSearchQuery] = useState('')
+  const [selectedBlockIndex, setSelectedBlockIndex] = useState(0)
+  const blockSearchInputRef = useRef<HTMLInputElement>(null)
   const [showKnowledgeGraph, setShowKnowledgeGraph] = useState(false)
   const [showProjectsModal, setShowProjectsModal] = useState(false)
   const [showBlockOutlines, setShowBlockOutlines] = useState(false)
+
+  // Content blocks configuration
+  const contentBlocks = useMemo(() => [
+    // Headings
+    { id: 'heading1', label: 'Heading 1', description: 'Large section heading', icon: Heading1, color: 'indigo', category: 'Headings', command: 'heading1' as RichTextCommand },
+    { id: 'heading2', label: 'Heading 2', description: 'Medium section heading', icon: Heading2, color: 'indigo', category: 'Headings', command: 'heading2' as RichTextCommand },
+    { id: 'heading3', label: 'Heading 3', description: 'Small section heading', icon: Heading3, color: 'indigo', category: 'Headings', command: 'heading3' as RichTextCommand },
+    // Lists
+    { id: 'unordered-list', label: 'Bullet List', description: 'Create an unordered list', icon: List, color: 'green', category: 'Lists', command: 'unordered-list' as RichTextCommand },
+    { id: 'ordered-list', label: 'Numbered List', description: 'Create an ordered list', icon: OrderedListIcon, color: 'green', category: 'Lists', command: 'ordered-list' as RichTextCommand },
+    { id: 'checklist', label: 'Checklist', description: 'Task list with checkboxes', icon: CheckSquare, color: 'green', category: 'Lists', command: 'checklist' as RichTextCommand },
+    // Content
+    { id: 'blockquote', label: 'Quote', description: 'Insert a blockquote', icon: Quote, color: 'amber', category: 'Content', command: 'blockquote' as RichTextCommand },
+    { id: 'horizontal-rule', label: 'Divider', description: 'Add a horizontal rule', icon: HorizontalRule, color: 'gray', category: 'Content', command: 'horizontal-rule' as RichTextCommand },
+    { id: 'table', label: 'Table', description: 'Insert a customizable table', icon: TableIcon, color: 'blue', category: 'Content', command: null },
+    { id: 'note-link', label: 'Note Link', description: 'Link to another note', icon: FileText, color: 'purple', category: 'Content', command: null },
+  ], [])
+
+  // Filter content blocks based on search query
+  const filteredBlocks = useMemo(() => {
+    if (!blockSearchQuery.trim()) return contentBlocks
+    
+    const query = blockSearchQuery.toLowerCase()
+    return contentBlocks.filter(block => 
+      block.label.toLowerCase().includes(query) ||
+      block.description.toLowerCase().includes(query) ||
+      block.category.toLowerCase().includes(query)
+    )
+  }, [blockSearchQuery, contentBlocks])
+
+  // Reset selected index when filtered blocks change
+  useEffect(() => {
+    if (selectedBlockIndex >= filteredBlocks.length) {
+      setSelectedBlockIndex(Math.max(0, filteredBlocks.length - 1))
+    }
+  }, [filteredBlocks.length, selectedBlockIndex])
+
+  // Focus search input when menu opens
+  useEffect(() => {
+    if (showContentBlocksMenu && blockSearchInputRef.current) {
+      setTimeout(() => {
+        blockSearchInputRef.current?.focus()
+      }, 50)
+    } else {
+      // Reset search when menu closes
+      setBlockSearchQuery('')
+      setSelectedBlockIndex(0)
+    }
+  }, [showContentBlocksMenu])
 
   const scheduleHeadingsUpdate = useCallback(() => {
     if (headingUpdateTimeoutRef.current !== null) {
@@ -521,6 +572,57 @@ export default function NoteEditor({
     editorRef.current?.focus()
     editorRef.current?.exec(command)
   }, [])
+
+  const executeBlockAction = useCallback((blockId: string) => {
+    const block = contentBlocks.find(b => b.id === blockId)
+    if (!block) return
+
+    setShowContentBlocksMenu(false)
+
+    if (blockId === 'table') {
+      handleInsertTable()
+    } else if (blockId === 'note-link') {
+      handleInsertNoteLink()
+    } else if (block.command) {
+      editorRef.current?.focus()
+      editorRef.current?.exec(block.command)
+    }
+  }, [contentBlocks, handleInsertTable, handleInsertNoteLink])
+
+  // Keyboard navigation for content blocks menu
+  const handleBlockMenuKeyDown = useCallback((e: KeyboardEvent | React.KeyboardEvent) => {
+    if (!showContentBlocksMenu) return
+
+    if (e.key === 'Escape') {
+      e.preventDefault()
+      setShowContentBlocksMenu(false)
+      editorRef.current?.focus()
+    } else if (e.key === 'ArrowDown') {
+      e.preventDefault()
+      setSelectedBlockIndex(prev => Math.min(prev + 1, filteredBlocks.length - 1))
+    } else if (e.key === 'ArrowUp') {
+      e.preventDefault()
+      setSelectedBlockIndex(prev => Math.max(prev - 1, 0))
+    } else if (e.key === 'Enter') {
+      e.preventDefault()
+      const selectedBlock = filteredBlocks[selectedBlockIndex]
+      if (selectedBlock) {
+        executeBlockAction(selectedBlock.id)
+      }
+    }
+  }, [showContentBlocksMenu, selectedBlockIndex, filteredBlocks, executeBlockAction])
+
+  // Add global keyboard listener for content blocks menu
+  useEffect(() => {
+    if (!showContentBlocksMenu) return
+
+    const handleKeyDown = (e: KeyboardEvent) => {
+      handleBlockMenuKeyDown(e)
+    }
+
+    window.addEventListener('keydown', handleKeyDown)
+    return () => window.removeEventListener('keydown', handleKeyDown)
+  }, [showContentBlocksMenu, handleBlockMenuKeyDown])
 
   // Handle clicking on note links
   useEffect(() => {
@@ -932,20 +1034,7 @@ export default function NoteEditor({
       />
 
       {/* Clean Editor Area */}
-      <div className="flex flex-col h-screen bg-white pb-10">
-        {/* Fixed Toolbar - Only show for rich text notes */}
-        {noteType === 'rich-text' && (
-          <FixedToolbar
-            onCommand={handleCommand}
-            onShowTable={() => editorRef.current?.showTableDialog()}
-            onShowNoteLink={() => editorRef.current?.requestNoteLink()}
-            activeFormats={activeFormats}
-            disabled={isSaving || isDeleting}
-            showBlockOutlines={showBlockOutlines}
-            onToggleBlockOutlines={() => setShowBlockOutlines(!showBlockOutlines)}
-          />
-        )}
-        
+      <div className="flex flex-col h-screen bg-white pb-10">        
         <div className={`flex-1 px-3 py-2 sm:px-4 sm:py-3 overflow-hidden ${showBlockOutlines ? 'show-block-outlines' : ''}`}>
           <div className="h-full w-full">
             <div className="relative h-full overflow-hidden flex flex-col bg-white">
@@ -1290,155 +1379,113 @@ export default function NoteEditor({
 
       {/* Content Blocks Menu */}
       {showContentBlocksMenu && noteType === 'rich-text' && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/20" onClick={() => setShowContentBlocksMenu(false)}>
+        <div 
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/20" 
+          onClick={() => setShowContentBlocksMenu(false)}
+        >
           <div 
-            className="bg-white rounded-xl shadow-2xl border border-gray-200 w-80 p-2 max-h-[80vh] overflow-y-auto"
+            className="bg-white rounded-xl shadow-2xl border border-gray-200 w-96 max-h-[80vh] overflow-hidden flex flex-col"
             onClick={(e) => e.stopPropagation()}
           >
-            <div className="flex items-center justify-between px-3 py-2 border-b border-gray-100 sticky top-0 bg-white z-10">
-              <h3 className="text-sm font-semibold text-gray-900">Insert Content Block</h3>
-              <button
-                onClick={() => setShowContentBlocksMenu(false)}
-                className="text-gray-400 hover:text-gray-600 transition-colors"
-              >
-                <X size={16} />
-              </button>
+            {/* Header with search */}
+            <div className="flex flex-col border-b border-gray-100 sticky top-0 bg-white z-10">
+              <div className="flex items-center justify-between px-4 py-3">
+                <h3 className="text-sm font-semibold text-gray-900">Insert Content Block</h3>
+                <button
+                  onClick={() => setShowContentBlocksMenu(false)}
+                  className="text-gray-400 hover:text-gray-600 transition-colors"
+                  aria-label="Close menu"
+                >
+                  <X size={16} />
+                </button>
+              </div>
+              
+              {/* Search bar */}
+              <div className="px-4 pb-3">
+                <div className="relative">
+                  <SearchIcon 
+                    size={16} 
+                    className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none" 
+                  />
+                  <input
+                    ref={blockSearchInputRef}
+                    type="text"
+                    value={blockSearchQuery}
+                    onChange={(e) => {
+                      setBlockSearchQuery(e.target.value)
+                      setSelectedBlockIndex(0)
+                    }}
+                    onKeyDown={handleBlockMenuKeyDown}
+                    placeholder="Search blocks..."
+                    className="w-full pl-9 pr-3 py-2 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  />
+                </div>
+                <p className="text-xs text-gray-500 mt-2">
+                  Use ↑↓ to navigate, Enter to select, Esc to close
+                </p>
+              </div>
             </div>
-            <div className="py-2">
-              {/* Headers Section */}
-              <div className="px-3 pt-2 pb-1">
-                <div className="text-xs font-semibold text-gray-500 uppercase tracking-wide">Headings</div>
-              </div>
-              <button
-                onClick={() => handleInsertContentBlock('heading1')}
-                className="w-full flex items-center gap-3 px-3 py-3 hover:bg-gray-50 rounded-lg transition-colors text-left"
-              >
-                <div className="flex-shrink-0 w-10 h-10 rounded-lg bg-indigo-100 flex items-center justify-center">
-                  <Heading1 size={20} className="text-indigo-600" />
-                </div>
-                <div className="flex-1 min-w-0">
-                  <div className="font-medium text-gray-900 text-sm">Heading 1</div>
-                  <div className="text-xs text-gray-500">Large section heading</div>
-                </div>
-              </button>
-              <button
-                onClick={() => handleInsertContentBlock('heading2')}
-                className="w-full flex items-center gap-3 px-3 py-3 hover:bg-gray-50 rounded-lg transition-colors text-left"
-              >
-                <div className="flex-shrink-0 w-10 h-10 rounded-lg bg-indigo-100 flex items-center justify-center">
-                  <Heading2 size={18} className="text-indigo-600" />
-                </div>
-                <div className="flex-1 min-w-0">
-                  <div className="font-medium text-gray-900 text-sm">Heading 2</div>
-                  <div className="text-xs text-gray-500">Medium section heading</div>
-                </div>
-              </button>
-              <button
-                onClick={() => handleInsertContentBlock('heading3')}
-                className="w-full flex items-center gap-3 px-3 py-3 hover:bg-gray-50 rounded-lg transition-colors text-left"
-              >
-                <div className="flex-shrink-0 w-10 h-10 rounded-lg bg-indigo-100 flex items-center justify-center">
-                  <Heading3 size={16} className="text-indigo-600" />
-                </div>
-                <div className="flex-1 min-w-0">
-                  <div className="font-medium text-gray-900 text-sm">Heading 3</div>
-                  <div className="text-xs text-gray-500">Small section heading</div>
-                </div>
-              </button>
 
-              {/* Lists Section */}
-              <div className="px-3 pt-3 pb-1">
-                <div className="text-xs font-semibold text-gray-500 uppercase tracking-wide">Lists</div>
-              </div>
-              <button
-                onClick={() => handleInsertContentBlock('unordered-list')}
-                className="w-full flex items-center gap-3 px-3 py-3 hover:bg-gray-50 rounded-lg transition-colors text-left"
-              >
-                <div className="flex-shrink-0 w-10 h-10 rounded-lg bg-green-100 flex items-center justify-center">
-                  <List size={20} className="text-green-600" />
+            {/* Content blocks list */}
+            <div className="overflow-y-auto flex-1 py-2">
+              {filteredBlocks.length === 0 ? (
+                <div className="px-4 py-8 text-center text-sm text-gray-500">
+                  No blocks found matching &quot;{blockSearchQuery}&quot;
                 </div>
-                <div className="flex-1 min-w-0">
-                  <div className="font-medium text-gray-900 text-sm">Bullet List</div>
-                  <div className="text-xs text-gray-500">Create an unordered list</div>
-                </div>
-              </button>
-              <button
-                onClick={() => handleInsertContentBlock('ordered-list')}
-                className="w-full flex items-center gap-3 px-3 py-3 hover:bg-gray-50 rounded-lg transition-colors text-left"
-              >
-                <div className="flex-shrink-0 w-10 h-10 rounded-lg bg-green-100 flex items-center justify-center">
-                  <OrderedListIcon size={20} className="text-green-600" />
-                </div>
-                <div className="flex-1 min-w-0">
-                  <div className="font-medium text-gray-900 text-sm">Numbered List</div>
-                  <div className="text-xs text-gray-500">Create an ordered list</div>
-                </div>
-              </button>
-              <button
-                onClick={() => handleInsertContentBlock('checklist')}
-                className="w-full flex items-center gap-3 px-3 py-3 hover:bg-gray-50 rounded-lg transition-colors text-left"
-              >
-                <div className="flex-shrink-0 w-10 h-10 rounded-lg bg-green-100 flex items-center justify-center">
-                  <CheckSquare size={20} className="text-green-600" />
-                </div>
-                <div className="flex-1 min-w-0">
-                  <div className="font-medium text-gray-900 text-sm">Checklist</div>
-                  <div className="text-xs text-gray-500">Task list with checkboxes</div>
-                </div>
-              </button>
-
-              {/* Content Blocks Section */}
-              <div className="px-3 pt-3 pb-1">
-                <div className="text-xs font-semibold text-gray-500 uppercase tracking-wide">Content</div>
-              </div>
-              <button
-                onClick={() => handleInsertContentBlock('blockquote')}
-                className="w-full flex items-center gap-3 px-3 py-3 hover:bg-gray-50 rounded-lg transition-colors text-left"
-              >
-                <div className="flex-shrink-0 w-10 h-10 rounded-lg bg-amber-100 flex items-center justify-center">
-                  <Quote size={20} className="text-amber-600" />
-                </div>
-                <div className="flex-1 min-w-0">
-                  <div className="font-medium text-gray-900 text-sm">Quote</div>
-                  <div className="text-xs text-gray-500">Insert a blockquote</div>
-                </div>
-              </button>
-              <button
-                onClick={() => handleInsertContentBlock('horizontal-rule')}
-                className="w-full flex items-center gap-3 px-3 py-3 hover:bg-gray-50 rounded-lg transition-colors text-left"
-              >
-                <div className="flex-shrink-0 w-10 h-10 rounded-lg bg-gray-100 flex items-center justify-center">
-                  <HorizontalRule size={20} className="text-gray-600" />
-                </div>
-                <div className="flex-1 min-w-0">
-                  <div className="font-medium text-gray-900 text-sm">Divider</div>
-                  <div className="text-xs text-gray-500">Add a horizontal rule</div>
-                </div>
-              </button>
-              <button
-                onClick={handleInsertTable}
-                className="w-full flex items-center gap-3 px-3 py-3 hover:bg-gray-50 rounded-lg transition-colors text-left"
-              >
-                <div className="flex-shrink-0 w-10 h-10 rounded-lg bg-blue-100 flex items-center justify-center">
-                  <TableIcon size={20} className="text-blue-600" />
-                </div>
-                <div className="flex-1 min-w-0">
-                  <div className="font-medium text-gray-900 text-sm">Table</div>
-                  <div className="text-xs text-gray-500">Insert a customizable table</div>
-                </div>
-              </button>
-              <button
-                onClick={handleInsertNoteLink}
-                className="w-full flex items-center gap-3 px-3 py-3 hover:bg-gray-50 rounded-lg transition-colors text-left"
-              >
-                <div className="flex-shrink-0 w-10 h-10 rounded-lg bg-purple-100 flex items-center justify-center">
-                  <FileText size={20} className="text-purple-600" />
-                </div>
-                <div className="flex-1 min-w-0">
-                  <div className="font-medium text-gray-900 text-sm">Note Link</div>
-                  <div className="text-xs text-gray-500">Link to another note</div>
-                </div>
-              </button>
+              ) : (
+                <>
+                  {Object.entries(
+                    filteredBlocks.reduce((acc, block) => {
+                      if (!acc[block.category]) acc[block.category] = []
+                      acc[block.category].push(block)
+                      return acc
+                    }, {} as Record<string, typeof filteredBlocks>)
+                  ).map(([category, blocks]) => (
+                    <div key={category}>
+                      {/* Category header - only show if not searching or multiple categories present */}
+                      {(!blockSearchQuery || Object.keys(
+                        filteredBlocks.reduce((acc, block) => {
+                          acc[block.category] = true
+                          return acc
+                        }, {} as Record<string, boolean>)
+                      ).length > 1) && (
+                        <div className="px-3 pt-3 pb-1 first:pt-1">
+                          <div className="text-xs font-semibold text-gray-500 uppercase tracking-wide">
+                            {category}
+                          </div>
+                        </div>
+                      )}
+                      
+                      {blocks.map((block) => {
+                        const blockIndex = filteredBlocks.indexOf(block)
+                        const isSelected = blockIndex === selectedBlockIndex
+                        const IconComponent = block.icon
+                        
+                        return (
+                          <button
+                            key={block.id}
+                            onClick={() => executeBlockAction(block.id)}
+                            className={`w-full flex items-center gap-3 px-3 py-3 rounded-lg transition-colors text-left ${
+                              isSelected 
+                                ? 'bg-blue-50 ring-2 ring-blue-500 ring-inset' 
+                                : 'hover:bg-gray-50'
+                            }`}
+                            onMouseEnter={() => setSelectedBlockIndex(blockIndex)}
+                          >
+                            <div className={`flex-shrink-0 w-10 h-10 rounded-lg bg-${block.color}-100 flex items-center justify-center`}>
+                              <IconComponent size={20} className={`text-${block.color}-600`} />
+                            </div>
+                            <div className="flex-1 min-w-0">
+                              <div className="font-medium text-gray-900 text-sm">{block.label}</div>
+                              <div className="text-xs text-gray-500">{block.description}</div>
+                            </div>
+                          </button>
+                        )
+                      })}
+                    </div>
+                  ))}
+                </>
+              )}
             </div>
           </div>
         </div>
