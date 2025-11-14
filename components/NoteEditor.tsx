@@ -54,6 +54,7 @@ import { Note as LibNote } from '../lib/notes'
 import NoteLinkDialog from './NoteLinkDialog'
 import KnowledgeGraphModal from './KnowledgeGraphModal'
 import { noteLinkBlock } from '../lib/editor/noteLinkBlock'
+import FixedToolbar from './FixedToolbar'
 
 export type { Note } from '../lib/notes'
 
@@ -169,6 +170,7 @@ export default function NoteEditor({
   const [showContentBlocksMenu, setShowContentBlocksMenu] = useState(false)
   const [showKnowledgeGraph, setShowKnowledgeGraph] = useState(false)
   const [showProjectsModal, setShowProjectsModal] = useState(false)
+  const [showBlockOutlines, setShowBlockOutlines] = useState(false)
 
   const scheduleHeadingsUpdate = useCallback(() => {
     if (headingUpdateTimeoutRef.current !== null) {
@@ -931,7 +933,20 @@ export default function NoteEditor({
 
       {/* Clean Editor Area */}
       <div className="flex flex-col h-screen bg-white pb-10">
-        <div className="flex-1 px-3 py-2 sm:px-4 sm:py-3 overflow-hidden">
+        {/* Fixed Toolbar - Only show for rich text notes */}
+        {noteType === 'rich-text' && (
+          <FixedToolbar
+            onCommand={handleCommand}
+            onShowTable={() => editorRef.current?.showTableDialog()}
+            onShowNoteLink={() => editorRef.current?.requestNoteLink()}
+            activeFormats={activeFormats}
+            disabled={isSaving || isDeleting}
+            showBlockOutlines={showBlockOutlines}
+            onToggleBlockOutlines={() => setShowBlockOutlines(!showBlockOutlines)}
+          />
+        )}
+        
+        <div className={`flex-1 px-3 py-2 sm:px-4 sm:py-3 overflow-hidden ${showBlockOutlines ? 'show-block-outlines' : ''}`}>
           <div className="h-full w-full">
             <div className="relative h-full overflow-hidden flex flex-col bg-white">
               {noteType === 'drawing' ? (

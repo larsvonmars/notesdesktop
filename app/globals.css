@@ -131,4 +131,125 @@
     @apply bg-yellow-200;
     padding: 0.125rem 0 !important;
   }
+
+  /* Block outline styles - shown when block visibility is enabled */
+  .show-block-outlines [contenteditable='true'] > *,
+  .show-block-outlines [contenteditable='true'] p,
+  .show-block-outlines [contenteditable='true'] h1,
+  .show-block-outlines [contenteditable='true'] h2,
+  .show-block-outlines [contenteditable='true'] h3,
+  .show-block-outlines [contenteditable='true'] ul,
+  .show-block-outlines [contenteditable='true'] ol,
+  .show-block-outlines [contenteditable='true'] blockquote,
+  .show-block-outlines [contenteditable='true'] pre,
+  .show-block-outlines [contenteditable='true'] [data-block='true'] {
+    position: relative;
+    border: 1px dashed rgba(147, 51, 234, 0.3) !important;
+    border-radius: 4px !important;
+    padding: 8px !important;
+    margin-top: 4px !important;
+    margin-bottom: 4px !important;
+    transition: all 0.2s ease;
+  }
+
+  .show-block-outlines [contenteditable='true'] > *:hover,
+  .show-block-outlines [contenteditable='true'] p:hover,
+  .show-block-outlines [contenteditable='true'] h1:hover,
+  .show-block-outlines [contenteditable='true'] h2:hover,
+  .show-block-outlines [contenteditable='true'] h3:hover,
+  .show-block-outlines [contenteditable='true'] ul:hover,
+  .show-block-outlines [contenteditable='true'] ol:hover,
+  .show-block-outlines [contenteditable='true'] blockquote:hover,
+  .show-block-outlines [contenteditable='true'] pre:hover,
+  .show-block-outlines [contenteditable='true'] [data-block='true']:hover {
+    background-color: rgba(147, 51, 234, 0.05) !important;
+    border-color: rgba(147, 51, 234, 0.6) !important;
+  }
+
+  /* Block type labels - shown when block visibility is enabled */
+  .show-block-outlines [contenteditable='true'] > *::before,
+  .show-block-outlines [contenteditable='true'] p::before,
+  .show-block-outlines [contenteditable='true'] h1::before,
+  .show-block-outlines [contenteditable='true'] h2::before,
+  .show-block-outlines [contenteditable='true'] h3::before,
+  .show-block-outlines [contenteditable='true'] ul::before,
+  .show-block-outlines [contenteditable='true'] ol::before,
+  .show-block-outlines [contenteditable='true'] blockquote::before,
+  .show-block-outlines [contenteditable='true'] pre::before,
+  .show-block-outlines [contenteditable='true'] [data-block='true']::before {
+    content: attr(data-block-label);
+    position: absolute;
+    top: -10px;
+    left: 4px;
+    font-size: 9px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    background: linear-gradient(135deg, #9333EA 0%, #7C3AED 100%);
+    color: white;
+    padding: 2px 6px;
+    border-radius: 3px;
+    z-index: 10;
+    pointer-events: none;
+    font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+  }
+
+  /* Specific block type labels */
+  .show-block-outlines [contenteditable='true'] p::before {
+    content: 'P';
+  }
+
+  .show-block-outlines [contenteditable='true'] h1::before {
+    content: 'H1';
+    background: linear-gradient(135deg, #EF4444 0%, #DC2626 100%);
+  }
+
+  .show-block-outlines [contenteditable='true'] h2::before {
+    content: 'H2';
+    background: linear-gradient(135deg, #F59E0B 0%, #D97706 100%);
+  }
+
+  .show-block-outlines [contenteditable='true'] h3::before {
+    content: 'H3';
+    background: linear-gradient(135deg, #10B981 0%, #059669 100%);
+  }
+
+  .show-block-outlines [contenteditable='true'] ul::before {
+    content: 'UL';
+    background: linear-gradient(135deg, #3B82F6 0%, #2563EB 100%);
+  }
+
+  .show-block-outlines [contenteditable='true'] ol::before {
+    content: 'OL';
+    background: linear-gradient(135deg, #06B6D4 0%, #0891B2 100%);
+  }
+
+  .show-block-outlines [contenteditable='true'] blockquote::before {
+    content: 'Quote';
+    background: linear-gradient(135deg, #8B5CF6 0%, #7C3AED 100%);
+  }
+
+  .show-block-outlines [contenteditable='true'] pre::before {
+    content: 'Code';
+    background: linear-gradient(135deg, #64748B 0%, #475569 100%);
+  }
+
+  .show-block-outlines [contenteditable='true'] [data-block='true']::before {
+    content: attr(data-block-type);
+    background: linear-gradient(135deg, #EC4899 0%, #DB2777 100%);
+  }
+
+  /* Adjust spacing for nested elements within blocks */
+  .show-block-outlines [contenteditable='true'] ul > li,
+  .show-block-outlines [contenteditable='true'] ol > li {
+    border: none !important;
+    padding: 0 !important;
+    margin-left: 0 !important;
+  }
+
+  .show-block-outlines [contenteditable='true'] ul > li::before,
+  .show-block-outlines [contenteditable='true'] ol > li::before {
+    display: none !important;
+  }
 }
