@@ -168,13 +168,6 @@ export default function UnifiedPanel({
   const [hoverFolderId, setHoverFolderId] = useState<string | null>(null)
   const lastAutoOpenKey = useRef<string | number | undefined>(undefined)
 
-  // Load tasks when panel opens or tab changes
-  useEffect(() => {
-    if (isOpen && activeTab === 'tasks') {
-      loadTasks()
-    }
-  }, [isOpen, activeTab, loadTasks])
-
   const loadTasks = useCallback(async () => {
     setIsLoadingTasks(true)
     try {
@@ -194,6 +187,13 @@ export default function UnifiedPanel({
       setIsLoadingTasks(false)
     }
   }, [note?.id, note?.project_id])
+
+  // Load tasks when panel opens or tab changes
+  useEffect(() => {
+    if (isOpen && activeTab === 'tasks') {
+      loadTasks()
+    }
+  }, [isOpen, activeTab, loadTasks])
 
   const handleQuickAddTask = useCallback(async () => {
     if (!quickTaskTitle.trim()) return
@@ -454,6 +454,111 @@ export default function UnifiedPanel({
     }
   }, [getFolderPathKeys, selectedFolderId])
 
+  // Context menu handlers with smart positioning
+  const handleFolderContextMenu = useCallback((e: React.MouseEvent, folderId: string, folderName: string) => {
+    e.preventDefault()
+    e.stopPropagation()
+    
+    // Calculate position to keep menu in viewport
+    const menuWidth = 200
+    const menuHeight = 250 // Approximate max height
+    const x = Math.min(e.clientX, window.innerWidth - menuWidth - 10)
+    const y = Math.min(e.clientY, window.innerHeight - menuHeight - 10)
+    
+    setContextMenu({
+      x,
+      y,
+      type: 'folder',
+      id: folderId,
+      name: folderName,
+    })
+  }, [])
+
+  const handleNoteContextMenu = useCallback((e: React.MouseEvent, note: Note) => {
+    e.preventDefault()
+    e.stopPropagation()
+    
+    // Calculate position to keep menu in viewport
+    const menuWidth = 200
+    const menuHeight = 180 // Approximate max height
+    const x = Math.min(e.clientX, window.innerWidth - menuWidth - 10)
+    const y = Math.min(e.clientY, window.innerHeight - menuHeight - 10)
+    
+    setContextMenu({
+      x,
+      y,
+      type: 'note',
+      id: note.id,
+      name: note.title || 'Untitled',
+    })
+  }, [])
+
+  // Drag and drop handlers for moving notes
+  const handleNoteDragStart = useCallback((e: React.DragEvent, noteId: string) => {
+    e.dataTransfer.setData('text/plain', noteId)
+    e.dataTransfer.effectAllowed = 'move'
+    // Add visual feedback
+    if (e.currentTarget instanceof HTMLElement) {
+      e.currentTarget.style.opacity = '0.5'
+    }
+  }, [])
+  
+  const handleNoteDragEnd = useCallback((e: React.DragEvent) => {
+    // Reset visual feedback
+    if (e.currentTarget instanceof HTMLElement) {
+      e.currentTarget.style.opacity = '1'
+    }
+    setHoverFolderId(null)
+  }, [])
+
+  const handleFolderDragOver = useCallback((e: React.DragEvent) => {
+    e.preventDefault()
+    e.dataTransfer.dropEffect = 'move'
+  }, [])
+
+  const handleFolderDragEnter = useCallback((e: React.DragEvent, targetFolderId: string | null) => {
+    e.preventDefault()
+    // Only set hover if we're entering the target element itself
+    if (e.currentTarget === e.target) {
+      setHoverFolderId(targetFolderId === null ? ALL_FOLDER_KEY : folderKey(targetFolderId))
+    }
+  }, [folderKey, ALL_FOLDER_KEY])
+
+  const handleFolderDragLeave = useCallback((e: React.DragEvent) => {
+    e.preventDefault()
+    // Only clear hover if we're actually leaving the element
+    if (e.currentTarget === e.target || !e.currentTarget.contains(e.relatedTarget as Node)) {
+      setHoverFolderId(null)
+    }
+  }, [])
+
+  const handleFolderDrop = useCallback(async (e: React.DragEvent, targetFolderId: string | null) => {
+    e.preventDefault()
+    setHoverFolderId(null)
+    
+    const noteId = e.dataTransfer.getData('text/plain')
+    if (!noteId) return
+    
+    // Avoid moving into same folder if we can determine it
+    const note = notes.find(n => n.id === noteId)
+    const currentFolder = note?.folder_id ?? null
+    
+    if (currentFolder === targetFolderId) {
+      // Note is already in this folder
+      return
+    }
+    
+    if (onMoveNote) {
+      try {
+        await onMoveNote(noteId, targetFolderId)
+      } catch (error) {
+        console.error('Failed to move note:', error)
+        // Error handling is done in the parent component
+      }
+    }
+    setContextMenu(null)
+  }, [notes, onMoveNote])
+
   const renderFolder = useCallback((folder: FolderNode, level: number = 0) => {
     const key = folderKey(folder.id)
     const isExpanded = expandedFolders.has(key)
@@ -604,111 +709,6 @@ export default function UnifiedPanel({
   const allNotes = allNotesEntry?.notes ?? []
   const displayedAllNotes = allNotes
   const allError = allNotesEntry?.error
-
-  // Context menu handlers with smart positioning
-  const handleFolderContextMenu = useCallback((e: React.MouseEvent, folderId: string, folderName: string) => {
-    e.preventDefault()
-    e.stopPropagation()
-    
-    // Calculate position to keep menu in viewport
-    const menuWidth = 200
-    const menuHeight = 250 // Approximate max height
-    const x = Math.min(e.clientX, window.innerWidth - menuWidth - 10)
-    const y = Math.min(e.clientY, window.innerHeight - menuHeight - 10)
-    
-    setContextMenu({
-      x,
-      y,
-      type: 'folder',
-      id: folderId,
-      name: folderName,
-    })
-  }, [])
-
-  const handleNoteContextMenu = useCallback((e: React.MouseEvent, note: Note) => {
-    e.preventDefault()
-    e.stopPropagation()
-    
-    // Calculate position to keep menu in viewport
-    const menuWidth = 200
-    const menuHeight = 180 // Approximate max height
-    const x = Math.min(e.clientX, window.innerWidth - menuWidth - 10)
-    const y = Math.min(e.clientY, window.innerHeight - menuHeight - 10)
-    
-    setContextMenu({
-      x,
-      y,
-      type: 'note',
-      id: note.id,
-      name: note.title || 'Untitled',
-    })
-  }, [])
-
-  // Drag and drop handlers for moving notes
-  const handleNoteDragStart = useCallback((e: React.DragEvent, noteId: string) => {
-    e.dataTransfer.setData('text/plain', noteId)
-    e.dataTransfer.effectAllowed = 'move'
-    // Add visual feedback
-    if (e.currentTarget instanceof HTMLElement) {
-      e.currentTarget.style.opacity = '0.5'
-    }
-  }, [])
-  
-  const handleNoteDragEnd = useCallback((e: React.DragEvent) => {
-    // Reset visual feedback
-    if (e.currentTarget instanceof HTMLElement) {
-      e.currentTarget.style.opacity = '1'
-    }
-    setHoverFolderId(null)
-  }, [])
-
-  const handleFolderDragOver = useCallback((e: React.DragEvent) => {
-    e.preventDefault()
-    e.dataTransfer.dropEffect = 'move'
-  }, [])
-
-  const handleFolderDragEnter = useCallback((e: React.DragEvent, targetFolderId: string | null) => {
-    e.preventDefault()
-    // Only set hover if we're entering the target element itself
-    if (e.currentTarget === e.target) {
-      setHoverFolderId(targetFolderId === null ? ALL_FOLDER_KEY : folderKey(targetFolderId))
-    }
-  }, [folderKey, ALL_FOLDER_KEY])
-
-  const handleFolderDragLeave = useCallback((e: React.DragEvent) => {
-    e.preventDefault()
-    // Only clear hover if we're actually leaving the element
-    if (e.currentTarget === e.target || !e.currentTarget.contains(e.relatedTarget as Node)) {
-      setHoverFolderId(null)
-    }
-  }, [])
-
-  const handleFolderDrop = useCallback(async (e: React.DragEvent, targetFolderId: string | null) => {
-    e.preventDefault()
-    setHoverFolderId(null)
-    
-    const noteId = e.dataTransfer.getData('text/plain')
-    if (!noteId) return
-    
-    // Avoid moving into same folder if we can determine it
-    const note = notes.find(n => n.id === noteId)
-    const currentFolder = note?.folder_id ?? null
-    
-    if (currentFolder === targetFolderId) {
-      // Note is already in this folder
-      return
-    }
-    
-    if (onMoveNote) {
-      try {
-        await onMoveNote(noteId, targetFolderId)
-      } catch (error) {
-        console.error('Failed to move note:', error)
-        // Error handling is done in the parent component
-      }
-    }
-    setContextMenu(null)
-  }, [notes, onMoveNote])
 
   const handleRenameFromContext = () => {
     if (!contextMenu) return
