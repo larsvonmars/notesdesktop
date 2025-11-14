@@ -20,10 +20,18 @@ import {
   FolderPlus,
   Copy,
   MoreVertical,
+  CheckSquare,
+  Calendar,
+  Circle,
+  CheckCircle2,
+  Clock,
+  Star,
+  Plus,
 } from 'lucide-react'
 import { Note } from './NoteEditor'
 import { FolderNode } from '@/lib/folders'
 import { getNotesByFolder } from '@/lib/notes'
+import { getTasks, createTask, completeTask, uncompleteTask, toggleTaskStar, getTaskStats, type Task, type TaskStats } from '@/lib/tasks'
 
 interface UnifiedPanelProps {
   // Note controls
@@ -79,6 +87,9 @@ interface UnifiedPanelProps {
 
   // Control signals
   autoOpenKey?: string | number
+  
+  // Tasks & Calendar
+  onOpenTaskCalendar?: () => void
 }
 
 export default function UnifiedPanel({
@@ -116,9 +127,16 @@ export default function UnifiedPanel({
   userEmail,
   onSignOut,
   autoOpenKey,
+  onOpenTaskCalendar,
 }: UnifiedPanelProps) {
   const [isOpen, setIsOpen] = useState(false)
-  const [activeTab, setActiveTab] = useState<'browse' | 'toc'>('browse')
+  const [activeTab, setActiveTab] = useState<'browse' | 'toc' | 'tasks'>('browse')
+  
+  // Task state
+  const [tasks, setTasks] = useState<Task[]>([])
+  const [taskStats, setTaskStats] = useState<TaskStats | null>(null)
+  const [isLoadingTasks, setIsLoadingTasks] = useState(false)
+  const [quickTaskTitle, setQuickTaskTitle] = useState('')
   const ALL_FOLDER_KEY = '__ALL__'
   const folderKey = (folderId: string | null) => folderId ?? ALL_FOLDER_KEY
   const [expandedFolders, setExpandedFolders] = useState<Set<string>>(
@@ -148,6 +166,70 @@ export default function UnifiedPanel({
   const renameFolderInputRef = useRef<HTMLInputElement | null>(null)
   const [hoverFolderId, setHoverFolderId] = useState<string | null>(null)
   const lastAutoOpenKey = useRef<string | number | undefined>(undefined)
+
+  // Load tasks when panel opens or tab changes
+  useEffect(() => {
+    if (isOpen && activeTab === 'tasks') {
+      loadTasks()
+    }
+  }, [isOpen, activeTab])
+
+  const loadTasks = async () => {
+    setIsLoadingTasks(true)
+    try {
+      const [tasksData, statsData] = await Promise.all([
+        getTasks({ 
+          noteId: note?.id,
+          projectId: note?.project_id || undefined,
+          includeCompleted: false,
+        }),
+        getTaskStats(),
+      ])
+      setTasks(tasksData)
+      setTaskStats(statsData)
+    } catch (error) {
+      console.error('Failed to load tasks:', error)
+    } finally {
+      setIsLoadingTasks(false)
+    }
+  }
+
+  const handleQuickAddTask = async () => {
+    if (!quickTaskTitle.trim()) return
+
+    try {
+      await createTask(quickTaskTitle, {
+        noteId: note?.id,
+        projectId: note?.project_id || undefined,
+      })
+      setQuickTaskTitle('')
+      await loadTasks()
+    } catch (error) {
+      console.error('Failed to create task:', error)
+    }
+  }
+
+  const handleToggleTaskComplete = async (taskId: string, isCompleted: boolean) => {
+    try {
+      if (isCompleted) {
+        await uncompleteTask(taskId)
+      } else {
+        await completeTask(taskId)
+      }
+      await loadTasks()
+    } catch (error) {
+      console.error('Failed to toggle task:', error)
+    }
+  }
+
+  const handleToggleTaskStar = async (taskId: string, isStarred: boolean) => {
+    try {
+      await toggleTaskStar(taskId, !isStarred)
+      await loadTasks()
+    } catch (error) {
+      console.error('Failed to toggle star:', error)
+    }
+  }
 
   // Keyboard shortcuts
   useEffect(() => {
@@ -802,6 +884,22 @@ export default function UnifiedPanel({
                 </span>
               )}
             </button>
+            <button
+              onClick={() => setActiveTab('tasks')}
+              className={`flex-1 px-3 py-2 text-sm font-medium transition-colors flex items-center justify-center gap-1.5 ${
+                activeTab === 'tasks'
+                  ? 'text-blue-600 border-b-2 border-blue-600 bg-white'
+                  : 'text-gray-600 hover:text-gray-800 hover:bg-gray-100'
+              }`}
+            >
+              <CheckSquare size={15} />
+              Tasks
+              {taskStats && taskStats.todo > 0 && (
+                <span className="px-1.5 py-0.5 text-xs bg-orange-100 text-orange-600 rounded-full font-semibold">
+                  {taskStats.todo}
+                </span>
+              )}
+            </button>
           </div>
 
           {/* Content */}
@@ -853,6 +951,180 @@ export default function UnifiedPanel({
                     </div>
                   </div>
                 )}
+              </div>
+            )}
+
+            {activeTab === 'tasks' && (
+              <div className="space-y-3">
+                {/* Tasks & Calendar Button */}
+                {onOpenTaskCalendar && (
+                  <button
+                    onClick={() => {
+                      onOpenTaskCalendar()
+                      setIsOpen(false)
+                    }}
+                    className="w-full px-3 py-2.5 bg-gradient-to-r from-blue-500 to-purple-600 text-white text-sm font-medium rounded-md hover:from-blue-600 hover:to-purple-700 transition-all shadow-sm hover:shadow flex items-center justify-center gap-2"
+                    title="Open Tasks & Calendar"
+                  >
+                    <Calendar size={16} />
+                    <span>Open Tasks & Calendar</span>
+                  </button>
+                )}
+
+                {/* Quick Add Task */}
+                <div className="bg-gray-50 rounded-lg p-3 border border-gray-200">
+                  <div className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">
+                    Quick Add
+                  </div>
+                  <div className="flex gap-2">
+                    <input
+                      type="text"
+                      value={quickTaskTitle}
+                      onChange={(e) => setQuickTaskTitle(e.target.value)}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter') {
+                          e.preventDefault()
+                          handleQuickAddTask()
+                        }
+                      }}
+                      placeholder="New task..."
+                      className="flex-1 px-2.5 py-1.5 text-sm border border-gray-200 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                    />
+                    <button
+                      onClick={handleQuickAddTask}
+                      disabled={!quickTaskTitle.trim()}
+                      className="px-2.5 py-1.5 bg-blue-600 text-white rounded-md hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                      title="Add task"
+                    >
+                      <Plus size={16} />
+                    </button>
+                  </div>
+                </div>
+
+                {/* Task Stats */}
+                {taskStats && (
+                  <div className="bg-gradient-to-br from-blue-50 to-purple-50 rounded-lg p-3 border border-blue-200">
+                    <div className="grid grid-cols-3 gap-2 text-center">
+                      <div>
+                        <div className="text-lg font-bold text-blue-600">{taskStats.todo}</div>
+                        <div className="text-xs text-gray-600">To Do</div>
+                      </div>
+                      <div>
+                        <div className="text-lg font-bold text-purple-600">{taskStats.in_progress}</div>
+                        <div className="text-xs text-gray-600">In Progress</div>
+                      </div>
+                      <div>
+                        <div className="text-lg font-bold text-green-600">{taskStats.completed}</div>
+                        <div className="text-xs text-gray-600">Done</div>
+                      </div>
+                    </div>
+                    {taskStats.overdue > 0 && (
+                      <div className="mt-2 pt-2 border-t border-blue-200">
+                        <div className="text-center">
+                          <div className="text-lg font-bold text-red-600">{taskStats.overdue}</div>
+                          <div className="text-xs text-gray-600">Overdue Tasks</div>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                {/* Task List */}
+                <div>
+                  <div className="flex items-center justify-between mb-2">
+                    <div className="text-xs font-semibold text-gray-500 uppercase tracking-wide">
+                      {note ? 'Tasks for this note' : 'Recent Tasks'}
+                    </div>
+                  </div>
+
+                  {isLoadingTasks ? (
+                    <div className="text-center py-6">
+                      <Loader2 size={24} className="animate-spin mx-auto text-blue-600 mb-2" />
+                      <p className="text-sm text-gray-500">Loading tasks...</p>
+                    </div>
+                  ) : tasks.length === 0 ? (
+                    <div className="text-center py-6 bg-gray-50 rounded-lg border border-dashed border-gray-300">
+                      <CheckSquare size={32} className="mx-auto text-gray-300 mb-2" />
+                      <p className="text-sm text-gray-500">No tasks yet</p>
+                      <p className="text-xs text-gray-400 mt-1">Add one above to get started</p>
+                    </div>
+                  ) : (
+                    <div className="space-y-2">
+                      {tasks.slice(0, 10).map((task) => {
+                        const isOverdue = task.due_date && new Date(task.due_date) < new Date() && task.status !== 'completed'
+                        
+                        return (
+                          <div
+                            key={task.id}
+                            className="bg-white border border-gray-200 rounded-lg p-2.5 hover:shadow-sm transition-shadow"
+                          >
+                            <div className="flex items-start gap-2">
+                              <button
+                                onClick={() => handleToggleTaskComplete(task.id, task.status === 'completed')}
+                                className="mt-0.5 flex-shrink-0"
+                              >
+                                {task.status === 'completed' ? (
+                                  <CheckCircle2 size={16} className="text-green-600" />
+                                ) : (
+                                  <Circle size={16} className="text-gray-400 hover:text-blue-600" />
+                                )}
+                              </button>
+
+                              <div className="flex-1 min-w-0">
+                                <div className="flex items-start justify-between gap-2 mb-1">
+                                  <p className={`text-sm font-medium ${task.status === 'completed' ? 'line-through text-gray-500' : 'text-gray-900'}`}>
+                                    {task.title}
+                                  </p>
+                                  <button
+                                    onClick={() => handleToggleTaskStar(task.id, task.is_starred)}
+                                    className={`flex-shrink-0 ${task.is_starred ? 'text-yellow-500' : 'text-gray-400 hover:text-yellow-500'}`}
+                                  >
+                                    <Star size={14} fill={task.is_starred ? 'currentColor' : 'none'} />
+                                  </button>
+                                </div>
+
+                                <div className="flex flex-wrap items-center gap-1.5 text-xs">
+                                  {task.priority !== 'medium' && (
+                                    <span className={`px-1.5 py-0.5 rounded ${
+                                      task.priority === 'urgent' ? 'bg-red-100 text-red-700' :
+                                      task.priority === 'high' ? 'bg-orange-100 text-orange-700' :
+                                      'bg-gray-100 text-gray-600'
+                                    }`}>
+                                      {task.priority}
+                                    </span>
+                                  )}
+                                  
+                                  {task.due_date && (
+                                    <span className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded ${
+                                      isOverdue ? 'bg-red-100 text-red-700' : 'bg-blue-100 text-blue-700'
+                                    }`}>
+                                      <Clock size={10} />
+                                      {new Date(task.due_date).toLocaleDateString('default', { month: 'short', day: 'numeric' })}
+                                    </span>
+                                  )}
+                                </div>
+                              </div>
+                            </div>
+                          </div>
+                        )
+                      })}
+
+                      {tasks.length > 10 && (
+                        <button
+                          onClick={() => {
+                            if (onOpenTaskCalendar) {
+                              onOpenTaskCalendar()
+                              setIsOpen(false)
+                            }
+                          }}
+                          className="w-full px-3 py-2 text-sm text-blue-600 hover:bg-blue-50 rounded-lg transition-colors font-medium"
+                        >
+                          View all {tasks.length} tasks →
+                        </button>
+                      )}
+                    </div>
+                  )}
+                </div>
               </div>
             )}
 
@@ -951,8 +1223,8 @@ export default function UnifiedPanel({
                 </button>
                 <button
                   onClick={() => {
-                    // create a new text note inside this folder
-                    onNewNote?.('rich-text', contextMenu.id)
+                    // create a new note inside this folder
+                    onNewNote?.(undefined, contextMenu.id)
                     setContextMenu(null)
                     setIsOpen(false)
                   }}

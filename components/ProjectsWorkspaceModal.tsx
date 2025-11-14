@@ -917,7 +917,7 @@ export default function ProjectsWorkspaceModal({
     }
   }
 
-  const handleCreateNote = (noteType: NoteType = 'rich-text') => {
+  const handleCreateNote = (noteType?: NoteType) => {
     const resolved = resolveProjectId(activeProjectId)
     if (resolved === undefined) {
       toast.push({
@@ -958,7 +958,7 @@ export default function ProjectsWorkspaceModal({
   }
 
   const handleCreateNoteFromFolder = (
-    noteType: NoteType = 'rich-text',
+    noteType?: NoteType,
     folderId?: string | null,
     projectId?: string | null
   ) => {
@@ -1447,7 +1447,7 @@ export default function ProjectsWorkspaceModal({
                 <button
                   type="button"
                   className="inline-flex items-center gap-2 rounded-md bg-blue-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-blue-700 disabled:opacity-50"
-                  onClick={() => handleCreateNote('rich-text')}
+                  onClick={() => handleCreateNote()}
                   disabled={activeProjectResolved === undefined}
                 >
                   <FilePlus2 size={16} />

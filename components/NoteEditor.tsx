@@ -105,6 +105,7 @@ interface NoteEditorWithPanelProps extends NoteEditorProps {
   userEmail?: string
   onSignOut?: () => void
   autoOpenPanelKey?: string | number
+  onOpenTaskCalendar?: () => void
 }
 
 export default function NoteEditor({ 
@@ -130,6 +131,7 @@ export default function NoteEditor({
   userEmail,
   onSignOut,
   autoOpenPanelKey,
+  onOpenTaskCalendar,
 }: NoteEditorWithPanelProps) {
   const toast = useToast()
   const [title, setTitle] = useState('')
@@ -893,7 +895,8 @@ export default function NoteEditor({
         stats={stats}
         userEmail={userEmail}
         onSignOut={onSignOut}
-          autoOpenKey={autoOpenPanelKey}
+        autoOpenKey={autoOpenPanelKey}
+        onOpenTaskCalendar={onOpenTaskCalendar}
       />
 
       {/* Clean Editor Area */}

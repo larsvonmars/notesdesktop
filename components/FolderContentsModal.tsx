@@ -251,7 +251,7 @@ export default function FolderContentsModal({
                 <div className="flex flex-wrap items-center gap-2">
                   <button
                     type="button"
-                    onClick={() => onCreateNote?.('rich-text', folder.id, projectId)}
+                    onClick={() => onCreateNote?.(undefined, folder.id, projectId)}
                     className="inline-flex items-center gap-2 rounded-md bg-blue-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-blue-700"
                   >
                     <FilePlus2 size={14} />
