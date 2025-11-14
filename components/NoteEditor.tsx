@@ -30,7 +30,8 @@ import {
   Edit2,
   Network,
   Table as TableIcon,
-  FileText
+  FileText,
+  Plus
 } from 'lucide-react'
 import RichTextEditor, {
   type RichTextCommand,
@@ -163,6 +164,7 @@ export default function NoteEditor({
   const wordGoalInputRef = useRef<HTMLInputElement>(null)
   const [showNoteLinkDialog, setShowNoteLinkDialog] = useState(false)
   const savedNoteLinkSelection = useRef<Range | null>(null)
+  const [showContentBlocksMenu, setShowContentBlocksMenu] = useState(false)
   const [showKnowledgeGraph, setShowKnowledgeGraph] = useState(false)
   const [showProjectsModal, setShowProjectsModal] = useState(false)
 
@@ -496,6 +498,19 @@ export default function NoteEditor({
     },
     []
   )
+
+  // Handle content block insertion
+  const handleInsertTable = useCallback(() => {
+    setShowContentBlocksMenu(false)
+    editorRef.current?.focus()
+    editorRef.current?.showTableDialog()
+  }, [])
+
+  const handleInsertNoteLink = useCallback(() => {
+    setShowContentBlocksMenu(false)
+    editorRef.current?.focus()
+    editorRef.current?.requestNoteLink()
+  }, [])
 
   // Handle clicking on note links
   useEffect(() => {
@@ -1231,6 +1246,63 @@ export default function NoteEditor({
         onNewNote={onNewNote}
         onDuplicateNote={onDuplicateNote}
       />
+
+      {/* Floating Content Blocks Button - Only show for rich text notes */}
+      {noteType === 'rich-text' && !showContentBlocksMenu && (
+        <button
+          onClick={() => setShowContentBlocksMenu(true)}
+          className="fixed right-6 bottom-24 z-40 w-14 h-14 rounded-full bg-blue-600 hover:bg-blue-700 text-white shadow-lg hover:shadow-xl transition-all duration-200 flex items-center justify-center group"
+          title="Insert content block"
+        >
+          <Plus size={24} className="transition-transform group-hover:rotate-90" />
+        </button>
+      )}
+
+      {/* Content Blocks Menu */}
+      {showContentBlocksMenu && noteType === 'rich-text' && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/20" onClick={() => setShowContentBlocksMenu(false)}>
+          <div 
+            className="bg-white rounded-xl shadow-2xl border border-gray-200 w-80 p-2"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-center justify-between px-3 py-2 border-b border-gray-100">
+              <h3 className="text-sm font-semibold text-gray-900">Insert Content Block</h3>
+              <button
+                onClick={() => setShowContentBlocksMenu(false)}
+                className="text-gray-400 hover:text-gray-600 transition-colors"
+              >
+                <X size={16} />
+              </button>
+            </div>
+            <div className="py-2">
+              <button
+                onClick={handleInsertTable}
+                className="w-full flex items-center gap-3 px-3 py-3 hover:bg-gray-50 rounded-lg transition-colors text-left"
+              >
+                <div className="flex-shrink-0 w-10 h-10 rounded-lg bg-blue-100 flex items-center justify-center">
+                  <TableIcon size={20} className="text-blue-600" />
+                </div>
+                <div className="flex-1 min-w-0">
+                  <div className="font-medium text-gray-900 text-sm">Table</div>
+                  <div className="text-xs text-gray-500">Insert a customizable table</div>
+                </div>
+              </button>
+              <button
+                onClick={handleInsertNoteLink}
+                className="w-full flex items-center gap-3 px-3 py-3 hover:bg-gray-50 rounded-lg transition-colors text-left"
+              >
+                <div className="flex-shrink-0 w-10 h-10 rounded-lg bg-purple-100 flex items-center justify-center">
+                  <FileText size={20} className="text-purple-600" />
+                </div>
+                <div className="flex-1 min-w-0">
+                  <div className="font-medium text-gray-900 text-sm">Note Link</div>
+                  <div className="text-xs text-gray-500">Link to another note</div>
+                </div>
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </>
   )
 }
