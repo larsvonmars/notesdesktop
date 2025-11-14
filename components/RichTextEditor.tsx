@@ -23,6 +23,13 @@ import {
   restoreSelection as restoreSelectionUtil
 } from '@/lib/editor/commandDispatcher'
 import {
+  saveCursorPosition,
+  restoreCursorPosition,
+  positionCursorInElement,
+  applyCursorOperation,
+  CURSOR_TIMING
+} from '@/lib/editor/cursorPosition'
+import {
   normalizeInlineNodes,
   normalizeEditorContent,
   sanitizeInlineNodes
@@ -911,8 +918,8 @@ const RichTextEditor = forwardRef<RichTextEditorHandle, RichTextEditorProps>(
     }, [disabled, emitChange])
 
     /**
-     * Apply heading format - simplified and cleaner implementation
-     * Uses applyBlockFormat from commandDispatcher with proper ID generation
+     * Apply heading format - improved with better cursor positioning
+     * Uses applyBlockFormat from commandDispatcher with enhanced cursor management
      */
     const applyHeading = useCallback(
       (level: 1 | 2 | 3) => {
@@ -920,14 +927,14 @@ const RichTextEditor = forwardRef<RichTextEditorHandle, RichTextEditorProps>(
         
         const editor = editorRef.current
         
-        // Ensure focus before any operations
+        // Ensure focus before any operations (critical for WebView)
         editor.focus()
         
         // Use the commandDispatcher's applyBlockFormat function
         applyBlockFormat(`h${level}` as 'h1' | 'h2' | 'h3', editor)
         
         // Add heading ID after the block format is applied
-        requestAnimationFrame(() => {
+        applyCursorOperation(() => {
           const selection = window.getSelection()
           if (selection && selection.rangeCount > 0) {
             const range = selection.getRangeAt(0)
@@ -951,7 +958,7 @@ const RichTextEditor = forwardRef<RichTextEditorHandle, RichTextEditorProps>(
           // Emit change after heading is created
           normalizeEditorContent(editor)
           emitChange()
-        })
+        }, CURSOR_TIMING.LONG)
       },
       [disabled, emitChange]
     )
@@ -1043,13 +1050,26 @@ const RichTextEditor = forwardRef<RichTextEditorHandle, RichTextEditorProps>(
           range.deleteContents()
           range.insertNode(link)
         }
+        
+        // Position cursor after the link for better UX
+        applyCursorOperation(() => {
+          const newRange = document.createRange()
+          newRange.setStartAfter(link)
+          newRange.collapse(true)
+          selection.removeAllRanges()
+          selection.addRange(newRange)
+        }, CURSOR_TIMING.SHORT)
       }
 
       setShowLinkDialog(false)
       setLinkUrl('')
       setLinkText('')
       emitChange()
-      editorRef.current?.focus()
+      
+      // Ensure focus returns to editor
+      applyCursorOperation(() => {
+        editorRef.current?.focus()
+      }, CURSOR_TIMING.MEDIUM)
     }, [linkUrl, linkText, restoreSelection, emitChange])
 
     // Search functionality
@@ -1514,20 +1534,15 @@ const RichTextEditor = forwardRef<RichTextEditorHandle, RichTextEditorProps>(
                   editorRef.current?.appendChild(paragraph)
                 }
 
-                const sel = window.getSelection()
-                if (sel) {
-                  const range = document.createRange()
-                  range.setStart(paragraph, 0)
-                  range.collapse(true)
-                  sel.removeAllRanges()
-                  sel.addRange(range)
-                }
+                // Use improved cursor positioning
+                positionCursorInElement(paragraph, 'start', editorRef.current || undefined)
 
                 emitChange()
                 return
               }
 
-              setTimeout(() => {
+              // Use applyCursorOperation for consistent timing
+              applyCursorOperation(() => {
                 const postSelection = window.getSelection()
                 const newListItem = getClosestListItem(postSelection?.anchorNode ?? null)
                 if (!newListItem || newListItem === currentListItem) {
@@ -1541,7 +1556,7 @@ const RichTextEditor = forwardRef<RichTextEditorHandle, RichTextEditorProps>(
                 }
 
                 emitChange()
-              }, 0)
+              }, CURSOR_TIMING.SHORT)
             }
           }
         }
