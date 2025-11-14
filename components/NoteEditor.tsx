@@ -31,7 +31,9 @@ import {
   Network,
   Table as TableIcon,
   FileText,
-  Plus
+  Plus,
+  Minus as HorizontalRule,
+  ListOrdered as OrderedListIcon
 } from 'lucide-react'
 import RichTextEditor, {
   type RichTextCommand,
@@ -512,6 +514,12 @@ export default function NoteEditor({
     editorRef.current?.requestNoteLink()
   }, [])
 
+  const handleInsertContentBlock = useCallback((command: RichTextCommand) => {
+    setShowContentBlocksMenu(false)
+    editorRef.current?.focus()
+    editorRef.current?.exec(command)
+  }, [])
+
   // Handle clicking on note links
   useEffect(() => {
     const handleNoteLinkClick = async (event: Event) => {
@@ -689,6 +697,13 @@ export default function NoteEditor({
 
   useEffect(() => {
     const handler = (event: KeyboardEvent) => {
+      // Handle "+" key to open content blocks menu (for rich text notes only)
+      if (event.key === '+' && noteType === 'rich-text' && !isSaving && !isDeleting) {
+        event.preventDefault()
+        setShowContentBlocksMenu(true)
+        return
+      }
+
       if (!(event.metaKey || event.ctrlKey)) return
       const key = event.key.toLowerCase()
 
@@ -710,7 +725,7 @@ export default function NoteEditor({
 
     window.addEventListener('keydown', handler)
     return () => window.removeEventListener('keydown', handler)
-  }, [handleSave, hasChanges, isSaving])
+  }, [handleSave, hasChanges, isSaving, noteType, isDeleting])
 
   // Listen for selection changes to update active format states
   useEffect(() => {
@@ -1262,10 +1277,10 @@ export default function NoteEditor({
       {showContentBlocksMenu && noteType === 'rich-text' && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/20" onClick={() => setShowContentBlocksMenu(false)}>
           <div 
-            className="bg-white rounded-xl shadow-2xl border border-gray-200 w-80 p-2"
+            className="bg-white rounded-xl shadow-2xl border border-gray-200 w-80 p-2 max-h-[80vh] overflow-y-auto"
             onClick={(e) => e.stopPropagation()}
           >
-            <div className="flex items-center justify-between px-3 py-2 border-b border-gray-100">
+            <div className="flex items-center justify-between px-3 py-2 border-b border-gray-100 sticky top-0 bg-white z-10">
               <h3 className="text-sm font-semibold text-gray-900">Insert Content Block</h3>
               <button
                 onClick={() => setShowContentBlocksMenu(false)}
@@ -1275,6 +1290,116 @@ export default function NoteEditor({
               </button>
             </div>
             <div className="py-2">
+              {/* Headers Section */}
+              <div className="px-3 pt-2 pb-1">
+                <div className="text-xs font-semibold text-gray-500 uppercase tracking-wide">Headings</div>
+              </div>
+              <button
+                onClick={() => handleInsertContentBlock('heading1')}
+                className="w-full flex items-center gap-3 px-3 py-3 hover:bg-gray-50 rounded-lg transition-colors text-left"
+              >
+                <div className="flex-shrink-0 w-10 h-10 rounded-lg bg-indigo-100 flex items-center justify-center">
+                  <Heading1 size={20} className="text-indigo-600" />
+                </div>
+                <div className="flex-1 min-w-0">
+                  <div className="font-medium text-gray-900 text-sm">Heading 1</div>
+                  <div className="text-xs text-gray-500">Large section heading</div>
+                </div>
+              </button>
+              <button
+                onClick={() => handleInsertContentBlock('heading2')}
+                className="w-full flex items-center gap-3 px-3 py-3 hover:bg-gray-50 rounded-lg transition-colors text-left"
+              >
+                <div className="flex-shrink-0 w-10 h-10 rounded-lg bg-indigo-100 flex items-center justify-center">
+                  <Heading2 size={18} className="text-indigo-600" />
+                </div>
+                <div className="flex-1 min-w-0">
+                  <div className="font-medium text-gray-900 text-sm">Heading 2</div>
+                  <div className="text-xs text-gray-500">Medium section heading</div>
+                </div>
+              </button>
+              <button
+                onClick={() => handleInsertContentBlock('heading3')}
+                className="w-full flex items-center gap-3 px-3 py-3 hover:bg-gray-50 rounded-lg transition-colors text-left"
+              >
+                <div className="flex-shrink-0 w-10 h-10 rounded-lg bg-indigo-100 flex items-center justify-center">
+                  <Heading3 size={16} className="text-indigo-600" />
+                </div>
+                <div className="flex-1 min-w-0">
+                  <div className="font-medium text-gray-900 text-sm">Heading 3</div>
+                  <div className="text-xs text-gray-500">Small section heading</div>
+                </div>
+              </button>
+
+              {/* Lists Section */}
+              <div className="px-3 pt-3 pb-1">
+                <div className="text-xs font-semibold text-gray-500 uppercase tracking-wide">Lists</div>
+              </div>
+              <button
+                onClick={() => handleInsertContentBlock('unordered-list')}
+                className="w-full flex items-center gap-3 px-3 py-3 hover:bg-gray-50 rounded-lg transition-colors text-left"
+              >
+                <div className="flex-shrink-0 w-10 h-10 rounded-lg bg-green-100 flex items-center justify-center">
+                  <List size={20} className="text-green-600" />
+                </div>
+                <div className="flex-1 min-w-0">
+                  <div className="font-medium text-gray-900 text-sm">Bullet List</div>
+                  <div className="text-xs text-gray-500">Create an unordered list</div>
+                </div>
+              </button>
+              <button
+                onClick={() => handleInsertContentBlock('ordered-list')}
+                className="w-full flex items-center gap-3 px-3 py-3 hover:bg-gray-50 rounded-lg transition-colors text-left"
+              >
+                <div className="flex-shrink-0 w-10 h-10 rounded-lg bg-green-100 flex items-center justify-center">
+                  <OrderedListIcon size={20} className="text-green-600" />
+                </div>
+                <div className="flex-1 min-w-0">
+                  <div className="font-medium text-gray-900 text-sm">Numbered List</div>
+                  <div className="text-xs text-gray-500">Create an ordered list</div>
+                </div>
+              </button>
+              <button
+                onClick={() => handleInsertContentBlock('checklist')}
+                className="w-full flex items-center gap-3 px-3 py-3 hover:bg-gray-50 rounded-lg transition-colors text-left"
+              >
+                <div className="flex-shrink-0 w-10 h-10 rounded-lg bg-green-100 flex items-center justify-center">
+                  <CheckSquare size={20} className="text-green-600" />
+                </div>
+                <div className="flex-1 min-w-0">
+                  <div className="font-medium text-gray-900 text-sm">Checklist</div>
+                  <div className="text-xs text-gray-500">Task list with checkboxes</div>
+                </div>
+              </button>
+
+              {/* Content Blocks Section */}
+              <div className="px-3 pt-3 pb-1">
+                <div className="text-xs font-semibold text-gray-500 uppercase tracking-wide">Content</div>
+              </div>
+              <button
+                onClick={() => handleInsertContentBlock('blockquote')}
+                className="w-full flex items-center gap-3 px-3 py-3 hover:bg-gray-50 rounded-lg transition-colors text-left"
+              >
+                <div className="flex-shrink-0 w-10 h-10 rounded-lg bg-amber-100 flex items-center justify-center">
+                  <Quote size={20} className="text-amber-600" />
+                </div>
+                <div className="flex-1 min-w-0">
+                  <div className="font-medium text-gray-900 text-sm">Quote</div>
+                  <div className="text-xs text-gray-500">Insert a blockquote</div>
+                </div>
+              </button>
+              <button
+                onClick={() => handleInsertContentBlock('horizontal-rule')}
+                className="w-full flex items-center gap-3 px-3 py-3 hover:bg-gray-50 rounded-lg transition-colors text-left"
+              >
+                <div className="flex-shrink-0 w-10 h-10 rounded-lg bg-gray-100 flex items-center justify-center">
+                  <HorizontalRule size={20} className="text-gray-600" />
+                </div>
+                <div className="flex-1 min-w-0">
+                  <div className="font-medium text-gray-900 text-sm">Divider</div>
+                  <div className="text-xs text-gray-500">Add a horizontal rule</div>
+                </div>
+              </button>
               <button
                 onClick={handleInsertTable}
                 className="w-full flex items-center gap-3 px-3 py-3 hover:bg-gray-50 rounded-lg transition-colors text-left"
