@@ -1188,7 +1188,7 @@ const RichTextEditor = forwardRef<RichTextEditorHandle, RichTextEditorProps>(
 
     // Horizontal rule
     const insertHorizontalRule = useCallback(() => {
-      if (disabled) return
+      if (disabled || !editorRef.current) return
       
       const selection = window.getSelection()
       if (!selection || selection.rangeCount === 0) return
@@ -1201,11 +1201,8 @@ const RichTextEditor = forwardRef<RichTextEditorHandle, RichTextEditorProps>(
       p.appendChild(document.createElement('br'))
       hr.parentNode?.insertBefore(p, hr.nextSibling)
       
-      const newRange = document.createRange()
-      newRange.setStart(p, 0)
-      newRange.collapse(true)
-      selection.removeAllRanges()
-      selection.addRange(newRange)
+      // Use improved cursor positioning
+      positionCursorInElement(p, 'start', editorRef.current)
       
       emitChange()
     }, [disabled, emitChange])
