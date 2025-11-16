@@ -5,6 +5,7 @@ import { useRouter, useSearchParams } from 'next/navigation'
 import { useEffect, useState, useRef, useCallback, Suspense } from 'react'
 import NoteEditor, { Note } from '@/components/NoteEditor'
 import TaskCalendarModal from '@/components/TaskCalendarModal'
+import WelcomeBackModal from '@/components/WelcomeBackModal'
 import { Loader2, FileEdit, Sparkles, FileText, PenTool, Network, X } from 'lucide-react'
 import type { NoteType } from '@/lib/notes'
 
@@ -58,6 +59,10 @@ function WorkspaceContent() {
   
   // Task Calendar modal state
   const [showTaskCalendar, setShowTaskCalendar] = useState(false)
+  
+  // Welcome Back modal state
+  const [showWelcomeBack, setShowWelcomeBack] = useState(false)
+  const hasShownWelcomeBackRef = useRef(false)
 
   const updateFolderParam = useCallback((folderId: string | null) => {
     if (typeof window === 'undefined') return
@@ -116,6 +121,14 @@ function WorkspaceContent() {
       loadFolders()
     }
   }, [user])
+  
+  // Show Welcome Back modal once when data is loaded
+  useEffect(() => {
+    if (user && !isLoadingFolders && !isLoadingNotes && !hasShownWelcomeBackRef.current) {
+      setShowWelcomeBack(true)
+      hasShownWelcomeBackRef.current = true
+    }
+  }, [user, isLoadingFolders, isLoadingNotes])
 
   useEffect(() => {
     if (!selectedFolderId) return
@@ -767,6 +780,22 @@ function WorkspaceContent() {
         onClose={() => setShowTaskCalendar(false)}
         linkedNoteId={selectedNote?.id}
         linkedProjectId={selectedProjectId || undefined}
+      />
+      
+      {/* Welcome Back Modal */}
+      <WelcomeBackModal
+        isOpen={showWelcomeBack}
+        onClose={() => setShowWelcomeBack(false)}
+        onSelectNote={(note) => {
+          setSelectedNote(note)
+          setSelectedFolderId(note.folder_id)
+          setShowWelcomeBack(false)
+        }}
+        onSelectTask={() => {
+          // Open task calendar when a task is selected
+          setShowWelcomeBack(false)
+          setShowTaskCalendar(true)
+        }}
       />
     </div>
   )
