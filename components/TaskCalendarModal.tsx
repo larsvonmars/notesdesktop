@@ -71,7 +71,7 @@ import {
   type TimeEntry,
 } from '@/lib/events'
 import KanbanBoard from './KanbanBoard'
-import { initializeDefaultBoard, addTaskToBoard, type BoardWithColumns } from '@/lib/kanban'
+import { initializeDefaultBoard, addTaskToBoard, moveTask, type BoardWithColumns, type KanbanColumn } from '@/lib/kanban'
 
 interface TaskCalendarModalProps {
   isOpen: boolean
@@ -115,16 +115,22 @@ export default function TaskCalendarModal({
   const [showTaskModal, setShowTaskModal] = useState(false)
   const [showEventModal, setShowEventModal] = useState(false)
   const [showTaskListModal, setShowTaskListModal] = useState(false)
+  const [showTaskDetail, setShowTaskDetail] = useState(false)
   const [editingTask, setEditingTask] = useState<TaskWithDetails | null>(null)
   const [editingEvent, setEditingEvent] = useState<CalendarEvent | null>(null)
+  const [selectedTaskId, setSelectedTaskId] = useState<string | null>(null)
 
   // Form states
   const [taskTitle, setTaskTitle] = useState('')
   const [taskDescription, setTaskDescription] = useState('')
   const [taskPriority, setTaskPriority] = useState<TaskPriority>('medium')
+  const [taskStatus, setTaskStatus] = useState<TaskStatus>('todo')
   const [taskDueDate, setTaskDueDate] = useState('')
+  const [taskStartDate, setTaskStartDate] = useState('')
+  const [taskEstimatedMinutes, setTaskEstimatedMinutes] = useState('')
   const [selectedTaskList, setSelectedTaskList] = useState<string>('')
   const [selectedTags, setSelectedTags] = useState<string[]>([])
+  const [newSubtaskTitle, setNewSubtaskTitle] = useState('')
 
   const [eventTitle, setEventTitle] = useState('')
   const [eventDescription, setEventDescription] = useState('')
@@ -140,12 +146,40 @@ export default function TaskCalendarModal({
     }
   }, [isOpen])
 
+  // Load task details when selected
+  useEffect(() => {
+    if (selectedTaskId) {
+      loadTaskDetails(selectedTaskId)
+    }
+  }, [selectedTaskId])
+
+  const loadTaskDetails = async (taskId: string) => {
+    try {
+      const taskDetails = await getTaskWithDetails(taskId)
+      if (taskDetails) {
+        setEditingTask(taskDetails)
+        setTaskTitle(taskDetails.title)
+        setTaskDescription(taskDetails.description || '')
+        setTaskPriority(taskDetails.priority)
+        setTaskStatus(taskDetails.status)
+        setTaskDueDate(taskDetails.due_date ? taskDetails.due_date.substring(0, 16) : '')
+        setTaskStartDate(taskDetails.start_date ? taskDetails.start_date.substring(0, 16) : '')
+        setTaskEstimatedMinutes(taskDetails.estimated_minutes?.toString() || '')
+        setSelectedTaskList(taskDetails.task_list_id || '')
+        setSelectedTags(taskDetails.tags?.map(t => t.id) || [])
+        setShowTaskDetail(true)
+      }
+    } catch (error) {
+      console.error('Failed to load task details:', error)
+    }
+  }
+
   // Load Kanban board when switching to kanban view
   useEffect(() => {
     if (viewMode === 'kanban' && !kanbanBoard && isOpen) {
       initializeDefaultBoard().then(setKanbanBoard)
     }
-  }, [viewMode, isOpen])
+  }, [viewMode, isOpen, kanbanBoard])
 
   const loadData = async () => {
     setIsLoading(true)
@@ -268,7 +302,10 @@ export default function TaskCalendarModal({
       const newTask = await createTask(taskTitle, {
         description: taskDescription || undefined,
         priority: taskPriority,
+        status: taskStatus,
         dueDate: taskDueDate ? new Date(taskDueDate) : undefined,
+        startDate: taskStartDate ? new Date(taskStartDate) : undefined,
+        estimatedMinutes: taskEstimatedMinutes ? parseInt(taskEstimatedMinutes) : undefined,
         taskListId: selectedTaskList || undefined,
         noteId: linkedNoteId,
         projectId: linkedProjectId,
@@ -288,11 +325,7 @@ export default function TaskCalendarModal({
         }
       }
 
-      setTaskTitle('')
-      setTaskDescription('')
-      setTaskPriority('medium')
-      setTaskDueDate('')
-      setSelectedTaskList('')
+      resetTaskForm()
       setShowTaskModal(false)
       await loadData()
     } catch (error) {
@@ -300,6 +333,127 @@ export default function TaskCalendarModal({
     } finally {
       setIsSaving(false)
     }
+  }
+
+  const handleUpdateTask = async () => {
+    if (!editingTask || !taskTitle.trim()) return
+
+    setIsSaving(true)
+    try {
+      // Check if status changed
+      const statusChanged = taskStatus !== editingTask.status
+
+      await updateTask(editingTask.id, {
+        title: taskTitle,
+        description: taskDescription || null,
+        priority: taskPriority,
+        status: taskStatus,
+        due_date: taskDueDate ? new Date(taskDueDate).toISOString() : null,
+        start_date: taskStartDate ? new Date(taskStartDate).toISOString() : null,
+        estimated_minutes: taskEstimatedMinutes ? parseInt(taskEstimatedMinutes) : null,
+        task_list_id: selectedTaskList || null,
+      })
+
+      // Update tags
+      const currentTagIds = editingTask.tags?.map(t => t.id) || []
+      const tagsToAdd = selectedTags.filter(id => !currentTagIds.includes(id))
+      const tagsToRemove = currentTagIds.filter(id => !selectedTags.includes(id))
+
+      await Promise.all([
+        ...tagsToAdd.map(tagId => addTagToTask(editingTask.id, tagId)),
+        ...tagsToRemove.map(tagId => removeTagFromTask(editingTask.id, tagId)),
+      ])
+
+      // Sync with Kanban board if status changed
+      if (statusChanged && kanbanBoard && kanbanBoard.columns.length > 0) {
+        try {
+          // Find the column that matches the new status
+          const targetColumn = kanbanBoard.columns.find(
+            col => col.status_mapping === taskStatus || col.auto_assign_status === taskStatus
+          )
+
+          if (targetColumn) {
+            // Move task to the appropriate column at position 0 (top)
+            await moveTask(editingTask.id, kanbanBoard.id, targetColumn.id, 0)
+          }
+        } catch (error) {
+          console.error('Failed to sync with Kanban board:', error)
+        }
+      }
+
+      // Reload data to reflect changes
+      await loadData()
+      
+      // If status changed, show a success message and optionally close the detail panel
+      if (statusChanged && viewMode === 'kanban') {
+        // Close the detail panel to show the updated Kanban board
+        handleCloseTaskDetail()
+      } else {
+        // Otherwise, just reload the task details
+        await loadTaskDetails(editingTask.id)
+      }
+    } catch (error) {
+      console.error('Failed to update task:', error)
+    } finally {
+      setIsSaving(false)
+    }
+  }
+
+  const handleCloseTaskDetail = () => {
+    setShowTaskDetail(false)
+    setSelectedTaskId(null)
+    setEditingTask(null)
+    resetTaskForm()
+  }
+
+  const resetTaskForm = () => {
+    setTaskTitle('')
+    setTaskDescription('')
+    setTaskPriority('medium')
+    setTaskStatus('todo')
+    setTaskDueDate('')
+    setTaskStartDate('')
+    setTaskEstimatedMinutes('')
+    setSelectedTaskList('')
+    setSelectedTags([])
+  }
+
+  const handleAddSubtask = async () => {
+    if (!editingTask || !newSubtaskTitle.trim()) return
+
+    try {
+      await createSubtask(editingTask.id, newSubtaskTitle)
+      setNewSubtaskTitle('')
+      await loadTaskDetails(editingTask.id)
+    } catch (error) {
+      console.error('Failed to add subtask:', error)
+    }
+  }
+
+  const handleToggleSubtask = async (subtaskId: string, isCompleted: boolean) => {
+    if (!editingTask) return
+
+    try {
+      await toggleSubtask(subtaskId, !isCompleted)
+      await loadTaskDetails(editingTask.id)
+    } catch (error) {
+      console.error('Failed to toggle subtask:', error)
+    }
+  }
+
+  const handleDeleteSubtask = async (subtaskId: string) => {
+    if (!editingTask || !confirm('Are you sure you want to delete this subtask?')) return
+
+    try {
+      await deleteSubtask(subtaskId)
+      await loadTaskDetails(editingTask.id)
+    } catch (error) {
+      console.error('Failed to delete subtask:', error)
+    }
+  }
+
+  const handleTaskClick = (taskId: string) => {
+    setSelectedTaskId(taskId)
   }
 
   const handleToggleTask = async (taskId: string, currentStatus: TaskStatus) => {
@@ -616,11 +770,15 @@ export default function TaskCalendarModal({
                   filteredTasks.map(task => (
                     <div
                       key={task.id}
-                      className="bg-white border border-gray-200 rounded-lg p-4 hover:shadow-md transition-shadow"
+                      className="bg-white border border-gray-200 rounded-lg p-4 hover:shadow-md transition-shadow cursor-pointer"
+                      onClick={() => handleTaskClick(task.id)}
                     >
                       <div className="flex items-start gap-3">
                         <button
-                          onClick={() => handleToggleTask(task.id, task.status)}
+                          onClick={(e) => {
+                            e.stopPropagation()
+                            handleToggleTask(task.id, task.status)
+                          }}
                           className="mt-1 flex-shrink-0"
                         >
                           {task.status === 'completed' ? (
@@ -637,14 +795,20 @@ export default function TaskCalendarModal({
                             </h3>
                             <div className="flex items-center gap-1 flex-shrink-0">
                               <button
-                                onClick={() => handleToggleStar(task.id, task.is_starred)}
+                                onClick={(e) => {
+                                  e.stopPropagation()
+                                  handleToggleStar(task.id, task.is_starred)
+                                }}
                                 className={`p-1 rounded ${task.is_starred ? 'text-yellow-500' : 'text-gray-400 hover:text-yellow-500'}`}
                               >
                                 <Star size={16} fill={task.is_starred ? 'currentColor' : 'none'} />
                               </button>
                               {!activeTimeEntry && task.status !== 'completed' && (
                                 <button
-                                  onClick={() => handleStartTimer(task.id)}
+                                  onClick={(e) => {
+                                    e.stopPropagation()
+                                    handleStartTimer(task.id)
+                                  }}
                                   className="p-1 rounded text-gray-400 hover:text-green-600"
                                   title="Start timer"
                                 >
@@ -652,7 +816,10 @@ export default function TaskCalendarModal({
                                 </button>
                               )}
                               <button
-                                onClick={() => handleDeleteTask(task.id)}
+                                onClick={(e) => {
+                                  e.stopPropagation()
+                                  handleDeleteTask(task.id)
+                                }}
                                 className="p-1 rounded text-gray-400 hover:text-red-600"
                               >
                                 <Trash2 size={16} />
@@ -779,9 +946,8 @@ export default function TaskCalendarModal({
               kanbanBoard ? (
                 <KanbanBoard
                   boardId={kanbanBoard.id}
-                  onTaskClick={(task) => {
-                    // TODO: Open task detail panel
-                    console.log('Task clicked:', task)
+                  onTaskClick={async (task) => {
+                    handleTaskClick(task.id)
                   }}
                   onCreateTask={(columnId) => {
                     // Open task creation modal
@@ -881,25 +1047,58 @@ export default function TaskCalendarModal({
                   rows={3}
                   className="w-full px-4 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent resize-none"
                 />
-                <select
-                  value={taskPriority}
-                  onChange={e => setTaskPriority(e.target.value as TaskPriority)}
-                  className="w-full px-4 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                >
-                  <option value="low">Low Priority</option>
-                  <option value="medium">Medium Priority</option>
-                  <option value="high">High Priority</option>
-                  <option value="urgent">Urgent</option>
-                </select>
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Status</label>
+                    <select
+                      value={taskStatus}
+                      onChange={e => setTaskStatus(e.target.value as TaskStatus)}
+                      className="w-full px-4 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                    >
+                      <option value="todo">To Do</option>
+                      <option value="in_progress">In Progress</option>
+                      <option value="waiting">Waiting</option>
+                    </select>
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Priority</label>
+                    <select
+                      value={taskPriority}
+                      onChange={e => setTaskPriority(e.target.value as TaskPriority)}
+                      className="w-full px-4 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                    >
+                      <option value="low">Low</option>
+                      <option value="medium">Medium</option>
+                      <option value="high">High</option>
+                      <option value="urgent">Urgent</option>
+                    </select>
+                  </div>
+                </div>
                 <input
                   type="datetime-local"
                   value={taskDueDate}
                   onChange={e => setTaskDueDate(e.target.value)}
+                  placeholder="Due date"
                   className="w-full px-4 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                 />
+                <select
+                  value={selectedTaskList}
+                  onChange={e => setSelectedTaskList(e.target.value)}
+                  className="w-full px-4 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                >
+                  <option value="">No List</option>
+                  {taskLists.map(list => (
+                    <option key={list.id} value={list.id}>
+                      {list.name}
+                    </option>
+                  ))}
+                </select>
                 <div className="flex gap-2">
                   <button
-                    onClick={() => setShowTaskModal(false)}
+                    onClick={() => {
+                      setShowTaskModal(false)
+                      resetTaskForm()
+                    }}
                     className="flex-1 px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-50"
                   >
                     Cancel
@@ -987,6 +1186,298 @@ export default function TaskCalendarModal({
                     {isSaving ? 'Creating...' : 'Create Event'}
                   </button>
                 </div>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Task Detail Panel */}
+        {showTaskDetail && editingTask && (
+          <div className="fixed inset-y-0 right-0 z-[110] w-full max-w-2xl bg-white shadow-2xl overflow-y-auto border-l border-gray-200">
+            <div className="sticky top-0 z-10 bg-white border-b border-gray-200 px-6 py-4">
+              <div className="flex items-center justify-between">
+                <h3 className="text-xl font-bold text-gray-900">Task Details</h3>
+                <button
+                  onClick={handleCloseTaskDetail}
+                  className="p-2 rounded-lg hover:bg-gray-100 transition-colors"
+                >
+                  <X size={20} />
+                </button>
+              </div>
+            </div>
+
+            <div className="p-6 space-y-6">
+              {/* Task Title */}
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">Title</label>
+                <input
+                  type="text"
+                  value={taskTitle}
+                  onChange={e => setTaskTitle(e.target.value)}
+                  className="w-full px-4 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                />
+              </div>
+
+              {/* Task Description */}
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">Description</label>
+                <textarea
+                  value={taskDescription}
+                  onChange={e => setTaskDescription(e.target.value)}
+                  rows={4}
+                  className="w-full px-4 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent resize-none"
+                  placeholder="Add a description..."
+                />
+              </div>
+
+              {/* Status & Priority */}
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">Status</label>
+                  <select
+                    value={taskStatus}
+                    onChange={e => setTaskStatus(e.target.value as TaskStatus)}
+                    className="w-full px-4 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  >
+                    <option value="todo">To Do</option>
+                    <option value="in_progress">In Progress</option>
+                    <option value="waiting">Waiting</option>
+                    <option value="completed">Completed</option>
+                    <option value="cancelled">Cancelled</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">Priority</label>
+                  <select
+                    value={taskPriority}
+                    onChange={e => setTaskPriority(e.target.value as TaskPriority)}
+                    className="w-full px-4 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  >
+                    <option value="low">Low</option>
+                    <option value="medium">Medium</option>
+                    <option value="high">High</option>
+                    <option value="urgent">Urgent</option>
+                  </select>
+                </div>
+              </div>
+
+              {/* Dates */}
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">Start Date</label>
+                  <input
+                    type="datetime-local"
+                    value={taskStartDate}
+                    onChange={e => setTaskStartDate(e.target.value)}
+                    className="w-full px-4 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">Due Date</label>
+                  <input
+                    type="datetime-local"
+                    value={taskDueDate}
+                    onChange={e => setTaskDueDate(e.target.value)}
+                    className="w-full px-4 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  />
+                </div>
+              </div>
+
+              {/* Estimated Time */}
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">Estimated Time (minutes)</label>
+                <input
+                  type="number"
+                  value={taskEstimatedMinutes}
+                  onChange={e => setTaskEstimatedMinutes(e.target.value)}
+                  min="0"
+                  placeholder="e.g., 60"
+                  className="w-full px-4 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                />
+              </div>
+
+              {/* Task List */}
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">Task List</label>
+                <select
+                  value={selectedTaskList}
+                  onChange={e => setSelectedTaskList(e.target.value)}
+                  className="w-full px-4 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                >
+                  <option value="">No List</option>
+                  {taskLists.map(list => (
+                    <option key={list.id} value={list.id}>
+                      {list.name}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              {/* Tags */}
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">Tags</label>
+                <div className="flex flex-wrap gap-2 mb-2">
+                  {editingTask.tags?.map(tag => (
+                    <span
+                      key={tag.id}
+                      className="inline-flex items-center gap-1 px-3 py-1 rounded-full text-sm font-medium"
+                      style={{
+                        backgroundColor: `${tag.color}20`,
+                        color: tag.color,
+                      }}
+                    >
+                      <TagIcon size={12} />
+                      {tag.name}
+                      <button
+                        onClick={() => setSelectedTags(selectedTags.filter(id => id !== tag.id))}
+                        className="hover:opacity-70"
+                      >
+                        <X size={14} />
+                      </button>
+                    </span>
+                  ))}
+                </div>
+                <select
+                  value=""
+                  onChange={e => {
+                    if (e.target.value && !selectedTags.includes(e.target.value)) {
+                      setSelectedTags([...selectedTags, e.target.value])
+                    }
+                  }}
+                  className="w-full px-4 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                >
+                  <option value="">Add a tag...</option>
+                  {tags
+                    .filter(tag => !selectedTags.includes(tag.id))
+                    .map(tag => (
+                      <option key={tag.id} value={tag.id}>
+                        {tag.name}
+                      </option>
+                    ))}
+                </select>
+              </div>
+
+              {/* Subtasks */}
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">Subtasks</label>
+                {editingTask.subtasks && editingTask.subtasks.length > 0 && (
+                  <div className="space-y-2 mb-3">
+                    {editingTask.subtasks.map(subtask => (
+                      <div
+                        key={subtask.id}
+                        className="flex items-center gap-2 p-2 bg-gray-50 rounded-lg"
+                      >
+                        <button
+                          onClick={() => handleToggleSubtask(subtask.id, subtask.is_completed)}
+                          className="flex-shrink-0"
+                        >
+                          {subtask.is_completed ? (
+                            <CheckCircle2 size={18} className="text-green-600" />
+                          ) : (
+                            <Circle size={18} className="text-gray-400 hover:text-blue-600" />
+                          )}
+                        </button>
+                        <span
+                          className={`flex-1 text-sm ${
+                            subtask.is_completed ? 'line-through text-gray-500' : 'text-gray-900'
+                          }`}
+                        >
+                          {subtask.title}
+                        </span>
+                        <button
+                          onClick={() => handleDeleteSubtask(subtask.id)}
+                          className="p-1 rounded text-gray-400 hover:text-red-600"
+                        >
+                          <Trash2 size={14} />
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                )}
+                {editingTask.completion_percentage !== undefined && editingTask.subtasks && editingTask.subtasks.length > 0 && (
+                  <div className="mb-3">
+                    <div className="flex items-center justify-between text-sm text-gray-600 mb-1">
+                      <span>Progress</span>
+                      <span className="font-medium">{editingTask.completion_percentage}%</span>
+                    </div>
+                    <div className="w-full bg-gray-200 rounded-full h-2">
+                      <div
+                        className="bg-blue-600 h-2 rounded-full transition-all"
+                        style={{ width: `${editingTask.completion_percentage}%` }}
+                      />
+                    </div>
+                  </div>
+                )}
+                <div className="flex gap-2">
+                  <input
+                    type="text"
+                    value={newSubtaskTitle}
+                    onChange={e => setNewSubtaskTitle(e.target.value)}
+                    onKeyPress={e => e.key === 'Enter' && handleAddSubtask()}
+                    placeholder="Add a subtask..."
+                    className="flex-1 px-4 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  />
+                  <button
+                    onClick={handleAddSubtask}
+                    disabled={!newSubtaskTitle.trim()}
+                    className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 flex items-center gap-2"
+                  >
+                    <Plus size={18} />
+                  </button>
+                </div>
+              </div>
+
+              {/* Time Tracking */}
+              {editingTask.actual_minutes !== null && editingTask.actual_minutes > 0 && (
+                <div className="p-4 bg-purple-50 rounded-lg border border-purple-200">
+                  <div className="flex items-center justify-between mb-2">
+                    <span className="text-sm font-medium text-purple-900">Time Tracked</span>
+                    <Timer size={16} className="text-purple-600" />
+                  </div>
+                  <div className="text-2xl font-bold text-purple-700">
+                    {formatDuration(editingTask.actual_minutes)}
+                  </div>
+                  {editingTask.estimated_minutes && (
+                    <div className="text-sm text-purple-600 mt-1">
+                      Estimated: {formatDuration(editingTask.estimated_minutes)}
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {/* Metadata */}
+              <div className="pt-4 border-t border-gray-200 space-y-2 text-sm text-gray-600">
+                <div className="flex items-center justify-between">
+                  <span>Created</span>
+                  <span>{new Date(editingTask.created_at).toLocaleString()}</span>
+                </div>
+                <div className="flex items-center justify-between">
+                  <span>Last Updated</span>
+                  <span>{new Date(editingTask.updated_at).toLocaleString()}</span>
+                </div>
+                {editingTask.completed_at && (
+                  <div className="flex items-center justify-between">
+                    <span>Completed</span>
+                    <span>{new Date(editingTask.completed_at).toLocaleString()}</span>
+                  </div>
+                )}
+              </div>
+
+              {/* Action Buttons */}
+              <div className="flex gap-2 pt-4">
+                <button
+                  onClick={handleUpdateTask}
+                  disabled={isSaving || !taskTitle.trim()}
+                  className="flex-1 px-4 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 font-medium"
+                >
+                  {isSaving ? 'Saving...' : 'Save Changes'}
+                </button>
+                <button
+                  onClick={handleCloseTaskDetail}
+                  className="px-4 py-3 border border-gray-300 rounded-lg hover:bg-gray-50 font-medium"
+                >
+                  Cancel
+                </button>
               </div>
             </div>
           </div>

@@ -187,6 +187,7 @@ export default function NoteEditor({
     // Content
     { id: 'blockquote', label: 'Quote', description: 'Insert a blockquote', icon: Quote, color: 'amber', category: 'Content', command: 'blockquote' as RichTextCommand },
     { id: 'horizontal-rule', label: 'Divider', description: 'Add a horizontal rule', icon: HorizontalRule, color: 'gray', category: 'Content', command: 'horizontal-rule' as RichTextCommand },
+    { id: 'hyperlink', label: 'Hyperlink', description: 'Insert a web link', icon: LinkIcon, color: 'blue', category: 'Content', command: 'link' as RichTextCommand },
     { id: 'table', label: 'Table', description: 'Insert a customizable table', icon: TableIcon, color: 'blue', category: 'Content', command: null },
     { id: 'note-link', label: 'Note Link', description: 'Link to another note', icon: FileText, color: 'purple', category: 'Content', command: null },
   ], [])

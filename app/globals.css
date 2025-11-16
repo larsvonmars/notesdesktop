@@ -111,13 +111,40 @@
     padding: 0.125rem 0.25rem !important;
   }
 
-  /* Link styling */
+  /* Link styling - Enhanced */
   [contenteditable='true'] a {
-    @apply text-blue-600 underline cursor-pointer;
+    @apply text-blue-600 cursor-pointer relative;
+    text-decoration: underline;
+    text-decoration-color: rgba(37, 99, 235, 0.4);
+    text-decoration-thickness: 2px;
+    text-underline-offset: 2px;
+    transition: all 0.2s ease;
   }
 
   [contenteditable='true'] a:hover {
     @apply text-blue-800;
+    text-decoration-color: rgba(30, 64, 175, 0.6);
+    text-decoration-thickness: 2px;
+  }
+
+  [contenteditable='true'] a:active {
+    @apply text-blue-900;
+  }
+
+  /* Link icon indicator (optional visual enhancement) */
+  [contenteditable='true'] a::after {
+    content: '↗';
+    display: inline-block;
+    font-size: 0.75em;
+    margin-left: 0.2em;
+    opacity: 0;
+    transform: translate(-2px, 2px);
+    transition: all 0.2s ease;
+  }
+
+  [contenteditable='true'] a:hover::after {
+    opacity: 0.5;
+    transform: translate(0, -2px);
   }
 
   /* Horizontal rule styling */

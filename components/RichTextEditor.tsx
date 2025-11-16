@@ -19,7 +19,15 @@ import {
   Search,
   Plus,
   Trash2,
-  Minus
+  Minus,
+  ExternalLink,
+  Link2,
+  Copy,
+  Edit2,
+  Check,
+  AlertCircle,
+  Clock,
+  Globe
 } from 'lucide-react'
 import EditorToolbar from './EditorToolbar'
 import {
@@ -205,6 +213,13 @@ const RichTextEditor = forwardRef<RichTextEditorHandle, RichTextEditorProps>(
     const [showLinkDialog, setShowLinkDialog] = useState(false)
     const [linkUrl, setLinkUrl] = useState('')
     const [linkText, setLinkText] = useState('')
+    const [linkUrlError, setLinkUrlError] = useState('')
+    const [recentLinks, setRecentLinks] = useState<Array<{url: string, text: string, timestamp: number}>>([])
+    const [showLinkPopover, setShowLinkPopover] = useState(false)
+    const [linkPopoverPos, setLinkPopoverPos] = useState({ top: 0, left: 0 })
+    const [hoveredLinkElement, setHoveredLinkElement] = useState<HTMLAnchorElement | null>(null)
+    const linkPopoverTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+    const [copiedLink, setCopiedLink] = useState(false)
     const [showSearchDialog, setShowSearchDialog] = useState(false)
     const [searchQuery, setSearchQuery] = useState('')
     const [replaceQuery, setReplaceQuery] = useState('')
@@ -743,8 +758,12 @@ const RichTextEditor = forwardRef<RichTextEditorHandle, RichTextEditorProps>(
           setTableToolbarVisible(false)
         }
       }
+      
       document.addEventListener('click', handleClick)
-      return () => document.removeEventListener('click', handleClick)
+      
+      return () => {
+        document.removeEventListener('click', handleClick)
+      }
     }, [findClosestTableBlock, showTableToolbarForNode])
 
     const createChecklistCheckbox = useCallback(() => {
@@ -1107,6 +1126,70 @@ const RichTextEditor = forwardRef<RichTextEditorHandle, RichTextEditorProps>(
       }
     }, [])
 
+    // Validate URL
+    const validateUrl = useCallback((url: string): { valid: boolean; error: string } => {
+      if (!url.trim()) {
+        return { valid: false, error: 'URL is required' }
+      }
+
+      try {
+        // Add protocol if missing
+        let testUrl = url.trim()
+        if (!testUrl.match(/^[a-zA-Z][a-zA-Z\d+\-.]*:/)) {
+          testUrl = 'https://' + testUrl
+        }
+        
+        const urlObj = new URL(testUrl)
+        
+        // Check for valid protocols
+        if (!['http:', 'https:', 'mailto:', 'tel:'].includes(urlObj.protocol)) {
+          return { valid: false, error: 'Invalid protocol. Use http, https, mailto, or tel' }
+        }
+        
+        return { valid: true, error: '' }
+      } catch {
+        return { valid: false, error: 'Invalid URL format' }
+      }
+    }, [])
+
+    // Normalize URL (add https:// if missing)
+    const normalizeUrl = useCallback((url: string): string => {
+      const trimmed = url.trim()
+      if (!trimmed) return trimmed
+      
+      if (!trimmed.match(/^[a-zA-Z][a-zA-Z\d+\-.]*:/)) {
+        return 'https://' + trimmed
+      }
+      
+      return trimmed
+    }, [])
+
+    // Add to recent links
+    const addToRecentLinks = useCallback((url: string, text: string) => {
+      setRecentLinks(prev => {
+        const filtered = prev.filter(link => link.url !== url)
+        const updated = [{ url, text, timestamp: Date.now() }, ...filtered].slice(0, 5)
+        
+        // Save to localStorage
+        try {
+          localStorage.setItem('editor-recent-links', JSON.stringify(updated))
+        } catch {}
+        
+        return updated
+      })
+    }, [])
+
+    // Load recent links from localStorage
+    useEffect(() => {
+      try {
+        const stored = localStorage.getItem('editor-recent-links')
+        if (stored) {
+          const links = JSON.parse(stored)
+          setRecentLinks(links)
+        }
+      } catch {}
+    }, [])
+
     // Link functionality
     const insertLink = useCallback(() => {
       if (disabled) return
@@ -1131,13 +1214,21 @@ const RichTextEditor = forwardRef<RichTextEditorHandle, RichTextEditorProps>(
         setLinkText(selectedText)
       }
 
+      setLinkUrlError('')
       saveSelection()
       setShowLinkDialog(true)
     }, [disabled, saveSelection])
 
     const applyLink = useCallback(() => {
-      if (!linkUrl) return
+      // Validate URL
+      const validation = validateUrl(linkUrl)
+      if (!validation.valid) {
+        setLinkUrlError(validation.error)
+        return
+      }
 
+      const normalizedUrl = normalizeUrl(linkUrl)
+      
       restoreSelection()
 
       const selection = window.getSelection()
@@ -1152,14 +1243,16 @@ const RichTextEditor = forwardRef<RichTextEditorHandle, RichTextEditorProps>(
       const existingLink = (node as Element).closest('a')
       
       if (existingLink) {
-        existingLink.setAttribute('href', linkUrl)
-        existingLink.textContent = linkText || linkUrl
+        existingLink.setAttribute('href', normalizedUrl)
+        existingLink.textContent = linkText || normalizedUrl
+        existingLink.className = 'text-blue-600 hover:text-blue-800 underline decoration-blue-400 decoration-2 underline-offset-2 transition-colors cursor-pointer inline-flex items-center gap-1'
       } else {
         const link = document.createElement('a')
-        link.href = linkUrl
+        link.href = normalizedUrl
         link.target = '_blank'
         link.rel = 'noopener noreferrer'
-        link.textContent = linkText || linkUrl
+        link.className = 'text-blue-600 hover:text-blue-800 underline decoration-blue-400 decoration-2 underline-offset-2 transition-colors cursor-pointer inline-flex items-center gap-1'
+        link.textContent = linkText || normalizedUrl
 
         if (range.collapsed) {
           range.insertNode(link)
@@ -1178,16 +1271,126 @@ const RichTextEditor = forwardRef<RichTextEditorHandle, RichTextEditorProps>(
         }, CURSOR_TIMING.SHORT)
       }
 
+      // Add to recent links
+      addToRecentLinks(normalizedUrl, linkText || normalizedUrl)
+
       setShowLinkDialog(false)
       setLinkUrl('')
       setLinkText('')
+      setLinkUrlError('')
       emitChange()
       
       // Ensure focus returns to editor
       applyCursorOperation(() => {
         editorRef.current?.focus()
       }, CURSOR_TIMING.MEDIUM)
-    }, [linkUrl, linkText, restoreSelection, emitChange])
+    }, [linkUrl, linkText, restoreSelection, emitChange, validateUrl, normalizeUrl, addToRecentLinks])
+
+    // Show link popover on hover
+    const showLinkPopoverForElement = useCallback((linkElement: HTMLAnchorElement) => {
+      if (linkPopoverTimeoutRef.current) {
+        clearTimeout(linkPopoverTimeoutRef.current)
+      }
+
+      const rect = linkElement.getBoundingClientRect()
+      const top = rect.bottom + window.scrollY + 8
+      const left = rect.left + window.scrollX
+
+      setLinkPopoverPos({ top, left })
+      setHoveredLinkElement(linkElement)
+      setShowLinkPopover(true)
+    }, [])
+
+    // Hide link popover
+    const hideLinkPopover = useCallback(() => {
+      linkPopoverTimeoutRef.current = setTimeout(() => {
+        setShowLinkPopover(false)
+        setHoveredLinkElement(null)
+      }, 200)
+    }, [])
+
+    // Keep popover open when hovering over it
+    const keepPopoverOpen = useCallback(() => {
+      if (linkPopoverTimeoutRef.current) {
+        clearTimeout(linkPopoverTimeoutRef.current)
+      }
+    }, [])
+
+    // Copy link to clipboard
+    const copyLinkUrl = useCallback(async (url: string) => {
+      try {
+        await navigator.clipboard.writeText(url)
+        setCopiedLink(true)
+        setTimeout(() => setCopiedLink(false), 2000)
+      } catch (err) {
+        console.error('Failed to copy link:', err)
+      }
+    }, [])
+
+    // Edit link
+    const editLink = useCallback((linkElement: HTMLAnchorElement) => {
+      setLinkUrl(linkElement.getAttribute('href') || '')
+      setLinkText(linkElement.textContent || '')
+      setLinkUrlError('')
+      setShowLinkPopover(false)
+      
+      // Select the link element
+      const range = document.createRange()
+      range.selectNodeContents(linkElement)
+      const selection = window.getSelection()
+      selection?.removeAllRanges()
+      selection?.addRange(range)
+      
+      saveSelection()
+      setShowLinkDialog(true)
+    }, [saveSelection])
+
+    // Remove link
+    const removeLink = useCallback((linkElement: HTMLAnchorElement) => {
+      const text = linkElement.textContent || ''
+      const textNode = document.createTextNode(text)
+      linkElement.parentNode?.replaceChild(textNode, linkElement)
+      setShowLinkPopover(false)
+      emitChange()
+    }, [emitChange])
+
+    // Open link in new tab
+    const openLink = useCallback((url: string) => {
+      window.open(url, '_blank', 'noopener,noreferrer')
+    }, [])
+
+    // Link hover detection
+    useEffect(() => {
+      if (!editorRef.current) return
+
+      const handleMouseOver = (event: MouseEvent) => {
+        const target = event.target as HTMLElement | null
+        if (target) {
+          const linkElement = target.closest('a[href]') as HTMLAnchorElement | null
+          if (linkElement && !linkElement.closest('[data-block-type="note-link"]')) {
+            showLinkPopoverForElement(linkElement)
+          }
+        }
+      }
+
+      const handleMouseOut = (event: MouseEvent) => {
+        const target = event.target as HTMLElement | null
+        const relatedTarget = event.relatedTarget as HTMLElement | null
+        
+        if (target && target.closest('a[href]') && !relatedTarget?.closest('a[href]') && !relatedTarget?.closest('.link-popover')) {
+          hideLinkPopover()
+        }
+      }
+
+      const editor = editorRef.current
+      editor.addEventListener('mouseover', handleMouseOver)
+      editor.addEventListener('mouseout', handleMouseOut)
+      
+      return () => {
+        editor.removeEventListener('mouseover', handleMouseOver)
+        editor.removeEventListener('mouseout', handleMouseOut)
+      }
+    }, [showLinkPopoverForElement, hideLinkPopover])
 
     // Search functionality
     const highlightMatch = useCallback((matchIndex: number) => {
@@ -2004,66 +2207,229 @@ const RichTextEditor = forwardRef<RichTextEditorHandle, RichTextEditorProps>(
           )}
         </div>
 
-        {/* Link Dialog */}
+        {/* Link Dialog - Enhanced */}
         {showLinkDialog && (
-          <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-            <div className="bg-white rounded-lg shadow-xl p-6 w-full max-w-md">
-              <div className="flex items-center justify-between mb-4">
-                <h3 className="text-lg font-semibold text-gray-900">Insert Link</h3>
+          <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+            <div className="bg-white rounded-2xl shadow-2xl p-6 w-full max-w-lg border border-slate-200">
+              <div className="flex items-center justify-between mb-6">
+                <div className="flex items-center gap-2">
+                  <div className="p-2 bg-blue-100 rounded-lg">
+                    <Link2 size={20} className="text-blue-600" />
+                  </div>
+                  <h3 className="text-xl font-semibold text-slate-900">Insert Link</h3>
+                </div>
                 <button
                   onClick={() => {
                     setShowLinkDialog(false)
                     setLinkUrl('')
                     setLinkText('')
+                    setLinkUrlError('')
                   }}
-                  className="text-gray-400 hover:text-gray-600"
+                  className="text-slate-400 hover:text-slate-600 transition-colors p-1 rounded-lg hover:bg-slate-100"
+                  aria-label="Close dialog"
                 >
                   <X size={20} />
                 </button>
               </div>
-              <div className="space-y-4">
+
+              <div className="space-y-5">
+                {/* URL Input */}
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Text to display
+                  <label className="flex items-center gap-2 text-sm font-semibold text-slate-700 mb-2">
+                    <Globe size={16} />
+                    URL
+                  </label>
+                  <div className="relative">
+                    <input
+                      type="url"
+                      value={linkUrl}
+                      onChange={(e) => {
+                        setLinkUrl(e.target.value)
+                        setLinkUrlError('')
+                      }}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter' && !e.shiftKey) {
+                          e.preventDefault()
+                          applyLink()
+                        }
+                      }}
+                      placeholder="https://example.com or example.com"
+                      className={`w-full px-4 py-3 pr-10 border-2 ${
+                        linkUrlError 
+                          ? 'border-red-300 focus:border-red-500 focus:ring-red-500' 
+                          : 'border-slate-200 focus:border-blue-500 focus:ring-blue-500'
+                      } rounded-xl focus:ring-2 focus:ring-offset-0 transition-all text-slate-900 placeholder-slate-400`}
+                      autoFocus
+                    />
+                    {linkUrlError && (
+                      <div className="absolute right-3 top-1/2 -translate-y-1/2">
+                        <AlertCircle size={20} className="text-red-500" />
+                      </div>
+                    )}
+                  </div>
+                  {linkUrlError && (
+                    <p className="mt-2 text-sm text-red-600 flex items-center gap-1">
+                      <AlertCircle size={14} />
+                      {linkUrlError}
+                    </p>
+                  )}
+                </div>
+
+                {/* Text Input */}
+                <div>
+                  <label className="flex items-center gap-2 text-sm font-semibold text-slate-700 mb-2">
+                    <Edit2 size={16} />
+                    Link Text (optional)
                   </label>
                   <input
                     type="text"
                     value={linkText}
                     onChange={(e) => setLinkText(e.target.value)}
-                    placeholder="Link text"
-                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter' && !e.shiftKey) {
+                        e.preventDefault()
+                        applyLink()
+                      }
+                    }}
+                    placeholder="Custom display text"
+                    className="w-full px-4 py-3 border-2 border-slate-200 rounded-xl focus:border-blue-500 focus:ring-2 focus:ring-blue-500 focus:ring-offset-0 transition-all text-slate-900 placeholder-slate-400"
                   />
+                  <p className="mt-2 text-xs text-slate-500">
+                    Leave empty to use the URL as display text
+                  </p>
                 </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    URL
-                  </label>
-                  <input
-                    type="url"
-                    value={linkUrl}
-                    onChange={(e) => setLinkUrl(e.target.value)}
-                    placeholder="https://example.com"
-                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                    autoFocus
-                  />
-                </div>
-                <div className="flex gap-2 justify-end">
+
+                {/* Recent Links */}
+                {recentLinks.length > 0 && (
+                  <div className="border-t border-slate-200 pt-4">
+                    <label className="flex items-center gap-2 text-sm font-semibold text-slate-700 mb-3">
+                      <Clock size={16} />
+                      Recent Links
+                    </label>
+                    <div className="space-y-2 max-h-32 overflow-y-auto">
+                      {recentLinks.map((recent, index) => (
+                        <button
+                          key={index}
+                          onClick={() => {
+                            setLinkUrl(recent.url)
+                            setLinkText(recent.text)
+                            setLinkUrlError('')
+                          }}
+                          className="w-full px-3 py-2 text-left rounded-lg border border-slate-200 hover:border-blue-300 hover:bg-blue-50 transition-all group"
+                        >
+                          <div className="flex items-center gap-2">
+                            <ExternalLink size={14} className="text-slate-400 group-hover:text-blue-600" />
+                            <div className="flex-1 min-w-0">
+                              <p className="text-sm font-medium text-slate-700 truncate">
+                                {recent.text}
+                              </p>
+                              <p className="text-xs text-slate-500 truncate">
+                                {recent.url}
+                              </p>
+                            </div>
+                          </div>
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {/* Action Buttons */}
+                <div className="flex gap-3 justify-end pt-2">
                   <button
                     onClick={() => {
                       setShowLinkDialog(false)
                       setLinkUrl('')
                       setLinkText('')
+                      setLinkUrlError('')
                     }}
-                    className="px-4 py-2 text-gray-700 hover:bg-gray-100 rounded-md transition-colors"
+                    className="px-5 py-2.5 text-slate-700 hover:bg-slate-100 rounded-xl transition-colors font-medium"
                   >
                     Cancel
                   </button>
                   <button
                     onClick={applyLink}
-                    disabled={!linkUrl}
-                    className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                    disabled={!linkUrl.trim()}
+                    className="px-5 py-2.5 bg-gradient-to-r from-blue-600 to-blue-700 text-white rounded-xl hover:from-blue-700 hover:to-blue-800 disabled:opacity-50 disabled:cursor-not-allowed transition-all font-medium shadow-lg shadow-blue-500/30 disabled:shadow-none flex items-center gap-2"
                   >
+                    <Check size={18} />
                     Insert Link
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Link Popover - Shows on hover */}
+        {showLinkPopover && hoveredLinkElement && (
+          <div
+            className="link-popover fixed z-50 bg-white rounded-xl shadow-2xl border border-slate-200 p-3 min-w-[320px] max-w-[400px]"
+            style={{
+              top: `${linkPopoverPos.top}px`,
+              left: `${linkPopoverPos.left}px`,
+            }}
+            onMouseEnter={keepPopoverOpen}
+            onMouseLeave={hideLinkPopover}
+          >
+            <div className="flex items-start gap-3">
+              <div className="p-2 bg-blue-100 rounded-lg flex-shrink-0">
+                <ExternalLink size={16} className="text-blue-600" />
+              </div>
+              <div className="flex-1 min-w-0">
+                <p className="text-sm font-semibold text-slate-900 truncate mb-1">
+                  {hoveredLinkElement.textContent}
+                </p>
+                <a
+                  href={hoveredLinkElement.href}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="text-xs text-blue-600 hover:text-blue-800 truncate block mb-2"
+                  onClick={(e) => e.stopPropagation()}
+                >
+                  {hoveredLinkElement.href}
+                </a>
+                <div className="flex items-center gap-2">
+                  <button
+                    onClick={() => openLink(hoveredLinkElement.href)}
+                    className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-blue-600 bg-blue-50 hover:bg-blue-100 rounded-lg transition-colors"
+                    title="Open link in new tab"
+                  >
+                    <ExternalLink size={14} />
+                    Open
+                  </button>
+                  <button
+                    onClick={() => editLink(hoveredLinkElement)}
+                    className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-slate-600 bg-slate-100 hover:bg-slate-200 rounded-lg transition-colors"
+                    title="Edit link"
+                  >
+                    <Edit2 size={14} />
+                    Edit
+                  </button>
+                  <button
+                    onClick={() => copyLinkUrl(hoveredLinkElement.href)}
+                    className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-slate-600 bg-slate-100 hover:bg-slate-200 rounded-lg transition-colors"
+                    title="Copy link"
+                  >
+                    {copiedLink ? (
+                      <>
+                        <Check size={14} className="text-green-600" />
+                        <span className="text-green-600">Copied!</span>
+                      </>
+                    ) : (
+                      <>
+                        <Copy size={14} />
+                        Copy
+                      </>
+                    )}
+                  </button>
+                  <button
+                    onClick={() => removeLink(hoveredLinkElement)}
+                    className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-red-600 bg-red-50 hover:bg-red-100 rounded-lg transition-colors ml-auto"
+                    title="Remove link"
+                  >
+                    <Trash2 size={14} />
+                    Remove
                   </button>
                 </div>
               </div>
