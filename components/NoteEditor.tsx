@@ -59,6 +59,9 @@ import { imageBlock } from '../lib/editor/imageBlock'
 
 export type { Note } from '../lib/notes'
 
+// Maximum image file size in bytes (10MB)
+const MAX_IMAGE_SIZE_BYTES = 10 * 1024 * 1024
+
 interface NoteEditorProps {
   note?: LibNote | null
   // `isAuto` will be passed when the editor triggers an autosave so parents can handle it differently
@@ -669,9 +672,8 @@ export default function NoteEditor({
         const target = e.target as HTMLInputElement
         const file = target.files?.[0]
         if (file) {
-          // Validate file size (max 10MB)
-          const maxSizeInBytes = 10 * 1024 * 1024
-          if (file.size > maxSizeInBytes) {
+          // Validate file size
+          if (file.size > MAX_IMAGE_SIZE_BYTES) {
             toast.push({ title: 'Image too large', description: 'Image file is too large. Maximum size is 10MB.' })
             return
           }
@@ -681,9 +683,11 @@ export default function NoteEditor({
           reader.onload = (readerEvent) => {
             const dataUrl = readerEvent.target?.result as string
             if (dataUrl && editorRef.current && editorRef.current.insertCustomBlock) {
+              // Sanitize filename for use as alt text
+              const sanitizedAlt = file.name.replace(/[<>"']/g, '')
               editorRef.current.insertCustomBlock('image', {
                 src: dataUrl,
-                alt: file.name
+                alt: sanitizedAlt || 'Image'
               })
               setHasChanges(true)
             }

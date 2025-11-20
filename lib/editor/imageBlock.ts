@@ -13,6 +13,15 @@ export interface ImagePayload {
 }
 
 /**
+ * Escape HTML entities to prevent XSS
+ */
+function escapeHtml(str: string): string {
+  const div = document.createElement('div')
+  div.textContent = str
+  return div.innerHTML
+}
+
+/**
  * Custom block descriptor for images
  */
 export const imageBlock: CustomBlockDescriptor = {
@@ -23,8 +32,8 @@ export const imageBlock: CustomBlockDescriptor = {
       return '<div class="inline-flex items-center gap-2 px-3 py-2 text-sm bg-gray-100 text-gray-400 rounded border border-gray-300">🖼️ Invalid Image</div>'
     }
 
-    const src = payload.src.replace(/"/g, '&quot;')
-    const alt = (payload.alt || 'Image').replace(/"/g, '&quot;')
+    const src = escapeHtml(payload.src)
+    const alt = escapeHtml(payload.alt || 'Image')
     const width = payload.width ? ` width="${payload.width}"` : ''
     const height = payload.height ? ` height="${payload.height}"` : ''
 
