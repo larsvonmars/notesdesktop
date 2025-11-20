@@ -237,7 +237,9 @@ const RichTextEditor = forwardRef<RichTextEditorHandle, RichTextEditorProps>(
     const [blockPanelOpen, setBlockPanelOpen] = useState(false)
     const [activeBlockId, setActiveBlockId] = useState<string | null>(null)
     const [showBlockOutlines, setShowBlockOutlines] = useState(false)
+    const [activeFormats, setActiveFormats] = useState<Set<string>>(new Set())
     const blockIdCounterRef = useRef(0)
+    const activeFormatsFrameRef = useRef<number | null>(null)
 
     const ensureBlockId = useCallback((node: HTMLElement | null) => {
       if (!node) return ''
@@ -305,6 +307,65 @@ const RichTextEditor = forwardRef<RichTextEditorHandle, RichTextEditorProps>(
         setActiveBlockId(null)
       }
     }, [ensureBlockId])
+
+    const updateActiveFormats = useCallback(() => {
+      try {
+        if (!editorRef.current) {
+          setActiveFormats(new Set())
+          return
+        }
+        
+        const selection = window.getSelection()
+        if (!selection || selection.rangeCount === 0) {
+          setActiveFormats(new Set())
+          return
+        }
+        
+        const range = selection.getRangeAt(0)
+        const node = range.commonAncestorContainer
+        const element = node.nodeType === Node.TEXT_NODE ? node.parentElement : (node as Element)
+        
+        if (!element) {
+          setActiveFormats(new Set())
+          return
+        }
+        
+        const formats = new Set<string>()
+        
+        // Check inline formatting
+        if (element.closest('strong, b')) formats.add('bold')
+        if (element.closest('em, i')) formats.add('italic')
+        if (element.closest('u')) formats.add('underline')
+        if (element.closest('s, strike')) formats.add('strike')
+        if (element.closest('code')) formats.add('code')
+        
+        // Check lists
+        if (element.closest('ul')) formats.add('unordered-list')
+        if (element.closest('ol')) formats.add('ordered-list')
+        
+        // Check block-level formatting
+        if (element.closest('h1')) formats.add('heading1')
+        if (element.closest('h2')) formats.add('heading2')
+        if (element.closest('h3')) formats.add('heading3')
+        if (element.closest('blockquote')) formats.add('blockquote')
+        
+        setActiveFormats(formats)
+      } catch (error) {
+        console.error('Error updating active formats:', error)
+        setActiveFormats(new Set())
+      }
+    }, [])
+
+    const scheduleActiveFormatsUpdate = useCallback(() => {
+      if (activeFormatsFrameRef.current !== null) {
+        window.cancelAnimationFrame(activeFormatsFrameRef.current)
+      }
+
+      activeFormatsFrameRef.current = window.requestAnimationFrame(() => {
+        updateActiveFormats()
+        activeFormatsFrameRef.current = null
+      })
+    }, [updateActiveFormats])
 
     const focusBlockById = useCallback(
       (blockId: string) => {
@@ -443,6 +504,12 @@ const RichTextEditor = forwardRef<RichTextEditorHandle, RichTextEditorProps>(
     }, [refreshActiveBlock])
 
     useEffect(() => {
+      const handleSelection = () => scheduleActiveFormatsUpdate()
+      document.addEventListener('selectionchange', handleSelection)
+      return () => document.removeEventListener('selectionchange', handleSelection)
+    }, [scheduleActiveFormatsUpdate])
+
+    useEffect(() => {
       if (!editorRef.current) return
       const nodes = editorRef.current.querySelectorAll('[data-block-id]')
       nodes.forEach((node) => {
@@ -538,7 +605,8 @@ const RichTextEditor = forwardRef<RichTextEditorHandle, RichTextEditorProps>(
         }
       }
       updateBlockMetadata()
-    }, [onChange, sanitize, updateBlockMetadata, value])
+      scheduleActiveFormatsUpdate()
+    }, [onChange, sanitize, updateBlockMetadata, value, scheduleActiveFormatsUpdate])
 
     // Public API: insert a custom block by type and optional payload
     const insertCustomBlock = useCallback(
@@ -972,6 +1040,9 @@ const RichTextEditor = forwardRef<RichTextEditorHandle, RichTextEditorProps>(
         observer.disconnect()
         if (checklistNormalizationTimerRef.current) {
           clearTimeout(checklistNormalizationTimerRef.current)
+        }
+        if (activeFormatsFrameRef.current !== null) {
+          window.cancelAnimationFrame(activeFormatsFrameRef.current)
         }
       }
     }, [scheduleChecklistNormalization])
@@ -1763,6 +1834,14 @@ const RichTextEditor = forwardRef<RichTextEditorHandle, RichTextEditorProps>(
                 return !!element?.closest('ul')
               case 'insertOrderedList':
                 return !!element?.closest('ol')
+              case 'heading1':
+                return !!element?.closest('h1')
+              case 'heading2':
+                return !!element?.closest('h2')
+              case 'heading3':
+                return !!element?.closest('h3')
+              case 'blockquote':
+                return !!element?.closest('blockquote')
               default:
                 try {
                   return document.queryCommandState?.(command) ?? false
@@ -2217,6 +2296,7 @@ const RichTextEditor = forwardRef<RichTextEditorHandle, RichTextEditorProps>(
           showBlockOutlines={showBlockOutlines}
           activeBlockId={activeBlockId}
           activeBlockType={blockMetadata.find((block) => block.id === activeBlockId)?.type}
+          activeFormats={activeFormats}
           disabled={disabled}
         />
 
