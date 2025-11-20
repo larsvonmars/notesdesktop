@@ -140,7 +140,8 @@ const SANITIZE_CONFIG: Config = {
     'h1',
     'h2',
     'h3',
-    'mark'
+    'mark',
+    'img'
   ],
   // allow data-block attributes and stored payload attribute
   // (data-block-payload stores URI-encoded JSON)
@@ -158,7 +159,11 @@ const SANITIZE_CONFIG: Config = {
     'data-block-payload',
     'data-note-id',
     'data-note-title',
-    'data-folder-id'
+    'data-folder-id',
+    'src',
+    'alt',
+    'width',
+    'height'
   ],
   ALLOW_DATA_ATTR: true
 }

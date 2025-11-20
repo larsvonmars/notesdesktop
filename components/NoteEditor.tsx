@@ -33,7 +33,8 @@ import {
   FileText,
   Plus,
   Minus as HorizontalRule,
-  ListOrdered as OrderedListIcon
+  ListOrdered as OrderedListIcon,
+  Image as ImageIcon
 } from 'lucide-react'
 import RichTextEditor, {
   type RichTextCommand,
@@ -54,8 +55,12 @@ import { Note as LibNote } from '../lib/notes'
 import NoteLinkDialog from './NoteLinkDialog'
 import KnowledgeGraphModal from './KnowledgeGraphModal'
 import { noteLinkBlock } from '../lib/editor/noteLinkBlock'
+import { imageBlock } from '../lib/editor/imageBlock'
 
 export type { Note } from '../lib/notes'
+
+// Maximum image file size in bytes (10MB)
+const MAX_IMAGE_SIZE_BYTES = 10 * 1024 * 1024
 
 interface NoteEditorProps {
   note?: LibNote | null
@@ -191,6 +196,7 @@ export default function NoteEditor({
     { id: 'hyperlink', label: 'Hyperlink', description: 'Insert a web link', icon: LinkIcon, color: 'blue', category: 'Content', command: 'link' as RichTextCommand },
     { id: 'table', label: 'Table', description: 'Insert a customizable table', icon: TableIcon, color: 'blue', category: 'Content', command: null },
     { id: 'note-link', label: 'Note Link', description: 'Link to another note', icon: FileText, color: 'purple', category: 'Content', command: null },
+    { id: 'image', label: 'Image', description: 'Insert an image', icon: ImageIcon, color: 'pink', category: 'Media', command: null },
   ], [])
 
   // Filter content blocks based on search query
@@ -656,6 +662,46 @@ export default function NoteEditor({
     })
   }, [hideContentBlocksMenu])
 
+  const handleInsertImage = useCallback(() => {
+    hideContentBlocksMenu(() => {
+      // Create a file input element to allow user to select an image
+      const input = document.createElement('input')
+      input.type = 'file'
+      input.accept = 'image/*'
+      input.onchange = (e: Event) => {
+        const target = e.target as HTMLInputElement
+        const file = target.files?.[0]
+        if (file) {
+          // Validate file size
+          if (file.size > MAX_IMAGE_SIZE_BYTES) {
+            toast.push({ title: 'Image too large', description: 'Image file is too large. Maximum size is 10MB.' })
+            return
+          }
+
+          // Convert the image to a data URL
+          const reader = new FileReader()
+          reader.onload = (readerEvent) => {
+            const dataUrl = readerEvent.target?.result as string
+            if (dataUrl && editorRef.current && editorRef.current.insertCustomBlock) {
+              // Sanitize filename for use as alt text
+              const sanitizedAlt = file.name.replace(/[<>"']/g, '')
+              editorRef.current.insertCustomBlock('image', {
+                src: dataUrl,
+                alt: sanitizedAlt || 'Image'
+              })
+              setHasChanges(true)
+            }
+          }
+          reader.onerror = () => {
+            toast.push({ title: 'Error reading file', description: 'Failed to read image file. Please try again.' })
+          }
+          reader.readAsDataURL(file)
+        }
+      }
+      input.click()
+    })
+  }, [hideContentBlocksMenu, toast])
+
   const handleInsertContentBlock = useCallback((command: RichTextCommand) => {
     hideContentBlocksMenu(() => {
       editorRef.current?.exec(command)
@@ -670,10 +716,12 @@ export default function NoteEditor({
       handleInsertTable()
     } else if (blockId === 'note-link') {
       handleInsertNoteLink()
+    } else if (blockId === 'image') {
+      handleInsertImage()
     } else if (block.command) {
       handleInsertContentBlock(block.command)
     }
-  }, [contentBlocks, handleInsertContentBlock, handleInsertNoteLink, handleInsertTable])
+  }, [contentBlocks, handleInsertContentBlock, handleInsertNoteLink, handleInsertTable, handleInsertImage])
 
   // Keyboard navigation for content blocks menu
   const handleBlockMenuKeyDown = useCallback((e: KeyboardEvent | React.KeyboardEvent) => {
@@ -1152,6 +1200,7 @@ export default function NoteEditor({
                     }}
                     customBlocks={[
                       noteLinkBlock,
+                      imageBlock,
                       {
                         type: 'table',
                         render: (payload?: any) => {
