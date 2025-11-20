@@ -1085,8 +1085,9 @@ const RichTextEditor = forwardRef<RichTextEditorHandle, RichTextEditorProps>(
           // This already handles cursor positioning internally
           applyBlockFormat(`h${level}` as 'h1' | 'h2' | 'h3', editor)
           
-          // Add heading ID synchronously after block format is applied
-          // Use a single timeout to avoid race conditions
+          // Add heading ID after block format completes
+          // Use EXTRA_LONG timing to ensure applyBlockFormat's cursor positioning (LONG=80ms) completes first
+          // This prevents race conditions where we try to find the heading before cursor is properly restored
           setTimeout(() => {
             try {
               // Verify editor is still valid
@@ -1095,26 +1096,32 @@ const RichTextEditor = forwardRef<RichTextEditorHandle, RichTextEditorProps>(
                 return
               }
               
+              // Try to find the heading at the current cursor position first
               const selection = window.getSelection()
+              let targetHeading: HTMLElement | null = null
+              
               if (selection && selection.rangeCount > 0) {
                 const range = selection.getRangeAt(0)
                 let node: Node | null = range.startContainer
                 
-                // Find the heading element
+                // Find the heading element containing the cursor
                 while (node && node !== editor) {
                   if (node.nodeType === Node.ELEMENT_NODE) {
                     const element = node as HTMLElement
                     const tagName = element.tagName?.toLowerCase()
                     if (tagName === `h${level}`) {
-                      // Only generate ID if not already present
-                      if (!element.id) {
-                        element.id = generateHeadingId(element.textContent || '')
-                      }
+                      targetHeading = element
                       break
                     }
                   }
                   node = node.parentElement
                 }
+              }
+              
+              // If we found a heading at cursor position, assign ID to it
+              // Only assign if the heading doesn't already have an ID
+              if (targetHeading && !targetHeading.id) {
+                targetHeading.id = generateHeadingId(targetHeading.textContent || '')
               }
               
               // Normalize and emit change once
@@ -1123,7 +1130,7 @@ const RichTextEditor = forwardRef<RichTextEditorHandle, RichTextEditorProps>(
             } catch (error) {
               console.error('Error in heading ID assignment:', error)
             }
-          }, CURSOR_TIMING.MEDIUM)
+          }, CURSOR_TIMING.EXTRA_LONG)
         } catch (error) {
           console.error('Error in applyHeading:', error)
           // Try to recover by normalizing

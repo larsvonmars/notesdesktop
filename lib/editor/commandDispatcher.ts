@@ -296,6 +296,13 @@ export function applyBlockFormat(
       return
     }
     
+    // Prevent converting list items to headings/paragraphs as this breaks list structure
+    // User should first exit the list, then apply heading format
+    if (block.tagName === 'LI') {
+      console.warn('Cannot convert list items to headings directly. Exit the list first.')
+      return
+    }
+    
     // Check if already the same tag - only convert to paragraph if explicitly requested
     const currentTag = block.tagName.toLowerCase()
     const targetTag = (currentTag === tagName && tagName !== 'p') ? 'p' : tagName
