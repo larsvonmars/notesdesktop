@@ -79,6 +79,51 @@ describe('Image Block', () => {
       expect(html).toContain('height: 300px')
     })
 
+    it('should enforce minimum dimensions', () => {
+      const payload: ImagePayload = {
+        src: 'data:image/png;base64,test',
+        alt: 'Test image',
+        width: 50,  // Below minimum
+        height: 30  // Below minimum
+      }
+
+      const html = imageBlock.render(payload)
+      
+      // Should clamp to minimum of 100px
+      expect(html).toContain('width: 100px')
+      expect(html).toContain('height: 100px')
+    })
+
+    it('should enforce maximum dimensions', () => {
+      const payload: ImagePayload = {
+        src: 'data:image/png;base64,test',
+        alt: 'Test image',
+        width: 5000,  // Above maximum
+        height: 5000  // Above maximum
+      }
+
+      const html = imageBlock.render(payload)
+      
+      // Should clamp to maximum of 4000px
+      expect(html).toContain('width: 4000px')
+      expect(html).toContain('height: 4000px')
+    })
+
+    it('should handle invalid dimensions gracefully', () => {
+      const payload: ImagePayload = {
+        src: 'data:image/png;base64,test',
+        alt: 'Test image',
+        width: NaN,
+        height: Infinity
+      }
+
+      const html = imageBlock.render(payload)
+      
+      // Should not include invalid dimensions
+      expect(html).not.toContain('width: NaNpx')
+      expect(html).not.toContain('height: Infinitypx')
+    })
+
     it('should handle invalid payload gracefully', () => {
       const html = imageBlock.render(undefined)
       

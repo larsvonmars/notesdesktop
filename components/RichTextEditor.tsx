@@ -1972,19 +1972,24 @@ const RichTextEditor = forwardRef<RichTextEditorHandle, RichTextEditorProps>(
     useEffect(() => {
       if (!editorRef.current) return
       
-      // Dynamically import the initialization function
+      // Dynamically import and initialize image block interactions
+      let cleanupFn: (() => void) | undefined = undefined
+      
       const initImageBlocks = async () => {
-        const { initializeImageBlockInteractions } = await import('@/lib/editor/imageBlock')
-        const cleanup = initializeImageBlockInteractions(editorRef.current!, emitChange)
-        return cleanup
+        try {
+          const { initializeImageBlockInteractions } = await import('@/lib/editor/imageBlock')
+          cleanupFn = initializeImageBlockInteractions(editorRef.current!, emitChange)
+        } catch (error) {
+          console.error('Failed to initialize image block interactions:', error)
+        }
       }
       
-      let cleanupPromise = initImageBlocks()
+      initImageBlocks()
       
       return () => {
-        cleanupPromise.then(cleanup => {
-          if (cleanup) cleanup()
-        })
+        if (cleanupFn) {
+          cleanupFn()
+        }
       }
     }, [emitChange])
 

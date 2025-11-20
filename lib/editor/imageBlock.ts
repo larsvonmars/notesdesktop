@@ -12,6 +12,11 @@ export interface ImagePayload {
   height?: number
 }
 
+// Minimum image dimensions in pixels
+const MIN_IMAGE_SIZE = 100
+// Maximum image dimensions in pixels to prevent performance issues
+const MAX_IMAGE_SIZE = 4000
+
 /**
  * Escape HTML entities to prevent XSS
  */
@@ -19,6 +24,17 @@ function escapeHtml(str: string): string {
   const div = document.createElement('div')
   div.textContent = str
   return div.innerHTML
+}
+
+/**
+ * Validate and sanitize dimension values
+ */
+function sanitizeDimension(value: number | undefined): number | undefined {
+  if (value === undefined || value === null) return undefined
+  if (typeof value !== 'number' || !Number.isFinite(value)) return undefined
+  if (value < MIN_IMAGE_SIZE) return MIN_IMAGE_SIZE
+  if (value > MAX_IMAGE_SIZE) return MAX_IMAGE_SIZE
+  return Math.round(value)
 }
 
 /**
@@ -34,9 +50,14 @@ export const imageBlock: CustomBlockDescriptor = {
 
     const src = escapeHtml(payload.src)
     const alt = escapeHtml(payload.alt || 'Image')
-    const widthStyle = payload.width ? ` style="width: ${payload.width}px;"` : ''
-    const heightStyle = payload.height ? ` style="height: ${payload.height}px;"` : ''
-    const dimensionsStyle = payload.width || payload.height ? widthStyle + heightStyle : ''
+    
+    // Sanitize dimensions
+    const width = sanitizeDimension(payload.width)
+    const height = sanitizeDimension(payload.height)
+    
+    const widthStyle = width ? ` style="width: ${width}px;"` : ''
+    const heightStyle = height ? ` style="height: ${height}px;"` : ''
+    const dimensionsStyle = width || height ? widthStyle + heightStyle : ''
 
     // Create an image block with custom UI elements (resize handlers and delete button)
     // The structure includes:
@@ -183,28 +204,28 @@ export function initializeImageBlockInteractions(editorElement: HTMLElement, onC
     switch (direction) {
       case 'se': // Southeast (bottom-right)
       case 'e':  // East (right)
-        newWidth = Math.max(100, startWidth + deltaX)
+        newWidth = Math.max(MIN_IMAGE_SIZE, startWidth + deltaX)
         newHeight = newWidth / aspectRatio
         break
       case 'sw': // Southwest (bottom-left)
       case 'w':  // West (left)
-        newWidth = Math.max(100, startWidth - deltaX)
+        newWidth = Math.max(MIN_IMAGE_SIZE, startWidth - deltaX)
         newHeight = newWidth / aspectRatio
         break
       case 'ne': // Northeast (top-right)
-        newWidth = Math.max(100, startWidth + deltaX)
+        newWidth = Math.max(MIN_IMAGE_SIZE, startWidth + deltaX)
         newHeight = newWidth / aspectRatio
         break
       case 'nw': // Northwest (top-left)
-        newWidth = Math.max(100, startWidth - deltaX)
+        newWidth = Math.max(MIN_IMAGE_SIZE, startWidth - deltaX)
         newHeight = newWidth / aspectRatio
         break
       case 's':  // South (bottom)
-        newHeight = Math.max(100, startHeight + deltaY)
+        newHeight = Math.max(MIN_IMAGE_SIZE, startHeight + deltaY)
         newWidth = newHeight * aspectRatio
         break
       case 'n':  // North (top)
-        newHeight = Math.max(100, startHeight - deltaY)
+        newHeight = Math.max(MIN_IMAGE_SIZE, startHeight - deltaY)
         newWidth = newHeight * aspectRatio
         break
     }
