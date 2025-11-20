@@ -43,11 +43,14 @@ export const imageBlock: CustomBlockDescriptor = {
       return undefined
     }
 
+    const widthAttr = img.getAttribute('width')
+    const heightAttr = img.getAttribute('height')
+
     return {
       src,
       alt: img.getAttribute('alt') || undefined,
-      width: img.width || undefined,
-      height: img.height || undefined
+      width: widthAttr ? parseInt(widthAttr, 10) : undefined,
+      height: heightAttr ? parseInt(heightAttr, 10) : undefined
     }
   }
 }
