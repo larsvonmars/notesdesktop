@@ -1096,9 +1096,6 @@ const RichTextEditor = forwardRef<RichTextEditorHandle, RichTextEditorProps>(
                 return
               }
               
-              // Search all headings of the target level in the editor
-              const headings = editor.querySelectorAll(`h${level}`)
-              
               // Try to find the heading at the current cursor position first
               const selection = window.getSelection()
               let targetHeading: HTMLElement | null = null
@@ -1122,16 +1119,10 @@ const RichTextEditor = forwardRef<RichTextEditorHandle, RichTextEditorProps>(
               }
               
               // If we found a heading at cursor position, assign ID to it
+              // Only assign if the heading doesn't already have an ID
               if (targetHeading && !targetHeading.id) {
                 targetHeading.id = generateHeadingId(targetHeading.textContent || '')
               }
-              
-              // Also ensure all other headings without IDs get IDs (defensive)
-              headings.forEach((heading) => {
-                if (!heading.id) {
-                  heading.id = generateHeadingId(heading.textContent || '')
-                }
-              })
               
               // Normalize and emit change once
               normalizeEditorContent(editor)
