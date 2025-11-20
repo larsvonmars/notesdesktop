@@ -141,7 +141,10 @@ const SANITIZE_CONFIG: Config = {
     'h2',
     'h3',
     'mark',
-    'img'
+    'img',
+    'button',
+    'svg',
+    'path'
   ],
   // allow data-block attributes and stored payload attribute
   // (data-block-payload stores URI-encoded JSON)
@@ -163,7 +166,21 @@ const SANITIZE_CONFIG: Config = {
     'src',
     'alt',
     'width',
-    'height'
+    'height',
+    'style',
+    'data-direction',
+    'aria-label',
+    'title',
+    'draggable',
+    'contenteditable',
+    'xmlns',
+    'viewBox',
+    'fill',
+    'stroke',
+    'stroke-width',
+    'stroke-linecap',
+    'stroke-linejoin',
+    'd'
   ],
   ALLOW_DATA_ATTR: true
 }
@@ -1948,6 +1965,31 @@ const RichTextEditor = forwardRef<RichTextEditorHandle, RichTextEditorProps>(
       el.addEventListener('change', handleCheckboxChange)
       return () => {
         el.removeEventListener('change', handleCheckboxChange)
+      }
+    }, [emitChange])
+
+    // Initialize image block interactions (resize and delete)
+    useEffect(() => {
+      if (!editorRef.current) return
+      
+      // Dynamically import and initialize image block interactions
+      let cleanupFn: (() => void) | undefined = undefined
+      
+      const initImageBlocks = async () => {
+        try {
+          const { initializeImageBlockInteractions } = await import('@/lib/editor/imageBlock')
+          cleanupFn = initializeImageBlockInteractions(editorRef.current!, emitChange)
+        } catch (error) {
+          console.error('Failed to initialize image block interactions:', error)
+        }
+      }
+      
+      initImageBlocks()
+      
+      return () => {
+        if (cleanupFn) {
+          cleanupFn()
+        }
       }
     }, [emitChange])
 

@@ -279,4 +279,63 @@
   .show-block-outlines [contenteditable='true'] ol > li::before {
     display: none !important;
   }
+
+  /* Image block custom UI styles */
+  .image-block-container {
+    position: relative;
+    display: inline-block;
+    max-width: 100%;
+    user-select: none;
+  }
+
+  .image-block-wrapper {
+    position: relative;
+    display: inline-block;
+  }
+
+  .image-block-img {
+    display: block;
+    max-width: 100%;
+    height: auto;
+    pointer-events: none;
+  }
+
+  .image-block-container.resizing .image-block-img {
+    pointer-events: none;
+    user-select: none;
+  }
+
+  .image-delete-btn {
+    cursor: pointer;
+    user-select: none;
+  }
+
+  .image-resize-handle {
+    position: absolute;
+    user-select: none;
+    z-index: 10;
+  }
+
+  .image-block-container.resizing {
+    cursor: inherit;
+  }
+
+  /* Ensure resize handles are above the image */
+  .image-block-wrapper > * {
+    position: relative;
+  }
+
+  /* Smooth transition for opacity changes */
+  .image-delete-btn,
+  .image-resize-handle {
+    transition: opacity 0.2s ease-in-out;
+  }
+
+  /* Show UI elements when hovering over the container or when resizing */
+  .image-block-container:hover .image-delete-btn,
+  .image-block-container:hover .image-resize-handle,
+  .image-block-container.resizing .image-delete-btn,
+  .image-block-container.resizing .image-resize-handle {
+    opacity: 1 !important;
+  }
 }
