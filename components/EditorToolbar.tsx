@@ -75,15 +75,14 @@ const EditorToolbar: React.FC<EditorToolbarProps> = ({
     'inline-flex h-9 w-9 items-center justify-center rounded-lg border border-transparent bg-blue-50 text-blue-700 shadow-sm hover:bg-blue-100 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-500 disabled:opacity-40 disabled:cursor-not-allowed transition-colors'
 
   // Determine the current block type based on active formats
-  const getCurrentBlockType = () => {
+  // Memoize with useMemo since activeFormats is a Set and would change reference
+  const currentBlockType = React.useMemo(() => {
     if (activeFormats.has('heading1')) return 'heading1'
     if (activeFormats.has('heading2')) return 'heading2'
     if (activeFormats.has('heading3')) return 'heading3'
     if (activeFormats.has('blockquote')) return 'blockquote'
     return 'paragraph'
-  }
-
-  const currentBlockType = getCurrentBlockType()
+  }, [activeFormats])
 
   return (
     <div className="sticky top-0 z-40 flex-shrink-0 border-b border-slate-200 bg-white/90 backdrop-blur supports-[backdrop-filter]:bg-white/70">

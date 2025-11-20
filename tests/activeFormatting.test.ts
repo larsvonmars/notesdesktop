@@ -63,7 +63,9 @@ describe('Active Formatting Detection', () => {
       
       // Position cursor in h1
       const range = document.createRange()
-      range.setStart(h1.firstChild!, 5)
+      const textNode = h1.firstChild
+      if (!textNode) throw new Error('Text node not created')
+      range.setStart(textNode, 5)
       range.collapse(true)
       const selection = window.getSelection()!
       selection.removeAllRanges()
@@ -80,7 +82,9 @@ describe('Active Formatting Detection', () => {
       editor.appendChild(h2)
       
       const range = document.createRange()
-      range.setStart(h2.firstChild!, 5)
+      const textNode = h2.firstChild
+      if (!textNode) throw new Error('Text node not created')
+      range.setStart(textNode, 5)
       range.collapse(true)
       const selection = window.getSelection()!
       selection.removeAllRanges()
@@ -97,7 +101,9 @@ describe('Active Formatting Detection', () => {
       editor.appendChild(h3)
       
       const range = document.createRange()
-      range.setStart(h3.firstChild!, 5)
+      const textNode = h3.firstChild
+      if (!textNode) throw new Error('Text node not created')
+      range.setStart(textNode, 5)
       range.collapse(true)
       const selection = window.getSelection()!
       selection.removeAllRanges()
@@ -118,7 +124,9 @@ describe('Active Formatting Detection', () => {
       editor.appendChild(blockquote)
       
       const range = document.createRange()
-      range.setStart(p.firstChild!, 5)
+      const textNode = p.firstChild
+      if (!textNode) throw new Error('Text node not created')
+      range.setStart(textNode, 5)
       range.collapse(true)
       const selection = window.getSelection()!
       selection.removeAllRanges()
@@ -133,7 +141,9 @@ describe('Active Formatting Detection', () => {
       editor.appendChild(p)
       
       const range = document.createRange()
-      range.setStart(p.firstChild!, 5)
+      const textNode = p.firstChild
+      if (!textNode) throw new Error('Text node not created')
+      range.setStart(textNode, 5)
       range.collapse(true)
       const selection = window.getSelection()!
       selection.removeAllRanges()
@@ -152,7 +162,9 @@ describe('Active Formatting Detection', () => {
       editor.appendChild(h1)
       
       const range = document.createRange()
-      range.setStart(strong.firstChild!, 5)
+      const textNode = strong.firstChild
+      if (!textNode) throw new Error('Text node not created')
+      range.setStart(textNode, 5)
       range.collapse(true)
       const selection = window.getSelection()!
       selection.removeAllRanges()
@@ -172,7 +184,9 @@ describe('Active Formatting Detection', () => {
       editor.appendChild(blockquote)
       
       const range = document.createRange()
-      range.setStart(em.firstChild!, 5)
+      const textNode = em.firstChild
+      if (!textNode) throw new Error('Text node not created')
+      range.setStart(textNode, 5)
       range.collapse(true)
       const selection = window.getSelection()!
       selection.removeAllRanges()
@@ -192,7 +206,9 @@ describe('Active Formatting Detection', () => {
       editor.appendChild(ul)
       
       const range = document.createRange()
-      range.setStart(li.firstChild!, 5)
+      const textNode = li.firstChild
+      if (!textNode) throw new Error('Text node not created')
+      range.setStart(textNode, 5)
       range.collapse(true)
       const selection = window.getSelection()!
       selection.removeAllRanges()
@@ -210,7 +226,9 @@ describe('Active Formatting Detection', () => {
       editor.appendChild(ol)
       
       const range = document.createRange()
-      range.setStart(li.firstChild!, 5)
+      const textNode = li.firstChild
+      if (!textNode) throw new Error('Text node not created')
+      range.setStart(textNode, 5)
       range.collapse(true)
       const selection = window.getSelection()!
       selection.removeAllRanges()

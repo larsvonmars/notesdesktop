@@ -354,7 +354,7 @@ const RichTextEditor = forwardRef<RichTextEditorHandle, RichTextEditorProps>(
         console.error('Error updating active formats:', error)
         setActiveFormats(new Set())
       }
-    }, [])
+    }, []) // Empty deps: only uses DOM APIs and setState
 
     const scheduleActiveFormatsUpdate = useCallback(() => {
       if (activeFormatsFrameRef.current !== null) {
