@@ -396,13 +396,20 @@ export default function NoteEditor({
     
     const formats = new Set<string>()
     
-    // Check standard formatting commands
+    // Check inline formatting commands
     if (editorRef.current.queryCommandState('bold')) formats.add('bold')
     if (editorRef.current.queryCommandState('italic')) formats.add('italic')
     if (editorRef.current.queryCommandState('underline')) formats.add('underline')
     if (editorRef.current.queryCommandState('strikeThrough')) formats.add('strike')
+    if (editorRef.current.queryCommandState('code')) formats.add('code')
     if (editorRef.current.queryCommandState('insertUnorderedList')) formats.add('unordered-list')
     if (editorRef.current.queryCommandState('insertOrderedList')) formats.add('ordered-list')
+    
+    // Check block-level formatting commands
+    if (editorRef.current.queryCommandState('heading1')) formats.add('heading1')
+    if (editorRef.current.queryCommandState('heading2')) formats.add('heading2')
+    if (editorRef.current.queryCommandState('heading3')) formats.add('heading3')
+    if (editorRef.current.queryCommandState('blockquote')) formats.add('blockquote')
     
     setActiveFormats(formats)
   }, [])

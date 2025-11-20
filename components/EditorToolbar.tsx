@@ -49,6 +49,7 @@ export interface EditorToolbarProps {
   showBlockOutlines: boolean
   activeBlockId: string | null
   activeBlockType?: string
+  activeFormats?: Set<string>
   disabled?: boolean
 }
 
@@ -64,6 +65,7 @@ const EditorToolbar: React.FC<EditorToolbarProps> = ({
   showBlockOutlines,
   activeBlockId,
   activeBlockType,
+  activeFormats = new Set(),
   disabled = false
 }) => {
   const toolbarButtonClass =
@@ -72,13 +74,23 @@ const EditorToolbar: React.FC<EditorToolbarProps> = ({
   const activeButtonClass =
     'inline-flex h-9 w-9 items-center justify-center rounded-lg border border-transparent bg-blue-50 text-blue-700 shadow-sm hover:bg-blue-100 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-500 disabled:opacity-40 disabled:cursor-not-allowed transition-colors'
 
+  // Determine the current block type based on active formats
+  // Memoize with useMemo since activeFormats is a Set and would change reference
+  const currentBlockType = React.useMemo(() => {
+    if (activeFormats.has('heading1')) return 'heading1'
+    if (activeFormats.has('heading2')) return 'heading2'
+    if (activeFormats.has('heading3')) return 'heading3'
+    if (activeFormats.has('blockquote')) return 'blockquote'
+    return 'paragraph'
+  }, [activeFormats])
+
   return (
     <div className="sticky top-0 z-40 flex-shrink-0 border-b border-slate-200 bg-white/90 backdrop-blur supports-[backdrop-filter]:bg-white/70">
       <div className="flex flex-wrap items-center gap-3 px-4 py-3">
         {/* Text Formatting Group */}
         <div className="flex items-center gap-1 rounded-2xl border border-slate-200 bg-white/80 px-2 py-1 shadow-sm">
           <button
-            className={toolbarButtonClass}
+            className={activeFormats.has('bold') ? activeButtonClass : toolbarButtonClass}
             onMouseDown={(e) => e.preventDefault()}
             onClick={() => onCommand('bold')}
             disabled={disabled}
@@ -88,7 +100,7 @@ const EditorToolbar: React.FC<EditorToolbarProps> = ({
             <Bold size={16} />
           </button>
           <button
-            className={toolbarButtonClass}
+            className={activeFormats.has('italic') ? activeButtonClass : toolbarButtonClass}
             onMouseDown={(e) => e.preventDefault()}
             onClick={() => onCommand('italic')}
             disabled={disabled}
@@ -98,7 +110,7 @@ const EditorToolbar: React.FC<EditorToolbarProps> = ({
             <Italic size={16} />
           </button>
           <button
-            className={toolbarButtonClass}
+            className={activeFormats.has('underline') ? activeButtonClass : toolbarButtonClass}
             onMouseDown={(e) => e.preventDefault()}
             onClick={() => onCommand('underline')}
             disabled={disabled}
@@ -108,7 +120,7 @@ const EditorToolbar: React.FC<EditorToolbarProps> = ({
             <Underline size={16} />
           </button>
           <button
-            className={toolbarButtonClass}
+            className={activeFormats.has('strike') ? activeButtonClass : toolbarButtonClass}
             onMouseDown={(e) => e.preventDefault()}
             onClick={() => onCommand('strike')}
             disabled={disabled}
@@ -118,7 +130,7 @@ const EditorToolbar: React.FC<EditorToolbarProps> = ({
             <Strikethrough size={16} />
           </button>
           <button
-            className={toolbarButtonClass}
+            className={activeFormats.has('code') ? activeButtonClass : toolbarButtonClass}
             onMouseDown={(e) => e.preventDefault()}
             onClick={() => onCommand('code')}
             disabled={disabled}
@@ -147,7 +159,7 @@ const EditorToolbar: React.FC<EditorToolbarProps> = ({
           </div>
           <select
             className="h-9 rounded-lg border border-slate-200 bg-white px-3 text-sm text-slate-700 focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:opacity-40 disabled:cursor-not-allowed"
-            value="paragraph"
+            value={currentBlockType}
             onChange={(event) => onBlockTypeChange(event.target.value)}
             disabled={disabled}
             aria-label="Block type"
@@ -163,7 +175,7 @@ const EditorToolbar: React.FC<EditorToolbarProps> = ({
         {/* Lists & Structure Group */}
         <div className="flex items-center gap-1 rounded-2xl border border-slate-200 bg-white/80 px-2 py-1 shadow-sm">
           <button
-            className={toolbarButtonClass}
+            className={activeFormats.has('unordered-list') ? activeButtonClass : toolbarButtonClass}
             onMouseDown={(e) => e.preventDefault()}
             onClick={() => onCommand('unordered-list')}
             disabled={disabled}
@@ -173,7 +185,7 @@ const EditorToolbar: React.FC<EditorToolbarProps> = ({
             <List size={16} />
           </button>
           <button
-            className={toolbarButtonClass}
+            className={activeFormats.has('ordered-list') ? activeButtonClass : toolbarButtonClass}
             onMouseDown={(e) => e.preventDefault()}
             onClick={() => onCommand('ordered-list')}
             disabled={disabled}
