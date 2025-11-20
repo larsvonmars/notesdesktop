@@ -45,12 +45,15 @@ export const imageBlock: CustomBlockDescriptor = {
 
     const widthAttr = img.getAttribute('width')
     const heightAttr = img.getAttribute('height')
+    
+    const width = widthAttr ? parseInt(widthAttr, 10) : undefined
+    const height = heightAttr ? parseInt(heightAttr, 10) : undefined
 
     return {
       src,
       alt: img.getAttribute('alt') || undefined,
-      width: widthAttr ? parseInt(widthAttr, 10) : undefined,
-      height: heightAttr ? parseInt(heightAttr, 10) : undefined
+      width: width !== undefined && !Number.isNaN(width) ? width : undefined,
+      height: height !== undefined && !Number.isNaN(height) ? height : undefined
     }
   }
 }

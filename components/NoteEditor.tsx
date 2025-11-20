@@ -669,6 +669,13 @@ export default function NoteEditor({
         const target = e.target as HTMLInputElement
         const file = target.files?.[0]
         if (file) {
+          // Validate file size (max 10MB)
+          const maxSizeInBytes = 10 * 1024 * 1024
+          if (file.size > maxSizeInBytes) {
+            showToast('Image file is too large. Maximum size is 10MB.', 'error')
+            return
+          }
+
           // Convert the image to a data URL
           const reader = new FileReader()
           reader.onload = (readerEvent) => {
@@ -681,12 +688,15 @@ export default function NoteEditor({
               setHasChanges(true)
             }
           }
+          reader.onerror = () => {
+            showToast('Failed to read image file. Please try again.', 'error')
+          }
           reader.readAsDataURL(file)
         }
       }
       input.click()
     })
-  }, [hideContentBlocksMenu])
+  }, [hideContentBlocksMenu]) // showToast is stable and doesn't need to be in deps
 
   const handleInsertContentBlock = useCallback((command: RichTextCommand) => {
     hideContentBlocksMenu(() => {
