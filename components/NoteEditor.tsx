@@ -672,7 +672,7 @@ export default function NoteEditor({
           // Validate file size (max 10MB)
           const maxSizeInBytes = 10 * 1024 * 1024
           if (file.size > maxSizeInBytes) {
-            showToast('Image file is too large. Maximum size is 10MB.', 'error')
+            toast.push({ title: 'Image too large', description: 'Image file is too large. Maximum size is 10MB.' })
             return
           }
 
@@ -689,14 +689,14 @@ export default function NoteEditor({
             }
           }
           reader.onerror = () => {
-            showToast('Failed to read image file. Please try again.', 'error')
+            toast.push({ title: 'Error reading file', description: 'Failed to read image file. Please try again.' })
           }
           reader.readAsDataURL(file)
         }
       }
       input.click()
     })
-  }, [hideContentBlocksMenu]) // showToast is stable and doesn't need to be in deps
+  }, [hideContentBlocksMenu, toast])
 
   const handleInsertContentBlock = useCallback((command: RichTextCommand) => {
     hideContentBlocksMenu(() => {
