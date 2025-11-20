@@ -241,53 +241,67 @@ const RichTextEditor = forwardRef<RichTextEditorHandle, RichTextEditorProps>(
 
     const ensureBlockId = useCallback((node: HTMLElement | null) => {
       if (!node) return ''
-      let id = node.getAttribute('data-block-id')
-      if (!id) {
-        blockIdCounterRef.current += 1
-        id = `block-${blockIdCounterRef.current}`
-        node.setAttribute('data-block-id', id)
+      try {
+        let id = node.getAttribute('data-block-id')
+        if (!id) {
+          blockIdCounterRef.current += 1
+          id = `block-${blockIdCounterRef.current}`
+          node.setAttribute('data-block-id', id)
+        }
+        return id
+      } catch (error) {
+        console.error('Error ensuring block ID:', error)
+        return ''
       }
-      return id
     }, [])
 
     const updateBlockMetadata = useCallback(() => {
       if (!editorRef.current) return
-      const blockNodes = Array.from(editorRef.current.children) as HTMLElement[]
-      const metadata = blockNodes.map((node, idx) => {
-        const id = ensureBlockId(node)
-        const type = node.getAttribute('data-block-type') ?? node.tagName.toLowerCase()
-        const textPreview = (node.textContent || '').replace(/\s+/g, ' ').trim().slice(0, 120)
-        return {
-          id,
-          type,
-          textPreview: textPreview || '(empty)',
-          index: idx + 1
-        }
-      })
-      setBlockMetadata(metadata)
+      try {
+        const blockNodes = Array.from(editorRef.current.children) as HTMLElement[]
+        const metadata = blockNodes.map((node, idx) => {
+          const id = ensureBlockId(node)
+          const type = node.getAttribute('data-block-type') ?? node.tagName.toLowerCase()
+          const textPreview = (node.textContent || '').replace(/\s+/g, ' ').trim().slice(0, 120)
+          return {
+            id,
+            type,
+            textPreview: textPreview || '(empty)',
+            index: idx + 1
+          }
+        })
+        setBlockMetadata(metadata)
+      } catch (error) {
+        console.error('Error updating block metadata:', error)
+      }
     }, [ensureBlockId])
 
     const refreshActiveBlock = useCallback(() => {
-      if (!editorRef.current) {
-        setActiveBlockId(null)
-        return
-      }
-      const selection = window.getSelection()
-      if (!selection || selection.rangeCount === 0) {
-        setActiveBlockId(null)
-        return
-      }
-      const anchorNode = selection.getRangeAt(0).startContainer
-      const element = anchorNode instanceof HTMLElement ? anchorNode : anchorNode.parentElement
-      if (!element) {
-        setActiveBlockId(null)
-        return
-      }
-      const blockElement = element.closest('[data-block-id]') || element.closest('[data-block="true"]')
-      if (blockElement instanceof HTMLElement) {
-        const id = ensureBlockId(blockElement)
-        setActiveBlockId(id)
-      } else {
+      try {
+        if (!editorRef.current) {
+          setActiveBlockId(null)
+          return
+        }
+        const selection = window.getSelection()
+        if (!selection || selection.rangeCount === 0) {
+          setActiveBlockId(null)
+          return
+        }
+        const anchorNode = selection.getRangeAt(0).startContainer
+        const element = anchorNode instanceof HTMLElement ? anchorNode : anchorNode.parentElement
+        if (!element) {
+          setActiveBlockId(null)
+          return
+        }
+        const blockElement = element.closest('[data-block-id]') || element.closest('[data-block="true"]')
+        if (blockElement instanceof HTMLElement) {
+          const id = ensureBlockId(blockElement)
+          setActiveBlockId(id)
+        } else {
+          setActiveBlockId(null)
+        }
+      } catch (error) {
+        console.error('Error refreshing active block:', error)
         setActiveBlockId(null)
       }
     }, [ensureBlockId])
@@ -1066,35 +1080,59 @@ const RichTextEditor = forwardRef<RichTextEditorHandle, RichTextEditorProps>(
         // Ensure focus before any operations (critical for WebView)
         editor.focus()
         
-        // Use the commandDispatcher's applyBlockFormat function
-        applyBlockFormat(`h${level}` as 'h1' | 'h2' | 'h3', editor)
-        
-        // Add heading ID after the block format is applied
-        applyCursorOperation(() => {
-          const selection = window.getSelection()
-          if (selection && selection.rangeCount > 0) {
-            const range = selection.getRangeAt(0)
-            let node: Node | null = range.startContainer
-            
-            // Find the heading element
-            while (node && node !== editor) {
-              if (node.nodeType === Node.ELEMENT_NODE) {
-                const element = node as HTMLElement
-                const tagName = element.tagName?.toLowerCase()
-                if (tagName === `h${level}` && !element.id) {
-                  // Generate and assign ID
-                  element.id = generateHeadingId(element.textContent || '')
-                  break
+        try {
+          // Use the commandDispatcher's applyBlockFormat function
+          // This already handles cursor positioning internally
+          applyBlockFormat(`h${level}` as 'h1' | 'h2' | 'h3', editor)
+          
+          // Add heading ID synchronously after block format is applied
+          // Use a single timeout to avoid race conditions
+          setTimeout(() => {
+            try {
+              // Verify editor is still valid
+              if (!editor.isConnected) {
+                console.warn('Editor removed from DOM during heading operation')
+                return
+              }
+              
+              const selection = window.getSelection()
+              if (selection && selection.rangeCount > 0) {
+                const range = selection.getRangeAt(0)
+                let node: Node | null = range.startContainer
+                
+                // Find the heading element
+                while (node && node !== editor) {
+                  if (node.nodeType === Node.ELEMENT_NODE) {
+                    const element = node as HTMLElement
+                    const tagName = element.tagName?.toLowerCase()
+                    if (tagName === `h${level}`) {
+                      // Only generate ID if not already present
+                      if (!element.id) {
+                        element.id = generateHeadingId(element.textContent || '')
+                      }
+                      break
+                    }
+                  }
+                  node = node.parentElement
                 }
               }
-              node = node.parentElement
+              
+              // Normalize and emit change once
+              normalizeEditorContent(editor)
+              emitChange()
+            } catch (error) {
+              console.error('Error in heading ID assignment:', error)
             }
+          }, CURSOR_TIMING.MEDIUM)
+        } catch (error) {
+          console.error('Error in applyHeading:', error)
+          // Try to recover by normalizing
+          try {
+            normalizeEditorContent(editor)
+          } catch (e) {
+            console.error('Failed to recover from applyHeading error:', e)
           }
-          
-          // Emit change after heading is created
-          normalizeEditorContent(editor)
-          emitChange()
-        }, CURSOR_TIMING.LONG)
+        }
       },
       [disabled, emitChange]
     )
@@ -1510,56 +1548,73 @@ const RichTextEditor = forwardRef<RichTextEditorHandle, RichTextEditorProps>(
     const insertHorizontalRule = useCallback(() => {
       if (disabled || !editorRef.current) return
       
-      const selection = window.getSelection()
-      if (!selection || selection.rangeCount === 0) return
-      
-      const range = selection.getRangeAt(0)
-      const hr = document.createElement('hr')
-      range.insertNode(hr)
-      
-      const p = document.createElement('p')
-      p.appendChild(document.createElement('br'))
-      hr.parentNode?.insertBefore(p, hr.nextSibling)
-      
-      // Use improved cursor positioning
-      positionCursorInElement(p, 'start', editorRef.current)
-      
-      emitChange()
+      try {
+        const selection = window.getSelection()
+        if (!selection || selection.rangeCount === 0) {
+          console.warn('No selection for horizontal rule insertion')
+          return
+        }
+        
+        const range = selection.getRangeAt(0)
+        const hr = document.createElement('hr')
+        range.insertNode(hr)
+        
+        const p = document.createElement('p')
+        p.appendChild(document.createElement('br'))
+        
+        if (hr.parentNode) {
+          hr.parentNode.insertBefore(p, hr.nextSibling)
+          
+          // Use improved cursor positioning
+          positionCursorInElement(p, 'start', editorRef.current)
+        } else {
+          console.warn('Horizontal rule has no parent, cannot insert paragraph')
+        }
+        
+        emitChange()
+      } catch (error) {
+        console.error('Error inserting horizontal rule:', error)
+      }
     }, [disabled, emitChange])
 
     const createRootLevelBlock = useCallback(() => {
       if (!editorRef.current) return null
 
-      const newBlock = document.createElement('div')
-      newBlock.setAttribute('data-block', 'true')
-      newBlock.className = 'block-root rounded-xl border border-slate-200 bg-white/80 px-3 py-2 my-3 shadow-sm'
+      try {
+        const newBlock = document.createElement('div')
+        newBlock.setAttribute('data-block', 'true')
+        newBlock.className = 'block-root rounded-xl border border-slate-200 bg-white/80 px-3 py-2 my-3 shadow-sm'
 
-      const paragraph = document.createElement('p')
-      paragraph.appendChild(document.createElement('br'))
-      newBlock.appendChild(paragraph)
+        const paragraph = document.createElement('p')
+        paragraph.appendChild(document.createElement('br'))
+        newBlock.appendChild(paragraph)
 
-      const selection = window.getSelection()
-      let anchorBlock: HTMLElement | null = null
-      if (selection && selection.rangeCount > 0) {
-        const anchorNode = selection.getRangeAt(0).startContainer
-        anchorBlock = (anchorNode instanceof HTMLElement ? anchorNode : anchorNode.parentElement)?.closest(
-          '[data-block-id]'
-        ) as HTMLElement | null
+        const selection = window.getSelection()
+        let anchorBlock: HTMLElement | null = null
+        if (selection && selection.rangeCount > 0) {
+          const anchorNode = selection.getRangeAt(0).startContainer
+          anchorBlock = (anchorNode instanceof HTMLElement ? anchorNode : anchorNode.parentElement)?.closest(
+            '[data-block-id]'
+          ) as HTMLElement | null
+        }
+
+        if (anchorBlock && anchorBlock.parentElement === editorRef.current) {
+          anchorBlock.insertAdjacentElement('afterend', newBlock)
+        } else {
+          editorRef.current.appendChild(newBlock)
+        }
+
+        ensureBlockId(newBlock)
+        const target = (newBlock.querySelector('p, div, span') as HTMLElement | null) ?? newBlock
+        positionCursorInElement(target, 'start', editorRef.current)
+        normalizeEditorContent(editorRef.current)
+        emitChange()
+        updateBlockMetadata()
+        return newBlock
+      } catch (error) {
+        console.error('Error creating root level block:', error)
+        return null
       }
-
-      if (anchorBlock && anchorBlock.parentElement === editorRef.current) {
-        anchorBlock.insertAdjacentElement('afterend', newBlock)
-      } else {
-        editorRef.current.appendChild(newBlock)
-      }
-
-      ensureBlockId(newBlock)
-      const target = (newBlock.querySelector('p, div, span') as HTMLElement | null) ?? newBlock
-      positionCursorInElement(target, 'start', editorRef.current)
-      normalizeEditorContent(editorRef.current)
-      emitChange()
-      updateBlockMetadata()
-      return newBlock
     }, [emitChange, ensureBlockId, updateBlockMetadata])
 
     /**
@@ -1620,23 +1675,33 @@ const RichTextEditor = forwardRef<RichTextEditorHandle, RichTextEditorProps>(
     }, [execCommand, applyCode, toggleChecklist, applyHeading, insertHorizontalRule, insertLink])
 
     const handleBlockTypeChange = useCallback((value: string) => {
-      switch (value) {
-        case 'heading1':
-          applyHeading(1)
-          break
-        case 'heading2':
-          applyHeading(2)
-          break
-        case 'heading3':
-          applyHeading(3)
-          break
-        case 'blockquote':
-          execCommand('formatBlock', 'blockquote')
-          break
-        default:
-          execCommand('formatBlock', 'p')
+      if (disabled || !editorRef.current) return
+      
+      try {
+        switch (value) {
+          case 'heading1':
+            applyHeading(1)
+            break
+          case 'heading2':
+            applyHeading(2)
+            break
+          case 'heading3':
+            applyHeading(3)
+            break
+          case 'blockquote':
+            execCommand('formatBlock', 'blockquote')
+            break
+          case 'paragraph':
+          case 'p':
+            execCommand('formatBlock', 'p')
+            break
+          default:
+            console.warn('Unknown block type:', value)
+        }
+      } catch (error) {
+        console.error('Error in handleBlockTypeChange:', error)
       }
-    }, [applyHeading, execCommand])
+    }, [disabled, applyHeading, execCommand])
 
     const scrollToHeading = useCallback((headingId: string) => {
       if (!editorRef.current || !headingId) return

@@ -101,46 +101,58 @@ function getTextNodesInRange(range: Range): Text[] {
 
 /**
  * Apply inline style by wrapping selection with a semantic tag
- * Improved cursor positioning for collapsed ranges
+ * Improved cursor positioning for collapsed ranges and better error handling
  */
 export function applyInlineStyle(tagName: 'strong' | 'em' | 'code' | 'u' | 's'): void {
-  const selection = window.getSelection()
-  if (!selection || selection.rangeCount === 0) return
-  
-  const range = selection.getRangeAt(0)
-  
-  // Check if already wrapped in this tag
-  const wrapper = isWrappedInTag(range.commonAncestorContainer, tagName)
-  
-  if (wrapper && range.toString().length === 0) {
-    // Cursor inside wrapper, unwrap it
-    unwrapElement(wrapper)
-    return
-  }
-  
-  if (wrapper && isRangeFullyWithinElement(range, wrapper)) {
-    // Selection fully within wrapper, unwrap it
-    unwrapElement(wrapper)
-    return
-  }
-  
-  // Apply the style
-  if (range.collapsed) {
-    // No selection - insert placeholder with improved cursor positioning
-    const element = document.createElement(tagName)
-    const textNode = document.createTextNode(tagName)
-    element.appendChild(textNode)
-    range.insertNode(element)
+  try {
+    const selection = window.getSelection()
+    if (!selection || selection.rangeCount === 0) {
+      console.warn('No selection available for inline style')
+      return
+    }
     
-    // Select the text inside for better UX - user can immediately type to replace
-    const newRange = document.createRange()
-    newRange.setStart(textNode, 0)
-    newRange.setEnd(textNode, textNode.length)
-    selection.removeAllRanges()
-    selection.addRange(newRange)
-  } else {
-    // Has selection - wrap it
-    wrapRangeInTag(range, tagName)
+    const range = selection.getRangeAt(0)
+    
+    // Check if already wrapped in this tag
+    const wrapper = isWrappedInTag(range.commonAncestorContainer, tagName)
+    
+    if (wrapper && range.toString().length === 0) {
+      // Cursor inside wrapper, unwrap it
+      unwrapElement(wrapper)
+      return
+    }
+    
+    if (wrapper && isRangeFullyWithinElement(range, wrapper)) {
+      // Selection fully within wrapper, unwrap it
+      unwrapElement(wrapper)
+      return
+    }
+    
+    // Apply the style
+    if (range.collapsed) {
+      // No selection - insert placeholder with improved cursor positioning
+      const element = document.createElement(tagName)
+      const textNode = document.createTextNode(tagName)
+      element.appendChild(textNode)
+      
+      try {
+        range.insertNode(element)
+        
+        // Select the text inside for better UX - user can immediately type to replace
+        const newRange = document.createRange()
+        newRange.setStart(textNode, 0)
+        newRange.setEnd(textNode, textNode.length)
+        selection.removeAllRanges()
+        selection.addRange(newRange)
+      } catch (error) {
+        console.error('Failed to insert inline style element:', error)
+      }
+    } else {
+      // Has selection - wrap it
+      wrapRangeInTag(range, tagName)
+    }
+  } catch (error) {
+    console.error('Error in applyInlineStyle:', error)
   }
 }
 
@@ -181,16 +193,26 @@ function wrapRangeInTag(range: Range, tagName: string): void {
  * Unwrap an element, moving its children up
  */
 function unwrapElement(element: Element): void {
-  const parent = element.parentNode
-  if (!parent) return
-  
-  // Move all children before the element
-  while (element.firstChild) {
-    parent.insertBefore(element.firstChild, element)
+  try {
+    const parent = element.parentNode
+    if (!parent) {
+      console.warn('Cannot unwrap element without parent')
+      return
+    }
+    
+    // Store children in array to avoid live collection issues
+    const children = Array.from(element.childNodes)
+    
+    // Move all children before the element
+    children.forEach(child => {
+      parent.insertBefore(child, element)
+    })
+    
+    // Remove the empty element
+    parent.removeChild(element)
+  } catch (error) {
+    console.error('Error unwrapping element:', error)
   }
-  
-  // Remove the empty element
-  parent.removeChild(element)
 }
 
 /**
@@ -214,99 +236,138 @@ function getBlockAncestor(node: Node | null): HTMLElement | null {
 
 /**
  * Apply block format by swapping the tag of the block ancestor
- * Improved cursor positioning with WebView compatibility
+ * Improved cursor positioning with WebView compatibility and better error handling
  */
 export function applyBlockFormat(
   tagName: 'p' | 'h1' | 'h2' | 'h3' | 'blockquote',
   editorElement?: HTMLElement | null
 ): void {
-  const selection = window.getSelection()
-  if (!selection || selection.rangeCount === 0) return
-  
-  const range = selection.getRangeAt(0)
-  const block = getBlockAncestor(range.startContainer)
+  try {
+    const selection = window.getSelection()
+    if (!selection || selection.rangeCount === 0) {
+      console.warn('No selection available for block format')
+      return
+    }
+    
+    const range = selection.getRangeAt(0)
+    const block = getBlockAncestor(range.startContainer)
 
-  const shouldFallbackToExecCommand =
-    typeof document !== 'undefined' &&
-    typeof document.execCommand === 'function' &&
-    editorElement != null &&
-    (!block || block === editorElement)
+    const shouldFallbackToExecCommand =
+      typeof document !== 'undefined' &&
+      typeof document.execCommand === 'function' &&
+      editorElement != null &&
+      (!block || block === editorElement)
 
-  if (shouldFallbackToExecCommand) {
-    try {
-      document.execCommand('formatBlock', false, `<${tagName}>`)
+    if (shouldFallbackToExecCommand) {
+      try {
+        document.execCommand('formatBlock', false, `<${tagName}>`)
+        
+        // Ensure cursor is properly positioned after execCommand
+        if (editorElement) {
+          setTimeout(() => {
+            editorElement.focus()
+          }, CURSOR_TIMING.SHORT)
+        }
+        return
+      } catch (error) {
+        console.warn('formatBlock fallback via execCommand failed:', error)
+      }
+    }
+    
+    if (!block) {
+      // No block found, create one
+      const newBlock = document.createElement(tagName)
+      newBlock.appendChild(document.createElement('br'))
       
-      // Ensure cursor is properly positioned after execCommand
       if (editorElement) {
-        setTimeout(() => {
-          editorElement.focus()
-        }, CURSOR_TIMING.SHORT)
+        editorElement.appendChild(newBlock)
+        // Use improved cursor positioning
+        positionCursorInElement(newBlock, 'start', editorElement)
+      } else {
+        range.insertNode(newBlock)
+        positionCursorInElement(newBlock, 'start')
+      }
+      
+      return
+    }
+
+    if (editorElement && block === editorElement) {
+      console.warn('Unable to identify block ancestor for formatBlock without execCommand fallback.')
+      return
+    }
+    
+    // Check if already the same tag - only convert to paragraph if explicitly requested
+    const currentTag = block.tagName.toLowerCase()
+    const targetTag = (currentTag === tagName && tagName !== 'p') ? 'p' : tagName
+    
+    // If no change needed, just ensure focus and return
+    if (currentTag === targetTag) {
+      if (editorElement) {
+        editorElement.focus()
       }
       return
-    } catch (error) {
-      console.warn('formatBlock fallback via execCommand failed:', error)
-    }
-  }
-  
-  if (!block) {
-    // No block found, create one
-    const newBlock = document.createElement(tagName)
-    newBlock.appendChild(document.createElement('br'))
-    
-    if (editorElement) {
-      editorElement.appendChild(newBlock)
-      // Use improved cursor positioning
-      positionCursorInElement(newBlock, 'start', editorElement)
-    } else {
-      range.insertNode(newBlock)
-      positionCursorInElement(newBlock, 'start')
     }
     
-    return
-  }
-
-  if (editorElement && block === editorElement) {
-    console.warn('Unable to identify block ancestor for formatBlock without execCommand fallback.')
-    return
-  }
-  
-  // If already the same tag, convert to paragraph
-  const targetTag = block.tagName.toLowerCase() === tagName ? 'p' : tagName
-  
-  // Save text offset within the block for better cursor restoration
-  const textOffset = getTextOffsetInBlock(block)
-  
-  // Create new block with the target tag
-  const newBlock = document.createElement(targetTag)
-  
-  // Copy attributes (like ID for headings)
-  if (block.id) {
-    newBlock.id = block.id
-  }
-  
-  // Move all children to the new block
-  while (block.firstChild) {
-    newBlock.appendChild(block.firstChild)
-  }
-  
-  // Replace the old block with the new one
-  block.parentNode?.replaceChild(newBlock, block)
-  
-  // Focus editor first (critical for WebView)
-  if (editorElement) {
-    editorElement.focus()
-  }
-  
-  // Restore cursor position with improved timing
-  setTimeout(() => {
-    // Verify block is still in DOM
-    if (!newBlock.isConnected) {
-      console.warn('Block was removed from DOM after creation')
+    // Save text offset within the block for better cursor restoration
+    const textOffset = getTextOffsetInBlock(block)
+    
+    // Create new block with the target tag
+    const newBlock = document.createElement(targetTag)
+    
+    // Copy attributes (like ID for headings) but only if target is also a heading
+    if (block.id && (targetTag.startsWith('h') || currentTag.startsWith('h'))) {
+      newBlock.id = block.id
+    }
+    
+    // Copy children safely by creating an array first
+    const children = Array.from(block.childNodes)
+    children.forEach(child => {
+      newBlock.appendChild(child)
+    })
+    
+    // Verify parent exists before replacement
+    const parent = block.parentNode
+    if (!parent) {
+      console.warn('Block has no parent, cannot replace')
       return
     }
     
-    restoreTextOffsetInBlock(newBlock, textOffset)
-  }, CURSOR_TIMING.LONG)
+    // Replace the old block with the new one
+    try {
+      parent.replaceChild(newBlock, block)
+    } catch (error) {
+      console.error('Failed to replace block:', error)
+      return
+    }
+    
+    // Focus editor first (critical for WebView)
+    if (editorElement) {
+      editorElement.focus()
+    }
+    
+    // Restore cursor position with improved timing
+    setTimeout(() => {
+      // Verify block is still in DOM
+      if (!newBlock.isConnected) {
+        console.warn('Block was removed from DOM after creation')
+        return
+      }
+      
+      try {
+        restoreTextOffsetInBlock(newBlock, textOffset)
+      } catch (error) {
+        console.warn('Failed to restore cursor position:', error)
+        // Fallback: position at end of block
+        if (editorElement) {
+          positionCursorInElement(newBlock, 'end', editorElement)
+        } else {
+          positionCursorInElement(newBlock, 'end')
+        }
+      }
+    }, CURSOR_TIMING.LONG)
+  } catch (error) {
+    console.error('Error in applyBlockFormat:', error)
+  }
 }
 
 /**
