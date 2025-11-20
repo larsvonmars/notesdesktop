@@ -166,6 +166,7 @@ export default function NoteEditor({
   const wordGoalInputRef = useRef<HTMLInputElement>(null)
   const [showNoteLinkDialog, setShowNoteLinkDialog] = useState(false)
   const savedNoteLinkSelection = useRef<Range | null>(null)
+  const savedContentBlockSelectionRef = useRef<Range | null>(null)
   const [showContentBlocksMenu, setShowContentBlocksMenu] = useState(false)
   const [blockSearchQuery, setBlockSearchQuery] = useState('')
   const [selectedBlockIndex, setSelectedBlockIndex] = useState(0)
@@ -554,41 +555,118 @@ export default function NoteEditor({
     },
     []
   )
+  
+  const saveContentBlockSelection = useCallback(() => {
+    if (typeof window === 'undefined') return
+    const editorElement = editorRef.current?.getRootElement()
+    const selection = window.getSelection()
+    if (!selection || selection.rangeCount === 0 || !editorElement) return
+
+    const range = selection.getRangeAt(0)
+    if (!editorElement.contains(range.commonAncestorContainer)) return
+
+    savedContentBlockSelectionRef.current = range.cloneRange()
+  }, [])
+
+  const restoreContentBlockSelection = useCallback(() => {
+    if (typeof window === 'undefined') {
+      savedContentBlockSelectionRef.current = null
+      return
+    }
+
+    const savedRange = savedContentBlockSelectionRef.current
+    const editorElement = editorRef.current?.getRootElement()
+
+    if (!savedRange || !editorElement) return
+
+    const { startContainer, endContainer } = savedRange
+    if (
+      !startContainer.isConnected ||
+      !endContainer.isConnected ||
+      !editorElement.contains(startContainer) ||
+      !editorElement.contains(endContainer)
+    ) {
+      savedContentBlockSelectionRef.current = null
+      return
+    }
+
+    const selection = window.getSelection()
+    if (!selection) return
+
+    selection.removeAllRanges()
+    selection.addRange(savedRange)
+    savedContentBlockSelectionRef.current = null
+  }, [])
+
+  const runAfterMenuClose = useCallback(
+    (action?: () => void) => {
+      const execute = () => {
+        editorRef.current?.focus()
+        restoreContentBlockSelection()
+        action?.()
+      }
+
+      if (typeof window === 'undefined') {
+        execute()
+        return
+      }
+
+      if (showContentBlocksMenu) {
+        window.requestAnimationFrame(() => {
+          window.requestAnimationFrame(execute)
+        })
+      } else {
+        execute()
+      }
+    },
+    [restoreContentBlockSelection, showContentBlocksMenu]
+  )
+
+  const openContentBlocksMenu = useCallback(() => {
+    if (showContentBlocksMenu) return
+    saveContentBlockSelection()
+    setShowContentBlocksMenu(true)
+  }, [saveContentBlockSelection, showContentBlocksMenu])
+
+  const hideContentBlocksMenu = useCallback(
+    (afterClose?: () => void) => {
+      setShowContentBlocksMenu(false)
+      runAfterMenuClose(afterClose)
+    },
+    [runAfterMenuClose]
+  )
 
   // Handle content block insertion
   const handleInsertTable = useCallback(() => {
-    setShowContentBlocksMenu(false)
-    editorRef.current?.focus()
-    editorRef.current?.showTableDialog()
-  }, [])
+    hideContentBlocksMenu(() => {
+      editorRef.current?.showTableDialog()
+    })
+  }, [hideContentBlocksMenu])
 
   const handleInsertNoteLink = useCallback(() => {
-    setShowContentBlocksMenu(false)
-    editorRef.current?.focus()
-    editorRef.current?.requestNoteLink()
-  }, [])
+    hideContentBlocksMenu(() => {
+      editorRef.current?.requestNoteLink()
+    })
+  }, [hideContentBlocksMenu])
 
   const handleInsertContentBlock = useCallback((command: RichTextCommand) => {
-    setShowContentBlocksMenu(false)
-    editorRef.current?.focus()
-    editorRef.current?.exec(command)
-  }, [])
+    hideContentBlocksMenu(() => {
+      editorRef.current?.exec(command)
+    })
+  }, [hideContentBlocksMenu])
 
   const executeBlockAction = useCallback((blockId: string) => {
     const block = contentBlocks.find(b => b.id === blockId)
     if (!block) return
-
-    setShowContentBlocksMenu(false)
 
     if (blockId === 'table') {
       handleInsertTable()
     } else if (blockId === 'note-link') {
       handleInsertNoteLink()
     } else if (block.command) {
-      editorRef.current?.focus()
-      editorRef.current?.exec(block.command)
+      handleInsertContentBlock(block.command)
     }
-  }, [contentBlocks, handleInsertTable, handleInsertNoteLink])
+  }, [contentBlocks, handleInsertContentBlock, handleInsertNoteLink, handleInsertTable])
 
   // Keyboard navigation for content blocks menu
   const handleBlockMenuKeyDown = useCallback((e: KeyboardEvent | React.KeyboardEvent) => {
@@ -596,8 +674,7 @@ export default function NoteEditor({
 
     if (e.key === 'Escape') {
       e.preventDefault()
-      setShowContentBlocksMenu(false)
-      editorRef.current?.focus()
+      hideContentBlocksMenu()
     } else if (e.key === 'ArrowDown') {
       e.preventDefault()
       setSelectedBlockIndex(prev => Math.min(prev + 1, filteredBlocks.length - 1))
@@ -611,7 +688,7 @@ export default function NoteEditor({
         executeBlockAction(selectedBlock.id)
       }
     }
-  }, [showContentBlocksMenu, selectedBlockIndex, filteredBlocks, executeBlockAction])
+  }, [showContentBlocksMenu, selectedBlockIndex, filteredBlocks, executeBlockAction, hideContentBlocksMenu])
 
   // Add global keyboard listener for content blocks menu
   useEffect(() => {
@@ -805,7 +882,7 @@ export default function NoteEditor({
       // Handle "+" key to open content blocks menu (for rich text notes only)
       if (event.key === '+' && noteType === 'rich-text' && !isSaving && !isDeleting) {
         event.preventDefault()
-        setShowContentBlocksMenu(true)
+        openContentBlocksMenu()
         return
       }
 
@@ -830,7 +907,7 @@ export default function NoteEditor({
 
     window.addEventListener('keydown', handler)
     return () => window.removeEventListener('keydown', handler)
-  }, [handleSave, hasChanges, isSaving, noteType, isDeleting])
+  }, [handleSave, hasChanges, isSaving, noteType, isDeleting, openContentBlocksMenu])
 
   // Listen for selection changes to update active format states
   useEffect(() => {
@@ -1370,7 +1447,7 @@ export default function NoteEditor({
       {/* Floating Content Blocks Button - Only show for rich text notes */}
       {noteType === 'rich-text' && !showContentBlocksMenu && (
         <button
-          onClick={() => setShowContentBlocksMenu(true)}
+          onClick={openContentBlocksMenu}
           className="fixed right-6 bottom-24 z-40 w-14 h-14 rounded-full bg-blue-600 hover:bg-blue-700 text-white shadow-lg hover:shadow-xl transition-all duration-200 flex items-center justify-center group"
           title="Insert content block"
         >
@@ -1382,7 +1459,7 @@ export default function NoteEditor({
       {showContentBlocksMenu && noteType === 'rich-text' && (
         <div 
           className="fixed inset-0 z-50 flex items-center justify-center bg-black/20" 
-          onClick={() => setShowContentBlocksMenu(false)}
+          onClick={() => hideContentBlocksMenu()}
         >
           <div 
             className="bg-white rounded-xl shadow-2xl border border-gray-200 w-96 max-h-[80vh] overflow-hidden flex flex-col"
@@ -1393,7 +1470,7 @@ export default function NoteEditor({
               <div className="flex items-center justify-between px-4 py-3">
                 <h3 className="text-sm font-semibold text-gray-900">Insert Content Block</h3>
                 <button
-                  onClick={() => setShowContentBlocksMenu(false)}
+                  onClick={() => hideContentBlocksMenu()}
                   className="text-gray-400 hover:text-gray-600 transition-colors"
                   aria-label="Close menu"
                 >
