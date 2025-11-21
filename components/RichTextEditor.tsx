@@ -682,8 +682,11 @@ const RichTextEditor = forwardRef<RichTextEditorHandle, RichTextEditorProps>(
                 }
                 
                 // Check if this is a block-level element (like image) and needs a trailing paragraph
+                // We check the block type directly rather than getComputedStyle for better performance
                 if (blockElement && blockElement.getAttribute('data-block-type') === type) {
-                  const isBlockLevel = window.getComputedStyle(blockElement).display === 'block'
+                  // Known block-level custom block types
+                  const blockLevelTypes = ['image', 'table']
+                  const isBlockLevel = blockLevelTypes.includes(type)
                   const hasNextSibling = blockElement.nextElementSibling
                   
                   if (isBlockLevel && !hasNextSibling) {

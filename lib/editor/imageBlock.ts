@@ -154,18 +154,22 @@ export function initializeImageBlockInteractions(editorElement: HTMLElement, onC
       
       const container = deleteBtn.closest('.image-block-container')
       if (container) {
-        // Create a paragraph after removing image to ensure cursor has somewhere to go
         const nextElement = container.nextElementSibling
-        const prevElement = container.previousElementSibling
         
         // Remove the container
         container.remove()
         
-        // If there's no next element and no previous element, create a paragraph
-        if (!nextElement && !prevElement) {
+        // If there's no next element, create a paragraph so user can continue typing
+        if (!nextElement) {
           const paragraph = document.createElement('p')
           paragraph.appendChild(document.createElement('br'))
-          editorElement.appendChild(paragraph)
+          
+          // Insert after where the image was (which might be at the end)
+          if (container.parentNode) {
+            container.parentNode.appendChild(paragraph)
+          } else {
+            editorElement.appendChild(paragraph)
+          }
         }
         
         onContentChange()
