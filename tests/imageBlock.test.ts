@@ -65,63 +65,55 @@ describe('Image Block', () => {
       expect(html).toContain('Delete image')
     })
 
-    it('should apply width and height styles when provided', () => {
+    it('should apply width styles when provided', () => {
       const payload: ImagePayload = {
         src: 'data:image/png;base64,test',
         alt: 'Test image',
-        width: 500,
-        height: 300
+        width: 500
       }
 
       const html = imageBlock.render(payload)
       
       expect(html).toContain('width: 500px')
-      expect(html).toContain('height: 300px')
     })
 
     it('should enforce minimum dimensions', () => {
       const payload: ImagePayload = {
         src: 'data:image/png;base64,test',
         alt: 'Test image',
-        width: 50,  // Below minimum
-        height: 30  // Below minimum
+        width: 50  // Below minimum
       }
 
       const html = imageBlock.render(payload)
       
       // Should clamp to minimum of 100px
       expect(html).toContain('width: 100px')
-      expect(html).toContain('height: 100px')
     })
 
     it('should enforce maximum dimensions', () => {
       const payload: ImagePayload = {
         src: 'data:image/png;base64,test',
         alt: 'Test image',
-        width: 5000,  // Above maximum
-        height: 5000  // Above maximum
+        width: 5000  // Above maximum
       }
 
       const html = imageBlock.render(payload)
       
       // Should clamp to maximum of 4000px
       expect(html).toContain('width: 4000px')
-      expect(html).toContain('height: 4000px')
     })
 
     it('should handle invalid dimensions gracefully', () => {
       const payload: ImagePayload = {
         src: 'data:image/png;base64,test',
         alt: 'Test image',
-        width: NaN,
-        height: Infinity
+        width: NaN
       }
 
       const html = imageBlock.render(payload)
       
       // Should not include invalid dimensions
       expect(html).not.toContain('width: NaNpx')
-      expect(html).not.toContain('height: Infinitypx')
     })
 
     it('should handle invalid payload gracefully', () => {
@@ -221,6 +213,26 @@ describe('Image Block', () => {
       expect(onContentChange).toHaveBeenCalled()
     })
 
+    it('should create a paragraph after deleting image if editor becomes empty', () => {
+      const onContentChange = vi.fn()
+      const payload: ImagePayload = {
+        src: 'data:image/png;base64,test',
+        alt: 'Test image'
+      }
+
+      const html = imageBlock.render(payload)
+      editor.innerHTML = html
+      
+      initializeImageBlockInteractions(editor, onContentChange)
+
+      const deleteBtn = editor.querySelector('.image-delete-btn') as HTMLButtonElement
+      deleteBtn.click()
+
+      // Editor should have a paragraph with a br tag
+      expect(editor.querySelector('p')).toBeTruthy()
+      expect(editor.querySelector('p br')).toBeTruthy()
+    })
+
     it('should return cleanup function', () => {
       const onContentChange = vi.fn()
       
@@ -317,7 +329,7 @@ describe('Image Block', () => {
       expect(html).toContain('data-block-type="image"')
     })
 
-    it('should set contenteditable to false on container', () => {
+    it('should set contenteditable to false on interactive elements', () => {
       const payload: ImagePayload = {
         src: 'data:image/png;base64,test',
         alt: 'Test image'
@@ -325,7 +337,28 @@ describe('Image Block', () => {
 
       const html = imageBlock.render(payload)
       
+      // Image, buttons, and handles should have contenteditable="false"
+      // but not the container itself (for proper cursor positioning)
       expect(html).toContain('contenteditable="false"')
+      
+      // Verify it's on the right elements
+      const tempDiv = document.createElement('div')
+      tempDiv.innerHTML = html
+      const container = tempDiv.firstElementChild as HTMLElement
+      const img = container.querySelector('img')
+      const deleteBtn = container.querySelector('.image-delete-btn')
+      const handles = container.querySelectorAll('.image-resize-handle')
+      
+      // Container should NOT have contenteditable="false"
+      expect(container.getAttribute('contenteditable')).toBeNull()
+      // Image should have it
+      expect(img?.getAttribute('contenteditable')).toBe('false')
+      // Delete button should have it
+      expect(deleteBtn?.getAttribute('contenteditable')).toBe('false')
+      // Handles should have it
+      handles.forEach(handle => {
+        expect(handle.getAttribute('contenteditable')).toBe('false')
+      })
     })
   })
 })
