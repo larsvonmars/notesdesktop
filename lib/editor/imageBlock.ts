@@ -53,11 +53,10 @@ export const imageBlock: CustomBlockDescriptor = {
     
     // Sanitize dimensions
     const width = sanitizeDimension(payload.width)
-    const height = sanitizeDimension(payload.height)
+    // We don't use height for styling to ensure aspect ratio is maintained by the image itself
+    // and to prevent layout issues where the wrapper is taller than the image
     
     const widthStyle = width ? ` style="width: ${width}px;"` : ''
-    const heightStyle = height ? ` style="height: ${height}px;"` : ''
-    const dimensionsStyle = width || height ? widthStyle + heightStyle : ''
 
     // Create an image block with custom UI elements (resize handlers and delete button)
     // The structure includes:
@@ -65,27 +64,37 @@ export const imageBlock: CustomBlockDescriptor = {
     // - The actual image element
     // - Resize handles on all corners and edges (8 total)
     // - A delete button that appears on hover
+    // 
+    // Changed to inline-flex to tightly wrap the image and prevent ghost spacing
+    // Added z-index to handles to ensure they are clickable and visible
+    // Adjusted handle positioning to be perfectly centered on the border
     return `<div class="image-block-container my-4 relative group" data-block="true" data-block-type="image" contenteditable="false">
-      <div class="image-block-wrapper relative inline-block max-w-full"${dimensionsStyle}>
+      <div class="image-block-wrapper relative inline-flex justify-center items-center max-w-full"${widthStyle}>
         <img src="${src}" alt="${alt}" class="image-block-img block w-full h-auto rounded-lg border border-gray-200" draggable="false" />
         
         <!-- Delete button (top-right corner) -->
-        <button class="image-delete-btn absolute top-2 right-2 w-8 h-8 bg-red-500 hover:bg-red-600 text-white rounded-full opacity-0 group-hover:opacity-100 transition-opacity shadow-lg flex items-center justify-center z-10" aria-label="Delete image" title="Delete image">
-          <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18"/><path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"/><path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"/></svg>
+        <button type="button" class="image-delete-btn absolute top-2 right-2 w-8 h-8 bg-red-500 hover:bg-red-600 text-white rounded-full opacity-0 group-hover:opacity-100 transition-opacity shadow-lg flex items-center justify-center z-20" aria-label="Delete image" title="Delete image">
+          <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M3 6h18" />
+            <path d="M19 6v14c0 1.1-.9 2-2 2H7c-1.1 0-2-.9-2-2V6" />
+            <path d="M8 6V4c0-1.1.9-2 2-2h4c1.1 0 2 .9 2 2v2" />
+            <line x1="10" y1="11" x2="10" y2="17" />
+            <line x1="14" y1="11" x2="14" y2="17" />
+          </svg>
         </button>
         
         <!-- Resize handles -->
-        <!-- Corner handles -->
-        <div class="image-resize-handle image-resize-nw absolute -top-1 -left-1 w-4 h-4 bg-blue-500 border-2 border-white rounded-full cursor-nw-resize opacity-0 group-hover:opacity-100 transition-opacity shadow-md" data-direction="nw"></div>
-        <div class="image-resize-handle image-resize-ne absolute -top-1 -right-1 w-4 h-4 bg-blue-500 border-2 border-white rounded-full cursor-ne-resize opacity-0 group-hover:opacity-100 transition-opacity shadow-md" data-direction="ne"></div>
-        <div class="image-resize-handle image-resize-sw absolute -bottom-1 -left-1 w-4 h-4 bg-blue-500 border-2 border-white rounded-full cursor-sw-resize opacity-0 group-hover:opacity-100 transition-opacity shadow-md" data-direction="sw"></div>
-        <div class="image-resize-handle image-resize-se absolute -bottom-1 -right-1 w-4 h-4 bg-blue-500 border-2 border-white rounded-full cursor-se-resize opacity-0 group-hover:opacity-100 transition-opacity shadow-md" data-direction="se"></div>
+        <!-- Corner handles (centered on corners: -top-1.5 -left-1.5 for w-3) -->
+        <div class="image-resize-handle image-resize-nw absolute -top-1.5 -left-1.5 w-3 h-3 bg-blue-500 border-2 border-white rounded-full cursor-nw-resize opacity-0 group-hover:opacity-100 transition-opacity shadow-md z-10" data-direction="nw"></div>
+        <div class="image-resize-handle image-resize-ne absolute -top-1.5 -right-1.5 w-3 h-3 bg-blue-500 border-2 border-white rounded-full cursor-ne-resize opacity-0 group-hover:opacity-100 transition-opacity shadow-md z-10" data-direction="ne"></div>
+        <div class="image-resize-handle image-resize-sw absolute -bottom-1.5 -left-1.5 w-3 h-3 bg-blue-500 border-2 border-white rounded-full cursor-sw-resize opacity-0 group-hover:opacity-100 transition-opacity shadow-md z-10" data-direction="sw"></div>
+        <div class="image-resize-handle image-resize-se absolute -bottom-1.5 -right-1.5 w-3 h-3 bg-blue-500 border-2 border-white rounded-full cursor-se-resize opacity-0 group-hover:opacity-100 transition-opacity shadow-md z-10" data-direction="se"></div>
         
-        <!-- Edge handles -->
-        <div class="image-resize-handle image-resize-n absolute -top-1 left-1/2 -translate-x-1/2 w-4 h-4 bg-blue-500 border-2 border-white rounded-full cursor-n-resize opacity-0 group-hover:opacity-100 transition-opacity shadow-md" data-direction="n"></div>
-        <div class="image-resize-handle image-resize-s absolute -bottom-1 left-1/2 -translate-x-1/2 w-4 h-4 bg-blue-500 border-2 border-white rounded-full cursor-s-resize opacity-0 group-hover:opacity-100 transition-opacity shadow-md" data-direction="s"></div>
-        <div class="image-resize-handle image-resize-w absolute top-1/2 -translate-y-1/2 -left-1 w-4 h-4 bg-blue-500 border-2 border-white rounded-full cursor-w-resize opacity-0 group-hover:opacity-100 transition-opacity shadow-md" data-direction="w"></div>
-        <div class="image-resize-handle image-resize-e absolute top-1/2 -translate-y-1/2 -right-1 w-4 h-4 bg-blue-500 border-2 border-white rounded-full cursor-e-resize opacity-0 group-hover:opacity-100 transition-opacity shadow-md" data-direction="e"></div>
+        <!-- Edge handles (centered on edges) -->
+        <div class="image-resize-handle image-resize-n absolute -top-1.5 left-1/2 -translate-x-1/2 w-3 h-3 bg-blue-500 border-2 border-white rounded-full cursor-n-resize opacity-0 group-hover:opacity-100 transition-opacity shadow-md z-10" data-direction="n"></div>
+        <div class="image-resize-handle image-resize-s absolute -bottom-1.5 left-1/2 -translate-x-1/2 w-3 h-3 bg-blue-500 border-2 border-white rounded-full cursor-s-resize opacity-0 group-hover:opacity-100 transition-opacity shadow-md z-10" data-direction="s"></div>
+        <div class="image-resize-handle image-resize-w absolute top-1/2 -translate-y-1/2 -left-1.5 w-3 h-3 bg-blue-500 border-2 border-white rounded-full cursor-w-resize opacity-0 group-hover:opacity-100 transition-opacity shadow-md z-10" data-direction="w"></div>
+        <div class="image-resize-handle image-resize-e absolute top-1/2 -translate-y-1/2 -right-1.5 w-3 h-3 bg-blue-500 border-2 border-white rounded-full cursor-e-resize opacity-0 group-hover:opacity-100 transition-opacity shadow-md z-10" data-direction="e"></div>
       </div>
     </div>`
   },
@@ -104,7 +113,6 @@ export const imageBlock: CustomBlockDescriptor = {
     // Try to get dimensions from the wrapper's inline style first
     const wrapper = el.querySelector('.image-block-wrapper') as HTMLElement
     let width: number | undefined = undefined
-    let height: number | undefined = undefined
     
     if (wrapper && wrapper.style.width) {
       const parsedWidth = parseInt(wrapper.style.width, 10)
@@ -113,18 +121,13 @@ export const imageBlock: CustomBlockDescriptor = {
       }
     }
     
-    if (wrapper && wrapper.style.height) {
-      const parsedHeight = parseInt(wrapper.style.height, 10)
-      if (!Number.isNaN(parsedHeight)) {
-        height = parsedHeight
-      }
-    }
+    // We intentionally don't parse height anymore to enforce aspect ratio
 
     return {
       src,
       alt: img.getAttribute('alt') || undefined,
       width,
-      height
+      // height is undefined
     }
   }
 }
@@ -134,25 +137,29 @@ export const imageBlock: CustomBlockDescriptor = {
  * This should be called after the editor content is rendered
  */
 export function initializeImageBlockInteractions(editorElement: HTMLElement, onContentChange: () => void) {
-  if (!editorElement) return
+  if (!editorElement) return () => {}
 
-  // Handle delete button clicks
-  editorElement.addEventListener('click', (e) => {
+  // --- Delete Handler ---
+  const handleDelete = (e: MouseEvent) => {
     const target = e.target as HTMLElement
-    if (target.classList.contains('image-delete-btn') || target.closest('.image-delete-btn')) {
+    // Check for delete button or its children
+    const deleteBtn = target.closest('.image-delete-btn')
+    
+    if (deleteBtn) {
       e.preventDefault()
       e.stopPropagation()
       
-      const container = target.closest('.image-block-container')
+      const container = deleteBtn.closest('.image-block-container')
       if (container) {
         container.remove()
         onContentChange()
       }
     }
-  })
+  }
 
-  // Handle resize
-  let resizing = false
+  // --- Resize Handler ---
+  // State for the current resize operation
+  let isResizing = false
   let currentHandle: HTMLElement | null = null
   let currentContainer: HTMLElement | null = null
   let currentWrapper: HTMLElement | null = null
@@ -162,34 +169,8 @@ export function initializeImageBlockInteractions(editorElement: HTMLElement, onC
   let startHeight = 0
   let aspectRatio = 1
 
-  const handleMouseDown = (e: MouseEvent) => {
-    const target = e.target as HTMLElement
-    if (target.classList.contains('image-resize-handle')) {
-      e.preventDefault()
-      e.stopPropagation()
-      
-      resizing = true
-      currentHandle = target
-      currentContainer = target.closest('.image-block-container') as HTMLElement
-      currentWrapper = currentContainer?.querySelector('.image-block-wrapper') as HTMLElement
-      
-      if (currentWrapper) {
-        const rect = currentWrapper.getBoundingClientRect()
-        startWidth = rect.width
-        startHeight = rect.height
-        aspectRatio = startWidth / startHeight
-        startX = e.clientX
-        startY = e.clientY
-        
-        // Add resizing class for visual feedback
-        currentContainer?.classList.add('resizing')
-        document.body.style.cursor = window.getComputedStyle(target).cursor
-      }
-    }
-  }
-
-  const handleMouseMove = (e: MouseEvent) => {
-    if (!resizing || !currentHandle || !currentWrapper) return
+  const handlePointerMove = (e: PointerEvent) => {
+    if (!isResizing || !currentHandle || !currentWrapper) return
     
     e.preventDefault()
     
@@ -201,6 +182,7 @@ export function initializeImageBlockInteractions(editorElement: HTMLElement, onC
     let newHeight = startHeight
     
     // Calculate new dimensions based on resize direction
+    // We maintain aspect ratio for all resize operations to prevent distortion
     switch (direction) {
       case 'se': // Southeast (bottom-right)
       case 'e':  // East (right)
@@ -231,36 +213,90 @@ export function initializeImageBlockInteractions(editorElement: HTMLElement, onC
     }
     
     // Apply new dimensions
+    // We only set width, and let height be auto to maintain aspect ratio and prevent layout issues
     currentWrapper.style.width = `${newWidth}px`
-    currentWrapper.style.height = `${newHeight}px`
+    // currentWrapper.style.height = `${newHeight}px` // Removed to allow auto height
   }
 
-  const handleMouseUp = () => {
-    if (resizing) {
-      resizing = false
-      currentContainer?.classList.remove('resizing')
-      document.body.style.cursor = ''
+  const handlePointerUp = (e: PointerEvent) => {
+    if (isResizing) {
+      isResizing = false
       
-      // Trigger content change to save the new dimensions
       if (currentContainer) {
-        onContentChange()
+        currentContainer.classList.remove('resizing')
+        onContentChange() // Save changes
       }
       
+      document.body.style.cursor = ''
+      
+      // Clean up global listeners
+      document.removeEventListener('pointermove', handlePointerMove)
+      document.removeEventListener('pointerup', handlePointerUp)
+      
+      // Reset state
       currentHandle = null
       currentContainer = null
       currentWrapper = null
     }
   }
 
-  editorElement.addEventListener('mousedown', handleMouseDown)
-  document.addEventListener('mousemove', handleMouseMove)
-  document.addEventListener('mouseup', handleMouseUp)
+  const handlePointerDown = (e: PointerEvent) => {
+    const target = e.target as HTMLElement
+    if (target.classList.contains('image-resize-handle')) {
+      e.preventDefault()
+      e.stopPropagation()
+      
+      // Only left click (button 0)
+      if (e.button !== 0) return
+
+      currentHandle = target
+      currentContainer = target.closest('.image-block-container') as HTMLElement
+      currentWrapper = currentContainer?.querySelector('.image-block-wrapper') as HTMLElement
+      
+      if (currentWrapper) {
+        const img = currentWrapper.querySelector('img')
+        // If image is missing, we can't resize properly
+        if (!img) return
+
+        isResizing = true
+        const rect = currentWrapper.getBoundingClientRect()
+        const imgRect = img.getBoundingClientRect()
+        
+        startWidth = rect.width
+        startHeight = rect.height
+        
+        // Use image aspect ratio for correctness, as wrapper might be distorted or have extra space
+        aspectRatio = imgRect.width / imgRect.height
+        
+        startX = e.clientX
+        startY = e.clientY
+        
+        // Add resizing class for visual feedback
+        currentContainer?.classList.add('resizing')
+        document.body.style.cursor = window.getComputedStyle(target).cursor
+        
+        // Attach global listeners for drag operation
+        document.addEventListener('pointermove', handlePointerMove)
+        document.addEventListener('pointerup', handlePointerUp)
+        
+        // Capture pointer to ensure we get events even if cursor leaves window
+        target.setPointerCapture(e.pointerId)
+      }
+    }
+  }
+
+  // Attach initial listeners to the editor element
+  editorElement.addEventListener('click', handleDelete)
+  editorElement.addEventListener('pointerdown', handlePointerDown)
 
   // Return cleanup function
   return () => {
-    editorElement.removeEventListener('mousedown', handleMouseDown)
-    document.removeEventListener('mousemove', handleMouseMove)
-    document.removeEventListener('mouseup', handleMouseUp)
+    editorElement.removeEventListener('click', handleDelete)
+    editorElement.removeEventListener('pointerdown', handlePointerDown)
+    
+    // Ensure we clean up any active resize operation
+    document.removeEventListener('pointermove', handlePointerMove)
+    document.removeEventListener('pointerup', handlePointerUp)
   }
 }
 

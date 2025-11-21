@@ -291,9 +291,12 @@
   .image-block-wrapper {
     position: relative;
     display: inline-block;
+    max-width: 100%;
   }
 
   .image-block-img {
+    position: relative;
+    z-index: 1;
     display: block;
     max-width: 100%;
     height: auto;
@@ -306,23 +309,22 @@
   }
 
   .image-delete-btn {
+    position: absolute;
+    z-index: 30;
     cursor: pointer;
     user-select: none;
+    pointer-events: auto;
   }
 
   .image-resize-handle {
     position: absolute;
     user-select: none;
-    z-index: 10;
+    z-index: 20;
+    pointer-events: auto;
   }
 
   .image-block-container.resizing {
     cursor: inherit;
-  }
-
-  /* Ensure resize handles are above the image */
-  .image-block-wrapper > * {
-    position: relative;
   }
 
   /* Smooth transition for opacity changes */
