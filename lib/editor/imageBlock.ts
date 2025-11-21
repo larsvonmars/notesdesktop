@@ -60,20 +60,23 @@ export const imageBlock: CustomBlockDescriptor = {
 
     // Create an image block with custom UI elements (resize handlers and delete button)
     // The structure includes:
-    // - A container div with image-block class for styling and interaction
-    // - The actual image element
+    // - A container div that is a proper block-level element
+    // - The inner wrapper contains the image and UI controls
+    // - The actual image element with contenteditable="false" to prevent editing
     // - Resize handles on all corners and edges (8 total)
     // - A delete button that appears on hover
     // 
-    // Changed to inline-flex to tightly wrap the image and prevent ghost spacing
-    // Added z-index to handles to ensure they are clickable and visible
-    // Adjusted handle positioning to be perfectly centered on the border
-    return `<div class="image-block-container my-4 relative group" data-block="true" data-block-type="image" contenteditable="false">
+    // Key design decisions:
+    // - Container is block-level (div with display:block) for proper flow
+    // - Only the image itself has contenteditable="false", not the container
+    // - Wrapper uses inline-flex to tightly wrap image
+    // - All interactive elements have pointer-events CSS to not interfere with text editing
+    return `<div class="image-block-container my-4 relative group" data-block="true" data-block-type="image">
       <div class="image-block-wrapper relative inline-flex justify-center items-center max-w-full"${widthStyle}>
-        <img src="${src}" alt="${alt}" class="image-block-img block w-full h-auto rounded-lg border border-gray-200" draggable="false" />
+        <img src="${src}" alt="${alt}" class="image-block-img block w-full h-auto rounded-lg border border-gray-200" draggable="false" contenteditable="false" />
         
         <!-- Delete button (top-right corner) -->
-        <button type="button" class="image-delete-btn absolute top-2 right-2 w-8 h-8 bg-red-500 hover:bg-red-600 text-white rounded-full opacity-0 group-hover:opacity-100 transition-opacity shadow-lg flex items-center justify-center z-20" aria-label="Delete image" title="Delete image">
+        <button type="button" class="image-delete-btn absolute top-2 right-2 w-8 h-8 bg-red-500 hover:bg-red-600 text-white rounded-full opacity-0 group-hover:opacity-100 transition-opacity shadow-lg flex items-center justify-center z-20" aria-label="Delete image" title="Delete image" contenteditable="false">
           <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
             <path d="M3 6h18" />
             <path d="M19 6v14c0 1.1-.9 2-2 2H7c-1.1 0-2-.9-2-2V6" />
@@ -85,16 +88,16 @@ export const imageBlock: CustomBlockDescriptor = {
         
         <!-- Resize handles -->
         <!-- Corner handles (centered on corners: -top-1.5 -left-1.5 for w-3) -->
-        <div class="image-resize-handle image-resize-nw absolute -top-1.5 -left-1.5 w-3 h-3 bg-blue-500 border-2 border-white rounded-full cursor-nw-resize opacity-0 group-hover:opacity-100 transition-opacity shadow-md z-10" data-direction="nw"></div>
-        <div class="image-resize-handle image-resize-ne absolute -top-1.5 -right-1.5 w-3 h-3 bg-blue-500 border-2 border-white rounded-full cursor-ne-resize opacity-0 group-hover:opacity-100 transition-opacity shadow-md z-10" data-direction="ne"></div>
-        <div class="image-resize-handle image-resize-sw absolute -bottom-1.5 -left-1.5 w-3 h-3 bg-blue-500 border-2 border-white rounded-full cursor-sw-resize opacity-0 group-hover:opacity-100 transition-opacity shadow-md z-10" data-direction="sw"></div>
-        <div class="image-resize-handle image-resize-se absolute -bottom-1.5 -right-1.5 w-3 h-3 bg-blue-500 border-2 border-white rounded-full cursor-se-resize opacity-0 group-hover:opacity-100 transition-opacity shadow-md z-10" data-direction="se"></div>
+        <div class="image-resize-handle image-resize-nw absolute -top-1.5 -left-1.5 w-3 h-3 bg-blue-500 border-2 border-white rounded-full cursor-nw-resize opacity-0 group-hover:opacity-100 transition-opacity shadow-md z-10" data-direction="nw" contenteditable="false"></div>
+        <div class="image-resize-handle image-resize-ne absolute -top-1.5 -right-1.5 w-3 h-3 bg-blue-500 border-2 border-white rounded-full cursor-ne-resize opacity-0 group-hover:opacity-100 transition-opacity shadow-md z-10" data-direction="ne" contenteditable="false"></div>
+        <div class="image-resize-handle image-resize-sw absolute -bottom-1.5 -left-1.5 w-3 h-3 bg-blue-500 border-2 border-white rounded-full cursor-sw-resize opacity-0 group-hover:opacity-100 transition-opacity shadow-md z-10" data-direction="sw" contenteditable="false"></div>
+        <div class="image-resize-handle image-resize-se absolute -bottom-1.5 -right-1.5 w-3 h-3 bg-blue-500 border-2 border-white rounded-full cursor-se-resize opacity-0 group-hover:opacity-100 transition-opacity shadow-md z-10" data-direction="se" contenteditable="false"></div>
         
         <!-- Edge handles (centered on edges) -->
-        <div class="image-resize-handle image-resize-n absolute -top-1.5 left-1/2 -translate-x-1/2 w-3 h-3 bg-blue-500 border-2 border-white rounded-full cursor-n-resize opacity-0 group-hover:opacity-100 transition-opacity shadow-md z-10" data-direction="n"></div>
-        <div class="image-resize-handle image-resize-s absolute -bottom-1.5 left-1/2 -translate-x-1/2 w-3 h-3 bg-blue-500 border-2 border-white rounded-full cursor-s-resize opacity-0 group-hover:opacity-100 transition-opacity shadow-md z-10" data-direction="s"></div>
-        <div class="image-resize-handle image-resize-w absolute top-1/2 -translate-y-1/2 -left-1.5 w-3 h-3 bg-blue-500 border-2 border-white rounded-full cursor-w-resize opacity-0 group-hover:opacity-100 transition-opacity shadow-md z-10" data-direction="w"></div>
-        <div class="image-resize-handle image-resize-e absolute top-1/2 -translate-y-1/2 -right-1.5 w-3 h-3 bg-blue-500 border-2 border-white rounded-full cursor-e-resize opacity-0 group-hover:opacity-100 transition-opacity shadow-md z-10" data-direction="e"></div>
+        <div class="image-resize-handle image-resize-n absolute -top-1.5 left-1/2 -translate-x-1/2 w-3 h-3 bg-blue-500 border-2 border-white rounded-full cursor-n-resize opacity-0 group-hover:opacity-100 transition-opacity shadow-md z-10" data-direction="n" contenteditable="false"></div>
+        <div class="image-resize-handle image-resize-s absolute -bottom-1.5 left-1/2 -translate-x-1/2 w-3 h-3 bg-blue-500 border-2 border-white rounded-full cursor-s-resize opacity-0 group-hover:opacity-100 transition-opacity shadow-md z-10" data-direction="s" contenteditable="false"></div>
+        <div class="image-resize-handle image-resize-w absolute top-1/2 -translate-y-1/2 -left-1.5 w-3 h-3 bg-blue-500 border-2 border-white rounded-full cursor-w-resize opacity-0 group-hover:opacity-100 transition-opacity shadow-md z-10" data-direction="w" contenteditable="false"></div>
+        <div class="image-resize-handle image-resize-e absolute top-1/2 -translate-y-1/2 -right-1.5 w-3 h-3 bg-blue-500 border-2 border-white rounded-full cursor-e-resize opacity-0 group-hover:opacity-100 transition-opacity shadow-md z-10" data-direction="e" contenteditable="false"></div>
       </div>
     </div>`
   },
@@ -151,7 +154,20 @@ export function initializeImageBlockInteractions(editorElement: HTMLElement, onC
       
       const container = deleteBtn.closest('.image-block-container')
       if (container) {
+        // Create a paragraph after removing image to ensure cursor has somewhere to go
+        const nextElement = container.nextElementSibling
+        const prevElement = container.previousElementSibling
+        
+        // Remove the container
         container.remove()
+        
+        // If there's no next element and no previous element, create a paragraph
+        if (!nextElement && !prevElement) {
+          const paragraph = document.createElement('p')
+          paragraph.appendChild(document.createElement('br'))
+          editorElement.appendChild(paragraph)
+        }
+        
         onContentChange()
       }
     }
@@ -286,13 +302,14 @@ export function initializeImageBlockInteractions(editorElement: HTMLElement, onC
   }
 
   // Attach initial listeners to the editor element
-  editorElement.addEventListener('click', handleDelete)
-  editorElement.addEventListener('pointerdown', handlePointerDown)
+  // Use capturing phase to ensure we get events before they bubble
+  editorElement.addEventListener('click', handleDelete, true)
+  editorElement.addEventListener('pointerdown', handlePointerDown, true)
 
   // Return cleanup function
   return () => {
-    editorElement.removeEventListener('click', handleDelete)
-    editorElement.removeEventListener('pointerdown', handlePointerDown)
+    editorElement.removeEventListener('click', handleDelete, true)
+    editorElement.removeEventListener('pointerdown', handlePointerDown, true)
     
     // Ensure we clean up any active resize operation
     document.removeEventListener('pointermove', handlePointerMove)

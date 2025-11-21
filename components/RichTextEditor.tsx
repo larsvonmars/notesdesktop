@@ -662,6 +662,45 @@ const RichTextEditor = forwardRef<RichTextEditorHandle, RichTextEditorProps>(
                   }
                 }
               })
+              
+              // For block-level custom blocks (like images), ensure there's a paragraph after
+              // for continued editing if the block is at the end
+              const selection = window.getSelection()
+              if (selection && selection.rangeCount > 0) {
+                const range = selection.getRangeAt(0)
+                const container = range.commonAncestorContainer
+                
+                // Find the custom block that was just inserted
+                let blockElement: HTMLElement | null = null
+                if (container.nodeType === Node.ELEMENT_NODE) {
+                  blockElement = (container as HTMLElement).querySelector('[data-block="true"]')
+                  if (!blockElement && (container as HTMLElement).hasAttribute('data-block')) {
+                    blockElement = container as HTMLElement
+                  }
+                } else if (container.parentElement) {
+                  blockElement = container.parentElement.closest('[data-block="true"]') as HTMLElement
+                }
+                
+                // Check if this is a block-level element (like image) and needs a trailing paragraph
+                if (blockElement && blockElement.getAttribute('data-block-type') === type) {
+                  const isBlockLevel = window.getComputedStyle(blockElement).display === 'block'
+                  const hasNextSibling = blockElement.nextElementSibling
+                  
+                  if (isBlockLevel && !hasNextSibling) {
+                    // Create a paragraph after the block for continued editing
+                    const paragraph = document.createElement('p')
+                    paragraph.appendChild(document.createElement('br'))
+                    blockElement.parentNode?.insertBefore(paragraph, blockElement.nextSibling)
+                    
+                    // Position cursor in the new paragraph
+                    const newRange = document.createRange()
+                    newRange.setStart(paragraph, 0)
+                    newRange.collapse(true)
+                    selection.removeAllRanges()
+                    selection.addRange(newRange)
+                  }
+                }
+              }
             }, 20)
           }
           emitChange()

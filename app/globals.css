@@ -283,15 +283,20 @@
   /* Image block custom UI styles */
   .image-block-container {
     position: relative;
-    display: inline-block;
+    display: block; /* Block-level for proper flow with text */
     max-width: 100%;
+    margin: 1rem 0; /* Consistent spacing with other blocks */
     user-select: none;
+    /* Allow text cursor when not interacting with image */
+    cursor: text;
   }
 
   .image-block-wrapper {
     position: relative;
-    display: inline-block;
+    display: inline-flex; /* Inline-flex to wrap tightly around image */
     max-width: 100%;
+    /* Prevent selection but allow cursor positioning around it */
+    user-select: none;
   }
 
   .image-block-img {
@@ -300,7 +305,9 @@
     display: block;
     max-width: 100%;
     height: auto;
+    /* Image itself doesn't capture pointer events except for drag handles */
     pointer-events: none;
+    user-select: none;
   }
 
   .image-block-container.resizing .image-block-img {
@@ -313,6 +320,7 @@
     z-index: 30;
     cursor: pointer;
     user-select: none;
+    /* Only capture pointer events for the button itself */
     pointer-events: auto;
   }
 
@@ -320,6 +328,7 @@
     position: absolute;
     user-select: none;
     z-index: 20;
+    /* Only capture pointer events for the handles themselves */
     pointer-events: auto;
   }
 
@@ -339,5 +348,15 @@
   .image-block-container.resizing .image-delete-btn,
   .image-block-container.resizing .image-resize-handle {
     opacity: 1 !important;
+  }
+  
+  /* Ensure proper cursor positioning around image blocks */
+  /* Add invisible pseudo-elements for better cursor placement */
+  .image-block-container::before,
+  .image-block-container::after {
+    content: '';
+    display: block;
+    height: 0;
+    width: 0;
   }
 }
