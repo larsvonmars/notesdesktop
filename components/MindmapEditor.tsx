@@ -234,6 +234,7 @@ const MindmapEditor = forwardRef<MindmapEditorHandle, MindmapEditorProps>(
       offsetX: number
       offsetY: number
     } | null>(null)
+    const [isHoveringEmptySpace, setIsHoveringEmptySpace] = useState(false)
 
     useImperativeHandle(ref, () => ({
       getData: () => mindmapData,
@@ -814,10 +815,7 @@ const MindmapEditor = forwardRef<MindmapEditorHandle, MindmapEditorProps>(
       if (!hit) {
         collapseTargetRef.current = null
         collapsePointerStartRef.current = null
-        setSelectedNodeId(null)
-        setDetailNodeId(null)
-        setDetailDraft(null)
-        setNewAttachmentInput({ label: '', url: '', type: 'image' })
+        // Don't deselect on empty click - user might just be panning
         return
       }
 
@@ -875,13 +873,10 @@ const MindmapEditor = forwardRef<MindmapEditorHandle, MindmapEditorProps>(
           setSelectedNodeId(hit.nodeId)
           setDraggingNodeId(hit.nodeId)
           setDragStart({ x: screenX, y: screenY })
-        } else if (e.shiftKey || e.metaKey || e.ctrlKey) {
+        } else {
+          // Click on empty canvas - start panning (no modifier keys needed)
           setIsPanning(true)
           setPanStart({ x: screenX - offset.x, y: screenY - offset.y })
-        } else {
-          setSelectedNodeId(null)
-          setDetailNodeId(null)
-          setDetailDraft(null)
         }
       } else if (e.button === 1 || e.button === 2) {
         e.preventDefault()
@@ -898,7 +893,7 @@ const MindmapEditor = forwardRef<MindmapEditorHandle, MindmapEditorProps>(
       const coordinates = mapClientToWorld(e.clientX, e.clientY)
       if (!coordinates) return
 
-      const { screenX, screenY } = coordinates
+      const { screenX, screenY, worldX, worldY } = coordinates
 
       if (draggingNodeId && dragStart) {
         const dx = (screenX - dragStart.x) / scale
@@ -943,6 +938,10 @@ const MindmapEditor = forwardRef<MindmapEditorHandle, MindmapEditorProps>(
           collapseTargetRef.current = null
           collapsePointerStartRef.current = null
         }
+      } else {
+        // Update hover state for cursor feedback
+        const hit = hitTestNodes(worldX, worldY)
+        setIsHoveringEmptySpace(!hit)
       }
     }
 
@@ -1218,6 +1217,107 @@ const MindmapEditor = forwardRef<MindmapEditorHandle, MindmapEditorProps>(
       [readOnly, selectedNodeId, renderMindmap]
     )
 
+    // Keyboard navigation for moving between nodes
+    useEffect(() => {
+      if (detailNodeId || readOnly) return // Don't navigate when detail panel is open
+
+      const handleKeyDown = (event: KeyboardEvent) => {
+        // Ignore if focus is on an input element
+        const target = event.target as HTMLElement
+        if (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.isContentEditable) {
+          return
+        }
+
+        const currentNode = selectedNodeId ? mindmapData.nodes[selectedNodeId] : null
+
+        switch (event.key) {
+          case 'ArrowUp':
+          case 'ArrowLeft': {
+            event.preventDefault()
+            if (!currentNode) {
+              // No selection - select root
+              setSelectedNodeId(mindmapData.rootId)
+              return
+            }
+            // Navigate to parent
+            if (currentNode.parentId && mindmapData.nodes[currentNode.parentId]) {
+              setSelectedNodeId(currentNode.parentId)
+            }
+            break
+          }
+          case 'ArrowDown':
+          case 'ArrowRight': {
+            event.preventDefault()
+            if (!currentNode) {
+              // No selection - select root
+              setSelectedNodeId(mindmapData.rootId)
+              return
+            }
+            // Navigate to first visible child
+            if (currentNode.children.length > 0 && !currentNode.collapsed) {
+              setSelectedNodeId(currentNode.children[0])
+            }
+            break
+          }
+          case 'Tab': {
+            event.preventDefault()
+            if (!currentNode) {
+              setSelectedNodeId(mindmapData.rootId)
+              return
+            }
+            // Navigate to next sibling (or wrap to first)
+            const parentNode = currentNode.parentId ? mindmapData.nodes[currentNode.parentId] : null
+            if (parentNode) {
+              const siblings = parentNode.children
+              const currentIndex = siblings.indexOf(currentNode.id)
+              const direction = event.shiftKey ? -1 : 1
+              const nextIndex = (currentIndex + direction + siblings.length) % siblings.length
+              setSelectedNodeId(siblings[nextIndex])
+            } else if (currentNode.children.length > 0 && !currentNode.collapsed) {
+              // Root node - go to first child
+              setSelectedNodeId(currentNode.children[0])
+            }
+            break
+          }
+          case 'Enter': {
+            event.preventDefault()
+            if (currentNode) {
+              openNodeDetail(currentNode.id)
+            }
+            break
+          }
+          case ' ': { // Space bar to toggle collapse
+            event.preventDefault()
+            if (currentNode && currentNode.children.length > 0) {
+              toggleCollapse(currentNode.id)
+            }
+            break
+          }
+          case 'Escape': {
+            event.preventDefault()
+            setSelectedNodeId(null)
+            break
+          }
+          case 'Home': {
+            event.preventDefault()
+            setSelectedNodeId(mindmapData.rootId)
+            // Center on root node
+            const rootNode = mindmapData.nodes[mindmapData.rootId]
+            if (rootNode && canvasRef.current) {
+              setOffset({
+                x: canvasRef.current.width / 2 - rootNode.x * scale,
+                y: canvasRef.current.height / 2 - rootNode.y * scale,
+              })
+            }
+            break
+          }
+        }
+      }
+
+      window.addEventListener('keydown', handleKeyDown)
+      return () => window.removeEventListener('keydown', handleKeyDown)
+    }, [detailNodeId, readOnly, selectedNodeId, mindmapData, scale, toggleCollapse, openNodeDetail])
+
     const zoomIn = () => {
       setScale(prev => Math.min(3, prev * 1.2))
     }
@@ -1329,9 +1429,9 @@ const MindmapEditor = forwardRef<MindmapEditorHandle, MindmapEditorProps>(
           onMouseLeave={handleCanvasMouseUp}
           onContextMenu={(e) => e.preventDefault()}
           onWheel={handleWheel}
-          className="w-full h-full cursor-move touch-none"
+          className="w-full h-full touch-none"
           style={{ 
-            cursor: draggingNodeId ? 'grabbing' : isPanning ? 'grabbing' : 'default', 
+            cursor: draggingNodeId ? 'grabbing' : isPanning ? 'grabbing' : isHoveringEmptySpace ? 'grab' : 'default', 
             touchAction: 'none',
             WebkitUserSelect: 'none',
             userSelect: 'none'
@@ -1662,6 +1762,14 @@ const MindmapEditor = forwardRef<MindmapEditorHandle, MindmapEditorProps>(
                 Selected: {mindmapData.nodes[selectedNodeId]?.text}
               </div>
             )}
+            <div className="mt-2 pt-2 border-t border-gray-200 text-xs text-gray-500">
+              <div className="font-medium mb-1">Navigation:</div>
+              <div>Drag empty space to pan</div>
+              <div>Scroll to zoom</div>
+              <div>←↑ Parent • →↓ Child</div>
+              <div>Tab: Next sibling</div>
+              <div>Home: Center on root</div>
+            </div>
           </div>
         </div>
       </div>
