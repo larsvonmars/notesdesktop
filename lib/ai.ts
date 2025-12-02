@@ -63,6 +63,8 @@ export interface AIContext {
     content: string
     type: 'rich-text' | 'drawing' | 'mindmap'
   }
+  // Selected text from the editor - for context-aware AI interactions
+  selectedText?: string
   tasks?: Array<{
     id: string
     title: string
@@ -756,6 +758,12 @@ function buildSystemMessage(context?: AIContext): string {
 
     if (context.currentNote) {
       contextParts.push(`- Working on note: "${context.currentNote.title}" (${context.currentNote.type})`)
+    }
+
+    // Include selected text for context-aware interactions
+    if (context.selectedText) {
+      contextParts.push(`- User has selected the following text: "${context.selectedText.slice(0, 500)}${context.selectedText.length > 500 ? '...' : ''}"`)
+      contextParts.push(`  When the user asks about "this", "the selection", or "selected text", refer to this text.`)
     }
 
     if (context.mindmapData) {
