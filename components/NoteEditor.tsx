@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useEffect, useCallback, useMemo, useRef, useDeferredValue, useLayoutEffect } from 'react'
+import DOMPurify from 'dompurify'
 import {
   Bold,
   Italic,
@@ -185,6 +186,7 @@ export default function NoteEditor({
   // Selected text state for AI assistant integration
   const [selectedText, setSelectedText] = useState('')
   const selectedTextRef = useRef<string>('')
+  const selectedTextUpdateTimeoutRef = useRef<number | null>(null)
   
   // Selected mindmap node state for AI assistant integration
   const [selectedMindmapNodeId, setSelectedMindmapNodeId] = useState<string | null>(null)
@@ -979,8 +981,13 @@ export default function NoteEditor({
       scheduleActiveFormatsUpdate()
       updateFloatingToolbar()
       
-      // Track selected text for AI assistant
+      // Track selected text for AI assistant (debounced to avoid excessive updates)
       if (noteType === 'rich-text' && editorRef.current) {
+        // Clear any pending update
+        if (selectedTextUpdateTimeoutRef.current !== null) {
+          window.clearTimeout(selectedTextUpdateTimeoutRef.current)
+        }
+        
         const editorElement = editorRef.current.getRootElement()
         const selection = window.getSelection()
         if (selection && selection.rangeCount > 0 && editorElement) {
@@ -990,7 +997,11 @@ export default function NoteEditor({
             const text = selection.toString().trim()
             if (text !== selectedTextRef.current) {
               selectedTextRef.current = text
-              setSelectedText(text)
+              // Debounce the state update by 150ms to avoid rapid re-renders during drag selection
+              selectedTextUpdateTimeoutRef.current = window.setTimeout(() => {
+                setSelectedText(text)
+                selectedTextUpdateTimeoutRef.current = null
+              }, 150)
             }
           } else if (selectedTextRef.current !== '') {
             selectedTextRef.current = ''
@@ -1004,7 +1015,13 @@ export default function NoteEditor({
     }
 
     document.addEventListener('selectionchange', handleSelectionChange)
-    return () => document.removeEventListener('selectionchange', handleSelectionChange)
+    return () => {
+      document.removeEventListener('selectionchange', handleSelectionChange)
+      // Clean up pending timeout on unmount
+      if (selectedTextUpdateTimeoutRef.current !== null) {
+        window.clearTimeout(selectedTextUpdateTimeoutRef.current)
+      }
+    }
   }, [scheduleActiveFormatsUpdate, updateFloatingToolbar, noteType])
 
   useEffect(() => {
@@ -1188,9 +1205,14 @@ export default function NoteEditor({
           range.deleteContents()
           
           // Create a text node with the new content
-          // If the text contains HTML-like formatting, insert as HTML
+          // If the text contains HTML-like formatting, sanitize and insert as HTML
           if (text.includes('<') && text.includes('>')) {
-            const fragment = range.createContextualFragment(text)
+            // Sanitize HTML to prevent XSS
+            const sanitizedHtml = DOMPurify.sanitize(text, {
+              ALLOWED_TAGS: ['p', 'br', 'strong', 'b', 'em', 'i', 'u', 'span', 'ul', 'ol', 'li', 'a', 'h1', 'h2', 'h3', 'h4', 'h5', 'h6', 'blockquote', 'code', 'pre'],
+              ALLOWED_ATTR: ['href', 'target', 'rel', 'class'],
+            })
+            const fragment = range.createContextualFragment(sanitizedHtml)
             range.insertNode(fragment)
           } else {
             const textNode = document.createTextNode(text)
@@ -1223,7 +1245,12 @@ export default function NoteEditor({
         if (editorElement && editorElement.contains(range.commonAncestorContainer)) {
           // Insert at cursor position
           if (text.includes('<') && text.includes('>')) {
-            const fragment = range.createContextualFragment(text)
+            // Sanitize HTML to prevent XSS
+            const sanitizedHtml = DOMPurify.sanitize(text, {
+              ALLOWED_TAGS: ['p', 'br', 'strong', 'b', 'em', 'i', 'u', 'span', 'ul', 'ol', 'li', 'a', 'h1', 'h2', 'h3', 'h4', 'h5', 'h6', 'blockquote', 'code', 'pre'],
+              ALLOWED_ATTR: ['href', 'target', 'rel', 'class'],
+            })
+            const fragment = range.createContextualFragment(sanitizedHtml)
             range.insertNode(fragment)
           } else {
             const textNode = document.createTextNode(text)

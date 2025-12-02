@@ -73,6 +73,15 @@ import type { CalendarEvent } from '@/lib/events'
 import type { MindmapData, MindmapNode } from './MindmapEditor'
 
 // ============================================================================
+// CONSTANTS
+// ============================================================================
+
+// Text truncation lengths for display
+const TEXT_TRUNCATION_SHORT = 50
+const TEXT_TRUNCATION_MEDIUM = 60
+const CONTEXT_LENGTH_LIMIT = 1000
+
+// ============================================================================
 // TYPES
 // ============================================================================
 
@@ -619,7 +628,7 @@ export default function AIAssistant({
           })
         } else {
           // Create new chat
-          const title = userMessage.content.slice(0, 50) + (userMessage.content.length > 50 ? '...' : '')
+          const title = userMessage.content.slice(0, TEXT_TRUNCATION_SHORT) + (userMessage.content.length > TEXT_TRUNCATION_SHORT ? '...' : '')
           const newChat = await createAIChat({
             note_id: note?.id || null,
             title,
@@ -709,7 +718,7 @@ export default function AIAssistant({
             break
           }
           const continued = await editText(
-            textToUse.slice(-1000), // Use last 1000 chars for context
+            textToUse.slice(-CONTEXT_LENGTH_LIMIT), // Use last 1000 chars for context
             'Continue writing from where this text ends. Maintain the same style, tone, and topic. Provide a natural continuation that flows seamlessly.'
           )
           // Show as a message with insert option
@@ -897,8 +906,22 @@ export default function AIAssistant({
   // Replace selected text with AI response
   const handleReplaceSelectionWithResponse = useCallback((content: string) => {
     if (selectedText && onReplaceSelection) {
-      // Strip markdown and use plain text for replacement
-      const plainText = content.replace(/[*_#`]/g, '').trim()
+      // Strip markdown formatting for clean text replacement
+      // This handles: bold (**text**, __text__), italic (*text*, _text_), 
+      // headers (#...), code (`text`, ```text```), links [text](url), and more
+      const plainText = content
+        .replace(/```[\s\S]*?```/g, '') // Remove code blocks
+        .replace(/`([^`]+)`/g, '$1') // Remove inline code, keep content
+        .replace(/\[([^\]]+)\]\([^)]+\)/g, '$1') // Convert links to just text
+        .replace(/!\[([^\]]*)\]\([^)]+\)/g, '') // Remove images
+        .replace(/#{1,6}\s*/g, '') // Remove headers
+        .replace(/[*_]{1,3}([^*_]+)[*_]{1,3}/g, '$1') // Remove bold/italic markers, keep content
+        .replace(/~~([^~]+)~~/g, '$1') // Remove strikethrough, keep content
+        .replace(/>\s*/g, '') // Remove blockquote markers
+        .replace(/[-*+]\s+/g, '') // Remove list markers
+        .replace(/\d+\.\s+/g, '') // Remove numbered list markers
+        .replace(/\n{3,}/g, '\n\n') // Normalize multiple newlines
+        .trim()
       onReplaceSelection(plainText)
     }
   }, [selectedText, onReplaceSelection])
@@ -1085,7 +1108,7 @@ export default function AIAssistant({
           <div className="mb-3">
             <div className="text-xs text-purple-600 mb-1.5 flex items-center gap-1">
               <MousePointerClick size={12} />
-              Selection ({selectedText.length > 50 ? `${selectedText.slice(0, 50)}...` : selectedText})
+              Selection ({selectedText.length > TEXT_TRUNCATION_SHORT ? `${selectedText.slice(0, TEXT_TRUNCATION_SHORT)}...` : selectedText})
             </div>
             <div className="flex flex-wrap gap-1.5">
               {selectionActions.map(({ action, icon, label }) => (
@@ -1532,7 +1555,7 @@ export default function AIAssistant({
           <div className="flex-1 min-w-0">
             <span className="font-medium">Selected text:</span>
             <span className="ml-1 text-purple-600 italic">
-              &quot;{selectedText.length > 60 ? selectedText.slice(0, 60) + '...' : selectedText}&quot;
+              &quot;{selectedText.length > TEXT_TRUNCATION_MEDIUM ? selectedText.slice(0, TEXT_TRUNCATION_MEDIUM) + '...' : selectedText}&quot;
             </span>
           </div>
         </div>
