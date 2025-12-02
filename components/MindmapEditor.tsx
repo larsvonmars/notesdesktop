@@ -66,11 +66,13 @@ export interface MindmapEditorHandle {
   getData: () => MindmapData
   setData: (data: MindmapData) => void
   clear: () => void
+  getSelectedNodeId: () => string | null
 }
 
 interface MindmapEditorProps {
   initialData?: MindmapData
   onChange?: (data: MindmapData) => void
+  onSelectedNodeChange?: (nodeId: string | null, node: MindmapNode | null) => void
   readOnly?: boolean
 }
 
@@ -200,7 +202,7 @@ const normalizeMindmapData = (input?: MindmapData | null): MindmapData => {
 }
 
 const MindmapEditor = forwardRef<MindmapEditorHandle, MindmapEditorProps>(
-  ({ initialData, onChange, readOnly = false }, ref) => {
+  ({ initialData, onChange, onSelectedNodeChange, readOnly = false }, ref) => {
     const canvasRef = useRef<HTMLCanvasElement>(null)
     const containerRef = useRef<HTMLDivElement>(null)
     const [mindmapData, setMindmapData] = useState<MindmapData>(() => normalizeMindmapData(initialData))
@@ -270,11 +272,20 @@ const MindmapEditor = forwardRef<MindmapEditorHandle, MindmapEditorProps>(
         setDetailDraft(null)
         setNewAttachmentInput({ label: '', url: '', type: 'image' })
       },
+      getSelectedNodeId: () => selectedNodeId,
     }))
 
     useEffect(() => {
       mindmapDataRef.current = mindmapData
     }, [mindmapData])
+
+    // Notify parent when selected node changes (for AI integration)
+    useEffect(() => {
+      if (onSelectedNodeChange) {
+        const node = selectedNodeId ? mindmapData.nodes[selectedNodeId] : null
+        onSelectedNodeChange(selectedNodeId, node)
+      }
+    }, [selectedNodeId, mindmapData, onSelectedNodeChange])
 
     useEffect(() => {
       const nextData = normalizeMindmapData(initialData)

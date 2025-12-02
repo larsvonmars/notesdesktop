@@ -30,6 +30,12 @@ import {
   History,
   MessageSquare,
   ChevronLeft,
+  PenLine,
+  HelpCircle,
+  Languages,
+  Type,
+  ArrowRight,
+  MousePointerClick,
 } from 'lucide-react'
 import {
   chat,
@@ -67,6 +73,15 @@ import type { CalendarEvent } from '@/lib/events'
 import type { MindmapData, MindmapNode } from './MindmapEditor'
 
 // ============================================================================
+// CONSTANTS
+// ============================================================================
+
+// Text truncation lengths for display
+const TEXT_TRUNCATION_SHORT = 50
+const TEXT_TRUNCATION_MEDIUM = 60
+const CONTEXT_LENGTH_LIMIT = 1000
+
+// ============================================================================
 // TYPES
 // ============================================================================
 
@@ -83,6 +98,9 @@ interface AIAssistantProps {
   note?: Note | null
   noteContent?: string
   
+  // Selected text from the editor - key for deep integration
+  selectedText?: string
+  
   // All notes for tool calling
   allNotes?: Note[]
   
@@ -98,6 +116,8 @@ interface AIAssistantProps {
   // Callbacks for actions
   onInsertText?: (text: string) => void
   onReplaceText?: (text: string) => void
+  onReplaceSelection?: (text: string) => void // Replace selected text specifically
+  onInsertAtCursor?: (text: string) => void // Insert at cursor position
   onCreateTask?: (title: string, options?: { description?: string; priority?: string; dueDate?: Date }) => void
   onCreateEvent?: (title: string, startTime: Date, endTime: Date, options?: { description?: string }) => void
   onAddMindmapNode?: (text: string, description?: string) => void
@@ -117,6 +137,12 @@ type QuickAction =
   | 'suggest-tasks'
   | 'suggest-events'
   | 'mindmap-ideas'
+  // New selection-based actions for deep editor integration
+  | 'continue-writing'
+  | 'explain-selection'
+  | 'improve-selection'
+  | 'translate-selection'
+  | 'simplify-selection'
 
 // Parsed structured response from AI
 interface ParsedAIResponse {
@@ -251,6 +277,7 @@ function MarkdownContent({ content, className = '' }: { content: string; classNa
 export default function AIAssistant({
   note,
   noteContent,
+  selectedText,
   allNotes,
   mindmapData,
   selectedMindmapNodeId,
@@ -259,6 +286,8 @@ export default function AIAssistant({
   events,
   onInsertText,
   onReplaceText,
+  onReplaceSelection,
+  onInsertAtCursor,
   onCreateTask,
   onCreateEvent,
   onAddMindmapNode,
@@ -388,6 +417,11 @@ export default function AIAssistant({
       }
     }
     
+    // Include selected text for context-aware AI interactions
+    if (selectedText && selectedText.trim()) {
+      context.selectedText = selectedText
+    }
+    
     if (mindmapData && selectedMindmapNodeId) {
       const selectedNode = mindmapData.nodes[selectedMindmapNodeId]
       if (selectedNode) {
@@ -428,7 +462,7 @@ export default function AIAssistant({
     }
     
     return context
-  }, [note, noteContent, mindmapData, selectedMindmapNodeId, tasks, events, allNotes])
+  }, [note, noteContent, selectedText, mindmapData, selectedMindmapNodeId, tasks, events, allNotes])
   
   // Tool call handler for AI to access notes
   const handleToolCall: ToolCallHandler = useCallback(async (name, args) => {
@@ -594,7 +628,7 @@ export default function AIAssistant({
           })
         } else {
           // Create new chat
-          const title = userMessage.content.slice(0, 50) + (userMessage.content.length > 50 ? '...' : '')
+          const title = userMessage.content.slice(0, TEXT_TRUNCATION_SHORT) + (userMessage.content.length > TEXT_TRUNCATION_SHORT ? '...' : '')
           const newChat = await createAIChat({
             note_id: note?.id || null,
             title,
@@ -676,6 +710,100 @@ export default function AIAssistant({
           break
         }
         
+        // New selection-based actions for deep editor integration
+        case 'continue-writing': {
+          const textToUse = selectedText?.trim() || aiContext.currentNote?.content
+          if (!textToUse) {
+            setError('No content to continue from. Select text or have content in the note.')
+            break
+          }
+          const continued = await editText(
+            textToUse.slice(-CONTEXT_LENGTH_LIMIT), // Use last 1000 chars for context
+            'Continue writing from where this text ends. Maintain the same style, tone, and topic. Provide a natural continuation that flows seamlessly.'
+          )
+          // Show as a message with insert option
+          const messageId = `action-${Date.now()}`
+          setMessages(prev => [...prev, {
+            id: messageId,
+            role: 'assistant',
+            content: `**Continue Writing:**\n\n${continued}`,
+            timestamp: new Date(),
+          }])
+          break
+        }
+        
+        case 'explain-selection': {
+          if (!selectedText?.trim()) {
+            setError('Please select some text to explain')
+            break
+          }
+          const explanation = await editText(
+            selectedText,
+            'Explain this text in simple terms. Break down any complex concepts, define technical terms, and provide helpful context.'
+          )
+          setMessages(prev => [...prev, {
+            id: `action-${Date.now()}`,
+            role: 'assistant',
+            content: `**Explanation:**\n\n${explanation}`,
+            timestamp: new Date(),
+          }])
+          break
+        }
+        
+        case 'improve-selection': {
+          if (!selectedText?.trim()) {
+            setError('Please select some text to improve')
+            break
+          }
+          const improved = await editText(
+            selectedText,
+            'Improve this text. Enhance clarity, fix any errors, improve flow, and make it more engaging while preserving the original meaning.'
+          )
+          setMessages(prev => [...prev, {
+            id: `action-${Date.now()}`,
+            role: 'assistant',
+            content: `**Improved Version:**\n\n${improved}`,
+            timestamp: new Date(),
+          }])
+          break
+        }
+        
+        case 'translate-selection': {
+          if (!selectedText?.trim()) {
+            setError('Please select some text to translate')
+            break
+          }
+          const translated = await editText(
+            selectedText,
+            'Translate this text to English if it is in another language, or to Spanish if it is in English. Provide a natural, fluent translation.'
+          )
+          setMessages(prev => [...prev, {
+            id: `action-${Date.now()}`,
+            role: 'assistant',
+            content: `**Translation:**\n\n${translated}`,
+            timestamp: new Date(),
+          }])
+          break
+        }
+        
+        case 'simplify-selection': {
+          if (!selectedText?.trim()) {
+            setError('Please select some text to simplify')
+            break
+          }
+          const simplified = await editText(
+            selectedText,
+            'Simplify this text. Use simpler words, shorter sentences, and clearer explanations. Make it accessible to a general audience while keeping the essential meaning.'
+          )
+          setMessages(prev => [...prev, {
+            id: `action-${Date.now()}`,
+            role: 'assistant',
+            content: `**Simplified:**\n\n${simplified}`,
+            timestamp: new Date(),
+          }])
+          break
+        }
+        
         case 'suggest-tasks': {
           const taskSuggestions = await suggestTasks(aiContext)
           setSuggestions(prev => ({ ...prev, tasks: taskSuggestions }))
@@ -710,7 +838,7 @@ export default function AIAssistant({
     } finally {
       setIsLoading(false)
     }
-  }, [hasKey, aiContext])
+  }, [hasKey, aiContext, selectedText])
   
   // Copy message content
   const handleCopy = useCallback((content: string, id: string) => {
@@ -756,13 +884,47 @@ export default function AIAssistant({
     }
   }, [onAddMindmapNode])
   
-  // Insert AI response into note
+  // Insert AI response into note (at end)
   const handleInsertToNote = useCallback((content: string) => {
     if (onInsertText) {
       // Convert markdown-like content to HTML
       onInsertText(textToHtml(content))
     }
   }, [onInsertText])
+  
+  // Insert AI response at cursor position
+  const handleInsertAtCursorPosition = useCallback((content: string) => {
+    if (onInsertAtCursor) {
+      // Convert markdown-like content to HTML
+      onInsertAtCursor(textToHtml(content))
+    } else if (onInsertText) {
+      // Fallback to append at end
+      onInsertText(textToHtml(content))
+    }
+  }, [onInsertAtCursor, onInsertText])
+  
+  // Replace selected text with AI response
+  const handleReplaceSelectionWithResponse = useCallback((content: string) => {
+    if (selectedText && onReplaceSelection) {
+      // Strip markdown formatting for clean text replacement
+      // This handles: bold (**text**, __text__), italic (*text*, _text_), 
+      // headers (#...), code (`text`, ```text```), links [text](url), and more
+      const plainText = content
+        .replace(/```[\s\S]*?```/g, '') // Remove code blocks
+        .replace(/`([^`]+)`/g, '$1') // Remove inline code, keep content
+        .replace(/\[([^\]]+)\]\([^)]+\)/g, '$1') // Convert links to just text
+        .replace(/!\[([^\]]*)\]\([^)]+\)/g, '') // Remove images
+        .replace(/#{1,6}\s*/g, '') // Remove headers
+        .replace(/[*_]{1,3}([^*_]+)[*_]{1,3}/g, '$1') // Remove bold/italic markers, keep content
+        .replace(/~~([^~]+)~~/g, '$1') // Remove strikethrough, keep content
+        .replace(/>\s*/g, '') // Remove blockquote markers
+        .replace(/[-*+]\s+/g, '') // Remove list markers
+        .replace(/\d+\.\s+/g, '') // Remove numbered list markers
+        .replace(/\n{3,}/g, '\n\n') // Normalize multiple newlines
+        .trim()
+      onReplaceSelection(plainText)
+    }
+  }, [selectedText, onReplaceSelection])
   
   // Handle key press in input
   const handleKeyDown = useCallback((e: React.KeyboardEvent<HTMLTextAreaElement>) => {
@@ -912,11 +1074,27 @@ export default function AIAssistant({
       { action: 'make-concise', icon: <RefreshCw size={14} />, label: 'Concise' },
     ]
     
+    // Selection-based actions - shown when text is selected
+    const selectionActions: { action: QuickAction; icon: React.ReactNode; label: string }[] = [
+      { action: 'explain-selection', icon: <HelpCircle size={14} />, label: 'Explain' },
+      { action: 'improve-selection', icon: <Wand2 size={14} />, label: 'Improve' },
+      { action: 'simplify-selection', icon: <Type size={14} />, label: 'Simplify' },
+      { action: 'translate-selection', icon: <Languages size={14} />, label: 'Translate' },
+    ]
+    
+    // Writing assistance actions
+    const writingActions: { action: QuickAction; icon: React.ReactNode; label: string; show: boolean }[] = [
+      { action: 'continue-writing', icon: <PenLine size={14} />, label: 'Continue Writing', show: !!note },
+      { action: 'expand', icon: <ArrowRight size={14} />, label: 'Expand', show: !!note },
+    ]
+    
     const otherActions: { action: QuickAction; icon: React.ReactNode; label: string; show: boolean }[] = [
       { action: 'suggest-tasks', icon: <CheckSquare size={14} />, label: 'Suggest Tasks', show: true },
       { action: 'suggest-events', icon: <Calendar size={14} />, label: 'Suggest Events', show: true },
       { action: 'mindmap-ideas', icon: <Network size={14} />, label: 'Mindmap Ideas', show: !!mindmapData },
     ]
+    
+    const hasSelection = selectedText && selectedText.trim().length > 0
     
     return (
       <div className="p-3 border-b border-gray-200 bg-gradient-to-br from-purple-50 to-blue-50">
@@ -924,6 +1102,49 @@ export default function AIAssistant({
           <Lightbulb size={12} />
           Quick Actions
         </div>
+        
+        {/* Selection-based actions - shown prominently when text is selected */}
+        {hasSelection && (
+          <div className="mb-3">
+            <div className="text-xs text-purple-600 mb-1.5 flex items-center gap-1">
+              <MousePointerClick size={12} />
+              Selection ({selectedText.length > TEXT_TRUNCATION_SHORT ? `${selectedText.slice(0, TEXT_TRUNCATION_SHORT)}...` : selectedText})
+            </div>
+            <div className="flex flex-wrap gap-1.5">
+              {selectionActions.map(({ action, icon, label }) => (
+                <button
+                  key={action}
+                  onClick={() => handleQuickAction(action)}
+                  disabled={isLoading}
+                  className="inline-flex items-center gap-1 px-2 py-1 text-xs font-medium bg-purple-100 border border-purple-200 text-purple-700 rounded-md hover:bg-purple-200 hover:border-purple-300 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                >
+                  {icon}
+                  {label}
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
+        
+        {/* Writing assistance */}
+        {writingActions.some(a => a.show) && (
+          <div className="mb-2">
+            <div className="text-xs text-gray-500 mb-1.5">Writing</div>
+            <div className="flex flex-wrap gap-1.5">
+              {writingActions.filter(a => a.show).map(({ action, icon, label }) => (
+                <button
+                  key={action}
+                  onClick={() => handleQuickAction(action)}
+                  disabled={isLoading}
+                  className="inline-flex items-center gap-1 px-2 py-1 text-xs font-medium bg-blue-50 border border-blue-200 text-blue-700 rounded-md hover:bg-blue-100 hover:border-blue-300 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                >
+                  {icon}
+                  {label}
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
         
         {note && (
           <div className="mb-2">
@@ -1265,7 +1486,7 @@ export default function AIAssistant({
                 </div>
                 
                 {message.role === 'assistant' && !message.isStreaming && (
-                  <div className="flex items-center gap-1 mt-1">
+                  <div className="flex items-center gap-1 mt-1 flex-wrap">
                     <button
                       onClick={() => handleCopy(message.content, message.id)}
                       className="p-1 text-gray-400 hover:text-gray-600 transition-colors"
@@ -1277,9 +1498,27 @@ export default function AIAssistant({
                       <button
                         onClick={() => handleInsertToNote(message.content)}
                         className="p-1 text-gray-400 hover:text-gray-600 transition-colors"
-                        title="Insert into note"
+                        title="Append to note"
                       >
                         <FileText size={12} />
+                      </button>
+                    )}
+                    {onInsertAtCursor && (
+                      <button
+                        onClick={() => handleInsertAtCursorPosition(message.content)}
+                        className="p-1 text-gray-400 hover:text-blue-600 transition-colors"
+                        title="Insert at cursor"
+                      >
+                        <PenLine size={12} />
+                      </button>
+                    )}
+                    {selectedText && onReplaceSelection && (
+                      <button
+                        onClick={() => handleReplaceSelectionWithResponse(message.content)}
+                        className="p-1 text-gray-400 hover:text-purple-600 transition-colors"
+                        title="Replace selection"
+                      >
+                        <ArrowRight size={12} />
                       </button>
                     )}
                   </div>
@@ -1309,13 +1548,30 @@ export default function AIAssistant({
         </div>
       )}
       
+      {/* Selected text indicator */}
+      {selectedText && selectedText.trim() && (
+        <div className="mb-2 px-3 py-2 bg-purple-50 border border-purple-200 rounded-lg text-xs text-purple-700 flex items-start gap-2">
+          <MousePointerClick size={14} className="flex-shrink-0 mt-0.5" />
+          <div className="flex-1 min-w-0">
+            <span className="font-medium">Selected text:</span>
+            <span className="ml-1 text-purple-600 italic">
+              &quot;{selectedText.length > TEXT_TRUNCATION_MEDIUM ? selectedText.slice(0, TEXT_TRUNCATION_MEDIUM) + '...' : selectedText}&quot;
+            </span>
+          </div>
+        </div>
+      )}
+      
       <div className="relative">
         <textarea
           ref={inputRef}
           value={inputValue}
           onChange={(e) => setInputValue(e.target.value)}
           onKeyDown={handleKeyDown}
-          placeholder={hasKey ? "Ask anything..." : "Configure API key to start..."}
+          placeholder={hasKey 
+            ? selectedText 
+              ? "Ask about the selection, or type 'improve', 'explain', 'simplify'..." 
+              : "Ask anything..." 
+            : "Configure API key to start..."}
           disabled={isLoading || !hasKey}
           rows={1}
           className="w-full px-3 py-2 pr-10 text-sm border border-gray-200 rounded-lg resize-none focus:ring-2 focus:ring-blue-500 focus:border-transparent disabled:bg-gray-50 disabled:cursor-not-allowed"

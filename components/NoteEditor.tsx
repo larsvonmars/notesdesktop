@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useEffect, useCallback, useMemo, useRef, useDeferredValue, useLayoutEffect } from 'react'
+import DOMPurify from 'dompurify'
 import {
   Bold,
   Italic,
@@ -181,6 +182,14 @@ export default function NoteEditor({
   const [showKnowledgeGraph, setShowKnowledgeGraph] = useState(false)
   const [showProjectsModal, setShowProjectsModal] = useState(false)
   const [showBlockOutlines, setShowBlockOutlines] = useState(false)
+  
+  // Selected text state for AI assistant integration
+  const [selectedText, setSelectedText] = useState('')
+  const selectedTextRef = useRef<string>('')
+  const selectedTextUpdateTimeoutRef = useRef<number | null>(null)
+  
+  // Selected mindmap node state for AI assistant integration
+  const [selectedMindmapNodeId, setSelectedMindmapNodeId] = useState<string | null>(null)
 
   // Content blocks configuration
   const contentBlocks = useMemo(() => [
@@ -971,11 +980,49 @@ export default function NoteEditor({
     const handleSelectionChange = () => {
       scheduleActiveFormatsUpdate()
       updateFloatingToolbar()
+      
+      // Track selected text for AI assistant (debounced to avoid excessive updates)
+      if (noteType === 'rich-text' && editorRef.current) {
+        // Clear any pending update
+        if (selectedTextUpdateTimeoutRef.current !== null) {
+          window.clearTimeout(selectedTextUpdateTimeoutRef.current)
+        }
+        
+        const editorElement = editorRef.current.getRootElement()
+        const selection = window.getSelection()
+        if (selection && selection.rangeCount > 0 && editorElement) {
+          const range = selection.getRangeAt(0)
+          // Only capture selection if it's within the editor
+          if (editorElement.contains(range.commonAncestorContainer)) {
+            const text = selection.toString().trim()
+            if (text !== selectedTextRef.current) {
+              selectedTextRef.current = text
+              // Debounce the state update by 150ms to avoid rapid re-renders during drag selection
+              selectedTextUpdateTimeoutRef.current = window.setTimeout(() => {
+                setSelectedText(text)
+                selectedTextUpdateTimeoutRef.current = null
+              }, 150)
+            }
+          } else if (selectedTextRef.current !== '') {
+            selectedTextRef.current = ''
+            setSelectedText('')
+          }
+        } else if (selectedTextRef.current !== '') {
+          selectedTextRef.current = ''
+          setSelectedText('')
+        }
+      }
     }
 
     document.addEventListener('selectionchange', handleSelectionChange)
-    return () => document.removeEventListener('selectionchange', handleSelectionChange)
-  }, [scheduleActiveFormatsUpdate, updateFloatingToolbar])
+    return () => {
+      document.removeEventListener('selectionchange', handleSelectionChange)
+      // Clean up pending timeout on unmount
+      if (selectedTextUpdateTimeoutRef.current !== null) {
+        window.clearTimeout(selectedTextUpdateTimeoutRef.current)
+      }
+    }
+  }, [scheduleActiveFormatsUpdate, updateFloatingToolbar, noteType])
 
   useEffect(() => {
     const handleWindowChange = () => updateFloatingToolbar()
@@ -1144,6 +1191,87 @@ export default function NoteEditor({
       toast.push({ title: 'Content replaced' })
     }
   }, [noteType, handleContentChange, toast])
+  
+  // Replace selected text with AI-generated text
+  const handleAIReplaceSelection = useCallback((text: string) => {
+    if (noteType === 'rich-text' && editorRef.current) {
+      const selection = window.getSelection()
+      if (selection && selection.rangeCount > 0) {
+        const range = selection.getRangeAt(0)
+        const editorElement = editorRef.current.getRootElement()
+        
+        if (editorElement && editorElement.contains(range.commonAncestorContainer)) {
+          // Delete the selected content and insert new text
+          range.deleteContents()
+          
+          // Create a text node with the new content
+          // If the text contains HTML-like formatting, sanitize and insert as HTML
+          if (text.includes('<') && text.includes('>')) {
+            // Sanitize HTML to prevent XSS
+            const sanitizedHtml = DOMPurify.sanitize(text, {
+              ALLOWED_TAGS: ['p', 'br', 'strong', 'b', 'em', 'i', 'u', 'span', 'ul', 'ol', 'li', 'a', 'h1', 'h2', 'h3', 'h4', 'h5', 'h6', 'blockquote', 'code', 'pre'],
+              ALLOWED_ATTR: ['href', 'target', 'rel', 'class'],
+            })
+            const fragment = range.createContextualFragment(sanitizedHtml)
+            range.insertNode(fragment)
+          } else {
+            const textNode = document.createTextNode(text)
+            range.insertNode(textNode)
+          }
+          
+          // Collapse selection to end
+          selection.collapseToEnd()
+          
+          // Update content state
+          const newContent = editorRef.current.getHTML()
+          handleContentChange(newContent)
+          setHasChanges(true)
+          toast.push({ title: 'Selection replaced' })
+        }
+      }
+    }
+  }, [noteType, handleContentChange, toast])
+  
+  // Insert text at current cursor position
+  const handleAIInsertAtCursor = useCallback((text: string) => {
+    if (noteType === 'rich-text' && editorRef.current) {
+      editorRef.current.focus()
+      
+      const selection = window.getSelection()
+      if (selection && selection.rangeCount > 0) {
+        const range = selection.getRangeAt(0)
+        const editorElement = editorRef.current.getRootElement()
+        
+        if (editorElement && editorElement.contains(range.commonAncestorContainer)) {
+          // Insert at cursor position
+          if (text.includes('<') && text.includes('>')) {
+            // Sanitize HTML to prevent XSS
+            const sanitizedHtml = DOMPurify.sanitize(text, {
+              ALLOWED_TAGS: ['p', 'br', 'strong', 'b', 'em', 'i', 'u', 'span', 'ul', 'ol', 'li', 'a', 'h1', 'h2', 'h3', 'h4', 'h5', 'h6', 'blockquote', 'code', 'pre'],
+              ALLOWED_ATTR: ['href', 'target', 'rel', 'class'],
+            })
+            const fragment = range.createContextualFragment(sanitizedHtml)
+            range.insertNode(fragment)
+          } else {
+            const textNode = document.createTextNode(text)
+            range.insertNode(textNode)
+          }
+          
+          // Move cursor to end of inserted text
+          selection.collapseToEnd()
+          
+          // Update content state
+          const newContent = editorRef.current.getHTML()
+          handleContentChange(newContent)
+          setHasChanges(true)
+          toast.push({ title: 'Content inserted at cursor' })
+        }
+      } else {
+        // No cursor position, append to end
+        handleAIInsertText(text)
+      }
+    }
+  }, [noteType, handleContentChange, toast, handleAIInsertText])
 
   const handleAIAddMindmapNode = useCallback((nodeText: string, description?: string) => {
     if (noteType === 'mindmap' && mindmapEditorRef.current) {
@@ -1232,8 +1360,12 @@ export default function NoteEditor({
         onOpenTaskCalendar={onOpenTaskCalendar}
         noteContent={content}
         mindmapData={mindmapData}
+        selectedMindmapNodeId={selectedMindmapNodeId}
+        selectedText={selectedText}
         onInsertText={handleAIInsertText}
         onReplaceText={handleAIReplaceText}
+        onReplaceSelection={handleAIReplaceSelection}
+        onInsertAtCursor={handleAIInsertAtCursor}
         onAddMindmapNode={handleAIAddMindmapNode}
         allNotes={allNotes}
       />
@@ -1255,6 +1387,7 @@ export default function NoteEditor({
                   ref={mindmapEditorRef}
                   initialData={mindmapData || undefined}
                   onChange={setMindmapData}
+                  onSelectedNodeChange={(nodeId, _node) => setSelectedMindmapNodeId(nodeId)}
                   readOnly={isSaving || isDeleting}
                 />
               ) : (

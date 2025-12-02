@@ -101,8 +101,11 @@ interface UnifiedPanelProps {
   noteContent?: string
   mindmapData?: MindmapData | null
   selectedMindmapNodeId?: string | null
+  selectedText?: string  // Selected text from editor for AI context
   onInsertText?: (text: string) => void
   onReplaceText?: (text: string) => void
+  onReplaceSelection?: (text: string) => void  // Replace selected text specifically
+  onInsertAtCursor?: (text: string) => void  // Insert at cursor position
   onCreateTaskFromAI?: (title: string, options?: { description?: string; priority?: string; dueDate?: Date }) => void
   onAddMindmapNode?: (text: string, description?: string) => void
   
@@ -149,8 +152,11 @@ export default function UnifiedPanel({
   noteContent,
   mindmapData,
   selectedMindmapNodeId,
+  selectedText,
   onInsertText,
   onReplaceText,
+  onReplaceSelection,
+  onInsertAtCursor,
   onCreateTaskFromAI,
   onAddMindmapNode,
   allNotes: allNotesForAI,
@@ -1367,6 +1373,7 @@ export default function UnifiedPanel({
                 <AIAssistant
                   note={note}
                   noteContent={noteContent}
+                  selectedText={selectedText}
                   allNotes={allNotesForAI}
                   mindmapData={mindmapData}
                   selectedMindmapNodeId={selectedMindmapNodeId}
@@ -1375,6 +1382,8 @@ export default function UnifiedPanel({
                   events={calendarEvents}
                   onInsertText={onInsertText}
                   onReplaceText={onReplaceText}
+                  onReplaceSelection={onReplaceSelection}
+                  onInsertAtCursor={onInsertAtCursor}
                   onCreateTask={onCreateTaskFromAI}
                   onAddMindmapNode={onAddMindmapNode}
                 />
