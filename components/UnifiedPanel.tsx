@@ -27,10 +27,16 @@ import {
   Clock,
   Star,
   Plus,
+  Sparkles,
+  Settings,
+  ChevronDown,
 } from 'lucide-react'
 import { Note } from './NoteEditor'
 import { FolderNode } from '@/lib/folders'
 import { getNotesByFolder } from '@/lib/notes'
+import AIAssistant from './AIAssistant'
+import type { MindmapData } from './MindmapEditor'
+import { getEvents, type CalendarEvent } from '@/lib/events'
 import { getTasks, createTask, completeTask, uncompleteTask, toggleTaskStar, getTaskStats, type Task, type TaskStats } from '@/lib/tasks'
 
 interface UnifiedPanelProps {
@@ -90,6 +96,18 @@ interface UnifiedPanelProps {
   
   // Tasks & Calendar
   onOpenTaskCalendar?: () => void
+  
+  // AI Assistant
+  noteContent?: string
+  mindmapData?: MindmapData | null
+  selectedMindmapNodeId?: string | null
+  onInsertText?: (text: string) => void
+  onReplaceText?: (text: string) => void
+  onCreateTaskFromAI?: (title: string, options?: { description?: string; priority?: string; dueDate?: Date }) => void
+  onAddMindmapNode?: (text: string, description?: string) => void
+  
+  // All notes for AI tool calling
+  allNotes?: Note[]
 }
 
 export default function UnifiedPanel({
@@ -128,9 +146,20 @@ export default function UnifiedPanel({
   onSignOut,
   autoOpenKey,
   onOpenTaskCalendar,
+  noteContent,
+  mindmapData,
+  selectedMindmapNodeId,
+  onInsertText,
+  onReplaceText,
+  onCreateTaskFromAI,
+  onAddMindmapNode,
+  allNotes: allNotesForAI,
 }: UnifiedPanelProps) {
   const [isOpen, setIsOpen] = useState(false)
-  const [activeTab, setActiveTab] = useState<'browse' | 'toc' | 'tasks'>('browse')
+  const [activeTab, setActiveTab] = useState<'browse' | 'toc' | 'tasks' | 'ai'>('browse')
+  
+  // Calendar events for AI
+  const [calendarEvents, setCalendarEvents] = useState<CalendarEvent[]>([])
   
   // Task state
   const [tasks, setTasks] = useState<Task[]>([])
@@ -194,6 +223,26 @@ export default function UnifiedPanel({
       loadTasks()
     }
   }, [isOpen, activeTab, loadTasks])
+
+  // Load calendar events for AI assistant
+  const loadCalendarEvents = useCallback(async () => {
+    try {
+      const now = new Date()
+      const weekLater = new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000)
+      const events = await getEvents({ startDate: now, endDate: weekLater })
+      setCalendarEvents(events)
+    } catch (error) {
+      console.error('Failed to load calendar events:', error)
+    }
+  }, [])
+
+  // Load calendar events when AI tab is active
+  useEffect(() => {
+    if (isOpen && activeTab === 'ai') {
+      loadTasks()
+      loadCalendarEvents()
+    }
+  }, [isOpen, activeTab, loadTasks, loadCalendarEvents])
 
   const handleQuickAddTask = useCallback(async () => {
     if (!quickTaskTitle.trim()) return
@@ -706,8 +755,8 @@ export default function UnifiedPanel({
   const isAllExpanded = expandedFolders.has(ALL_FOLDER_KEY)
   const shouldShowAllNotes = isAllExpanded
   const isAllLoading = allNotesEntry?.isLoading ?? (shouldShowAllNotes && !allNotesEntry)
-  const allNotes = allNotesEntry?.notes ?? []
-  const displayedAllNotes = allNotes
+  const allFolderNotes = allNotesEntry?.notes ?? []
+  const displayedAllNotes = allFolderNotes
   const allError = allNotesEntry?.error
 
   const handleRenameFromContext = () => {
@@ -803,213 +852,268 @@ export default function UnifiedPanel({
       {/* Floating Menu Button */}
       <button
         onClick={() => setIsOpen(!isOpen)}
-        className="fixed top-28 right-6 z-50 p-3 bg-white border-2 border-gray-200 rounded-full shadow-lg hover:shadow-xl hover:scale-105 transition-all duration-200"
+        className="fixed top-28 right-6 z-50 p-3.5 bg-white border border-gray-200 rounded-2xl shadow-lg hover:shadow-xl hover:scale-105 transition-all duration-200 group"
         aria-label={isOpen ? 'Close menu' : 'Open menu (⌘\\)'}
         title={isOpen ? 'Close menu' : 'Open menu (⌘\\)'}
       >
-        {isOpen ? <X size={20} /> : <Menu size={20} />}
+        {isOpen ? <X size={22} className="text-gray-700" /> : <Menu size={22} className="text-gray-700 group-hover:text-blue-600 transition-colors" />}
       </button>
 
-      {/* Unified Panel */}
+      {/* Unified Panel - Redesigned */}
       {isOpen && (
         <div
           ref={panelRef}
-          className="fixed top-40 right-6 z-40 w-80 max-h-[calc(100vh-14rem)] bg-white rounded-xl shadow-2xl border border-gray-200 flex flex-col overflow-hidden animate-in slide-in-from-right duration-200"
+          className="fixed top-20 right-6 z-40 w-[440px] max-h-[calc(100vh-6rem)] bg-white rounded-2xl shadow-2xl border border-gray-100 flex flex-col overflow-hidden animate-in slide-in-from-right duration-200"
         >
-          {/* User Info & Sign Out */}
-          {userEmail && onSignOut && (
-            <div className="p-2.5 border-b border-gray-200 bg-gray-50">
-              <div className="flex items-center justify-between gap-2">
-                <div className="flex items-center gap-2 text-xs text-gray-700 truncate flex-1 min-w-0">
-                  <User size={13} className="text-gray-500 flex-shrink-0" />
-                  <span className="truncate">{userEmail}</span>
+          {/* Header Section - User & Note Title */}
+          <div className="bg-gradient-to-br from-slate-50 via-white to-blue-50 border-b border-gray-100">
+            {/* User Info Bar */}
+            {userEmail && onSignOut && (
+              <div className="px-5 py-3 flex items-center justify-between border-b border-gray-100">
+                <div className="flex items-center gap-3">
+                  <div className="w-8 h-8 rounded-full bg-gradient-to-br from-blue-500 to-purple-600 flex items-center justify-center text-white text-sm font-medium">
+                    {userEmail.charAt(0).toUpperCase()}
+                  </div>
+                  <span className="text-sm text-gray-700 font-medium truncate max-w-[200px]">{userEmail}</span>
                 </div>
                 <button
                   onClick={onSignOut}
-                  className="inline-flex items-center gap-1 px-2 py-1 text-xs font-medium text-red-600 hover:bg-red-50 rounded transition-colors flex-shrink-0"
+                  className="flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium text-gray-500 hover:text-red-600 hover:bg-red-50 rounded-lg transition-all"
                   title="Sign Out"
                 >
-                  <LogOut size={13} />
-                  <span>Sign Out</span>
+                  <LogOut size={15} />
                 </button>
-              </div>
-            </div>
-          )}
-
-          {/* Title & Actions */}
-          <div className="p-3 border-b border-gray-200 bg-gradient-to-br from-gray-50 to-white">
-            <input
-              type="text"
-              value={title}
-              onChange={(e) => onTitleChange(e.target.value)}
-              placeholder="Note title..."
-              className="w-full px-2.5 py-1.5 text-base font-semibold border border-gray-200 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-transparent mb-2"
-              disabled={isSaving || isDeleting}
-            />
-            
-            <div className="flex items-center gap-1.5">
-              <button
-                onClick={onSave}
-                disabled={isSaving || isDeleting || !hasChanges}
-                className="flex-1 inline-flex items-center justify-center gap-1.5 px-3 py-1.5 bg-blue-600 text-white text-sm font-medium rounded-md hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors relative group"
-                title="Save note (⌘S)"
-              >
-                {isSaving ? (
-                  <Loader2 size={14} className="animate-spin" />
-                ) : (
-                  <Save size={14} />
-                )}
-                {isSaving ? 'Saving...' : 'Save'}
-                {!isSaving && hasChanges && (
-                  <kbd className="hidden group-hover:inline-block ml-1 px-1 py-0.5 bg-blue-700 rounded text-xs">⌘S</kbd>
-                )}
-              </button>
-              
-              {note && onDelete && (
-                <button
-                  onClick={() => onDelete(note.id)}
-                  disabled={isDeleting}
-                  className="px-2.5 py-1.5 border border-red-200 text-red-600 text-sm font-medium rounded-md hover:bg-red-50 disabled:opacity-50 transition-colors"
-                  title="Delete note"
-                >
-                  <Trash2 size={14} />
-                </button>
-              )}
-              
-              <button
-                onClick={onCancel}
-                disabled={isSaving || isDeleting}
-                className="px-2.5 py-1.5 border border-gray-200 text-gray-600 text-sm font-medium rounded-md hover:bg-gray-50 disabled:opacity-50 transition-colors"
-                title="Cancel"
-              >
-                <X size={14} />
-              </button>
-            </div>
-
-            {hasChanges && (
-              <div className="mt-1.5 text-xs text-amber-600 flex items-center gap-1">
-                <span className="w-1.5 h-1.5 bg-amber-500 rounded-full" />
-                Unsaved changes
               </div>
             )}
+
+            {/* Note Title & Actions */}
+            <div className="p-5">
+              <div className="mb-4">
+                <label className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2 block">
+                  Note Title
+                </label>
+                <input
+                  type="text"
+                  value={title}
+                  onChange={(e) => onTitleChange(e.target.value)}
+                  placeholder="Untitled note..."
+                  className="w-full px-4 py-3 text-lg font-semibold border border-gray-200 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white transition-all placeholder:text-gray-300"
+                  disabled={isSaving || isDeleting}
+                />
+              </div>
+              
+              {/* Action Buttons */}
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={onSave}
+                  disabled={isSaving || isDeleting || !hasChanges}
+                  className="flex-1 inline-flex items-center justify-center gap-2 px-4 py-2.5 bg-gradient-to-r from-blue-600 to-blue-700 text-white text-sm font-semibold rounded-xl hover:from-blue-700 hover:to-blue-800 disabled:opacity-50 disabled:cursor-not-allowed transition-all shadow-sm hover:shadow-md"
+                  title="Save note (⌘S)"
+                >
+                  {isSaving ? (
+                    <Loader2 size={16} className="animate-spin" />
+                  ) : (
+                    <Save size={16} />
+                  )}
+                  {isSaving ? 'Saving...' : 'Save'}
+                </button>
+                
+                {note && onDelete && (
+                  <button
+                    onClick={() => onDelete(note.id)}
+                    disabled={isDeleting}
+                    className="p-2.5 border border-red-200 text-red-600 rounded-xl hover:bg-red-50 disabled:opacity-50 transition-all"
+                    title="Delete note"
+                  >
+                    <Trash2 size={16} />
+                  </button>
+                )}
+                
+                <button
+                  onClick={onCancel}
+                  disabled={isSaving || isDeleting}
+                  className="p-2.5 border border-gray-200 text-gray-600 rounded-xl hover:bg-gray-50 disabled:opacity-50 transition-all"
+                  title="Cancel"
+                >
+                  <X size={16} />
+                </button>
+              </div>
+
+              {hasChanges && (
+                <div className="mt-3 flex items-center gap-2 text-amber-600 bg-amber-50 px-3 py-2 rounded-lg">
+                  <span className="w-2 h-2 bg-amber-500 rounded-full animate-pulse" />
+                  <span className="text-sm font-medium">Unsaved changes</span>
+                </div>
+              )}
+            </div>
           </div>
 
-          {/* Tabs */}
-          <div className="flex border-b border-gray-200 bg-gray-50">
-            <button
-              onClick={() => setActiveTab('browse')}
-              className={`flex-1 px-3 py-2 text-sm font-medium transition-colors flex items-center justify-center gap-1.5 ${
-                activeTab === 'browse'
-                  ? 'text-blue-600 border-b-2 border-blue-600 bg-white'
-                  : 'text-gray-600 hover:text-gray-800 hover:bg-gray-100'
-              }`}
-            >
-              <FileText size={15} />
-              Browse
-            </button>
-            <button
-              onClick={() => setActiveTab('toc')}
-              className={`flex-1 px-3 py-2 text-sm font-medium transition-colors flex items-center justify-center gap-1.5 ${
-                activeTab === 'toc'
-                  ? 'text-blue-600 border-b-2 border-blue-600 bg-white'
-                  : 'text-gray-600 hover:text-gray-800 hover:bg-gray-100'
-              }`}
-              disabled={headings.length === 0}
-            >
-              <ListTree size={15} />
-              Contents
-              {headings.length > 0 && (
-                <span className="px-1.5 py-0.5 text-xs bg-blue-100 text-blue-600 rounded-full font-semibold">
-                  {headings.length}
-                </span>
-              )}
-            </button>
-            <button
-              onClick={() => setActiveTab('tasks')}
-              className={`flex-1 px-3 py-2 text-sm font-medium transition-colors flex items-center justify-center gap-1.5 ${
-                activeTab === 'tasks'
-                  ? 'text-blue-600 border-b-2 border-blue-600 bg-white'
-                  : 'text-gray-600 hover:text-gray-800 hover:bg-gray-100'
-              }`}
-            >
-              <CheckSquare size={15} />
-              Tasks
-              {taskStats && taskStats.todo > 0 && (
-                <span className="px-1.5 py-0.5 text-xs bg-orange-100 text-orange-600 rounded-full font-semibold">
-                  {taskStats.todo}
-                </span>
-              )}
-            </button>
+          {/* Tabs - Modern Pill Style */}
+          <div className="px-3 py-3 bg-gray-50/50 border-b border-gray-100">
+            <div className="flex bg-gray-100 rounded-xl p-1 gap-0.5">
+              <button
+                onClick={() => setActiveTab('browse')}
+                className={`flex-1 px-2 py-2 text-xs font-medium transition-all rounded-lg flex items-center justify-center gap-1.5 min-w-0 ${
+                  activeTab === 'browse'
+                    ? 'bg-white text-blue-600 shadow-sm'
+                    : 'text-gray-600 hover:text-gray-800 hover:bg-gray-50'
+                }`}
+              >
+                <FileText size={14} className="flex-shrink-0" />
+                <span className="truncate">Browse</span>
+              </button>
+              <button
+                onClick={() => setActiveTab('toc')}
+                className={`flex-1 px-2 py-2 text-xs font-medium transition-all rounded-lg flex items-center justify-center gap-1.5 min-w-0 ${
+                  activeTab === 'toc'
+                    ? 'bg-white text-blue-600 shadow-sm'
+                    : 'text-gray-600 hover:text-gray-800 hover:bg-gray-50'
+                }`}
+                disabled={headings.length === 0}
+              >
+                <ListTree size={14} className="flex-shrink-0" />
+                <span className="truncate">Contents</span>
+                {headings.length > 0 && (
+                  <span className="px-1 py-0.5 text-[10px] bg-blue-100 text-blue-600 rounded-full font-semibold flex-shrink-0">
+                    {headings.length}
+                  </span>
+                )}
+              </button>
+              <button
+                onClick={() => setActiveTab('tasks')}
+                className={`flex-1 px-2 py-2 text-xs font-medium transition-all rounded-lg flex items-center justify-center gap-1.5 min-w-0 ${
+                  activeTab === 'tasks'
+                    ? 'bg-white text-blue-600 shadow-sm'
+                    : 'text-gray-600 hover:text-gray-800 hover:bg-gray-50'
+                }`}
+              >
+                <CheckSquare size={14} className="flex-shrink-0" />
+                <span className="truncate">Tasks</span>
+                {taskStats && taskStats.todo > 0 && (
+                  <span className="px-1 py-0.5 text-[10px] bg-orange-100 text-orange-600 rounded-full font-semibold flex-shrink-0">
+                    {taskStats.todo}
+                  </span>
+                )}
+              </button>
+              <button
+                onClick={() => setActiveTab('ai')}
+                className={`flex-1 px-2 py-2 text-xs font-medium transition-all rounded-lg flex items-center justify-center gap-1.5 min-w-0 ${
+                  activeTab === 'ai'
+                    ? 'bg-white text-purple-600 shadow-sm'
+                    : 'text-gray-600 hover:text-gray-800 hover:bg-gray-50'
+                }`}
+              >
+                <Sparkles size={14} className="flex-shrink-0" />
+                <span className="truncate">AI</span>
+              </button>
+            </div>
           </div>
 
-          {/* Content */}
-          <div className="flex-1 overflow-y-auto p-3">
+          {/* Content Area */}
+          <div className="flex-1 overflow-y-auto">
             {activeTab === 'browse' && (
-              <div className="space-y-3">
-                {/* Knowledge Graph */}
-                {onOpenKnowledgeGraph && (
-                  <div>
+              <div className="p-5 space-y-5">
+                {/* Quick Actions Row */}
+                <div className="grid grid-cols-2 gap-3">
+                  {onOpenKnowledgeGraph && (
                     <button
                       onClick={() => {
                         onOpenKnowledgeGraph()
                         setIsOpen(false)
                       }}
-                      className="w-full px-3 py-2.5 bg-gradient-to-r from-indigo-500 to-purple-600 text-white text-sm font-medium rounded-md hover:from-indigo-600 hover:to-purple-700 transition-all shadow-sm hover:shadow flex items-center justify-center gap-2"
+                      className="px-4 py-3.5 bg-gradient-to-br from-indigo-500 to-purple-600 text-white text-sm font-semibold rounded-xl hover:from-indigo-600 hover:to-purple-700 transition-all shadow-sm hover:shadow-md flex items-center justify-center gap-2"
                       title="Open Knowledge Graph - Visualize note connections"
                     >
-                      <Network size={16} />
+                      <Network size={18} />
                       <span>Knowledge Graph</span>
                     </button>
+                  )}
+                  <button
+                    onClick={() => {
+                      onSearch()
+                      setIsOpen(false)
+                    }}
+                    className="px-4 py-3.5 bg-white border border-gray-200 text-gray-700 text-sm font-semibold rounded-xl hover:bg-gray-50 transition-all flex items-center justify-center gap-2 shadow-sm"
+                  >
+                    <Search size={18} />
+                    <span>Find & Replace</span>
+                  </button>
+                </div>
+
+                {/* Current Note Card */}
+                {note && (
+                  <div className="bg-gradient-to-br from-blue-50/50 to-purple-50/50 rounded-2xl p-5 border border-blue-100/50">
+                    <div className="flex items-start justify-between mb-4">
+                      <div className="flex items-center gap-3">
+                        <div className={`w-10 h-10 rounded-xl flex items-center justify-center ${
+                          note.note_type === 'drawing' ? 'bg-purple-100' :
+                          note.note_type === 'mindmap' ? 'bg-green-100' : 'bg-blue-100'
+                        }`}>
+                          {note.note_type === 'drawing' ? (
+                            <PenTool size={20} className="text-purple-600" />
+                          ) : note.note_type === 'mindmap' ? (
+                            <Network size={20} className="text-green-600" />
+                          ) : (
+                            <FileText size={20} className="text-blue-600" />
+                          )}
+                        </div>
+                        <div>
+                          <h3 className="font-semibold text-gray-900">Current Note</h3>
+                          <p className="text-sm text-gray-500 capitalize">{note.note_type?.replace('-', ' ') || 'Text Note'}</p>
+                        </div>
+                      </div>
+                    </div>
+                    
+                    <div className="space-y-3">
+                      {currentFolderName && (
+                        <div className="flex items-center gap-3 px-3 py-2.5 bg-white/80 rounded-xl">
+                          <FolderTreeIcon size={16} className="text-amber-500" />
+                          <span className="text-sm text-gray-700">{currentFolderName}</span>
+                        </div>
+                      )}
+                      <div className="grid grid-cols-2 gap-3">
+                        <div className="px-3 py-2.5 bg-white/80 rounded-xl">
+                          <p className="text-xs text-gray-500 mb-1">Last edited</p>
+                          <p className="text-sm font-medium text-gray-900">{new Date(note.updated_at).toLocaleDateString()}</p>
+                        </div>
+                        {stats.words > 0 && (
+                          <div className="px-3 py-2.5 bg-white/80 rounded-xl">
+                            <p className="text-xs text-gray-500 mb-1">Word count</p>
+                            <p className="text-sm font-medium text-gray-900">{stats.words.toLocaleString()}</p>
+                          </div>
+                        )}
+                      </div>
+                    </div>
                   </div>
                 )}
 
-                {/* Quick info about current note */}
-                {note && (
-                  <div className="bg-gradient-to-br from-gray-50 to-blue-50 rounded-lg p-3 border border-gray-200">
-                    <div className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">
-                      Current Note
+                {/* Keyboard Shortcuts */}
+                <div className="bg-gray-50 rounded-xl p-4">
+                  <h4 className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-3">Quick Keys</h4>
+                  <div className="grid grid-cols-2 gap-2 text-sm">
+                    <div className="flex items-center justify-between px-2 py-1.5">
+                      <span className="text-gray-600">Toggle Panel</span>
+                      <kbd className="px-2 py-1 bg-white border border-gray-200 rounded-md text-xs font-mono text-gray-600 shadow-sm">⌘\</kbd>
                     </div>
-                    <div className="space-y-2">
-                      <div className="flex items-center gap-2 text-sm text-gray-700">
-                        {note.note_type === 'drawing' ? (
-                          <PenTool size={14} className="text-purple-500" />
-                        ) : note.note_type === 'mindmap' ? (
-                          <Network size={14} className="text-green-500" />
-                        ) : (
-                          <FileText size={14} className="text-blue-500" />
-                        )}
-                        <span className="font-medium">
-                          {note.note_type === 'drawing' ? 'Drawing' : note.note_type === 'mindmap' ? 'Mind Map' : 'Text Note'}
-                        </span>
-                      </div>
-                      {currentFolderName && (
-                        <div className="flex items-center gap-2 text-xs text-gray-600">
-                          <FolderTreeIcon size={12} className="text-amber-500" />
-                          <span>{currentFolderName}</span>
-                        </div>
-                      )}
-                      <div className="pt-2 border-t border-gray-200">
-                        <div className="text-xs text-gray-500 space-y-1">
-                          <div className="flex justify-between">
-                            <span>Last edited:</span>
-                            <span className="font-medium">{new Date(note.updated_at).toLocaleDateString()}</span>
-                          </div>
-                          {stats.words > 0 && (
-                            <div className="flex justify-between">
-                              <span>Word count:</span>
-                              <span className="font-medium">{stats.words.toLocaleString()}</span>
-                            </div>
-                          )}
-                        </div>
-                      </div>
+                    <div className="flex items-center justify-between px-2 py-1.5">
+                      <span className="text-gray-600">Save Note</span>
+                      <kbd className="px-2 py-1 bg-white border border-gray-200 rounded-md text-xs font-mono text-gray-600 shadow-sm">⌘S</kbd>
+                    </div>
+                    <div className="flex items-center justify-between px-2 py-1.5">
+                      <span className="text-gray-600">Find</span>
+                      <kbd className="px-2 py-1 bg-white border border-gray-200 rounded-md text-xs font-mono text-gray-600 shadow-sm">⌘F</kbd>
+                    </div>
+                    <div className="flex items-center justify-between px-2 py-1.5">
+                      <span className="text-gray-600">New Note</span>
+                      <kbd className="px-2 py-1 bg-white border border-gray-200 rounded-md text-xs font-mono text-gray-600 shadow-sm">⌘N</kbd>
                     </div>
                   </div>
-                )}
+                </div>
               </div>
             )}
 
             {activeTab === 'tasks' && (
-              <div className="space-y-3">
+              <div className="p-5 space-y-5">
                 {/* Tasks & Calendar Button */}
                 {onOpenTaskCalendar && (
                   <button
@@ -1017,19 +1121,19 @@ export default function UnifiedPanel({
                       onOpenTaskCalendar()
                       setIsOpen(false)
                     }}
-                    className="w-full px-3 py-2.5 bg-gradient-to-r from-blue-500 to-purple-600 text-white text-sm font-medium rounded-md hover:from-blue-600 hover:to-purple-700 transition-all shadow-sm hover:shadow flex items-center justify-center gap-2"
+                    className="w-full px-4 py-3.5 bg-gradient-to-r from-blue-500 to-purple-600 text-white text-sm font-semibold rounded-xl hover:from-blue-600 hover:to-purple-700 transition-all shadow-sm hover:shadow-md flex items-center justify-center gap-2"
                     title="Open Tasks & Calendar"
                   >
-                    <Calendar size={16} />
+                    <Calendar size={18} />
                     <span>Open Tasks & Calendar</span>
                   </button>
                 )}
 
                 {/* Quick Add Task */}
-                <div className="bg-gray-50 rounded-lg p-3 border border-gray-200">
-                  <div className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">
-                    Quick Add
-                  </div>
+                <div className="bg-white rounded-xl p-4 border border-gray-200 shadow-sm">
+                  <label className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-3 block">
+                    Quick Add Task
+                  </label>
                   <div className="flex gap-2">
                     <input
                       type="text"
@@ -1041,118 +1145,91 @@ export default function UnifiedPanel({
                           handleQuickAddTask()
                         }
                       }}
-                      placeholder="New task..."
-                      className="flex-1 px-2.5 py-1.5 text-sm border border-gray-200 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                      placeholder="What needs to be done?"
+                      className="flex-1 px-4 py-2.5 text-sm border border-gray-200 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all"
                     />
                     <button
                       onClick={handleQuickAddTask}
                       disabled={!quickTaskTitle.trim()}
-                      className="px-2.5 py-1.5 bg-blue-600 text-white rounded-md hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                      className="px-4 py-2.5 bg-blue-600 text-white rounded-xl hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-all shadow-sm"
                       title="Add task"
                     >
-                      <Plus size={16} />
+                      <Plus size={18} />
                     </button>
                   </div>
                 </div>
 
                 {/* Task Stats */}
                 {taskStats && (
-                  <div className="bg-gradient-to-br from-blue-50 to-purple-50 rounded-lg p-3 border border-blue-200">
-                    <div className="grid grid-cols-3 gap-2 text-center">
-                      <div>
-                        <div className="text-lg font-bold text-blue-600">{taskStats.todo}</div>
-                        <div className="text-xs text-gray-600">To Do</div>
+                  <div className="bg-gradient-to-br from-blue-50 to-purple-50 rounded-xl p-4 border border-blue-100/50">
+                    <div className="grid grid-cols-4 gap-3 text-center">
+                      <div className="bg-white/80 rounded-xl p-3">
+                        <div className="text-2xl font-bold text-blue-600">{taskStats.todo}</div>
+                        <div className="text-xs text-gray-500 mt-1">To Do</div>
                       </div>
-                      <div>
-                        <div className="text-lg font-bold text-purple-600">{taskStats.in_progress}</div>
-                        <div className="text-xs text-gray-600">In Progress</div>
+                      <div className="bg-white/80 rounded-xl p-3">
+                        <div className="text-2xl font-bold text-purple-600">{taskStats.in_progress}</div>
+                        <div className="text-xs text-gray-500 mt-1">In Progress</div>
                       </div>
-                      <div>
-                        <div className="text-lg font-bold text-green-600">{taskStats.completed}</div>
-                        <div className="text-xs text-gray-600">Done</div>
+                      <div className="bg-white/80 rounded-xl p-3">
+                        <div className="text-2xl font-bold text-green-600">{taskStats.completed}</div>
+                        <div className="text-xs text-gray-500 mt-1">Done</div>
+                      </div>
+                      <div className="bg-white/80 rounded-xl p-3">
+                        <div className={`text-2xl font-bold ${taskStats.overdue > 0 ? 'text-red-600' : 'text-gray-400'}`}>
+                          {taskStats.overdue}
+                        </div>
+                        <div className="text-xs text-gray-500 mt-1">Overdue</div>
                       </div>
                     </div>
-                    {taskStats.overdue > 0 && (
-                      <div className="mt-2 pt-2 border-t border-blue-200">
-                        <div className="text-center">
-                          <div className="text-lg font-bold text-red-600">{taskStats.overdue}</div>
-                          <div className="text-xs text-gray-600">Overdue Tasks</div>
-                        </div>
-                      </div>
-                    )}
                   </div>
                 )}
 
-                {/* Task List */}
+                {/* Task List Section */}
                 <div>
-                  <div className="flex items-center justify-between mb-2">
-                    <div className="text-xs font-semibold text-gray-500 uppercase tracking-wide">
+                  <div className="flex items-center justify-between mb-4">
+                    <h3 className="text-sm font-semibold text-gray-700">
                       {note ? 'Tasks for this note' : 'Recent Tasks'}
-                    </div>
+                    </h3>
                   </div>
 
-                  {/* Task Filter Buttons */}
-                  <div className="flex gap-1 mb-3 flex-wrap">
-                    <button
-                      onClick={() => setTaskFilter('all')}
-                      className={`px-2 py-1 text-xs rounded-md transition-colors ${
-                        taskFilter === 'all'
-                          ? 'bg-blue-600 text-white'
-                          : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
-                      }`}
-                    >
-                      All
-                    </button>
-                    <button
-                      onClick={() => setTaskFilter('starred')}
-                      className={`px-2 py-1 text-xs rounded-md transition-colors flex items-center gap-1 ${
-                        taskFilter === 'starred'
-                          ? 'bg-yellow-500 text-white'
-                          : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
-                      }`}
-                    >
-                      <Star size={10} fill={taskFilter === 'starred' ? 'currentColor' : 'none'} />
-                      Starred
-                    </button>
-                    <button
-                      onClick={() => setTaskFilter('today')}
-                      className={`px-2 py-1 text-xs rounded-md transition-colors flex items-center gap-1 ${
-                        taskFilter === 'today'
-                          ? 'bg-blue-600 text-white'
-                          : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
-                      }`}
-                    >
-                      <Clock size={10} />
-                      Today
-                    </button>
-                    <button
-                      onClick={() => setTaskFilter('overdue')}
-                      className={`px-2 py-1 text-xs rounded-md transition-colors ${
-                        taskFilter === 'overdue'
-                          ? 'bg-red-600 text-white'
-                          : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
-                      }`}
-                    >
-                      Overdue
-                    </button>
+                  {/* Task Filters - Pill Style */}
+                  <div className="flex gap-2 mb-4 flex-wrap">
+                    {(['all', 'starred', 'today', 'overdue'] as const).map((filter) => (
+                      <button
+                        key={filter}
+                        onClick={() => setTaskFilter(filter)}
+                        className={`px-3 py-1.5 text-xs font-medium rounded-full transition-all flex items-center gap-1.5 ${
+                          taskFilter === filter
+                            ? filter === 'starred' ? 'bg-yellow-500 text-white' :
+                              filter === 'overdue' ? 'bg-red-500 text-white' :
+                              'bg-blue-600 text-white'
+                            : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+                        }`}
+                      >
+                        {filter === 'starred' && <Star size={12} fill={taskFilter === 'starred' ? 'currentColor' : 'none'} />}
+                        {filter === 'today' && <Clock size={12} />}
+                        {filter.charAt(0).toUpperCase() + filter.slice(1)}
+                      </button>
+                    ))}
                   </div>
 
                   {isLoadingTasks ? (
-                    <div className="text-center py-6">
-                      <Loader2 size={24} className="animate-spin mx-auto text-blue-600 mb-2" />
+                    <div className="text-center py-10">
+                      <Loader2 size={28} className="animate-spin mx-auto text-blue-600 mb-3" />
                       <p className="text-sm text-gray-500">Loading tasks...</p>
                     </div>
                   ) : filteredTasks.length === 0 ? (
-                    <div className="text-center py-6 bg-gray-50 rounded-lg border border-dashed border-gray-300">
-                      <CheckSquare size={32} className="mx-auto text-gray-300 mb-2" />
-                      <p className="text-sm text-gray-500">
+                    <div className="text-center py-10 bg-gray-50 rounded-xl border border-dashed border-gray-200">
+                      <CheckSquare size={40} className="mx-auto text-gray-300 mb-3" />
+                      <p className="text-sm font-medium text-gray-500">
                         {taskFilter === 'all' ? 'No tasks yet' : 
                          taskFilter === 'starred' ? 'No starred tasks' :
                          taskFilter === 'today' ? 'No tasks due today' :
                          'No overdue tasks'}
                       </p>
                       {taskFilter === 'all' && (
-                        <p className="text-xs text-gray-400 mt-1">Add one above to get started</p>
+                        <p className="text-xs text-gray-400 mt-2">Add your first task above</p>
                       )}
                     </div>
                   ) : (
@@ -1163,36 +1240,36 @@ export default function UnifiedPanel({
                         return (
                           <div
                             key={task.id}
-                            className="bg-white border border-gray-200 rounded-lg p-2.5 hover:shadow-sm transition-shadow"
+                            className="bg-white border border-gray-100 rounded-xl p-3.5 hover:shadow-md hover:border-gray-200 transition-all group"
                           >
-                            <div className="flex items-start gap-2">
+                            <div className="flex items-start gap-3">
                               <button
                                 onClick={() => handleToggleTaskComplete(task.id, task.status === 'completed')}
-                                className="mt-0.5 flex-shrink-0"
+                                className="mt-0.5 flex-shrink-0 transition-transform hover:scale-110"
                               >
                                 {task.status === 'completed' ? (
-                                  <CheckCircle2 size={16} className="text-green-600" />
+                                  <CheckCircle2 size={20} className="text-green-600" />
                                 ) : (
-                                  <Circle size={16} className="text-gray-400 hover:text-blue-600" />
+                                  <Circle size={20} className="text-gray-300 group-hover:text-blue-400" />
                                 )}
                               </button>
 
                               <div className="flex-1 min-w-0">
-                                <div className="flex items-start justify-between gap-2 mb-1">
-                                  <p className={`text-sm font-medium ${task.status === 'completed' ? 'line-through text-gray-500' : 'text-gray-900'}`}>
+                                <div className="flex items-start justify-between gap-2">
+                                  <p className={`text-sm font-medium ${task.status === 'completed' ? 'line-through text-gray-400' : 'text-gray-900'}`}>
                                     {task.title}
                                   </p>
                                   <button
                                     onClick={() => handleToggleTaskStar(task.id, task.is_starred)}
-                                    className={`flex-shrink-0 ${task.is_starred ? 'text-yellow-500' : 'text-gray-400 hover:text-yellow-500'}`}
+                                    className={`flex-shrink-0 transition-transform hover:scale-110 ${task.is_starred ? 'text-yellow-500' : 'text-gray-300 opacity-0 group-hover:opacity-100 hover:text-yellow-500'}`}
                                   >
-                                    <Star size={14} fill={task.is_starred ? 'currentColor' : 'none'} />
+                                    <Star size={16} fill={task.is_starred ? 'currentColor' : 'none'} />
                                   </button>
                                 </div>
 
-                                <div className="flex flex-wrap items-center gap-1.5 text-xs">
+                                <div className="flex flex-wrap items-center gap-2 mt-2 text-xs">
                                   {task.priority !== 'medium' && (
-                                    <span className={`px-1.5 py-0.5 rounded ${
+                                    <span className={`px-2 py-1 rounded-md font-medium ${
                                       task.priority === 'urgent' ? 'bg-red-100 text-red-700' :
                                       task.priority === 'high' ? 'bg-orange-100 text-orange-700' :
                                       'bg-gray-100 text-gray-600'
@@ -1202,10 +1279,10 @@ export default function UnifiedPanel({
                                   )}
                                   
                                   {task.due_date && (
-                                    <span className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded ${
+                                    <span className={`inline-flex items-center gap-1.5 px-2 py-1 rounded-md font-medium ${
                                       isOverdue ? 'bg-red-100 text-red-700' : 'bg-blue-100 text-blue-700'
                                     }`}>
-                                      <Clock size={10} />
+                                      <Clock size={12} />
                                       {new Date(task.due_date).toLocaleDateString('default', { month: 'short', day: 'numeric' })}
                                     </span>
                                   )}
@@ -1224,7 +1301,7 @@ export default function UnifiedPanel({
                               setIsOpen(false)
                             }
                           }}
-                          className="w-full px-3 py-2 text-sm text-blue-600 hover:bg-blue-50 rounded-lg transition-colors font-medium"
+                          className="w-full px-4 py-3 text-sm text-blue-600 hover:bg-blue-50 rounded-xl transition-colors font-semibold"
                         >
                           View all {filteredTasks.length} {taskFilter !== 'all' ? taskFilter : ''} tasks →
                         </button>
@@ -1236,19 +1313,24 @@ export default function UnifiedPanel({
             )}
 
             {activeTab === 'toc' && (
-              <div>
+              <div className="p-5">
                 {headings.length === 0 ? (
-                  <div className="text-center py-10 px-4">
-                    <ListTree size={40} className="mx-auto text-gray-300 mb-2" />
-                    <p className="text-sm text-gray-500">No headings in this note yet</p>
-                    <p className="text-xs text-gray-400 mt-1.5">Use H1, H2, or H3 to create headings</p>
+                  <div className="text-center py-14 px-4">
+                    <div className="w-16 h-16 rounded-2xl bg-gray-100 flex items-center justify-center mx-auto mb-4">
+                      <ListTree size={32} className="text-gray-400" />
+                    </div>
+                    <p className="text-base font-medium text-gray-600 mb-2">No headings yet</p>
+                    <p className="text-sm text-gray-400">Use H1, H2, or H3 to create headings</p>
                   </div>
                 ) : (
                   <>
-                    <div className="text-xs text-gray-500 mb-2 px-1">
-                      {headings.length} heading{headings.length !== 1 ? 's' : ''} found
+                    <div className="flex items-center justify-between mb-4">
+                      <h3 className="text-sm font-semibold text-gray-700">Table of Contents</h3>
+                      <span className="text-xs text-gray-500 bg-gray-100 px-2 py-1 rounded-md">
+                        {headings.length} heading{headings.length !== 1 ? 's' : ''}
+                      </span>
                     </div>
-                    <div className="space-y-0.5">
+                    <div className="space-y-1">
                       {headings.map((heading, index) => {
                         const levelLabel = heading.level === 1 ? 'H1' : heading.level === 2 ? 'H2' : 'H3'
                         return (
@@ -1258,13 +1340,18 @@ export default function UnifiedPanel({
                               onScrollToHeading(heading.id)
                               setIsOpen(false)
                             }}
-                            className="w-full text-left block px-2.5 py-1.5 text-sm hover:bg-blue-50 hover:text-blue-700 rounded-md transition-colors group"
-                            style={{ paddingLeft: `${(heading.level - 1) * 12 + 10}px` }}
+                            className="w-full text-left px-4 py-3 hover:bg-blue-50 hover:text-blue-700 rounded-xl transition-all group border border-transparent hover:border-blue-100"
+                            style={{ paddingLeft: `${(heading.level - 1) * 16 + 16}px` }}
                             title={`Jump to ${levelLabel}: ${heading.text}`}
                           >
-                            <div className="flex items-center gap-2">
-                              <span className="text-xs text-gray-400 group-hover:text-blue-500 font-mono">{levelLabel}</span>
-                              <span className="truncate block flex-1">{heading.text}</span>
+                            <div className="flex items-center gap-3">
+                              <span className={`text-xs font-mono px-2 py-1 rounded-md ${
+                                heading.level === 1 ? 'bg-blue-100 text-blue-600' :
+                                heading.level === 2 ? 'bg-purple-100 text-purple-600' :
+                                'bg-gray-100 text-gray-600'
+                              }`}>{levelLabel}</span>
+                              <span className="truncate block flex-1 text-sm font-medium">{heading.text}</span>
+                              <ChevronRight size={14} className="text-gray-400 opacity-0 group-hover:opacity-100 transition-opacity" />
                             </div>
                           </button>
                         )
@@ -1274,41 +1361,42 @@ export default function UnifiedPanel({
                 )}
               </div>
             )}
-          </div>
 
-          {/* Footer with search & stats */}
-          <div className="border-t border-gray-200 p-2.5 bg-gray-50">
-            {note && (
-              <>
-                <button
-                  onClick={() => {
-                    onSearch()
-                    setIsOpen(false)
-                  }}
-                  className="w-full mb-2 px-2.5 py-1.5 text-sm text-gray-700 bg-white border border-gray-200 rounded-md hover:bg-gray-50 transition-colors flex items-center gap-2 font-medium"
-                >
-                  <Search size={14} />
-                  Find & Replace
-                  <kbd className="ml-auto px-1.5 py-0.5 bg-gray-100 border border-gray-300 rounded text-xs text-gray-600">⌘F</kbd>
-                </button>
-                <div className="flex justify-between items-center text-xs text-gray-500 px-1">
-                  <div className="flex items-center gap-2.5">
-                    <span title="Word count">{stats.words} words</span>
-                    <span className="text-gray-300">•</span>
-                    <span title="Character count">{stats.characters} chars</span>
-                  </div>
-                  <span className="text-gray-400" title="Last modified">
-                    {new Date(note.updated_at).toLocaleDateString()}
-                  </span>
-                </div>
-              </>
-            )}
-            {!note && (
-              <div className="text-center text-xs text-gray-400 py-0.5">
-                Press <kbd className="px-1.5 py-0.5 bg-white border border-gray-300 rounded text-gray-600 font-mono">⌘\</kbd> to toggle menu
+            {activeTab === 'ai' && (
+              <div className="h-[calc(100%-1px)]">
+                <AIAssistant
+                  note={note}
+                  noteContent={noteContent}
+                  allNotes={allNotesForAI}
+                  mindmapData={mindmapData}
+                  selectedMindmapNodeId={selectedMindmapNodeId}
+                  tasks={tasks}
+                  taskStats={taskStats}
+                  events={calendarEvents}
+                  onInsertText={onInsertText}
+                  onReplaceText={onReplaceText}
+                  onCreateTask={onCreateTaskFromAI}
+                  onAddMindmapNode={onAddMindmapNode}
+                />
               </div>
             )}
           </div>
+
+          {/* Footer - Compact Stats */}
+          {note && activeTab !== 'ai' && (
+            <div className="border-t border-gray-100 px-5 py-3 bg-gray-50/50">
+              <div className="flex justify-between items-center text-xs text-gray-500">
+                <div className="flex items-center gap-4">
+                  <span>{stats.words.toLocaleString()} words</span>
+                  <span className="text-gray-300">•</span>
+                  <span>{stats.characters.toLocaleString()} characters</span>
+                </div>
+                <span title="Last modified">
+                  {new Date(note.updated_at).toLocaleDateString('default', { month: 'short', day: 'numeric', year: 'numeric' })}
+                </span>
+              </div>
+            </div>
+          )}
         </div>
       )}
 

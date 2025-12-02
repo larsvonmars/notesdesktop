@@ -104,6 +104,7 @@ interface NoteEditorWithPanelProps extends NoteEditorProps {
   onDeleteFolder?: (folderId: string) => void
   onMoveFolder?: (folderId: string, newParentId: string | null) => void
   notes?: LibNote[]
+  allNotes?: LibNote[]  // All notes for AI tool calling
   onSelectNote?: (note: LibNote) => void
   onNewNote?: (noteType?: 'rich-text' | 'drawing' | 'mindmap', folderId?: string | null, projectId?: string | null) => void
   onDuplicateNote?: (note: LibNote) => void
@@ -130,6 +131,7 @@ export default function NoteEditor({
   onDeleteFolder = () => {},
   onMoveFolder,
   notes = [],
+  allNotes,
   onSelectNote = () => {},
   onNewNote = () => {},
   onDuplicateNote,
@@ -1125,6 +1127,70 @@ export default function NoteEditor({
     { label: 'Redo', command: 'redo', icon: <Redo size={16} /> }
   ]
 
+  // AI Assistant handlers
+  const handleAIInsertText = useCallback((text: string) => {
+    if (noteType === 'rich-text' && editorRef.current) {
+      // Insert the HTML at the end of the current content
+      const currentHtml = editorRef.current.getHTML()
+      const newContent = currentHtml + text
+      handleContentChange(newContent)
+      toast.push({ title: 'Content inserted' })
+    }
+  }, [noteType, handleContentChange, toast])
+
+  const handleAIReplaceText = useCallback((text: string) => {
+    if (noteType === 'rich-text') {
+      handleContentChange(text)
+      toast.push({ title: 'Content replaced' })
+    }
+  }, [noteType, handleContentChange, toast])
+
+  const handleAIAddMindmapNode = useCallback((nodeText: string, description?: string) => {
+    if (noteType === 'mindmap' && mindmapEditorRef.current) {
+      // Get current data and add a new node
+      const currentData = mindmapEditorRef.current.getData()
+      const rootNode = currentData.nodes[currentData.rootId]
+      
+      const newNodeId = `node-${Date.now()}`
+      const childCount = rootNode.children.length
+      const angle = (Math.PI * 2 * childCount) / Math.max(childCount + 1, 4)
+      const distance = 150
+      const newX = rootNode.x + Math.cos(angle) * distance
+      const newY = rootNode.y + Math.sin(angle) * distance
+      
+      const colors = ['#3B82F6', '#10B981', '#F59E0B', '#EF4444', '#8B5CF6', '#EC4899', '#06B6D4', '#F97316']
+      const colorIndex = childCount % colors.length
+      
+      const newData = {
+        ...currentData,
+        nodes: {
+          ...currentData.nodes,
+          [currentData.rootId]: {
+            ...rootNode,
+            children: [...rootNode.children, newNodeId],
+          },
+          [newNodeId]: {
+            id: newNodeId,
+            text: nodeText,
+            x: newX,
+            y: newY,
+            parentId: currentData.rootId,
+            children: [],
+            collapsed: false,
+            color: colors[colorIndex],
+            description: description || '',
+            attachments: [],
+          },
+        },
+      }
+      
+      mindmapEditorRef.current.setData(newData)
+      setMindmapData(newData)
+      setHasChanges(true)
+      toast.push({ title: 'Node added to mindmap' })
+    }
+  }, [noteType, toast])
+
   return (
     <>
       {/* Unified Control Panel */}
@@ -1164,6 +1230,12 @@ export default function NoteEditor({
         onSignOut={onSignOut}
         autoOpenKey={autoOpenPanelKey}
         onOpenTaskCalendar={onOpenTaskCalendar}
+        noteContent={content}
+        mindmapData={mindmapData}
+        onInsertText={handleAIInsertText}
+        onReplaceText={handleAIReplaceText}
+        onAddMindmapNode={handleAIAddMindmapNode}
+        allNotes={allNotes}
       />
 
       {/* Clean Editor Area */}

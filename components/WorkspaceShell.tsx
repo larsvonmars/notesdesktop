@@ -15,6 +15,7 @@ type NoteCreationContext = {
 }
 import { useToast } from '@/components/ToastProvider'
 import {
+  getNotes,
   getNotesByFolder,
   createNote,
   updateNote,
@@ -40,6 +41,7 @@ function WorkspaceContent() {
   const searchParams = useSearchParams()
   const toast = useToast()
   const [notes, setNotes] = useState<Note[]>([])
+  const [allNotes, setAllNotes] = useState<Note[]>([])  // All notes for AI tool calling
   const [folders, setFolders] = useState<Folder[]>([])
   const [folderTree, setFolderTree] = useState<FolderNode[]>([])
   const [selectedFolderId, setSelectedFolderId] = useState<string | null>(null)
@@ -251,6 +253,23 @@ function WorkspaceContent() {
       setIsLoadingNotes(false)
     }
   }
+
+  // Load all notes for AI tool calling
+  const loadAllNotes = async () => {
+    try {
+      const fetchedNotes = await getNotes()
+      setAllNotes(fetchedNotes)
+    } catch (error) {
+      console.error('Error loading all notes:', error)
+    }
+  }
+
+  // Load all notes when user is authenticated
+  useEffect(() => {
+    if (user) {
+      loadAllNotes()
+    }
+  }, [user])
 
   const handleSaveNote = async (
     noteData: { title: string; content: string; note_type?: 'rich-text' | 'drawing' | 'mindmap' },
@@ -646,6 +665,7 @@ function WorkspaceContent() {
             onDeleteFolder={handleDeleteFolder}
             onMoveFolder={handleMoveFolder}
             notes={notes}
+            allNotes={allNotes}
             onSelectNote={handleSelectNote}
             onNewNote={handleNewNote}
             onDuplicateNote={handleDuplicateNote}
