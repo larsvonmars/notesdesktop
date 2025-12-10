@@ -1449,70 +1449,88 @@ const RichTextEditor = forwardRef<RichTextEditorHandle, RichTextEditorProps>(
     }, [disabled, saveSelection])
 
     const applyLink = useCallback(() => {
-      // Validate URL
-      const validation = validateUrl(linkUrl)
-      if (!validation.valid) {
-        setLinkUrlError(validation.error)
-        return
-      }
+      try {
+        // Validate URL
+        const validation = validateUrl(linkUrl)
+        if (!validation.valid) {
+          setLinkUrlError(validation.error)
+          return
+        }
 
-      const normalizedUrl = normalizeUrl(linkUrl)
-      
-      restoreSelection()
-
-      const selection = window.getSelection()
-      if (!selection || selection.rangeCount === 0) return
-
-      const range = selection.getRangeAt(0)
-      
-      let node = range.commonAncestorContainer
-      if (node.nodeType === Node.TEXT_NODE) {
-        node = node.parentNode!
-      }
-      const existingLink = (node as Element).closest('a')
-      
-      if (existingLink) {
-        existingLink.setAttribute('href', normalizedUrl)
-        existingLink.textContent = linkText || normalizedUrl
-        existingLink.className = 'text-blue-600 hover:text-blue-800 underline decoration-blue-400 decoration-2 underline-offset-2 transition-colors cursor-pointer inline-flex items-center gap-1'
-      } else {
-        const link = document.createElement('a')
-        link.href = normalizedUrl
-        link.target = '_blank'
-        link.rel = 'noopener noreferrer'
-        link.className = 'text-blue-600 hover:text-blue-800 underline decoration-blue-400 decoration-2 underline-offset-2 transition-colors cursor-pointer inline-flex items-center gap-1'
-        link.textContent = linkText || normalizedUrl
-
-        if (range.collapsed) {
-          range.insertNode(link)
-        } else {
-          range.deleteContents()
-          range.insertNode(link)
+        const normalizedUrl = normalizeUrl(linkUrl)
+        
+        // Additional safety check
+        if (!normalizedUrl) {
+          setLinkUrlError('Invalid URL')
+          return
         }
         
-        // Position cursor after the link for better UX
+        restoreSelection()
+
+        const selection = window.getSelection()
+        if (!selection || selection.rangeCount === 0) {
+          console.warn('No selection available for link insertion')
+          return
+        }
+
+        const range = selection.getRangeAt(0)
+        
+        let node = range.commonAncestorContainer
+        if (node.nodeType === Node.TEXT_NODE) {
+          node = node.parentNode!
+        }
+        const existingLink = (node as Element).closest('a')
+        
+        if (existingLink) {
+          existingLink.setAttribute('href', normalizedUrl)
+          existingLink.textContent = linkText || normalizedUrl
+          existingLink.className = 'text-blue-600 hover:text-blue-800 underline decoration-blue-400 decoration-2 underline-offset-2 transition-colors cursor-pointer inline-flex items-center gap-1'
+        } else {
+          const link = document.createElement('a')
+          link.href = normalizedUrl
+          link.target = '_blank'
+          link.rel = 'noopener noreferrer'
+          link.className = 'text-blue-600 hover:text-blue-800 underline decoration-blue-400 decoration-2 underline-offset-2 transition-colors cursor-pointer inline-flex items-center gap-1'
+          link.textContent = linkText || normalizedUrl
+
+          if (range.collapsed) {
+            range.insertNode(link)
+          } else {
+            range.deleteContents()
+            range.insertNode(link)
+          }
+          
+          // Position cursor after the link for better UX
+          applyCursorOperation(() => {
+            try {
+              const newRange = document.createRange()
+              newRange.setStartAfter(link)
+              newRange.collapse(true)
+              selection.removeAllRanges()
+              selection.addRange(newRange)
+            } catch (error) {
+              console.warn('Error positioning cursor after link:', error)
+            }
+          }, CURSOR_TIMING.SHORT)
+        }
+
+        // Add to recent links
+        addToRecentLinks(normalizedUrl, linkText || normalizedUrl)
+
+        setShowLinkDialog(false)
+        setLinkUrl('')
+        setLinkText('')
+        setLinkUrlError('')
+        emitChange()
+        
+        // Ensure focus returns to editor
         applyCursorOperation(() => {
-          const newRange = document.createRange()
-          newRange.setStartAfter(link)
-          newRange.collapse(true)
-          selection.removeAllRanges()
-          selection.addRange(newRange)
-        }, CURSOR_TIMING.SHORT)
+          editorRef.current?.focus()
+        }, CURSOR_TIMING.MEDIUM)
+      } catch (error) {
+        console.error('Error applying link:', error)
+        setLinkUrlError('Failed to create link')
       }
-
-      // Add to recent links
-      addToRecentLinks(normalizedUrl, linkText || normalizedUrl)
-
-      setShowLinkDialog(false)
-      setLinkUrl('')
-      setLinkText('')
-      setLinkUrlError('')
-      emitChange()
-      
-      // Ensure focus returns to editor
-      applyCursorOperation(() => {
-        editorRef.current?.focus()
-      }, CURSOR_TIMING.MEDIUM)
     }, [linkUrl, linkText, restoreSelection, emitChange, validateUrl, normalizeUrl, addToRecentLinks])
 
     // Show link popover on hover
@@ -1722,33 +1740,45 @@ const RichTextEditor = forwardRef<RichTextEditorHandle, RichTextEditorProps>(
     }, [searchQuery, caseSensitive, highlightMatch])
 
     const nextMatch = useCallback(() => {
-      if (searchMatches.length === 0) return
-      const nextIndex = (currentMatchIndex + 1) % searchMatches.length
-      setCurrentMatchIndex(nextIndex)
-      highlightMatch(nextIndex)
+      try {
+        if (searchMatches.length === 0) return
+        const nextIndex = (currentMatchIndex + 1) % searchMatches.length
+        setCurrentMatchIndex(nextIndex)
+        highlightMatch(nextIndex)
+      } catch (error) {
+        console.error('Error navigating to next match:', error)
+      }
     }, [currentMatchIndex, searchMatches, highlightMatch])
 
     const previousMatch = useCallback(() => {
-      if (searchMatches.length === 0) return
-      const prevIndex = (currentMatchIndex - 1 + searchMatches.length) % searchMatches.length
-      setCurrentMatchIndex(prevIndex)
-      highlightMatch(prevIndex)
+      try {
+        if (searchMatches.length === 0) return
+        const prevIndex = (currentMatchIndex - 1 + searchMatches.length) % searchMatches.length
+        setCurrentMatchIndex(prevIndex)
+        highlightMatch(prevIndex)
+      } catch (error) {
+        console.error('Error navigating to previous match:', error)
+      }
     }, [currentMatchIndex, searchMatches, highlightMatch])
 
     const replaceCurrentMatch = useCallback(() => {
       if (searchMatches.length === 0 || !editorRef.current) return
       
-      highlightMatch(currentMatchIndex)
-      const replaced = insertPlainTextAtSelection(replaceQuery)
+      try {
+        highlightMatch(currentMatchIndex)
+        const replaced = insertPlainTextAtSelection(replaceQuery)
 
-      if (replaced) {
-        normalizeEditorContent(editorRef.current)
-        mergeAdjacentLists(editorRef.current)
-        scheduleChecklistNormalization()
+        if (replaced) {
+          normalizeEditorContent(editorRef.current)
+          mergeAdjacentLists(editorRef.current)
+          scheduleChecklistNormalization()
+        }
+        
+        emitChange()
+        performSearch()
+      } catch (error) {
+        console.error('Error replacing current match:', error)
       }
-      
-      emitChange()
-      performSearch()
     }, [currentMatchIndex, replaceQuery, searchMatches, highlightMatch, insertPlainTextAtSelection, emitChange, performSearch, scheduleChecklistNormalization])
 
     const replaceAllMatches = useCallback(() => {
@@ -2067,21 +2097,50 @@ const RichTextEditor = forwardRef<RichTextEditorHandle, RichTextEditorProps>(
     useEffect(() => {
       if (!editorRef.current) return
 
-      const editorEl = editorRef.current
-      const sanitizedValue = sanitize(value || '')
-
-      if (lastSyncedValueRef.current !== sanitizedValue) {
-        editorEl.innerHTML = sanitizedValue
-        lastSyncedValueRef.current = sanitizedValue
-        if (historyManagerRef.current) {
-          historyManagerRef.current.capture()
+      try {
+        const editorEl = editorRef.current
+        
+        // Validate editor is still connected to DOM
+        if (!editorEl.isConnected) {
+          console.warn('Editor not connected to DOM during value sync')
+          return
         }
-      }
+        
+        const sanitizedValue = sanitize(value || '')
 
-      scheduleChecklistNormalization()
-      // attempt to rehydrate any custom blocks that came from loaded HTML
-      rehydrateExistingBlocks()
-      updateBlockMetadata()
+        // Only update if value has actually changed to prevent unnecessary renders
+        if (lastSyncedValueRef.current !== sanitizedValue) {
+          // Store cursor position before update
+          const savedCursorPos = saveCursorPosition(editorEl)
+          
+          editorEl.innerHTML = sanitizedValue
+          lastSyncedValueRef.current = sanitizedValue
+          
+          // Restore cursor position after update if it was valid
+          if (savedCursorPos) {
+            try {
+              restoreCursorPosition(savedCursorPos, editorEl)
+            } catch (error) {
+              console.warn('Could not restore cursor position:', error)
+            }
+          }
+          
+          if (historyManagerRef.current) {
+            try {
+              historyManagerRef.current.capture()
+            } catch (error) {
+              console.error('Error capturing history:', error)
+            }
+          }
+        }
+
+        scheduleChecklistNormalization()
+        // attempt to rehydrate any custom blocks that came from loaded HTML
+        rehydrateExistingBlocks()
+        updateBlockMetadata()
+      } catch (error) {
+        console.error('Error synchronizing editor value:', error)
+      }
     }, [sanitize, value, scheduleChecklistNormalization, rehydrateExistingBlocks, updateBlockMetadata])
 
     useEffect(() => {
@@ -2224,7 +2283,6 @@ const RichTextEditor = forwardRef<RichTextEditorHandle, RichTextEditorProps>(
               }
             }
           }
-        }
         } catch (error) {
           console.error('Error in autoformatting:', error)
         }
