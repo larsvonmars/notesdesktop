@@ -208,6 +208,13 @@ interface BlockMetadata {
   index: number
 }
 
+// Performance limits
+const MAX_SEARCH_MATCHES = 1000
+const MAX_REPLACE_MATCHES = 1000
+
+// Regex patterns
+const REGEX_ESCAPE_PATTERN = /[.*+?^${}()|[\]\\]/g
+
 const splitLinesToFragment = (text: string): DocumentFragment => {
   const fragment = document.createDocumentFragment()
   const lines = text.split(/\r?\n|\r/g)
@@ -417,46 +424,58 @@ const RichTextEditor = forwardRef<RichTextEditorHandle, RichTextEditorProps>(
         (fragment: DocumentFragment) => {
           if (!editorRef.current) return false
 
-          let selection = window.getSelection()
-          if (!selection || selection.rangeCount === 0) {
-            editorRef.current.focus()
-            selection = window.getSelection()
-          }
+          try {
+            let selection = window.getSelection()
+            if (!selection || selection.rangeCount === 0) {
+              editorRef.current.focus()
+              selection = window.getSelection()
+            }
 
-          if (!selection || selection.rangeCount === 0) {
+            if (!selection || selection.rangeCount === 0) {
+              console.warn('Unable to get selection for fragment insertion')
+              return false
+            }
+
+            const range = selection.getRangeAt(0)
+
+            // Validate range is within editor
+            if (!editorRef.current.contains(range.commonAncestorContainer)) {
+              console.warn('Selection range is outside editor')
+              return false
+            }
+
+            range.deleteContents()
+
+            const nodes = Array.from(fragment.childNodes)
+
+            if (nodes.length === 0) {
+              range.collapse(true)
+              selection.removeAllRanges()
+              selection.addRange(range)
+              return true
+            }
+
+            range.insertNode(fragment)
+
+            const lastNode = nodes[nodes.length - 1]
+            const newRange = document.createRange()
+
+            if (lastNode.nodeType === Node.TEXT_NODE) {
+              newRange.setStart(lastNode, lastNode.textContent?.length ?? 0)
+            } else if (lastNode.childNodes.length > 0) {
+              newRange.setStart(lastNode, lastNode.childNodes.length)
+            } else {
+              newRange.setStartAfter(lastNode)
+            }
+
+            newRange.collapse(true)
+            selection.removeAllRanges()
+            selection.addRange(newRange)
+            return true
+          } catch (error) {
+            console.error('Error inserting fragment at selection:', error)
             return false
           }
-
-          const range = selection.getRangeAt(0)
-
-          range.deleteContents()
-
-          const nodes = Array.from(fragment.childNodes)
-
-          if (nodes.length === 0) {
-            range.collapse(true)
-            selection.removeAllRanges()
-            selection.addRange(range)
-            return true
-          }
-
-          range.insertNode(fragment)
-
-          const lastNode = nodes[nodes.length - 1]
-          const newRange = document.createRange()
-
-          if (lastNode.nodeType === Node.TEXT_NODE) {
-            newRange.setStart(lastNode, lastNode.textContent?.length ?? 0)
-          } else if (lastNode.childNodes.length > 0) {
-            newRange.setStart(lastNode, lastNode.childNodes.length)
-          } else {
-            newRange.setStartAfter(lastNode)
-          }
-
-          newRange.collapse(true)
-          selection.removeAllRanges()
-          selection.addRange(newRange)
-          return true
         },
         [editorRef]
       )
@@ -618,16 +637,29 @@ const RichTextEditor = forwardRef<RichTextEditorHandle, RichTextEditorProps>(
 
     const emitChange = useCallback(() => {
       if (!editorRef.current) return
-      const sanitized = sanitize(editorRef.current.innerHTML)
-      lastSyncedValueRef.current = sanitized
-      if (sanitized !== value) {
-        onChange(sanitized)
-        if (debouncedCaptureRef.current) {
-          debouncedCaptureRef.current()
+      
+      try {
+        // Validate editor is still connected
+        if (!editorRef.current.isConnected) {
+          console.warn('Editor disconnected, skipping change emission')
+          return
         }
+        
+        const sanitized = sanitize(editorRef.current.innerHTML)
+        lastSyncedValueRef.current = sanitized
+        
+        if (sanitized !== value) {
+          onChange(sanitized)
+          if (debouncedCaptureRef.current) {
+            debouncedCaptureRef.current()
+          }
+        }
+        
+        updateBlockMetadata()
+        scheduleActiveFormatsUpdate()
+      } catch (error) {
+        console.error('Error emitting change:', error)
       }
-      updateBlockMetadata()
-      scheduleActiveFormatsUpdate()
     }, [onChange, sanitize, updateBlockMetadata, value, scheduleActiveFormatsUpdate])
 
     // Public API: insert a custom block by type and optional payload
@@ -1313,21 +1345,39 @@ const RichTextEditor = forwardRef<RichTextEditorHandle, RichTextEditorProps>(
       }
 
       try {
+        const trimmed = url.trim()
+        const lowerTrimmed = trimmed.toLowerCase()
+        
+        // Check for common XSS patterns
+        if (lowerTrimmed.startsWith('javascript:') || 
+            lowerTrimmed.startsWith('data:') ||
+            lowerTrimmed.startsWith('vbscript:')) {
+          return { valid: false, error: 'Invalid or dangerous protocol' }
+        }
+        
         // Add protocol if missing
-        let testUrl = url.trim()
+        let testUrl = trimmed
         if (!testUrl.match(/^[a-zA-Z][a-zA-Z\d+\-.]*:/)) {
           testUrl = 'https://' + testUrl
         }
         
         const urlObj = new URL(testUrl)
         
-        // Check for valid protocols
+        // Check for valid protocols only
         if (!['http:', 'https:', 'mailto:', 'tel:'].includes(urlObj.protocol)) {
           return { valid: false, error: 'Invalid protocol. Use http, https, mailto, or tel' }
         }
         
+        // Additional validation for http/https
+        if (['http:', 'https:'].includes(urlObj.protocol)) {
+          if (!urlObj.hostname || urlObj.hostname.length < 2) {
+            return { valid: false, error: 'Invalid hostname' }
+          }
+        }
+        
         return { valid: true, error: '' }
-      } catch {
+      } catch (error) {
+        console.error('URL validation error:', error)
         return { valid: false, error: 'Invalid URL format' }
       }
     }, [])
@@ -1336,6 +1386,15 @@ const RichTextEditor = forwardRef<RichTextEditorHandle, RichTextEditorProps>(
     const normalizeUrl = useCallback((url: string): string => {
       const trimmed = url.trim()
       if (!trimmed) return trimmed
+      
+      const lowerTrimmed = trimmed.toLowerCase()
+      
+      // Prevent XSS through URL
+      if (lowerTrimmed.startsWith('javascript:') || 
+          lowerTrimmed.startsWith('data:') ||
+          lowerTrimmed.startsWith('vbscript:')) {
+        return ''
+      }
       
       if (!trimmed.match(/^[a-zA-Z][a-zA-Z\d+\-.]*:/)) {
         return 'https://' + trimmed
@@ -1400,70 +1459,88 @@ const RichTextEditor = forwardRef<RichTextEditorHandle, RichTextEditorProps>(
     }, [disabled, saveSelection])
 
     const applyLink = useCallback(() => {
-      // Validate URL
-      const validation = validateUrl(linkUrl)
-      if (!validation.valid) {
-        setLinkUrlError(validation.error)
-        return
-      }
+      try {
+        // Validate URL
+        const validation = validateUrl(linkUrl)
+        if (!validation.valid) {
+          setLinkUrlError(validation.error)
+          return
+        }
 
-      const normalizedUrl = normalizeUrl(linkUrl)
-      
-      restoreSelection()
-
-      const selection = window.getSelection()
-      if (!selection || selection.rangeCount === 0) return
-
-      const range = selection.getRangeAt(0)
-      
-      let node = range.commonAncestorContainer
-      if (node.nodeType === Node.TEXT_NODE) {
-        node = node.parentNode!
-      }
-      const existingLink = (node as Element).closest('a')
-      
-      if (existingLink) {
-        existingLink.setAttribute('href', normalizedUrl)
-        existingLink.textContent = linkText || normalizedUrl
-        existingLink.className = 'text-blue-600 hover:text-blue-800 underline decoration-blue-400 decoration-2 underline-offset-2 transition-colors cursor-pointer inline-flex items-center gap-1'
-      } else {
-        const link = document.createElement('a')
-        link.href = normalizedUrl
-        link.target = '_blank'
-        link.rel = 'noopener noreferrer'
-        link.className = 'text-blue-600 hover:text-blue-800 underline decoration-blue-400 decoration-2 underline-offset-2 transition-colors cursor-pointer inline-flex items-center gap-1'
-        link.textContent = linkText || normalizedUrl
-
-        if (range.collapsed) {
-          range.insertNode(link)
-        } else {
-          range.deleteContents()
-          range.insertNode(link)
+        const normalizedUrl = normalizeUrl(linkUrl)
+        
+        // Additional safety check
+        if (!normalizedUrl) {
+          setLinkUrlError('Invalid URL')
+          return
         }
         
-        // Position cursor after the link for better UX
+        restoreSelection()
+
+        const selection = window.getSelection()
+        if (!selection || selection.rangeCount === 0) {
+          console.warn('No selection available for link insertion')
+          return
+        }
+
+        const range = selection.getRangeAt(0)
+        
+        let node = range.commonAncestorContainer
+        if (node.nodeType === Node.TEXT_NODE) {
+          node = node.parentNode!
+        }
+        const existingLink = (node as Element).closest('a')
+        
+        if (existingLink) {
+          existingLink.setAttribute('href', normalizedUrl)
+          existingLink.textContent = linkText || normalizedUrl
+          existingLink.className = 'text-blue-600 hover:text-blue-800 underline decoration-blue-400 decoration-2 underline-offset-2 transition-colors cursor-pointer inline-flex items-center gap-1'
+        } else {
+          const link = document.createElement('a')
+          link.href = normalizedUrl
+          link.target = '_blank'
+          link.rel = 'noopener noreferrer'
+          link.className = 'text-blue-600 hover:text-blue-800 underline decoration-blue-400 decoration-2 underline-offset-2 transition-colors cursor-pointer inline-flex items-center gap-1'
+          link.textContent = linkText || normalizedUrl
+
+          if (range.collapsed) {
+            range.insertNode(link)
+          } else {
+            range.deleteContents()
+            range.insertNode(link)
+          }
+          
+          // Position cursor after the link for better UX
+          applyCursorOperation(() => {
+            try {
+              const newRange = document.createRange()
+              newRange.setStartAfter(link)
+              newRange.collapse(true)
+              selection.removeAllRanges()
+              selection.addRange(newRange)
+            } catch (error) {
+              console.warn('Error positioning cursor after link:', error)
+            }
+          }, CURSOR_TIMING.SHORT)
+        }
+
+        // Add to recent links
+        addToRecentLinks(normalizedUrl, linkText || normalizedUrl)
+
+        setShowLinkDialog(false)
+        setLinkUrl('')
+        setLinkText('')
+        setLinkUrlError('')
+        emitChange()
+        
+        // Ensure focus returns to editor
         applyCursorOperation(() => {
-          const newRange = document.createRange()
-          newRange.setStartAfter(link)
-          newRange.collapse(true)
-          selection.removeAllRanges()
-          selection.addRange(newRange)
-        }, CURSOR_TIMING.SHORT)
+          editorRef.current?.focus()
+        }, CURSOR_TIMING.MEDIUM)
+      } catch (error) {
+        console.error('Error applying link:', error)
+        setLinkUrlError('Failed to create link')
       }
-
-      // Add to recent links
-      addToRecentLinks(normalizedUrl, linkText || normalizedUrl)
-
-      setShowLinkDialog(false)
-      setLinkUrl('')
-      setLinkText('')
-      setLinkUrlError('')
-      emitChange()
-      
-      // Ensure focus returns to editor
-      applyCursorOperation(() => {
-        editorRef.current?.focus()
-      }, CURSOR_TIMING.MEDIUM)
     }, [linkUrl, linkText, restoreSelection, emitChange, validateUrl, normalizeUrl, addToRecentLinks])
 
     // Show link popover on hover
@@ -1576,114 +1653,181 @@ const RichTextEditor = forwardRef<RichTextEditorHandle, RichTextEditorProps>(
     const highlightMatch = useCallback((matchIndex: number) => {
       if (!editorRef.current || matchIndex < 0 || matchIndex >= searchMatches.length) return
 
-      const match = searchMatches[matchIndex]
-      const range = document.createRange()
-      const selection = window.getSelection()
-      
-      const walker = document.createTreeWalker(
-        editorRef.current,
-        NodeFilter.SHOW_TEXT,
-        null
-      )
-
-      let currentPos = 0
-      let node = walker.nextNode()
-
-      while (node) {
-        const nodeLength = node.textContent?.length || 0
-        if (currentPos + nodeLength > match.index) {
-          const offset = match.index - currentPos
-          range.setStart(node, offset)
-          range.setEnd(node, offset + match.length)
-          break
+      try {
+        const match = searchMatches[matchIndex]
+        const range = document.createRange()
+        const selection = window.getSelection()
+        
+        if (!selection) {
+          console.warn('No selection available for highlighting match')
+          return
         }
-        currentPos += nodeLength
-        node = walker.nextNode()
-      }
+        
+        const walker = document.createTreeWalker(
+          editorRef.current,
+          NodeFilter.SHOW_TEXT,
+          null
+        )
 
-      selection?.removeAllRanges()
-      selection?.addRange(range)
-      
-      range.startContainer.parentElement?.scrollIntoView({
-        behavior: 'smooth',
-        block: 'center'
-      })
+        let currentPos = 0
+        let node = walker.nextNode()
+
+        while (node) {
+          const nodeLength = node.textContent?.length || 0
+          if (currentPos + nodeLength > match.index) {
+            const rawOffset = match.index - currentPos
+            const offset = Math.max(0, Math.min(rawOffset, nodeLength))
+            const endOffset = Math.min(offset + match.length, nodeLength)
+            
+            // Set range with clamped offsets
+            range.setStart(node, offset)
+            range.setEnd(node, endOffset)
+            break
+          }
+          currentPos += nodeLength
+          node = walker.nextNode()
+        }
+
+        selection.removeAllRanges()
+        selection.addRange(range)
+        
+        // Safely scroll into view
+        const containerElement = range.startContainer.parentElement
+        if (containerElement && containerElement.scrollIntoView) {
+          containerElement.scrollIntoView({
+            behavior: 'smooth',
+            block: 'center'
+          })
+        }
+      } catch (error) {
+        console.error('Error highlighting match:', error)
+      }
     }, [searchMatches])
 
     const performSearch = useCallback(() => {
-      if (!editorRef.current || !searchQuery) {
+      try {
+        if (!editorRef.current || !searchQuery) {
+          setSearchMatches([])
+          return
+        }
+
+        const content = editorRef.current.textContent || ''
+        const query = caseSensitive ? searchQuery : searchQuery.toLowerCase()
+        const searchIn = caseSensitive ? content : content.toLowerCase()
+        
+        const matches: SearchMatch[] = []
+        let index = searchIn.indexOf(query)
+        
+        // Limit matches to prevent performance issues
+        let matchCount = 0
+        
+        while (index !== -1 && matchCount < MAX_SEARCH_MATCHES) {
+          matches.push({
+            index,
+            length: searchQuery.length,
+            text: content.substring(index, index + searchQuery.length)
+          })
+          index = searchIn.indexOf(query, index + 1)
+          matchCount++
+        }
+
+        if (matchCount >= MAX_SEARCH_MATCHES) {
+          console.warn(`Search limited to ${MAX_SEARCH_MATCHES} matches`)
+        }
+
+        setSearchMatches(matches)
+        setCurrentMatchIndex(0)
+        
+        if (matches.length > 0) {
+          highlightMatch(0)
+        }
+      } catch (error) {
+        console.error('Error performing search:', error)
         setSearchMatches([])
-        return
-      }
-
-      const content = editorRef.current.textContent || ''
-      const query = caseSensitive ? searchQuery : searchQuery.toLowerCase()
-      const searchIn = caseSensitive ? content : content.toLowerCase()
-      
-      const matches: SearchMatch[] = []
-      let index = searchIn.indexOf(query)
-      
-      while (index !== -1) {
-        matches.push({
-          index,
-          length: searchQuery.length,
-          text: content.substr(index, searchQuery.length)
-        })
-        index = searchIn.indexOf(query, index + 1)
-      }
-
-      setSearchMatches(matches)
-      setCurrentMatchIndex(0)
-      
-      if (matches.length > 0) {
-        highlightMatch(0)
       }
     }, [searchQuery, caseSensitive, highlightMatch])
 
     const nextMatch = useCallback(() => {
-      if (searchMatches.length === 0) return
-      const nextIndex = (currentMatchIndex + 1) % searchMatches.length
-      setCurrentMatchIndex(nextIndex)
-      highlightMatch(nextIndex)
+      try {
+        if (searchMatches.length === 0) return
+        const nextIndex = (currentMatchIndex + 1) % searchMatches.length
+        setCurrentMatchIndex(nextIndex)
+        highlightMatch(nextIndex)
+      } catch (error) {
+        console.error('Error navigating to next match:', error)
+      }
     }, [currentMatchIndex, searchMatches, highlightMatch])
 
     const previousMatch = useCallback(() => {
-      if (searchMatches.length === 0) return
-      const prevIndex = (currentMatchIndex - 1 + searchMatches.length) % searchMatches.length
-      setCurrentMatchIndex(prevIndex)
-      highlightMatch(prevIndex)
+      try {
+        if (searchMatches.length === 0) return
+        const prevIndex = (currentMatchIndex - 1 + searchMatches.length) % searchMatches.length
+        setCurrentMatchIndex(prevIndex)
+        highlightMatch(prevIndex)
+      } catch (error) {
+        console.error('Error navigating to previous match:', error)
+      }
     }, [currentMatchIndex, searchMatches, highlightMatch])
 
     const replaceCurrentMatch = useCallback(() => {
       if (searchMatches.length === 0 || !editorRef.current) return
       
-      highlightMatch(currentMatchIndex)
-      const replaced = insertPlainTextAtSelection(replaceQuery)
+      try {
+        highlightMatch(currentMatchIndex)
+        const replaced = insertPlainTextAtSelection(replaceQuery)
 
-      if (replaced) {
-        normalizeEditorContent(editorRef.current)
-        mergeAdjacentLists(editorRef.current)
-        scheduleChecklistNormalization()
+        if (replaced) {
+          normalizeEditorContent(editorRef.current)
+          mergeAdjacentLists(editorRef.current)
+          scheduleChecklistNormalization()
+        }
+        
+        emitChange()
+        performSearch()
+      } catch (error) {
+        console.error('Error replacing current match:', error)
       }
-      
-      emitChange()
-      performSearch()
     }, [currentMatchIndex, replaceQuery, searchMatches, highlightMatch, insertPlainTextAtSelection, emitChange, performSearch, scheduleChecklistNormalization])
 
     const replaceAllMatches = useCallback(() => {
       if (!editorRef.current || !searchQuery) return
       
-      const content = editorRef.current.innerHTML
-      const flags = caseSensitive ? 'g' : 'gi'
-      const regex = new RegExp(searchQuery.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), flags)
-      const newContent = content.replace(regex, replaceQuery)
-      
-      editorRef.current.innerHTML = newContent
-      normalizeEditorContent(editorRef.current)
-      mergeAdjacentLists(editorRef.current)
-      scheduleChecklistNormalization()
-      emitChange()
-      performSearch()
+      try {
+        const content = editorRef.current.innerHTML
+        const flags = caseSensitive ? 'g' : 'gi'
+        
+        // Escape special regex characters
+        const escapedQuery = searchQuery.replace(REGEX_ESCAPE_PATTERN, '\\$&')
+        
+        // Count matches efficiently without creating array
+        const searchIn = caseSensitive ? content : content.toLowerCase()
+        const queryLower = caseSensitive ? escapedQuery : escapedQuery.toLowerCase()
+        let matchCount = 0
+        let pos = searchIn.indexOf(queryLower)
+        
+        while (pos !== -1 && matchCount < MAX_REPLACE_MATCHES) {
+          matchCount++
+          pos = searchIn.indexOf(queryLower, pos + 1)
+        }
+        
+        if (matchCount >= MAX_REPLACE_MATCHES) {
+          console.warn(`Too many matches (${matchCount}+) for replace all operation, limit is ${MAX_REPLACE_MATCHES}`)
+          return
+        }
+        
+        // Perform the replacement
+        const regex = new RegExp(escapedQuery, flags)
+        const newContent = content.replace(regex, replaceQuery)
+        
+        editorRef.current.innerHTML = newContent
+        normalizeEditorContent(editorRef.current)
+        mergeAdjacentLists(editorRef.current)
+        scheduleChecklistNormalization()
+        emitChange()
+        performSearch()
+      } catch (error) {
+        console.error('Error replacing all matches:', error)
+      }
     }, [searchQuery, replaceQuery, caseSensitive, emitChange, performSearch, scheduleChecklistNormalization])
 
     // Horizontal rule
@@ -1971,21 +2115,50 @@ const RichTextEditor = forwardRef<RichTextEditorHandle, RichTextEditorProps>(
     useEffect(() => {
       if (!editorRef.current) return
 
-      const editorEl = editorRef.current
-      const sanitizedValue = sanitize(value || '')
-
-      if (lastSyncedValueRef.current !== sanitizedValue) {
-        editorEl.innerHTML = sanitizedValue
-        lastSyncedValueRef.current = sanitizedValue
-        if (historyManagerRef.current) {
-          historyManagerRef.current.capture()
+      try {
+        const editorEl = editorRef.current
+        
+        // Validate editor is still connected to DOM
+        if (!editorEl.isConnected) {
+          console.warn('Editor not connected to DOM during value sync')
+          return
         }
-      }
+        
+        const sanitizedValue = sanitize(value || '')
 
-      scheduleChecklistNormalization()
-      // attempt to rehydrate any custom blocks that came from loaded HTML
-      rehydrateExistingBlocks()
-      updateBlockMetadata()
+        // Only update if value has actually changed to prevent unnecessary renders
+        if (lastSyncedValueRef.current !== sanitizedValue) {
+          // Store cursor position before update
+          const savedCursorPos = saveCursorPosition(editorEl)
+          
+          editorEl.innerHTML = sanitizedValue
+          lastSyncedValueRef.current = sanitizedValue
+          
+          // Restore cursor position after update if it was valid
+          if (savedCursorPos) {
+            try {
+              restoreCursorPosition(savedCursorPos, editorEl)
+            } catch (error) {
+              console.warn('Could not restore cursor position:', error)
+            }
+          }
+          
+          if (historyManagerRef.current) {
+            try {
+              historyManagerRef.current.capture()
+            } catch (error) {
+              console.error('Error capturing history:', error)
+            }
+          }
+        }
+
+        scheduleChecklistNormalization()
+        // attempt to rehydrate any custom blocks that came from loaded HTML
+        rehydrateExistingBlocks()
+        updateBlockMetadata()
+      } catch (error) {
+        console.error('Error synchronizing editor value:', error)
+      }
     }, [sanitize, value, scheduleChecklistNormalization, rehydrateExistingBlocks, updateBlockMetadata])
 
     useEffect(() => {
@@ -2035,206 +2208,242 @@ const RichTextEditor = forwardRef<RichTextEditorHandle, RichTextEditorProps>(
       }
     }, [emitChange])
 
-    const handleInput = () => emitChange()
+    const handleInput = () => {
+      try {
+        // Validate editor is still connected to DOM
+        if (!editorRef.current || !editorRef.current.isConnected) {
+          console.warn('Editor disconnected during input')
+          return
+        }
+        emitChange()
+      } catch (error) {
+        console.error('Error in handleInput:', error)
+      }
+    }
 
   const handleKeyDown = (event: ReactKeyboardEvent<HTMLDivElement>) => {
+    try {
+      // Validate editor state
+      if (disabled || !editorRef.current || !editorRef.current.isConnected) {
+        return
+      }
+
       // Handle autoformatting
       if (autoformatEnabled && shouldApplyAutoformat(event.nativeEvent)) {
-        const selection = window.getSelection()
-        if (selection && selection.rangeCount > 0) {
-          const range = selection.getRangeAt(0)
-          const node = range.startContainer
-          
-          // Check for inline autoformatting (bold, italic, etc.)
-          if (node.nodeType === Node.TEXT_NODE && event.key === ' ') {
-            const textNode = node as Text
-            const cursorOffset = range.startOffset
+        try {
+          const selection = window.getSelection()
+          if (selection && selection.rangeCount > 0) {
+            const range = selection.getRangeAt(0)
+            const node = range.startContainer
             
-            if (applyAutoformat(textNode, cursorOffset)) {
-              event.preventDefault()
-              emitChange()
-              return
-            }
-          }
-          
-          // Check for list prefix patterns (at start of line)
-          if (event.key === ' ') {
-            const textNode = node.nodeType === Node.TEXT_NODE ? node as Text : null
-            if (textNode) {
-              const text = textNode.textContent?.substring(0, range.startOffset) || ''
-              const lineStart = text.lastIndexOf('\n') + 1
-              const lineText = text.substring(lineStart)
-              const action = checkListPrefixPattern(lineText)
+            // Check for inline autoformatting (bold, italic, etc.)
+            if (node.nodeType === Node.TEXT_NODE && event.key === ' ') {
+              const textNode = node as Text
+              const cursorOffset = range.startOffset
               
-              if (action) {
+              if (applyAutoformat(textNode, cursorOffset)) {
                 event.preventDefault()
-                
-                // Remove the pattern text
-                const patternLength = lineText.length
-                const removeRange = document.createRange()
-                removeRange.setStart(textNode, range.startOffset - patternLength)
-                removeRange.setEnd(textNode, range.startOffset)
-                removeRange.deleteContents()
-                
-                // Apply the formatting
-                switch (action) {
-                  case 'unordered-list':
-                    execCommand('insertUnorderedList')
-                    break
-                  case 'ordered-list':
-                    execCommand('insertOrderedList')
-                    break
-                  case 'checklist':
-                    toggleChecklist()
-                    break
-                  case 'heading1':
-                    applyHeading(1)
-                    break
-                  case 'heading2':
-                    applyHeading(2)
-                    break
-                  case 'heading3':
-                    applyHeading(3)
-                    break
-                  case 'blockquote':
-                    execCommand('formatBlock', 'blockquote')
-                    break
-                  case 'horizontal-rule':
-                    insertHorizontalRule()
-                    break
-                }
-                
                 emitChange()
                 return
               }
             }
+            
+            // Check for list prefix patterns (at start of line)
+            if (event.key === ' ') {
+              const textNode = node.nodeType === Node.TEXT_NODE ? node as Text : null
+              if (textNode) {
+                const text = textNode.textContent?.substring(0, range.startOffset) || ''
+                const lineStart = text.lastIndexOf('\n') + 1
+                const lineText = text.substring(lineStart)
+                const action = checkListPrefixPattern(lineText)
+                
+                if (action) {
+                  event.preventDefault()
+                  
+                  // Remove the pattern text
+                  const patternLength = lineText.length
+                  const removeRange = document.createRange()
+                  removeRange.setStart(textNode, range.startOffset - patternLength)
+                  removeRange.setEnd(textNode, range.startOffset)
+                  removeRange.deleteContents()
+                  
+                  // Apply the formatting
+                  switch (action) {
+                    case 'unordered-list':
+                      execCommand('insertUnorderedList')
+                      break
+                    case 'ordered-list':
+                      execCommand('insertOrderedList')
+                      break
+                    case 'checklist':
+                      toggleChecklist()
+                      break
+                    case 'heading1':
+                      applyHeading(1)
+                      break
+                    case 'heading2':
+                      applyHeading(2)
+                      break
+                    case 'heading3':
+                      applyHeading(3)
+                      break
+                    case 'blockquote':
+                      execCommand('formatBlock', 'blockquote')
+                      break
+                    case 'horizontal-rule':
+                      insertHorizontalRule()
+                      break
+                  }
+                  
+                  emitChange()
+                  return
+                }
+              }
+            }
           }
+        } catch (error) {
+          console.error('Error in autoformatting:', error)
         }
       }
       
       if (event.key === 'Enter' && (event.metaKey || event.ctrlKey)) {
-        event.preventDefault()
-        createRootLevelBlock()
-        return
+        try {
+          event.preventDefault()
+          createRootLevelBlock()
+          return
+        } catch (error) {
+          console.error('Error creating root level block:', error)
+        }
       }
 
       // Handle Enter key for checklist items
       if (event.key === 'Enter' && !event.shiftKey) {
-        const selection = window.getSelection()
-        const currentListItem = getClosestListItem(selection?.anchorNode ?? null)
-        if (currentListItem) {
-          const hasCheckbox = !!currentListItem.querySelector('input[type="checkbox"]')
-          const isChecklist =
-            hasCheckbox ||
-            currentListItem.classList.contains('checklist-item') ||
-            currentListItem.getAttribute('data-checklist') === 'true'
+        try {
+          const selection = window.getSelection()
+          const currentListItem = getClosestListItem(selection?.anchorNode ?? null)
+          if (currentListItem) {
+            const hasCheckbox = !!currentListItem.querySelector('input[type="checkbox"]')
+            const isChecklist =
+              hasCheckbox ||
+              currentListItem.classList.contains('checklist-item') ||
+              currentListItem.getAttribute('data-checklist') === 'true'
 
-          if (isChecklist) {
-            const list = currentListItem.parentElement
-            if (list) {
-              const textContent = getChecklistItemText(currentListItem)
+            if (isChecklist) {
+              const list = currentListItem.parentElement
+              if (list) {
+                const textContent = getChecklistItemText(currentListItem)
 
-              if (textContent.length === 0) {
-                event.preventDefault()
+                if (textContent.length === 0) {
+                  event.preventDefault()
 
-                const parent = list.parentElement
-                const paragraph = document.createElement('p')
-                paragraph.appendChild(document.createElement('br'))
+                  const parent = list.parentElement
+                  const paragraph = document.createElement('p')
+                  paragraph.appendChild(document.createElement('br'))
 
-                list.removeChild(currentListItem)
-                if (list.childElementCount === 0) {
-                  list.remove()
-                }
+                  list.removeChild(currentListItem)
+                  if (list.childElementCount === 0) {
+                    list.remove()
+                  }
 
-                if (parent) {
-                  parent.insertBefore(paragraph, list.nextSibling)
-                } else {
-                  editorRef.current?.appendChild(paragraph)
-                }
+                  if (parent) {
+                    parent.insertBefore(paragraph, list.nextSibling)
+                  } else {
+                    editorRef.current?.appendChild(paragraph)
+                  }
 
-                // Use improved cursor positioning
-                positionCursorInElement(paragraph, 'start', editorRef.current || undefined)
+                  // Use improved cursor positioning
+                  positionCursorInElement(paragraph, 'start', editorRef.current || undefined)
 
-                emitChange()
-                return
-              }
-
-              // Use applyCursorOperation for consistent timing
-              applyCursorOperation(() => {
-                const postSelection = window.getSelection()
-                const newListItem = getClosestListItem(postSelection?.anchorNode ?? null)
-                if (!newListItem || newListItem === currentListItem) {
+                  emitChange()
                   return
                 }
 
-                if (!newListItem.querySelector('input[type="checkbox"]')) {
-                  addCheckboxToListItem(newListItem)
-                } else {
-                  markChecklistItem(newListItem, true)
-                }
+                // Use applyCursorOperation for consistent timing
+                applyCursorOperation(() => {
+                  const postSelection = window.getSelection()
+                  const newListItem = getClosestListItem(postSelection?.anchorNode ?? null)
+                  if (!newListItem || newListItem === currentListItem) {
+                    return
+                  }
 
-                emitChange()
-              }, CURSOR_TIMING.SHORT)
+                  if (!newListItem.querySelector('input[type="checkbox"]')) {
+                    addCheckboxToListItem(newListItem)
+                  } else {
+                    markChecklistItem(newListItem, true)
+                  }
+
+                  emitChange()
+                }, CURSOR_TIMING.SHORT)
+              }
             }
           }
+        } catch (error) {
+          console.error('Error handling checklist Enter key:', error)
         }
       }
 
       // Handle keyboard shortcuts
-  if (!(event.metaKey || event.ctrlKey)) return
-      const key = event.key.toLowerCase()
+      try {
+        if (!(event.metaKey || event.ctrlKey)) return
+        const key = event.key.toLowerCase()
 
-      if (key === 'b' && !event.shiftKey) {
-        event.preventDefault()
-        execCommand('bold')
-      } else if (key === 'i') {
-        event.preventDefault()
-        execCommand('italic')
-      } else if (key === 'u') {
-        event.preventDefault()
-        execCommand('underline')
-      } else if (event.shiftKey && key === 'x') {
-        event.preventDefault()
-        execCommand('strikeThrough')
-      } else if (event.shiftKey && key === 'c') {
-        event.preventDefault()
-        toggleChecklist()
-      } else if (event.shiftKey && key === 'b') {
-        event.preventDefault()
-        execCommand('formatBlock', 'blockquote')
-      } else if (event.shiftKey && key === 'l') {
-        event.preventDefault()
-        execCommand('insertUnorderedList')
-      } else if (event.shiftKey && key === 'o') {
-        event.preventDefault()
-        execCommand('insertOrderedList')
-      } else if (event.altKey && key === '1') {
-        event.preventDefault()
-        applyHeading(1)
-      } else if (event.altKey && key === '2') {
-        event.preventDefault()
-        applyHeading(2)
-      } else if (event.altKey && key === '3') {
-        event.preventDefault()
-        applyHeading(3)
-      } else if (key === '`') {
-        event.preventDefault()
-        applyCode()
-      } else if (key === 'k') {
-        event.preventDefault()
-        insertLink()
-      } else if (key === 'f') {
-        event.preventDefault()
-        setShowSearchDialog(true)
-      } else if (key === 'z') {
-        event.preventDefault()
-        if (event.shiftKey) {
-          historyManagerRef.current?.redo()
-        } else {
-          historyManagerRef.current?.undo()
+        if (key === 'b' && !event.shiftKey) {
+          event.preventDefault()
+          execCommand('bold')
+        } else if (key === 'i') {
+          event.preventDefault()
+          execCommand('italic')
+        } else if (key === 'u') {
+          event.preventDefault()
+          execCommand('underline')
+        } else if (event.shiftKey && key === 'x') {
+          event.preventDefault()
+          execCommand('strikeThrough')
+        } else if (event.shiftKey && key === 'c') {
+          event.preventDefault()
+          toggleChecklist()
+        } else if (event.shiftKey && key === 'b') {
+          event.preventDefault()
+          execCommand('formatBlock', 'blockquote')
+        } else if (event.shiftKey && key === 'l') {
+          event.preventDefault()
+          execCommand('insertUnorderedList')
+        } else if (event.shiftKey && key === 'o') {
+          event.preventDefault()
+          execCommand('insertOrderedList')
+        } else if (event.altKey && key === '1') {
+          event.preventDefault()
+          applyHeading(1)
+        } else if (event.altKey && key === '2') {
+          event.preventDefault()
+          applyHeading(2)
+        } else if (event.altKey && key === '3') {
+          event.preventDefault()
+          applyHeading(3)
+        } else if (key === '`') {
+          event.preventDefault()
+          applyCode()
+        } else if (key === 'k') {
+          event.preventDefault()
+          insertLink()
+        } else if (key === 'f') {
+          event.preventDefault()
+          setShowSearchDialog(true)
+        } else if (key === 'z') {
+          event.preventDefault()
+          if (event.shiftKey) {
+            historyManagerRef.current?.redo()
+          } else {
+            historyManagerRef.current?.undo()
+          }
         }
+      } catch (error) {
+        console.error('Error handling keyboard shortcut:', error)
       }
+    } catch (error) {
+      console.error('Critical error in handleKeyDown:', error)
     }
+  }
 
     const handlePaste = (event: ReactClipboardEvent<HTMLDivElement>) => {
       if (disabled) return
