@@ -239,6 +239,7 @@ const RichTextEditor = forwardRef<RichTextEditorHandle, RichTextEditorProps>(
   const lastSyncedValueRef = useRef<string>('')
     const mutationObserverRef = useRef<MutationObserver | null>(null)
     const checklistNormalizationTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+    const isProcessingCommandRef = useRef<boolean>(false)
     const [showLinkDialog, setShowLinkDialog] = useState(false)
     const [linkUrl, setLinkUrl] = useState('')
     const [linkText, setLinkText] = useState('')
@@ -1147,6 +1148,14 @@ const RichTextEditor = forwardRef<RichTextEditorHandle, RichTextEditorProps>(
       (command: string, valueArg?: string) => {
         if (disabled || !editorRef.current || !editorRef.current.isConnected) return
         
+        // Prevent concurrent command execution to avoid race conditions
+        if (isProcessingCommandRef.current) {
+          console.warn('Command execution already in progress, skipping:', command)
+          return
+        }
+        
+        isProcessingCommandRef.current = true
+        
         try {
           const editor = editorRef.current
           const selection = window.getSelection()
@@ -1217,18 +1226,30 @@ const RichTextEditor = forwardRef<RichTextEditorHandle, RichTextEditorProps>(
           } catch (e) {
             console.error('Failed to recover from execCommand error:', e);
           }
+        } finally {
+          // Reset the processing flag after a short delay to allow DOM to settle
+          setTimeout(() => {
+            isProcessingCommandRef.current = false
+          }, 50)
         }
       },
       [disabled, emitChange]
     )
 
     const applyCode = useCallback(() => {
-      if (disabled) return
+      if (disabled || !editorRef.current || !editorRef.current.isConnected) return
+      
       try {
         applyInlineStyle('code')
-        if (editorRef.current) {
-          normalizeEditorContent(editorRef.current)
+        
+        if (editorRef.current && editorRef.current.isConnected) {
+          try {
+            normalizeEditorContent(editorRef.current)
+          } catch (e) {
+            console.warn('Error normalizing after code application:', e)
+          }
         }
+        
         emitChange()
       } catch (error) {
         console.error('Error in applyCode:', error);
@@ -1236,13 +1257,21 @@ const RichTextEditor = forwardRef<RichTextEditorHandle, RichTextEditorProps>(
     }, [disabled, emitChange])
 
     const toggleChecklist = useCallback(() => {
-      if (disabled || !editorRef.current) return
+      if (disabled || !editorRef.current || !editorRef.current.isConnected) return
+      
+      const editor = editorRef.current
       
       try {
-        toggleChecklistState(editorRef.current)
+        toggleChecklistState(editor)
         
-        normalizeEditorContent(editorRef.current)
-        mergeAdjacentLists(editorRef.current)
+        if (editor.isConnected) {
+          try {
+            normalizeEditorContent(editor)
+            mergeAdjacentLists(editor)
+          } catch (e) {
+            console.warn('Error normalizing after checklist toggle:', e)
+          }
+        }
         
         emitChange()
       } catch (error) {
@@ -1874,7 +1903,9 @@ const RichTextEditor = forwardRef<RichTextEditorHandle, RichTextEditorProps>(
 
     // Horizontal rule
     const insertHorizontalRule = useCallback(() => {
-      if (disabled || !editorRef.current) return
+      if (disabled || !editorRef.current || !editorRef.current.isConnected) return
+      
+      const editor = editorRef.current
       
       try {
         const selection = window.getSelection()
@@ -1884,19 +1915,38 @@ const RichTextEditor = forwardRef<RichTextEditorHandle, RichTextEditorProps>(
         }
         
         const range = selection.getRangeAt(0)
+        
+        // Validate range is connected
+        if (!range.startContainer.isConnected) {
+          console.warn('Selection not connected for horizontal rule')
+          return
+        }
+        
         const hr = document.createElement('hr')
-        range.insertNode(hr)
+        
+        try {
+          range.insertNode(hr)
+        } catch (e) {
+          console.error('Error inserting horizontal rule node:', e)
+          return
+        }
         
         const p = document.createElement('p')
         p.appendChild(document.createElement('br'))
         
-        if (hr.parentNode) {
-          hr.parentNode.insertBefore(p, hr.nextSibling)
-          
-          // Use improved cursor positioning
-          positionCursorInElement(p, 'start', editorRef.current)
+        if (hr.parentNode && hr.isConnected) {
+          try {
+            hr.parentNode.insertBefore(p, hr.nextSibling)
+            
+            // Use improved cursor positioning with validation
+            if (p.isConnected && editor.isConnected) {
+              positionCursorInElement(p, 'start', editor)
+            }
+          } catch (e) {
+            console.error('Error inserting paragraph after hr:', e)
+          }
         } else {
-          console.warn('Horizontal rule has no parent, cannot insert paragraph')
+          console.warn('Horizontal rule has no parent or not connected, cannot insert paragraph')
         }
         
         emitChange()
@@ -2034,7 +2084,7 @@ const RichTextEditor = forwardRef<RichTextEditorHandle, RichTextEditorProps>(
     }, [execCommand, applyCode, toggleChecklist, applyHeading, insertHorizontalRule, insertLink])
 
     const handleBlockTypeChange = useCallback((value: string) => {
-      if (disabled || !editorRef.current) return
+      if (disabled || !editorRef.current || !editorRef.current.isConnected) return
       
       try {
         switch (value) {
