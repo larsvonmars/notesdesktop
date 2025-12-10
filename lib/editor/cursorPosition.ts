@@ -10,6 +10,12 @@
  */
 export function setCursorAtEnd(element: HTMLElement): boolean {
   try {
+    // Validate element is in DOM
+    if (!element.isConnected) {
+      console.warn('Cannot set cursor in disconnected element')
+      return false
+    }
+    
     const selection = window.getSelection()
     if (!selection) return false
 
@@ -51,6 +57,12 @@ export function setCursorAtEnd(element: HTMLElement): boolean {
  */
 export function setCursorAtStart(element: HTMLElement): boolean {
   try {
+    // Validate element is in DOM
+    if (!element.isConnected) {
+      console.warn('Cannot set cursor in disconnected element')
+      return false
+    }
+    
     const selection = window.getSelection()
     if (!selection) return false
 

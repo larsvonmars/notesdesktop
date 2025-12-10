@@ -1148,9 +1148,22 @@ const RichTextEditor = forwardRef<RichTextEditorHandle, RichTextEditorProps>(
         if (disabled || !editorRef.current) return
         
         try {
+          // Validate editor is still connected
+          if (!editorRef.current.isConnected) {
+            console.warn('Editor disconnected during execCommand')
+            return
+          }
+          
           const selection = window.getSelection()
           if (selection && selection.rangeCount > 0) {
             const range = selection.getRangeAt(0)
+            
+            // Verify selection is within editor
+            if (!editorRef.current.contains(range.commonAncestorContainer)) {
+              console.warn('Selection outside editor during execCommand')
+              return
+            }
+            
             sanitizeInlineNodes(range)
           }
           
@@ -1185,7 +1198,7 @@ const RichTextEditor = forwardRef<RichTextEditorHandle, RichTextEditorProps>(
               console.warn(`Unsupported rich text command: ${command}`)
           }
           
-          if (editorRef.current) {
+          if (editorRef.current && editorRef.current.isConnected) {
             normalizeEditorContent(editorRef.current)
             mergeAdjacentLists(editorRef.current)
           }
@@ -1195,7 +1208,7 @@ const RichTextEditor = forwardRef<RichTextEditorHandle, RichTextEditorProps>(
           console.error('Error in execCommand:', error);
           // Try to recover gracefully
           try {
-            if (editorRef.current) {
+            if (editorRef.current && editorRef.current.isConnected) {
               normalizeEditorContent(editorRef.current);
             }
           } catch (e) {
@@ -1244,17 +1257,33 @@ const RichTextEditor = forwardRef<RichTextEditorHandle, RichTextEditorProps>(
         
         const editor = editorRef.current
         
+        // Validate editor state
+        if (!editor.isConnected) {
+          console.warn('Editor not connected during applyHeading')
+          return
+        }
+        
         // Ensure focus before any operations (critical for WebView)
         editor.focus()
         
         try {
+          // Validate selection before applying
+          const selection = window.getSelection()
+          if (selection && selection.rangeCount > 0) {
+            const range = selection.getRangeAt(0)
+            if (!editor.contains(range.commonAncestorContainer)) {
+              console.warn('Selection outside editor during applyHeading')
+              return
+            }
+          }
+          
           // Use the commandDispatcher's applyBlockFormat function
           // This already handles cursor positioning internally
           applyBlockFormat(`h${level}` as 'h1' | 'h2' | 'h3', editor)
           
           // Add heading ID after block format completes
-          // Use EXTRA_LONG timing to ensure applyBlockFormat's cursor positioning (LONG=80ms) completes first
-          // This prevents race conditions where we try to find the heading before cursor is properly restored
+          // Use MEDIUM timing for faster response while still allowing DOM to settle
+          // Reduced from EXTRA_LONG to improve responsiveness
           setTimeout(() => {
             try {
               // Verify editor is still valid
@@ -1292,12 +1321,14 @@ const RichTextEditor = forwardRef<RichTextEditorHandle, RichTextEditorProps>(
               }
               
               // Normalize and emit change once
-              normalizeEditorContent(editor)
-              emitChange()
+              if (editor.isConnected) {
+                normalizeEditorContent(editor)
+                emitChange()
+              }
             } catch (error) {
               console.error('Error in heading ID assignment:', error)
             }
-          }, CURSOR_TIMING.EXTRA_LONG)
+          }, CURSOR_TIMING.MEDIUM)
         } catch (error) {
           console.error('Error in applyHeading:', error)
           // Try to recover by normalizing
@@ -2320,8 +2351,20 @@ const RichTextEditor = forwardRef<RichTextEditorHandle, RichTextEditorProps>(
       if (event.key === 'Enter' && !event.shiftKey) {
         try {
           const selection = window.getSelection()
+          
+          // Validate selection
+          if (!selection) {
+            return
+          }
+          
           const currentListItem = getClosestListItem(selection?.anchorNode ?? null)
           if (currentListItem) {
+            // Validate list item is still in DOM
+            if (!currentListItem.isConnected) {
+              console.warn('List item disconnected during Enter handling')
+              return
+            }
+            
             const hasCheckbox = !!currentListItem.querySelector('input[type="checkbox"]')
             const isChecklist =
               hasCheckbox ||
@@ -2330,7 +2373,7 @@ const RichTextEditor = forwardRef<RichTextEditorHandle, RichTextEditorProps>(
 
             if (isChecklist) {
               const list = currentListItem.parentElement
-              if (list) {
+              if (list && list.isConnected) {
                 const textContent = getChecklistItemText(currentListItem)
 
                 if (textContent.length === 0) {
@@ -2340,15 +2383,25 @@ const RichTextEditor = forwardRef<RichTextEditorHandle, RichTextEditorProps>(
                   const paragraph = document.createElement('p')
                   paragraph.appendChild(document.createElement('br'))
 
-                  list.removeChild(currentListItem)
-                  if (list.childElementCount === 0) {
-                    list.remove()
+                  // Safely remove list item
+                  try {
+                    list.removeChild(currentListItem)
+                    if (list.childElementCount === 0) {
+                      list.remove()
+                    }
+                  } catch (error) {
+                    console.error('Error removing list item:', error)
+                    return
                   }
 
-                  if (parent) {
+                  // Insert paragraph after list
+                  if (parent && parent.isConnected) {
                     parent.insertBefore(paragraph, list.nextSibling)
+                  } else if (editorRef.current && editorRef.current.isConnected) {
+                    editorRef.current.appendChild(paragraph)
                   } else {
-                    editorRef.current?.appendChild(paragraph)
+                    console.warn('Cannot insert paragraph - parent not available')
+                    return
                   }
 
                   // Use improved cursor positioning
@@ -2361,8 +2414,16 @@ const RichTextEditor = forwardRef<RichTextEditorHandle, RichTextEditorProps>(
                 // Use applyCursorOperation for consistent timing
                 applyCursorOperation(() => {
                   const postSelection = window.getSelection()
+                  if (!postSelection) return
+                  
                   const newListItem = getClosestListItem(postSelection?.anchorNode ?? null)
                   if (!newListItem || newListItem === currentListItem) {
+                    return
+                  }
+                  
+                  // Validate new list item
+                  if (!newListItem.isConnected) {
+                    console.warn('New list item not in DOM')
                     return
                   }
 

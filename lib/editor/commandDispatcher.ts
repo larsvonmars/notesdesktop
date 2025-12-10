@@ -113,6 +113,12 @@ export function applyInlineStyle(tagName: 'strong' | 'em' | 'code' | 'u' | 's'):
     
     const range = selection.getRangeAt(0)
     
+    // Validate range is within document
+    if (!document.body.contains(range.commonAncestorContainer)) {
+      console.warn('Selection range not in document body')
+      return
+    }
+    
     // Check if already wrapped in this tag
     const wrapper = isWrappedInTag(range.commonAncestorContainer, tagName)
     
@@ -250,6 +256,19 @@ export function applyBlockFormat(
     }
     
     const range = selection.getRangeAt(0)
+    
+    // Validate range is within document body
+    if (!document.body.contains(range.commonAncestorContainer)) {
+      console.warn('Selection range not in document body')
+      return
+    }
+    
+    // Validate range is within editor if editor element is provided
+    if (editorElement && !editorElement.contains(range.commonAncestorContainer)) {
+      console.warn('Selection range not within editor element')
+      return
+    }
+    
     const block = getBlockAncestor(range.startContainer)
 
     const shouldFallbackToExecCommand =
@@ -263,9 +282,11 @@ export function applyBlockFormat(
         document.execCommand('formatBlock', false, `<${tagName}>`)
         
         // Ensure cursor is properly positioned after execCommand
-        if (editorElement) {
+        if (editorElement && editorElement.isConnected) {
           setTimeout(() => {
-            editorElement.focus()
+            if (editorElement.isConnected) {
+              editorElement.focus()
+            }
           }, CURSOR_TIMING.SHORT)
         }
         return
@@ -279,13 +300,17 @@ export function applyBlockFormat(
       const newBlock = document.createElement(tagName)
       newBlock.appendChild(document.createElement('br'))
       
-      if (editorElement) {
+      if (editorElement && editorElement.isConnected) {
         editorElement.appendChild(newBlock)
         // Use improved cursor positioning
         positionCursorInElement(newBlock, 'start', editorElement)
       } else {
-        range.insertNode(newBlock)
-        positionCursorInElement(newBlock, 'start')
+        try {
+          range.insertNode(newBlock)
+          positionCursorInElement(newBlock, 'start')
+        } catch (error) {
+          console.error('Failed to insert new block:', error)
+        }
       }
       
       return
@@ -309,9 +334,15 @@ export function applyBlockFormat(
     
     // If no change needed, just ensure focus and return
     if (currentTag === targetTag) {
-      if (editorElement) {
+      if (editorElement && editorElement.isConnected) {
         editorElement.focus()
       }
+      return
+    }
+    
+    // Validate block is still in DOM
+    if (!block.isConnected) {
+      console.warn('Block element disconnected before formatting')
       return
     }
     
@@ -329,7 +360,11 @@ export function applyBlockFormat(
     // Copy children safely by creating an array first
     const children = Array.from(block.childNodes)
     children.forEach(child => {
-      newBlock.appendChild(child)
+      try {
+        newBlock.appendChild(child)
+      } catch (error) {
+        console.warn('Failed to move child node:', error)
+      }
     })
     
     // Verify parent exists before replacement
@@ -348,11 +383,11 @@ export function applyBlockFormat(
     }
     
     // Focus editor first (critical for WebView)
-    if (editorElement) {
+    if (editorElement && editorElement.isConnected) {
       editorElement.focus()
     }
     
-    // Restore cursor position with improved timing
+    // Restore cursor position with improved timing (reduced from LONG to MEDIUM for better responsiveness)
     setTimeout(() => {
       // Verify block is still in DOM
       if (!newBlock.isConnected) {
@@ -365,13 +400,13 @@ export function applyBlockFormat(
       } catch (error) {
         console.warn('Failed to restore cursor position:', error)
         // Fallback: position at end of block
-        if (editorElement) {
+        if (editorElement && editorElement.isConnected) {
           positionCursorInElement(newBlock, 'end', editorElement)
         } else {
           positionCursorInElement(newBlock, 'end')
         }
       }
-    }, CURSOR_TIMING.LONG)
+    }, CURSOR_TIMING.MEDIUM)
   } catch (error) {
     console.error('Error in applyBlockFormat:', error)
   }
