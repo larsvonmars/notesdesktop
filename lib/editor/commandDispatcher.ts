@@ -113,18 +113,54 @@ export function applyInlineStyle(tagName: 'strong' | 'em' | 'code' | 'u' | 's'):
     
     const range = selection.getRangeAt(0)
     
+    // Validate range is still connected to DOM
+    if (!range.commonAncestorContainer.isConnected) {
+      console.warn('Selection range not connected to DOM')
+      return
+    }
+    
     // Check if already wrapped in this tag
     const wrapper = isWrappedInTag(range.commonAncestorContainer, tagName)
     
     if (wrapper && range.toString().length === 0) {
       // Cursor inside wrapper, unwrap it
+      const parent = wrapper.parentNode
       unwrapElement(wrapper)
+      
+      // Restore cursor position after unwrap
+      if (parent) {
+        try {
+          const newRange = document.createRange()
+          newRange.selectNodeContents(parent)
+          newRange.collapse(true)
+          selection.removeAllRanges()
+          selection.addRange(newRange)
+        } catch (e) {
+          console.warn('Failed to restore cursor after unwrap:', e)
+        }
+      }
       return
     }
     
     if (wrapper && isRangeFullyWithinElement(range, wrapper)) {
       // Selection fully within wrapper, unwrap it
+      const startOffset = range.startOffset
+      const endOffset = range.endOffset
+      const startContainer = range.startContainer
+      const endContainer = range.endContainer
+      
       unwrapElement(wrapper)
+      
+      // Restore selection after unwrap
+      try {
+        const newRange = document.createRange()
+        newRange.setStart(startContainer, startOffset)
+        newRange.setEnd(endContainer, endOffset)
+        selection.removeAllRanges()
+        selection.addRange(newRange)
+      } catch (e) {
+        console.warn('Failed to restore selection after unwrap:', e)
+      }
       return
     }
     
@@ -173,17 +209,37 @@ function wrapRangeInTag(range: Range, tagName: string): void {
   const wrapper = document.createElement(tagName)
   
   try {
+    // Validate range before extraction
+    if (!range.commonAncestorContainer.isConnected) {
+      console.warn('Range not connected to DOM, cannot wrap')
+      return
+    }
+    
     // Extract and wrap contents
     const contents = range.extractContents()
+    
+    // Ensure we have content to wrap
+    if (!contents.childNodes.length) {
+      console.warn('No content to wrap')
+      return
+    }
+    
     wrapper.appendChild(contents)
     range.insertNode(wrapper)
     
+    // Normalize adjacent text nodes
+    if (wrapper.parentNode) {
+      wrapper.parentNode.normalize()
+    }
+    
     // Select the wrapped content
     const selection = window.getSelection()
-    const newRange = document.createRange()
-    newRange.selectNodeContents(wrapper)
-    selection?.removeAllRanges()
-    selection?.addRange(newRange)
+    if (selection) {
+      const newRange = document.createRange()
+      newRange.selectNodeContents(wrapper)
+      selection.removeAllRanges()
+      selection.addRange(newRange)
+    }
   } catch (error) {
     console.warn('Failed to wrap range:', error)
   }
@@ -250,6 +306,13 @@ export function applyBlockFormat(
     }
     
     const range = selection.getRangeAt(0)
+    
+    // Validate range is connected to DOM
+    if (!range.startContainer.isConnected) {
+      console.warn('Selection not connected to DOM')
+      return
+    }
+    
     const block = getBlockAncestor(range.startContainer)
 
     const shouldFallbackToExecCommand =
@@ -263,9 +326,11 @@ export function applyBlockFormat(
         document.execCommand('formatBlock', false, `<${tagName}>`)
         
         // Ensure cursor is properly positioned after execCommand
-        if (editorElement) {
+        if (editorElement && editorElement.isConnected) {
           setTimeout(() => {
-            editorElement.focus()
+            if (editorElement.isConnected) {
+              editorElement.focus()
+            }
           }, CURSOR_TIMING.SHORT)
         }
         return
@@ -279,7 +344,7 @@ export function applyBlockFormat(
       const newBlock = document.createElement(tagName)
       newBlock.appendChild(document.createElement('br'))
       
-      if (editorElement) {
+      if (editorElement && editorElement.isConnected) {
         editorElement.appendChild(newBlock)
         // Use improved cursor positioning
         positionCursorInElement(newBlock, 'start', editorElement)
@@ -309,7 +374,7 @@ export function applyBlockFormat(
     
     // If no change needed, just ensure focus and return
     if (currentTag === targetTag) {
-      if (editorElement) {
+      if (editorElement && editorElement.isConnected) {
         editorElement.focus()
       }
       return
@@ -329,7 +394,11 @@ export function applyBlockFormat(
     // Copy children safely by creating an array first
     const children = Array.from(block.childNodes)
     children.forEach(child => {
-      newBlock.appendChild(child)
+      try {
+        newBlock.appendChild(child)
+      } catch (e) {
+        console.warn('Failed to move child node:', e)
+      }
     })
     
     // Verify parent exists before replacement
@@ -348,7 +417,7 @@ export function applyBlockFormat(
     }
     
     // Focus editor first (critical for WebView)
-    if (editorElement) {
+    if (editorElement && editorElement.isConnected) {
       editorElement.focus()
     }
     
@@ -365,10 +434,14 @@ export function applyBlockFormat(
       } catch (error) {
         console.warn('Failed to restore cursor position:', error)
         // Fallback: position at end of block
-        if (editorElement) {
-          positionCursorInElement(newBlock, 'end', editorElement)
-        } else {
-          positionCursorInElement(newBlock, 'end')
+        try {
+          if (editorElement && editorElement.isConnected) {
+            positionCursorInElement(newBlock, 'end', editorElement)
+          } else {
+            positionCursorInElement(newBlock, 'end')
+          }
+        } catch (e) {
+          console.warn('Failed to position cursor at end:', e)
         }
       }
     }, CURSOR_TIMING.LONG)

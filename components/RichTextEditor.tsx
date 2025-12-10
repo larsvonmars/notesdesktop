@@ -239,6 +239,7 @@ const RichTextEditor = forwardRef<RichTextEditorHandle, RichTextEditorProps>(
   const lastSyncedValueRef = useRef<string>('')
     const mutationObserverRef = useRef<MutationObserver | null>(null)
     const checklistNormalizationTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+    const isProcessingCommandRef = useRef<boolean>(false)
     const [showLinkDialog, setShowLinkDialog] = useState(false)
     const [linkUrl, setLinkUrl] = useState('')
     const [linkText, setLinkText] = useState('')
@@ -1145,13 +1146,29 @@ const RichTextEditor = forwardRef<RichTextEditorHandle, RichTextEditorProps>(
 
     const execCommand = useCallback(
       (command: string, valueArg?: string) => {
-        if (disabled || !editorRef.current) return
+        if (disabled || !editorRef.current || !editorRef.current.isConnected) return
+        
+        // Prevent concurrent command execution to avoid race conditions
+        if (isProcessingCommandRef.current) {
+          console.warn('Command execution already in progress, skipping:', command)
+          return
+        }
+        
+        isProcessingCommandRef.current = true
         
         try {
+          const editor = editorRef.current
           const selection = window.getSelection()
+          
           if (selection && selection.rangeCount > 0) {
-            const range = selection.getRangeAt(0)
-            sanitizeInlineNodes(range)
+            try {
+              const range = selection.getRangeAt(0)
+              if (range.startContainer.isConnected) {
+                sanitizeInlineNodes(range)
+              }
+            } catch (e) {
+              console.warn('Error sanitizing inline nodes:', e)
+            }
           }
           
           switch (command) {
@@ -1171,23 +1188,31 @@ const RichTextEditor = forwardRef<RichTextEditorHandle, RichTextEditorProps>(
               if (valueArg) {
                 const tag = valueArg.toLowerCase().replace(/[<>]/g, '')
                 if (['p', 'h1', 'h2', 'h3', 'blockquote'].includes(tag)) {
-                  applyBlockFormat(tag as 'p' | 'h1' | 'h2' | 'h3' | 'blockquote', editorRef.current)
+                  applyBlockFormat(tag as 'p' | 'h1' | 'h2' | 'h3' | 'blockquote', editor)
                 }
               }
               break
             case 'insertUnorderedList':
-              toggleListType('ul', editorRef.current)
+              if (editor.isConnected) {
+                toggleListType('ul', editor)
+              }
               break
             case 'insertOrderedList':
-              toggleListType('ol', editorRef.current)
+              if (editor.isConnected) {
+                toggleListType('ol', editor)
+              }
               break
             default:
               console.warn(`Unsupported rich text command: ${command}`)
           }
           
-          if (editorRef.current) {
-            normalizeEditorContent(editorRef.current)
-            mergeAdjacentLists(editorRef.current)
+          if (editor.isConnected) {
+            try {
+              normalizeEditorContent(editor)
+              mergeAdjacentLists(editor)
+            } catch (e) {
+              console.warn('Error normalizing content after command:', e)
+            }
           }
           
           emitChange()
@@ -1195,24 +1220,34 @@ const RichTextEditor = forwardRef<RichTextEditorHandle, RichTextEditorProps>(
           console.error('Error in execCommand:', error);
           // Try to recover gracefully
           try {
-            if (editorRef.current) {
+            if (editorRef.current && editorRef.current.isConnected) {
               normalizeEditorContent(editorRef.current);
             }
           } catch (e) {
             console.error('Failed to recover from execCommand error:', e);
           }
+        } finally {
+          // Reset the processing flag synchronously
+          isProcessingCommandRef.current = false
         }
       },
       [disabled, emitChange]
     )
 
     const applyCode = useCallback(() => {
-      if (disabled) return
+      if (disabled || !editorRef.current || !editorRef.current.isConnected) return
+      
       try {
         applyInlineStyle('code')
-        if (editorRef.current) {
-          normalizeEditorContent(editorRef.current)
+        
+        if (editorRef.current && editorRef.current.isConnected) {
+          try {
+            normalizeEditorContent(editorRef.current)
+          } catch (e) {
+            console.warn('Error normalizing after code application:', e)
+          }
         }
+        
         emitChange()
       } catch (error) {
         console.error('Error in applyCode:', error);
@@ -1220,13 +1255,21 @@ const RichTextEditor = forwardRef<RichTextEditorHandle, RichTextEditorProps>(
     }, [disabled, emitChange])
 
     const toggleChecklist = useCallback(() => {
-      if (disabled || !editorRef.current) return
+      if (disabled || !editorRef.current || !editorRef.current.isConnected) return
+      
+      const editor = editorRef.current
       
       try {
-        toggleChecklistState(editorRef.current)
+        toggleChecklistState(editor)
         
-        normalizeEditorContent(editorRef.current)
-        mergeAdjacentLists(editorRef.current)
+        if (editor.isConnected) {
+          try {
+            normalizeEditorContent(editor)
+            mergeAdjacentLists(editor)
+          } catch (e) {
+            console.warn('Error normalizing after checklist toggle:', e)
+          }
+        }
         
         emitChange()
       } catch (error) {
@@ -1240,12 +1283,17 @@ const RichTextEditor = forwardRef<RichTextEditorHandle, RichTextEditorProps>(
      */
     const applyHeading = useCallback(
       (level: 1 | 2 | 3) => {
-        if (disabled || !editorRef.current) return
+        if (disabled || !editorRef.current || !editorRef.current.isConnected) return
         
         const editor = editorRef.current
         
         // Ensure focus before any operations (critical for WebView)
-        editor.focus()
+        try {
+          editor.focus()
+        } catch (e) {
+          console.warn('Error focusing editor:', e)
+          return
+        }
         
         try {
           // Use the commandDispatcher's applyBlockFormat function
@@ -1268,31 +1316,50 @@ const RichTextEditor = forwardRef<RichTextEditorHandle, RichTextEditorProps>(
               let targetHeading: HTMLElement | null = null
               
               if (selection && selection.rangeCount > 0) {
-                const range = selection.getRangeAt(0)
-                let node: Node | null = range.startContainer
-                
-                // Find the heading element containing the cursor
-                while (node && node !== editor) {
-                  if (node.nodeType === Node.ELEMENT_NODE) {
-                    const element = node as HTMLElement
-                    const tagName = element.tagName?.toLowerCase()
-                    if (tagName === `h${level}`) {
-                      targetHeading = element
-                      break
-                    }
+                try {
+                  const range = selection.getRangeAt(0)
+                  if (!range.startContainer.isConnected) {
+                    console.warn('Selection not connected during heading ID assignment')
+                    return
                   }
-                  node = node.parentElement
+                  
+                  let node: Node | null = range.startContainer
+                  
+                  // Find the heading element containing the cursor
+                  while (node && node !== editor) {
+                    if (node.nodeType === Node.ELEMENT_NODE) {
+                      const element = node as HTMLElement
+                      const tagName = element.tagName?.toLowerCase()
+                      if (tagName === `h${level}`) {
+                        targetHeading = element
+                        break
+                      }
+                    }
+                    node = node.parentElement
+                  }
+                } catch (e) {
+                  console.warn('Error finding heading element:', e)
                 }
               }
               
               // If we found a heading at cursor position, assign ID to it
               // Only assign if the heading doesn't already have an ID
-              if (targetHeading && !targetHeading.id) {
-                targetHeading.id = generateHeadingId(targetHeading.textContent || '')
+              if (targetHeading && targetHeading.isConnected && !targetHeading.id) {
+                try {
+                  targetHeading.id = generateHeadingId(targetHeading.textContent || '')
+                } catch (e) {
+                  console.warn('Error generating heading ID:', e)
+                }
               }
               
               // Normalize and emit change once
-              normalizeEditorContent(editor)
+              if (editor.isConnected) {
+                try {
+                  normalizeEditorContent(editor)
+                } catch (e) {
+                  console.warn('Error normalizing after heading:', e)
+                }
+              }
               emitChange()
             } catch (error) {
               console.error('Error in heading ID assignment:', error)
@@ -1302,7 +1369,9 @@ const RichTextEditor = forwardRef<RichTextEditorHandle, RichTextEditorProps>(
           console.error('Error in applyHeading:', error)
           // Try to recover by normalizing
           try {
-            normalizeEditorContent(editor)
+            if (editor.isConnected) {
+              normalizeEditorContent(editor)
+            }
           } catch (e) {
             console.error('Failed to recover from applyHeading error:', e)
           }
@@ -1832,7 +1901,9 @@ const RichTextEditor = forwardRef<RichTextEditorHandle, RichTextEditorProps>(
 
     // Horizontal rule
     const insertHorizontalRule = useCallback(() => {
-      if (disabled || !editorRef.current) return
+      if (disabled || !editorRef.current || !editorRef.current.isConnected) return
+      
+      const editor = editorRef.current
       
       try {
         const selection = window.getSelection()
@@ -1842,19 +1913,38 @@ const RichTextEditor = forwardRef<RichTextEditorHandle, RichTextEditorProps>(
         }
         
         const range = selection.getRangeAt(0)
+        
+        // Validate range is connected
+        if (!range.startContainer.isConnected) {
+          console.warn('Selection not connected for horizontal rule')
+          return
+        }
+        
         const hr = document.createElement('hr')
-        range.insertNode(hr)
+        
+        try {
+          range.insertNode(hr)
+        } catch (e) {
+          console.error('Error inserting horizontal rule node:', e)
+          return
+        }
         
         const p = document.createElement('p')
         p.appendChild(document.createElement('br'))
         
-        if (hr.parentNode) {
-          hr.parentNode.insertBefore(p, hr.nextSibling)
-          
-          // Use improved cursor positioning
-          positionCursorInElement(p, 'start', editorRef.current)
+        if (hr.parentNode && hr.isConnected) {
+          try {
+            hr.parentNode.insertBefore(p, hr.nextSibling)
+            
+            // Use improved cursor positioning with validation
+            if (p.isConnected && editor.isConnected) {
+              positionCursorInElement(p, 'start', editor)
+            }
+          } catch (e) {
+            console.error('Error inserting paragraph after hr:', e)
+          }
         } else {
-          console.warn('Horizontal rule has no parent, cannot insert paragraph')
+          console.warn('Horizontal rule has no parent or not connected, cannot insert paragraph')
         }
         
         emitChange()
@@ -1864,9 +1954,11 @@ const RichTextEditor = forwardRef<RichTextEditorHandle, RichTextEditorProps>(
     }, [disabled, emitChange])
 
     const createRootLevelBlock = useCallback(() => {
-      if (!editorRef.current) return null
+      if (!editorRef.current || !editorRef.current.isConnected) return null
 
       try {
+        const editor = editorRef.current
+        
         const newBlock = document.createElement('div')
         newBlock.setAttribute('data-block', 'true')
         newBlock.className = 'block-root rounded-xl border border-slate-200 bg-white/80 px-3 py-2 my-3 shadow-sm'
@@ -1878,22 +1970,51 @@ const RichTextEditor = forwardRef<RichTextEditorHandle, RichTextEditorProps>(
         const selection = window.getSelection()
         let anchorBlock: HTMLElement | null = null
         if (selection && selection.rangeCount > 0) {
-          const anchorNode = selection.getRangeAt(0).startContainer
-          anchorBlock = (anchorNode instanceof HTMLElement ? anchorNode : anchorNode.parentElement)?.closest(
-            '[data-block-id]'
-          ) as HTMLElement | null
+          try {
+            const anchorNode = selection.getRangeAt(0).startContainer
+            if (anchorNode.isConnected) {
+              anchorBlock = (anchorNode instanceof HTMLElement ? anchorNode : anchorNode.parentElement)?.closest(
+                '[data-block-id]'
+              ) as HTMLElement | null
+            }
+          } catch (e) {
+            console.warn('Error getting anchor block:', e)
+          }
         }
 
-        if (anchorBlock && anchorBlock.parentElement === editorRef.current) {
-          anchorBlock.insertAdjacentElement('afterend', newBlock)
-        } else {
-          editorRef.current.appendChild(newBlock)
+        try {
+          if (anchorBlock && anchorBlock.isConnected && anchorBlock.parentElement === editor) {
+            anchorBlock.insertAdjacentElement('afterend', newBlock)
+          } else {
+            editor.appendChild(newBlock)
+          }
+        } catch (e) {
+          console.error('Error inserting new block:', e)
+          return null
         }
 
         ensureBlockId(newBlock)
+        
+        // Verify block was successfully inserted
+        if (!newBlock.isConnected) {
+          console.warn('New block not connected after insertion')
+          return null
+        }
+        
         const target = (newBlock.querySelector('p, div, span') as HTMLElement | null) ?? newBlock
-        positionCursorInElement(target, 'start', editorRef.current)
-        normalizeEditorContent(editorRef.current)
+        
+        try {
+          positionCursorInElement(target, 'start', editor)
+        } catch (e) {
+          console.warn('Error positioning cursor in new block:', e)
+        }
+        
+        try {
+          normalizeEditorContent(editor)
+        } catch (e) {
+          console.warn('Error normalizing editor content:', e)
+        }
+        
         emitChange()
         updateBlockMetadata()
         return newBlock
@@ -1961,7 +2082,7 @@ const RichTextEditor = forwardRef<RichTextEditorHandle, RichTextEditorProps>(
     }, [execCommand, applyCode, toggleChecklist, applyHeading, insertHorizontalRule, insertLink])
 
     const handleBlockTypeChange = useCallback((value: string) => {
-      if (disabled || !editorRef.current) return
+      if (disabled || !editorRef.current || !editorRef.current.isConnected) return
       
       try {
         switch (value) {
@@ -2320,8 +2441,12 @@ const RichTextEditor = forwardRef<RichTextEditorHandle, RichTextEditorProps>(
       if (event.key === 'Enter' && !event.shiftKey) {
         try {
           const selection = window.getSelection()
-          const currentListItem = getClosestListItem(selection?.anchorNode ?? null)
-          if (currentListItem) {
+          if (!selection || !selection.anchorNode) {
+            return
+          }
+          
+          const currentListItem = getClosestListItem(selection.anchorNode)
+          if (currentListItem && currentListItem.isConnected) {
             const hasCheckbox = !!currentListItem.querySelector('input[type="checkbox"]')
             const isChecklist =
               hasCheckbox ||
@@ -2330,7 +2455,7 @@ const RichTextEditor = forwardRef<RichTextEditorHandle, RichTextEditorProps>(
 
             if (isChecklist) {
               const list = currentListItem.parentElement
-              if (list) {
+              if (list && list.isConnected) {
                 const textContent = getChecklistItemText(currentListItem)
 
                 if (textContent.length === 0) {
@@ -2340,39 +2465,53 @@ const RichTextEditor = forwardRef<RichTextEditorHandle, RichTextEditorProps>(
                   const paragraph = document.createElement('p')
                   paragraph.appendChild(document.createElement('br'))
 
-                  list.removeChild(currentListItem)
-                  if (list.childElementCount === 0) {
-                    list.remove()
+                  try {
+                    list.removeChild(currentListItem)
+                    if (list.childElementCount === 0) {
+                      list.remove()
+                    }
+
+                    if (parent && parent.isConnected) {
+                      parent.insertBefore(paragraph, list.nextSibling)
+                    } else if (editorRef.current && editorRef.current.isConnected) {
+                      editorRef.current.appendChild(paragraph)
+                    }
+
+                    // Use improved cursor positioning with validation
+                    if (paragraph.isConnected && editorRef.current) {
+                      positionCursorInElement(paragraph, 'start', editorRef.current)
+                    }
+
+                    emitChange()
+                  } catch (err) {
+                    console.error('Error removing empty checklist item:', err)
                   }
-
-                  if (parent) {
-                    parent.insertBefore(paragraph, list.nextSibling)
-                  } else {
-                    editorRef.current?.appendChild(paragraph)
-                  }
-
-                  // Use improved cursor positioning
-                  positionCursorInElement(paragraph, 'start', editorRef.current || undefined)
-
-                  emitChange()
                   return
                 }
 
                 // Use applyCursorOperation for consistent timing
                 applyCursorOperation(() => {
-                  const postSelection = window.getSelection()
-                  const newListItem = getClosestListItem(postSelection?.anchorNode ?? null)
-                  if (!newListItem || newListItem === currentListItem) {
-                    return
-                  }
+                  try {
+                    const postSelection = window.getSelection()
+                    if (!postSelection || !postSelection.anchorNode) {
+                      return
+                    }
+                    
+                    const newListItem = getClosestListItem(postSelection.anchorNode)
+                    if (!newListItem || newListItem === currentListItem || !newListItem.isConnected) {
+                      return
+                    }
 
-                  if (!newListItem.querySelector('input[type="checkbox"]')) {
-                    addCheckboxToListItem(newListItem)
-                  } else {
-                    markChecklistItem(newListItem, true)
-                  }
+                    if (!newListItem.querySelector('input[type="checkbox"]')) {
+                      addCheckboxToListItem(newListItem)
+                    } else {
+                      markChecklistItem(newListItem, true)
+                    }
 
-                  emitChange()
+                    emitChange()
+                  } catch (err) {
+                    console.error('Error in checklist Enter post-processing:', err)
+                  }
                 }, CURSOR_TIMING.SHORT)
               }
             }
