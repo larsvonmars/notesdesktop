@@ -212,6 +212,9 @@ interface BlockMetadata {
 const MAX_SEARCH_MATCHES = 1000
 const MAX_REPLACE_MATCHES = 1000
 
+// Regex patterns
+const REGEX_ESCAPE_PATTERN = /[.*+?^${}()|[\]\\]/g
+
 const splitLinesToFragment = (text: string): DocumentFragment => {
   const fragment = document.createDocumentFragment()
   const lines = text.split(/\r?\n|\r/g)
@@ -1343,11 +1346,12 @@ const RichTextEditor = forwardRef<RichTextEditorHandle, RichTextEditorProps>(
 
       try {
         const trimmed = url.trim()
+        const lowerTrimmed = trimmed.toLowerCase()
         
         // Check for common XSS patterns
-        if (trimmed.toLowerCase().startsWith('javascript:') || 
-            trimmed.toLowerCase().startsWith('data:') ||
-            trimmed.toLowerCase().startsWith('vbscript:')) {
+        if (lowerTrimmed.startsWith('javascript:') || 
+            lowerTrimmed.startsWith('data:') ||
+            lowerTrimmed.startsWith('vbscript:')) {
           return { valid: false, error: 'Invalid or dangerous protocol' }
         }
         
@@ -1383,10 +1387,12 @@ const RichTextEditor = forwardRef<RichTextEditorHandle, RichTextEditorProps>(
       const trimmed = url.trim()
       if (!trimmed) return trimmed
       
+      const lowerTrimmed = trimmed.toLowerCase()
+      
       // Prevent XSS through URL
-      if (trimmed.toLowerCase().startsWith('javascript:') || 
-          trimmed.toLowerCase().startsWith('data:') ||
-          trimmed.toLowerCase().startsWith('vbscript:')) {
+      if (lowerTrimmed.startsWith('javascript:') || 
+          lowerTrimmed.startsWith('data:') ||
+          lowerTrimmed.startsWith('vbscript:')) {
         return ''
       }
       
@@ -1669,7 +1675,8 @@ const RichTextEditor = forwardRef<RichTextEditorHandle, RichTextEditorProps>(
         while (node) {
           const nodeLength = node.textContent?.length || 0
           if (currentPos + nodeLength > match.index) {
-            const offset = Math.max(0, match.index - currentPos)
+            const rawOffset = match.index - currentPos
+            const offset = Math.max(0, Math.min(rawOffset, nodeLength))
             const endOffset = Math.min(offset + match.length, nodeLength)
             
             // Set range with clamped offsets
@@ -1790,16 +1797,26 @@ const RichTextEditor = forwardRef<RichTextEditorHandle, RichTextEditorProps>(
         const flags = caseSensitive ? 'g' : 'gi'
         
         // Escape special regex characters
-        const escapedQuery = searchQuery.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
-        const regex = new RegExp(escapedQuery, flags)
+        const escapedQuery = searchQuery.replace(REGEX_ESCAPE_PATTERN, '\\$&')
         
-        // Limit replacements to prevent performance issues
-        const matches = content.match(regex)
-        if (matches && matches.length > MAX_REPLACE_MATCHES) {
-          console.warn(`Too many matches (${matches.length}) for replace all operation, limit is ${MAX_REPLACE_MATCHES}`)
+        // Count matches efficiently without creating array
+        const searchIn = caseSensitive ? content : content.toLowerCase()
+        const queryLower = caseSensitive ? escapedQuery : escapedQuery.toLowerCase()
+        let matchCount = 0
+        let pos = searchIn.indexOf(queryLower)
+        
+        while (pos !== -1 && matchCount < MAX_REPLACE_MATCHES) {
+          matchCount++
+          pos = searchIn.indexOf(queryLower, pos + 1)
+        }
+        
+        if (matchCount >= MAX_REPLACE_MATCHES) {
+          console.warn(`Too many matches (${matchCount}+) for replace all operation, limit is ${MAX_REPLACE_MATCHES}`)
           return
         }
         
+        // Perform the replacement
+        const regex = new RegExp(escapedQuery, flags)
         const newContent = content.replace(regex, replaceQuery)
         
         editorRef.current.innerHTML = newContent
