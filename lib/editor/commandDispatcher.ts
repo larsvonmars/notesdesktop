@@ -124,16 +124,20 @@ export function applyInlineStyle(tagName: 'strong' | 'em' | 'code' | 'u' | 's'):
     
     if (wrapper && range.toString().length === 0) {
       // Cursor inside wrapper, unwrap it
+      const parent = wrapper.parentNode
       unwrapElement(wrapper)
+      
       // Restore cursor position after unwrap
-      try {
-        const newRange = document.createRange()
-        newRange.selectNodeContents(wrapper.parentNode || wrapper)
-        newRange.collapse(true)
-        selection.removeAllRanges()
-        selection.addRange(newRange)
-      } catch (e) {
-        console.warn('Failed to restore cursor after unwrap:', e)
+      if (parent) {
+        try {
+          const newRange = document.createRange()
+          newRange.selectNodeContents(parent)
+          newRange.collapse(true)
+          selection.removeAllRanges()
+          selection.addRange(newRange)
+        } catch (e) {
+          console.warn('Failed to restore cursor after unwrap:', e)
+        }
       }
       return
     }

@@ -1227,10 +1227,8 @@ const RichTextEditor = forwardRef<RichTextEditorHandle, RichTextEditorProps>(
             console.error('Failed to recover from execCommand error:', e);
           }
         } finally {
-          // Reset the processing flag after a short delay to allow DOM to settle
-          setTimeout(() => {
-            isProcessingCommandRef.current = false
-          }, 50)
+          // Reset the processing flag synchronously
+          isProcessingCommandRef.current = false
         }
       },
       [disabled, emitChange]
@@ -2480,8 +2478,8 @@ const RichTextEditor = forwardRef<RichTextEditorHandle, RichTextEditorProps>(
                     }
 
                     // Use improved cursor positioning with validation
-                    if (paragraph.isConnected) {
-                      positionCursorInElement(paragraph, 'start', editorRef.current || undefined)
+                    if (paragraph.isConnected && editorRef.current) {
+                      positionCursorInElement(paragraph, 'start', editorRef.current)
                     }
 
                     emitChange()
