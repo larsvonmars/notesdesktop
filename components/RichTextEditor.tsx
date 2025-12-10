@@ -208,6 +208,10 @@ interface BlockMetadata {
   index: number
 }
 
+// Performance limits
+const MAX_SEARCH_MATCHES = 1000
+const MAX_REPLACE_MATCHES = 1000
+
 const splitLinesToFragment = (text: string): DocumentFragment => {
   const fragment = document.createDocumentFragment()
   const lines = text.split(/\r?\n|\r/g)
@@ -1665,15 +1669,13 @@ const RichTextEditor = forwardRef<RichTextEditorHandle, RichTextEditorProps>(
         while (node) {
           const nodeLength = node.textContent?.length || 0
           if (currentPos + nodeLength > match.index) {
-            const offset = match.index - currentPos
-            const endOffset = offset + match.length
+            const offset = Math.max(0, match.index - currentPos)
+            const endOffset = Math.min(offset + match.length, nodeLength)
             
-            // Validate offsets
-            if (offset >= 0 && endOffset <= nodeLength) {
-              range.setStart(node, offset)
-              range.setEnd(node, endOffset)
-              break
-            }
+            // Set range with clamped offsets
+            range.setStart(node, offset)
+            range.setEnd(node, endOffset)
+            break
           }
           currentPos += nodeLength
           node = walker.nextNode()
@@ -1710,10 +1712,9 @@ const RichTextEditor = forwardRef<RichTextEditorHandle, RichTextEditorProps>(
         let index = searchIn.indexOf(query)
         
         // Limit matches to prevent performance issues
-        const MAX_MATCHES = 1000
         let matchCount = 0
         
-        while (index !== -1 && matchCount < MAX_MATCHES) {
+        while (index !== -1 && matchCount < MAX_SEARCH_MATCHES) {
           matches.push({
             index,
             length: searchQuery.length,
@@ -1723,8 +1724,8 @@ const RichTextEditor = forwardRef<RichTextEditorHandle, RichTextEditorProps>(
           matchCount++
         }
 
-        if (matchCount >= MAX_MATCHES) {
-          console.warn(`Search limited to ${MAX_MATCHES} matches`)
+        if (matchCount >= MAX_SEARCH_MATCHES) {
+          console.warn(`Search limited to ${MAX_SEARCH_MATCHES} matches`)
         }
 
         setSearchMatches(matches)
@@ -1794,8 +1795,8 @@ const RichTextEditor = forwardRef<RichTextEditorHandle, RichTextEditorProps>(
         
         // Limit replacements to prevent performance issues
         const matches = content.match(regex)
-        if (matches && matches.length > 1000) {
-          console.warn('Too many matches for replace all operation')
+        if (matches && matches.length > MAX_REPLACE_MATCHES) {
+          console.warn(`Too many matches (${matches.length}) for replace all operation, limit is ${MAX_REPLACE_MATCHES}`)
           return
         }
         
@@ -2204,11 +2205,11 @@ const RichTextEditor = forwardRef<RichTextEditorHandle, RichTextEditorProps>(
     }
 
   const handleKeyDown = (event: ReactKeyboardEvent<HTMLDivElement>) => {
-      try {
-        // Validate editor state
-        if (disabled || !editorRef.current || !editorRef.current.isConnected) {
-          return
-        }
+    try {
+      // Validate editor state
+      if (disabled || !editorRef.current || !editorRef.current.isConnected) {
+        return
+      }
 
       // Handle autoformatting
       if (autoformatEnabled && shouldApplyAutoformat(event.nativeEvent)) {
@@ -2425,7 +2426,7 @@ const RichTextEditor = forwardRef<RichTextEditorHandle, RichTextEditorProps>(
     } catch (error) {
       console.error('Critical error in handleKeyDown:', error)
     }
-    }
+  }
 
     const handlePaste = (event: ReactClipboardEvent<HTMLDivElement>) => {
       if (disabled) return
