@@ -971,6 +971,8 @@ export default function UnifiedPanel({
     
     if (note.note_type === 'rich-text' && noteContent) {
       // Convert HTML to Markdown (basic conversion)
+      // Note: noteContent is already sanitized by DOMPurify in RichTextEditor
+      // This conversion is for export only, not for DOM insertion
       let converted = noteContent
         // Remove HTML tags but preserve structure
         .replace(/<h1[^>]*>(.*?)<\/h1>/gi, '# $1\n\n')
@@ -1074,6 +1076,8 @@ export default function UnifiedPanel({
     
     if (note.note_type === 'rich-text' && noteContent) {
       // Strip all HTML tags
+      // Note: noteContent is already sanitized by DOMPurify in RichTextEditor
+      // This conversion is for export only, not for DOM insertion
       const stripped = noteContent
         .replace(/<br\s*\/?>/gi, '\n')
         .replace(/<\/p>/gi, '\n\n')
