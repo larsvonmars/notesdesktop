@@ -2025,6 +2025,51 @@ const RichTextEditor = forwardRef<RichTextEditorHandle, RichTextEditorProps>(
     }, [emitChange, ensureBlockId, updateBlockMetadata])
 
     /**
+     * Ensure the editor always has at least one block for writing
+     * Creates a default block if the editor is empty
+     */
+    const ensureDefaultBlock = useCallback(() => {
+      if (!editorRef.current || !editorRef.current.isConnected) return
+
+      try {
+        const editor = editorRef.current
+        
+        // Check if editor is effectively empty (no content or only whitespace)
+        const hasContent = editor.textContent && editor.textContent.trim().length > 0
+        const hasBlocks = editor.children.length > 0
+        
+        // If editor is completely empty or has no blocks, create a default one
+        if (!hasContent || !hasBlocks) {
+          const newBlock = document.createElement('div')
+          newBlock.setAttribute('data-block', 'true')
+          newBlock.className = 'block-root rounded-xl border border-slate-200 bg-white/80 px-3 py-2 my-3 shadow-sm'
+
+          const paragraph = document.createElement('p')
+          paragraph.appendChild(document.createElement('br'))
+          newBlock.appendChild(paragraph)
+
+          // Clear any existing content and append the new block
+          editor.innerHTML = ''
+          editor.appendChild(newBlock)
+          
+          ensureBlockId(newBlock)
+          
+          // Position cursor in the new block
+          const target = (newBlock.querySelector('p, div, span') as HTMLElement | null) ?? newBlock
+          try {
+            positionCursorInElement(target, 'start', editor)
+          } catch (e) {
+            console.warn('Error positioning cursor in default block:', e)
+          }
+          
+          updateBlockMetadata()
+        }
+      } catch (error) {
+        console.error('Error ensuring default block:', error)
+      }
+    }, [ensureBlockId, updateBlockMetadata])
+
+    /**
      * Execute a rich text command
      * This is the main entry point for all formatting commands
      */
@@ -2250,7 +2295,7 @@ const RichTextEditor = forwardRef<RichTextEditorHandle, RichTextEditorProps>(
         // Only update if value has actually changed to prevent unnecessary renders
         if (lastSyncedValueRef.current !== sanitizedValue) {
           // Store cursor position before update
-          const savedCursorPos = saveCursorPosition(editorEl)
+          const savedCursorPos = saveCursorPosition()
           
           editorEl.innerHTML = sanitizedValue
           lastSyncedValueRef.current = sanitizedValue
@@ -2273,6 +2318,9 @@ const RichTextEditor = forwardRef<RichTextEditorHandle, RichTextEditorProps>(
           }
         }
 
+        // Ensure editor always has a default block when empty
+        ensureDefaultBlock()
+
         scheduleChecklistNormalization()
         // attempt to rehydrate any custom blocks that came from loaded HTML
         rehydrateExistingBlocks()
@@ -2280,7 +2328,7 @@ const RichTextEditor = forwardRef<RichTextEditorHandle, RichTextEditorProps>(
       } catch (error) {
         console.error('Error synchronizing editor value:', error)
       }
-    }, [sanitize, value, scheduleChecklistNormalization, rehydrateExistingBlocks, updateBlockMetadata])
+    }, [sanitize, value, scheduleChecklistNormalization, rehydrateExistingBlocks, updateBlockMetadata, ensureDefaultBlock])
 
     useEffect(() => {
       if (!editorRef.current) return
