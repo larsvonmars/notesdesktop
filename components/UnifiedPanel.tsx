@@ -30,6 +30,8 @@ import {
   Sparkles,
   Settings,
   ChevronDown,
+  Download,
+  FileDown,
 } from 'lucide-react'
 import { Note } from './NoteEditor'
 import { FolderNode } from '@/lib/folders'
@@ -202,6 +204,7 @@ export default function UnifiedPanel({
   const renameFolderInputRef = useRef<HTMLInputElement | null>(null)
   const [hoverFolderId, setHoverFolderId] = useState<string | null>(null)
   const lastAutoOpenKey = useRef<string | number | undefined>(undefined)
+  const [showExportMenu, setShowExportMenu] = useState(false)
 
   const loadTasks = useCallback(async () => {
     setIsLoadingTasks(true)
@@ -846,6 +849,267 @@ export default function UnifiedPanel({
     setContextMenu(null)
   }
 
+  // Helper function to sanitize filename
+  const sanitizeFilename = useCallback((filename: string): string => {
+    return filename
+      .replace(/[/\\?%*:|"<>]/g, '-') // Replace invalid characters
+      .replace(/\s+/g, '_') // Replace spaces with underscores
+      .replace(/_{2,}/g, '_') // Replace multiple underscores with single
+      .replace(/^[.-]/, '') // Remove leading dots or dashes
+      .substring(0, 200) // Limit length
+      .trim()
+      || 'untitled' // Fallback if empty
+  }, [])
+
+  // Export functions
+  const handleExportToPDF = useCallback(() => {
+    if (!note) return
+    
+    // Create a temporary container for printing
+    const printContainer = document.createElement('div')
+    printContainer.style.position = 'absolute'
+    printContainer.style.left = '-9999px'
+    printContainer.style.top = '0'
+    printContainer.style.width = '210mm' // A4 width
+    printContainer.style.padding = '20mm'
+    printContainer.style.fontFamily = 'system-ui, -apple-system, sans-serif'
+    printContainer.style.fontSize = '12pt'
+    printContainer.style.lineHeight = '1.6'
+    printContainer.style.color = '#000'
+    printContainer.style.backgroundColor = '#fff'
+    
+    // Add title
+    const titleEl = document.createElement('h1')
+    titleEl.textContent = note.title || 'Untitled'
+    titleEl.style.marginBottom = '20px'
+    titleEl.style.fontSize = '24pt'
+    titleEl.style.fontWeight = 'bold'
+    printContainer.appendChild(titleEl)
+    
+    // Add content
+    if (note.note_type === 'rich-text' && noteContent) {
+      const contentEl = document.createElement('div')
+      contentEl.innerHTML = noteContent
+      // Apply print-friendly styles
+      contentEl.querySelectorAll('*').forEach((el) => {
+        if (el instanceof HTMLElement) {
+          el.style.color = '#000'
+          el.style.backgroundColor = 'transparent'
+        }
+      })
+      printContainer.appendChild(contentEl)
+    } else if (note.note_type === 'drawing') {
+      const infoEl = document.createElement('p')
+      infoEl.textContent = '[Drawing content - not available in PDF export]'
+      infoEl.style.fontStyle = 'italic'
+      infoEl.style.color = '#666'
+      printContainer.appendChild(infoEl)
+    } else if (note.note_type === 'mindmap') {
+      const infoEl = document.createElement('p')
+      infoEl.textContent = '[Mindmap content - not available in PDF export]'
+      infoEl.style.fontStyle = 'italic'
+      infoEl.style.color = '#666'
+      printContainer.appendChild(infoEl)
+    }
+    
+    document.body.appendChild(printContainer)
+    
+    // Create a style element for print
+    const printStyle = document.createElement('style')
+    printStyle.textContent = `
+      @media print {
+        body * {
+          visibility: hidden;
+        }
+        #print-content, #print-content * {
+          visibility: visible;
+        }
+        #print-content {
+          position: absolute;
+          left: 0;
+          top: 0;
+        }
+      }
+    `
+    printContainer.id = 'print-content'
+    document.head.appendChild(printStyle)
+    
+    // Cleanup function
+    const cleanup = () => {
+      if (printContainer.parentNode) {
+        document.body.removeChild(printContainer)
+      }
+      if (printStyle.parentNode) {
+        document.head.removeChild(printStyle)
+      }
+    }
+    
+    // Listen for afterprint event for reliable cleanup
+    const handleAfterPrint = () => {
+      cleanup()
+      window.removeEventListener('afterprint', handleAfterPrint)
+    }
+    
+    window.addEventListener('afterprint', handleAfterPrint)
+    
+    // Trigger print dialog
+    window.print()
+    
+    // Fallback cleanup in case afterprint doesn't fire (some browsers)
+    setTimeout(() => {
+      window.removeEventListener('afterprint', handleAfterPrint)
+      cleanup()
+    }, 1000)
+    
+    setShowExportMenu(false)
+  }, [note, noteContent])
+
+  const handleExportToMarkdown = useCallback(() => {
+    if (!note) return
+    
+    let markdownContent = `# ${note.title || 'Untitled'}\n\n`
+    
+    if (note.note_type === 'rich-text' && noteContent) {
+      // Convert HTML to Markdown (basic conversion)
+      // Note: noteContent is already sanitized by DOMPurify in RichTextEditor
+      // This conversion is for export only, not for DOM insertion
+      let converted = noteContent
+        // Remove HTML tags but preserve structure
+        .replace(/<h1[^>]*>(.*?)<\/h1>/gi, '# $1\n\n')
+        .replace(/<h2[^>]*>(.*?)<\/h2>/gi, '## $1\n\n')
+        .replace(/<h3[^>]*>(.*?)<\/h3>/gi, '### $1\n\n')
+        .replace(/<strong[^>]*>(.*?)<\/strong>/gi, '**$1**')
+        .replace(/<b[^>]*>(.*?)<\/b>/gi, '**$1**')
+        .replace(/<em[^>]*>(.*?)<\/em>/gi, '*$1*')
+        .replace(/<i[^>]*>(.*?)<\/i>/gi, '*$1*')
+        .replace(/<code[^>]*>(.*?)<\/code>/gi, '`$1`')
+        .replace(/<ul[^>]*>(.*?)<\/ul>/gi, '$1\n')
+        .replace(/<ol[^>]*>(.*?)<\/ol>/gi, '$1\n')
+        .replace(/<li[^>]*>(.*?)<\/li>/gi, '- $1\n')
+        .replace(/<blockquote[^>]*>(.*?)<\/blockquote>/gi, '> $1\n\n')
+        .replace(/<a[^>]*href="([^"]*)"[^>]*>(.*?)<\/a>/gi, '[$2]($1)')
+        .replace(/<br\s*\/?>/gi, '\n')
+        .replace(/<p[^>]*>(.*?)<\/p>/gi, '$1\n\n')
+        .replace(/<div[^>]*>(.*?)<\/div>/gi, '$1\n')
+        .replace(/<[^>]+>/g, '')
+        .replace(/&nbsp;/g, ' ')
+        .replace(/&lt;/g, '<')
+        .replace(/&gt;/g, '>')
+        .replace(/&amp;/g, '&')
+        .replace(/\n\n\n+/g, '\n\n')
+        .trim()
+      
+      markdownContent += converted
+    } else if (note.note_type === 'drawing') {
+      markdownContent += '*[Drawing content - not available in Markdown export]*'
+    } else if (note.note_type === 'mindmap') {
+      markdownContent += '*[Mindmap content - not available in Markdown export]*'
+    }
+    
+    // Create blob and download
+    const blob = new Blob([markdownContent], { type: 'text/markdown' })
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url
+    a.download = `${sanitizeFilename(note.title || 'untitled')}.md`
+    a.click()
+    URL.revokeObjectURL(url)
+    
+    setShowExportMenu(false)
+  }, [note, noteContent, sanitizeFilename])
+
+  const handleExportToHTML = useCallback(() => {
+    if (!note) return
+    
+    let htmlContent = `<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>${note.title || 'Untitled'}</title>
+  <style>
+    body {
+      font-family: system-ui, -apple-system, sans-serif;
+      line-height: 1.6;
+      max-width: 800px;
+      margin: 40px auto;
+      padding: 20px;
+      color: #333;
+    }
+    h1, h2, h3 { margin-top: 1.5em; }
+    code { background: #f4f4f4; padding: 2px 6px; border-radius: 3px; }
+    pre { background: #f4f4f4; padding: 15px; border-radius: 5px; overflow-x: auto; }
+    blockquote { border-left: 4px solid #ddd; margin-left: 0; padding-left: 20px; color: #666; }
+    img { max-width: 100%; height: auto; }
+  </style>
+</head>
+<body>
+  <h1>${note.title || 'Untitled'}</h1>
+`
+    
+    if (note.note_type === 'rich-text' && noteContent) {
+      htmlContent += noteContent
+    } else if (note.note_type === 'drawing') {
+      htmlContent += '<p><em>[Drawing content - not available in HTML export]</em></p>'
+    } else if (note.note_type === 'mindmap') {
+      htmlContent += '<p><em>[Mindmap content - not available in HTML export]</em></p>'
+    }
+    
+    htmlContent += '\n</body>\n</html>'
+    
+    // Create blob and download
+    const blob = new Blob([htmlContent], { type: 'text/html' })
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url
+    a.download = `${sanitizeFilename(note.title || 'untitled')}.html`
+    a.click()
+    URL.revokeObjectURL(url)
+    
+    setShowExportMenu(false)
+  }, [note, noteContent, sanitizeFilename])
+
+  const handleExportToPlainText = useCallback(() => {
+    if (!note) return
+    
+    let textContent = `${note.title || 'Untitled'}\n${'='.repeat((note.title || 'Untitled').length)}\n\n`
+    
+    if (note.note_type === 'rich-text' && noteContent) {
+      // Strip all HTML tags
+      // Note: noteContent is already sanitized by DOMPurify in RichTextEditor
+      // This conversion is for export only, not for DOM insertion
+      const stripped = noteContent
+        .replace(/<br\s*\/?>/gi, '\n')
+        .replace(/<\/p>/gi, '\n\n')
+        .replace(/<\/div>/gi, '\n')
+        .replace(/<\/li>/gi, '\n')
+        .replace(/<[^>]+>/g, '')
+        .replace(/&nbsp;/g, ' ')
+        .replace(/&lt;/g, '<')
+        .replace(/&gt;/g, '>')
+        .replace(/&amp;/g, '&')
+        .replace(/\n\n\n+/g, '\n\n')
+        .trim()
+      
+      textContent += stripped
+    } else if (note.note_type === 'drawing') {
+      textContent += '[Drawing content - not available in plain text export]'
+    } else if (note.note_type === 'mindmap') {
+      textContent += '[Mindmap content - not available in plain text export]'
+    }
+    
+    // Create blob and download
+    const blob = new Blob([textContent], { type: 'text/plain' })
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url
+    a.download = `${sanitizeFilename(note.title || 'untitled')}.txt`
+    a.click()
+    URL.revokeObjectURL(url)
+    
+    setShowExportMenu(false)
+  }, [note, noteContent, sanitizeFilename])
+
   useEffect(() => {
     if (autoOpenKey === undefined) return
     if (lastAutoOpenKey.current === autoOpenKey) return
@@ -1044,6 +1308,67 @@ export default function UnifiedPanel({
                     <Search size={18} />
                     <span>Find & Replace</span>
                   </button>
+                  {note && (
+                    <div className="relative col-span-2">
+                      <button
+                        onClick={() => setShowExportMenu(!showExportMenu)}
+                        className="w-full px-4 py-3.5 bg-gradient-to-br from-emerald-500 to-teal-600 text-white text-sm font-semibold rounded-xl hover:from-emerald-600 hover:to-teal-700 transition-all shadow-sm hover:shadow-md flex items-center justify-center gap-2"
+                        title="Export note to different formats"
+                      >
+                        <Download size={18} />
+                        <span>Export Note</span>
+                        <ChevronDown size={16} className={`transition-transform ${showExportMenu ? 'rotate-180' : ''}`} />
+                      </button>
+                      
+                      {/* Export Menu Dropdown */}
+                      {showExportMenu && (
+                        <div className="absolute top-full left-0 right-0 mt-2 bg-white rounded-xl shadow-2xl border border-gray-200 overflow-hidden z-10">
+                          <div className="py-1">
+                            <button
+                              onClick={handleExportToPDF}
+                              className="w-full px-4 py-3 text-left hover:bg-gray-50 transition-colors flex items-center gap-3 group"
+                            >
+                              <FileDown size={18} className="text-red-500 group-hover:scale-110 transition-transform" />
+                              <div className="flex-1">
+                                <div className="text-sm font-semibold text-gray-900">Export to PDF</div>
+                                <div className="text-xs text-gray-500">Print-friendly PDF format</div>
+                              </div>
+                            </button>
+                            <button
+                              onClick={handleExportToMarkdown}
+                              className="w-full px-4 py-3 text-left hover:bg-gray-50 transition-colors flex items-center gap-3 group"
+                            >
+                              <FileDown size={18} className="text-blue-500 group-hover:scale-110 transition-transform" />
+                              <div className="flex-1">
+                                <div className="text-sm font-semibold text-gray-900">Export to Markdown</div>
+                                <div className="text-xs text-gray-500">Plain text with formatting</div>
+                              </div>
+                            </button>
+                            <button
+                              onClick={handleExportToHTML}
+                              className="w-full px-4 py-3 text-left hover:bg-gray-50 transition-colors flex items-center gap-3 group"
+                            >
+                              <FileDown size={18} className="text-orange-500 group-hover:scale-110 transition-transform" />
+                              <div className="flex-1">
+                                <div className="text-sm font-semibold text-gray-900">Export to HTML</div>
+                                <div className="text-xs text-gray-500">Standalone web page</div>
+                              </div>
+                            </button>
+                            <button
+                              onClick={handleExportToPlainText}
+                              className="w-full px-4 py-3 text-left hover:bg-gray-50 transition-colors flex items-center gap-3 group"
+                            >
+                              <FileDown size={18} className="text-gray-500 group-hover:scale-110 transition-transform" />
+                              <div className="flex-1">
+                                <div className="text-sm font-semibold text-gray-900">Export to Plain Text</div>
+                                <div className="text-xs text-gray-500">Simple text format</div>
+                              </div>
+                            </button>
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  )}
                 </div>
 
                 {/* Current Note Card */}
