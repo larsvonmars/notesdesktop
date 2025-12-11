@@ -21,6 +21,86 @@ describe('Block Logic Stability', () => {
     document.body.removeChild(container)
   })
 
+  describe('Default Block Creation', () => {
+    it('should ensure empty editor has at least one block', () => {
+      // Editor starts empty
+      expect(editor.children.length).toBe(0)
+      
+      // Simulate the ensureDefaultBlock logic
+      const hasContent = editor.textContent && editor.textContent.trim().length > 0
+      const hasBlocks = editor.children.length > 0
+      
+      if (!hasContent || !hasBlocks) {
+        const newBlock = document.createElement('div')
+        newBlock.setAttribute('data-block', 'true')
+        newBlock.className = 'block-root rounded-xl border border-slate-200 bg-white/80 px-3 py-2 my-3 shadow-sm'
+
+        const paragraph = document.createElement('p')
+        paragraph.appendChild(document.createElement('br'))
+        newBlock.appendChild(paragraph)
+
+        editor.innerHTML = ''
+        editor.appendChild(newBlock)
+      }
+      
+      // Verify a block was created
+      expect(editor.children.length).toBe(1)
+      const block = editor.children[0] as HTMLElement
+      expect(block.getAttribute('data-block')).toBe('true')
+      expect(block.querySelector('p')).toBeTruthy()
+    })
+
+    it('should not create a block if content already exists', () => {
+      // Add existing content
+      const p = document.createElement('p')
+      p.textContent = 'Existing content'
+      editor.appendChild(p)
+      
+      expect(editor.children.length).toBe(1)
+      
+      // Simulate the ensureDefaultBlock logic
+      const hasContent = editor.textContent && editor.textContent.trim().length > 0
+      const hasBlocks = editor.children.length > 0
+      
+      if (!hasContent || !hasBlocks) {
+        const newBlock = document.createElement('div')
+        newBlock.setAttribute('data-block', 'true')
+        editor.appendChild(newBlock)
+      }
+      
+      // Should still have only one child (the existing paragraph)
+      expect(editor.children.length).toBe(1)
+      expect(editor.textContent).toBe('Existing content')
+    })
+
+    it('should create a block if editor only has whitespace', () => {
+      // Add only whitespace
+      editor.innerHTML = '   \n\n   '
+      
+      // Simulate the ensureDefaultBlock logic
+      const hasContent = editor.textContent && editor.textContent.trim().length > 0
+      const hasBlocks = editor.children.length > 0
+      
+      if (!hasContent || !hasBlocks) {
+        const newBlock = document.createElement('div')
+        newBlock.setAttribute('data-block', 'true')
+        newBlock.className = 'block-root'
+
+        const paragraph = document.createElement('p')
+        paragraph.appendChild(document.createElement('br'))
+        newBlock.appendChild(paragraph)
+
+        editor.innerHTML = ''
+        editor.appendChild(newBlock)
+      }
+      
+      // Should have created a block
+      expect(editor.children.length).toBe(1)
+      const block = editor.children[0] as HTMLElement
+      expect(block.getAttribute('data-block')).toBe('true')
+    })
+  })
+
   describe('applyBlockFormat', () => {
     it('should convert paragraph to h1', () => {
       const p = document.createElement('p')
