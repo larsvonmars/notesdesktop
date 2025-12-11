@@ -2038,8 +2038,8 @@ const RichTextEditor = forwardRef<RichTextEditorHandle, RichTextEditorProps>(
         const hasContent = editor.textContent && editor.textContent.trim().length > 0
         const hasBlocks = editor.children.length > 0
         
-        // If editor is completely empty or has no blocks, create a default one
-        if (!hasContent || !hasBlocks) {
+        // If editor is completely empty AND has no blocks, create a default one
+        if (!hasContent && !hasBlocks) {
           const newBlock = document.createElement('div')
           newBlock.setAttribute('data-block', 'true')
           newBlock.className = 'block-root rounded-xl border border-slate-200 bg-white/80 px-3 py-2 my-3 shadow-sm'

@@ -30,7 +30,7 @@ describe('Block Logic Stability', () => {
       const hasContent = editor.textContent && editor.textContent.trim().length > 0
       const hasBlocks = editor.children.length > 0
       
-      if (!hasContent || !hasBlocks) {
+      if (!hasContent && !hasBlocks) {
         const newBlock = document.createElement('div')
         newBlock.setAttribute('data-block', 'true')
         newBlock.className = 'block-root rounded-xl border border-slate-200 bg-white/80 px-3 py-2 my-3 shadow-sm'
@@ -62,7 +62,7 @@ describe('Block Logic Stability', () => {
       const hasContent = editor.textContent && editor.textContent.trim().length > 0
       const hasBlocks = editor.children.length > 0
       
-      if (!hasContent || !hasBlocks) {
+      if (!hasContent && !hasBlocks) {
         const newBlock = document.createElement('div')
         newBlock.setAttribute('data-block', 'true')
         editor.appendChild(newBlock)
@@ -81,7 +81,7 @@ describe('Block Logic Stability', () => {
       const hasContent = editor.textContent && editor.textContent.trim().length > 0
       const hasBlocks = editor.children.length > 0
       
-      if (!hasContent || !hasBlocks) {
+      if (!hasContent && !hasBlocks) {
         const newBlock = document.createElement('div')
         newBlock.setAttribute('data-block', 'true')
         newBlock.className = 'block-root'
