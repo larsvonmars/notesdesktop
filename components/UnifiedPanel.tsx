@@ -849,6 +849,18 @@ export default function UnifiedPanel({
     setContextMenu(null)
   }
 
+  // Helper function to sanitize filename
+  const sanitizeFilename = useCallback((filename: string): string => {
+    return filename
+      .replace(/[/\\?%*:|"<>]/g, '-') // Replace invalid characters
+      .replace(/\s+/g, '_') // Replace spaces with underscores
+      .replace(/_{2,}/g, '_') // Replace multiple underscores with single
+      .replace(/^[.-]/, '') // Remove leading dots or dashes
+      .substring(0, 200) // Limit length
+      .trim()
+      || 'untitled' // Fallback if empty
+  }, [])
+
   // Export functions
   const handleExportToPDF = useCallback(() => {
     if (!note) return
@@ -922,14 +934,32 @@ export default function UnifiedPanel({
     printContainer.id = 'print-content'
     document.head.appendChild(printStyle)
     
+    // Cleanup function
+    const cleanup = () => {
+      if (printContainer.parentNode) {
+        document.body.removeChild(printContainer)
+      }
+      if (printStyle.parentNode) {
+        document.head.removeChild(printStyle)
+      }
+    }
+    
+    // Listen for afterprint event for reliable cleanup
+    const handleAfterPrint = () => {
+      cleanup()
+      window.removeEventListener('afterprint', handleAfterPrint)
+    }
+    
+    window.addEventListener('afterprint', handleAfterPrint)
+    
     // Trigger print dialog
     window.print()
     
-    // Clean up
+    // Fallback cleanup in case afterprint doesn't fire (some browsers)
     setTimeout(() => {
-      document.body.removeChild(printContainer)
-      document.head.removeChild(printStyle)
-    }, 100)
+      window.removeEventListener('afterprint', handleAfterPrint)
+      cleanup()
+    }, 1000)
     
     setShowExportMenu(false)
   }, [note, noteContent])
@@ -979,12 +1009,12 @@ export default function UnifiedPanel({
     const url = URL.createObjectURL(blob)
     const a = document.createElement('a')
     a.href = url
-    a.download = `${note.title || 'untitled'}.md`
+    a.download = `${sanitizeFilename(note.title || 'untitled')}.md`
     a.click()
     URL.revokeObjectURL(url)
     
     setShowExportMenu(false)
-  }, [note, noteContent])
+  }, [note, noteContent, sanitizeFilename])
 
   const handleExportToHTML = useCallback(() => {
     if (!note) return
@@ -1030,12 +1060,12 @@ export default function UnifiedPanel({
     const url = URL.createObjectURL(blob)
     const a = document.createElement('a')
     a.href = url
-    a.download = `${note.title || 'untitled'}.html`
+    a.download = `${sanitizeFilename(note.title || 'untitled')}.html`
     a.click()
     URL.revokeObjectURL(url)
     
     setShowExportMenu(false)
-  }, [note, noteContent])
+  }, [note, noteContent, sanitizeFilename])
 
   const handleExportToPlainText = useCallback(() => {
     if (!note) return
@@ -1069,12 +1099,12 @@ export default function UnifiedPanel({
     const url = URL.createObjectURL(blob)
     const a = document.createElement('a')
     a.href = url
-    a.download = `${note.title || 'untitled'}.txt`
+    a.download = `${sanitizeFilename(note.title || 'untitled')}.txt`
     a.click()
     URL.revokeObjectURL(url)
     
     setShowExportMenu(false)
-  }, [note, noteContent])
+  }, [note, noteContent, sanitizeFilename])
 
   useEffect(() => {
     if (autoOpenKey === undefined) return
