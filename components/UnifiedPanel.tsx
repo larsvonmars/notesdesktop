@@ -33,6 +33,8 @@ import {
   Download,
   FileDown,
 } from 'lucide-react'
+import jsPDF from 'jspdf'
+import html2canvas from 'html2canvas'
 import { Note } from './NoteEditor'
 import { FolderNode } from '@/lib/folders'
 import { getNotesByFolder } from '@/lib/notes'
@@ -205,6 +207,23 @@ export default function UnifiedPanel({
   const [hoverFolderId, setHoverFolderId] = useState<string | null>(null)
   const lastAutoOpenKey = useRef<string | number | undefined>(undefined)
   const [showExportMenu, setShowExportMenu] = useState(false)
+  const [showPDFSettings, setShowPDFSettings] = useState(false)
+  const [pdfSettings, setPdfSettings] = useState({
+    fontSize: 14,
+    lineHeight: 1.6,
+    orientation: 'portrait' as 'portrait' | 'landscape',
+    marginTop: 20,
+    marginBottom: 20,
+    marginLeft: 20,
+    marginRight: 20,
+    includeTitle: true,
+    includeDate: false,
+    includePageNumbers: true,
+    fontFamily: 'sans-serif' as 'sans-serif' | 'serif' | 'monospace',
+    headingColor: '#000000',
+    textColor: '#000000',
+    backgroundColor: '#ffffff',
+  })
 
   const loadTasks = useCallback(async () => {
     setIsLoadingTasks(true)
@@ -862,107 +881,191 @@ export default function UnifiedPanel({
   }, [])
 
   // Export functions
-  const handleExportToPDF = useCallback(() => {
+  const handleExportToPDF = useCallback(async () => {
     if (!note) return
     
-    // Create a temporary container for printing
-    const printContainer = document.createElement('div')
-    printContainer.style.position = 'absolute'
-    printContainer.style.left = '-9999px'
-    printContainer.style.top = '0'
-    printContainer.style.width = '210mm' // A4 width
-    printContainer.style.padding = '20mm'
-    printContainer.style.fontFamily = 'system-ui, -apple-system, sans-serif'
-    printContainer.style.fontSize = '12pt'
-    printContainer.style.lineHeight = '1.6'
-    printContainer.style.color = '#000'
-    printContainer.style.backgroundColor = '#fff'
-    
-    // Add title
-    const titleEl = document.createElement('h1')
-    titleEl.textContent = note.title || 'Untitled'
-    titleEl.style.marginBottom = '20px'
-    titleEl.style.fontSize = '24pt'
-    titleEl.style.fontWeight = 'bold'
-    printContainer.appendChild(titleEl)
-    
-    // Add content
-    if (note.note_type === 'rich-text' && noteContent) {
-      const contentEl = document.createElement('div')
-      contentEl.innerHTML = noteContent
-      // Apply print-friendly styles
-      contentEl.querySelectorAll('*').forEach((el) => {
-        if (el instanceof HTMLElement) {
-          el.style.color = '#000'
-          el.style.backgroundColor = 'transparent'
-        }
+    try {
+      const { 
+        fontSize, 
+        lineHeight, 
+        orientation, 
+        marginTop, 
+        marginBottom, 
+        marginLeft, 
+        marginRight,
+        includeTitle,
+        includeDate,
+        includePageNumbers,
+        fontFamily,
+        headingColor,
+        textColor,
+        backgroundColor
+      } = pdfSettings
+
+      // Calculate page dimensions based on orientation
+      const isLandscape = orientation === 'landscape'
+      const pageWidth = isLandscape ? 297 : 210 // A4 dimensions in mm
+      const pageHeight = isLandscape ? 210 : 297
+      const contentWidth = pageWidth - marginLeft - marginRight
+      
+      // Create a temporary container for rendering
+      const container = document.createElement('div')
+      container.style.position = 'absolute'
+      container.style.left = '-9999px'
+      container.style.top = '0'
+      container.style.width = `${contentWidth * 3.78}px` // Convert mm to pixels (96 DPI)
+      container.style.padding = `${marginTop * 3.78}px ${marginRight * 3.78}px ${marginBottom * 3.78}px ${marginLeft * 3.78}px`
+      container.style.fontFamily = fontFamily === 'serif' ? 'Georgia, serif' : fontFamily === 'monospace' ? 'Courier New, monospace' : 'system-ui, -apple-system, sans-serif'
+      container.style.fontSize = `${fontSize}px`
+      container.style.lineHeight = lineHeight.toString()
+      container.style.color = textColor
+      container.style.backgroundColor = backgroundColor
+      container.style.boxSizing = 'border-box'
+      
+      // Add date if enabled
+      if (includeDate) {
+        const dateEl = document.createElement('div')
+        dateEl.textContent = new Date().toLocaleDateString('en-US', { 
+          year: 'numeric', 
+          month: 'long', 
+          day: 'numeric' 
+        })
+        dateEl.style.fontSize = `${fontSize * 0.85}px`
+        dateEl.style.color = textColor
+        dateEl.style.opacity = '0.7'
+        dateEl.style.marginBottom = '10px'
+        container.appendChild(dateEl)
+      }
+      
+      // Add title if enabled
+      if (includeTitle) {
+        const titleEl = document.createElement('h1')
+        titleEl.textContent = note.title || 'Untitled'
+        titleEl.style.marginBottom = '20px'
+        titleEl.style.fontSize = `${fontSize * 2}px`
+        titleEl.style.fontWeight = 'bold'
+        titleEl.style.color = headingColor
+        titleEl.style.lineHeight = '1.2'
+        container.appendChild(titleEl)
+      }
+      
+      // Add content
+      if (note.note_type === 'rich-text' && noteContent) {
+        const contentEl = document.createElement('div')
+        contentEl.innerHTML = noteContent
+        
+        // Apply PDF-friendly styles
+        contentEl.querySelectorAll('*').forEach((el) => {
+          if (el instanceof HTMLElement) {
+            el.style.color = textColor
+            el.style.backgroundColor = 'transparent'
+            
+            // Handle different element types
+            if (el.tagName === 'H1') {
+              el.style.fontSize = `${fontSize * 1.7}px`
+              el.style.fontWeight = 'bold'
+              el.style.marginTop = '20px'
+              el.style.marginBottom = '10px'
+              el.style.color = headingColor
+            } else if (el.tagName === 'H2') {
+              el.style.fontSize = `${fontSize * 1.4}px`
+              el.style.fontWeight = 'bold'
+              el.style.marginTop = '16px'
+              el.style.marginBottom = '8px'
+              el.style.color = headingColor
+            } else if (el.tagName === 'H3') {
+              el.style.fontSize = `${fontSize * 1.2}px`
+              el.style.fontWeight = 'bold'
+              el.style.marginTop = '14px'
+              el.style.marginBottom = '7px'
+              el.style.color = headingColor
+            } else if (el.tagName === 'P') {
+              el.style.marginBottom = '10px'
+            } else if (el.tagName === 'UL' || el.tagName === 'OL') {
+              el.style.marginLeft = '20px'
+              el.style.marginBottom = '10px'
+            }
+          }
+        })
+        container.appendChild(contentEl)
+      } else if (note.note_type === 'drawing') {
+        const infoEl = document.createElement('p')
+        infoEl.textContent = '[Drawing content - not available in PDF export]'
+        infoEl.style.fontStyle = 'italic'
+        infoEl.style.color = textColor
+        infoEl.style.opacity = '0.6'
+        container.appendChild(infoEl)
+      } else if (note.note_type === 'mindmap') {
+        const infoEl = document.createElement('p')
+        infoEl.textContent = '[Mindmap content - not available in PDF export]'
+        infoEl.style.fontStyle = 'italic'
+        infoEl.style.color = textColor
+        infoEl.style.opacity = '0.6'
+        container.appendChild(infoEl)
+      }
+      
+      document.body.appendChild(container)
+      
+      // Convert to canvas
+      const canvas = await html2canvas(container, {
+        scale: 2,
+        useCORS: true,
+        logging: false,
+        backgroundColor: backgroundColor
       })
-      printContainer.appendChild(contentEl)
-    } else if (note.note_type === 'drawing') {
-      const infoEl = document.createElement('p')
-      infoEl.textContent = '[Drawing content - not available in PDF export]'
-      infoEl.style.fontStyle = 'italic'
-      infoEl.style.color = '#666'
-      printContainer.appendChild(infoEl)
-    } else if (note.note_type === 'mindmap') {
-      const infoEl = document.createElement('p')
-      infoEl.textContent = '[Mindmap content - not available in PDF export]'
-      infoEl.style.fontStyle = 'italic'
-      infoEl.style.color = '#666'
-      printContainer.appendChild(infoEl)
-    }
-    
-    document.body.appendChild(printContainer)
-    
-    // Create a style element for print
-    const printStyle = document.createElement('style')
-    printStyle.textContent = `
-      @media print {
-        body * {
-          visibility: hidden;
-        }
-        #print-content, #print-content * {
-          visibility: visible;
-        }
-        #print-content {
-          position: absolute;
-          left: 0;
-          top: 0;
-        }
+      
+      // Remove temporary container
+      document.body.removeChild(container)
+      
+      // Create PDF with custom settings
+      const pdf = new jsPDF(orientation, 'mm', 'a4')
+      const imgWidth = pageWidth - marginLeft - marginRight
+      const imgHeight = (canvas.height * imgWidth) / canvas.width
+      let heightLeft = imgHeight
+      let position = marginTop
+      let pageNumber = 1
+      
+      // Add image to PDF
+      const imgData = canvas.toDataURL('image/png')
+      pdf.addImage(imgData, 'PNG', marginLeft, position, imgWidth, imgHeight)
+      
+      // Add page number if enabled
+      if (includePageNumbers) {
+        pdf.setFontSize(fontSize * 0.7)
+        pdf.setTextColor(textColor)
+        pdf.text(`${pageNumber}`, pageWidth / 2, pageHeight - marginBottom / 2, { align: 'center' })
       }
-    `
-    printContainer.id = 'print-content'
-    document.head.appendChild(printStyle)
-    
-    // Cleanup function
-    const cleanup = () => {
-      if (printContainer.parentNode) {
-        document.body.removeChild(printContainer)
+      
+      heightLeft -= (pageHeight - marginTop - marginBottom)
+      
+      // Add new pages if content is longer than one page
+      while (heightLeft > 0) {
+        position = marginTop - (imgHeight - heightLeft)
+        pdf.addPage()
+        pageNumber++
+        pdf.addImage(imgData, 'PNG', marginLeft, position, imgWidth, imgHeight)
+        
+        // Add page number if enabled
+        if (includePageNumbers) {
+          pdf.setFontSize(fontSize * 0.7)
+          pdf.setTextColor(textColor)
+          pdf.text(`${pageNumber}`, pageWidth / 2, pageHeight - marginBottom / 2, { align: 'center' })
+        }
+        
+        heightLeft -= (pageHeight - marginTop - marginBottom)
       }
-      if (printStyle.parentNode) {
-        document.head.removeChild(printStyle)
-      }
+      
+      // Save the PDF
+      const fileName = `${note.title || 'Untitled'}.pdf`
+      pdf.save(fileName)
+      
+      setShowExportMenu(false)
+      setShowPDFSettings(false)
+    } catch (error) {
+      console.error('Error exporting to PDF:', error)
+      alert('Failed to export PDF. Please try again.')
     }
-    
-    // Listen for afterprint event for reliable cleanup
-    const handleAfterPrint = () => {
-      cleanup()
-      window.removeEventListener('afterprint', handleAfterPrint)
-    }
-    
-    window.addEventListener('afterprint', handleAfterPrint)
-    
-    // Trigger print dialog
-    window.print()
-    
-    // Fallback cleanup in case afterprint doesn't fire (some browsers)
-    setTimeout(() => {
-      window.removeEventListener('afterprint', handleAfterPrint)
-      cleanup()
-    }, 1000)
-    
-    setShowExportMenu(false)
-  }, [note, noteContent])
+  }, [note, noteContent, pdfSettings])
 
   const handleExportToMarkdown = useCallback(() => {
     if (!note) return
@@ -1325,13 +1428,236 @@ export default function UnifiedPanel({
                         <div className="absolute top-full left-0 right-0 mt-2 bg-white rounded-xl shadow-2xl border border-gray-200 overflow-hidden z-10">
                           <div className="py-1">
                             <button
+                              onClick={() => setShowPDFSettings(!showPDFSettings)}
+                              className="w-full px-4 py-3 text-left hover:bg-gray-50 transition-colors flex items-center gap-3 group"
+                            >
+                              <Settings size={18} className="text-purple-500 group-hover:scale-110 transition-transform" />
+                              <div className="flex-1">
+                                <div className="text-sm font-semibold text-gray-900">Customize PDF Export</div>
+                                <div className="text-xs text-gray-500">Configure layout, fonts, and styling</div>
+                              </div>
+                              <ChevronDown size={16} className={`transition-transform ${showPDFSettings ? 'rotate-180' : ''}`} />
+                            </button>
+                            
+                            {/* PDF Settings Panel */}
+                            {showPDFSettings && (
+                              <div className="bg-gray-50 px-4 py-4 border-t border-gray-200 max-h-[500px] overflow-y-auto">
+                                <div className="space-y-4">
+                                  {/* Layout Section */}
+                                  <div>
+                                    <h4 className="text-xs font-semibold text-gray-700 uppercase mb-2">Layout</h4>
+                                    <div className="space-y-3">
+                                      <div>
+                                        <label className="text-xs text-gray-600 mb-1 block">Orientation</label>
+                                        <div className="flex gap-2">
+                                          <button
+                                            onClick={() => setPdfSettings(prev => ({ ...prev, orientation: 'portrait' }))}
+                                            className={`flex-1 px-3 py-2 text-xs rounded-lg transition-colors ${
+                                              pdfSettings.orientation === 'portrait'
+                                                ? 'bg-blue-500 text-white'
+                                                : 'bg-white text-gray-700 hover:bg-gray-100 border border-gray-300'
+                                            }`}
+                                          >
+                                            Portrait
+                                          </button>
+                                          <button
+                                            onClick={() => setPdfSettings(prev => ({ ...prev, orientation: 'landscape' }))}
+                                            className={`flex-1 px-3 py-2 text-xs rounded-lg transition-colors ${
+                                              pdfSettings.orientation === 'landscape'
+                                                ? 'bg-blue-500 text-white'
+                                                : 'bg-white text-gray-700 hover:bg-gray-100 border border-gray-300'
+                                            }`}
+                                          >
+                                            Landscape
+                                          </button>
+                                        </div>
+                                      </div>
+                                      
+                                      <div className="grid grid-cols-2 gap-2">
+                                        <div>
+                                          <label className="text-xs text-gray-600 mb-1 block">Top Margin (mm)</label>
+                                          <input
+                                            type="number"
+                                            value={pdfSettings.marginTop}
+                                            onChange={(e) => setPdfSettings(prev => ({ ...prev, marginTop: Number(e.target.value) }))}
+                                            className="w-full px-2 py-1.5 text-xs border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                                            min="0"
+                                            max="50"
+                                          />
+                                        </div>
+                                        <div>
+                                          <label className="text-xs text-gray-600 mb-1 block">Bottom Margin (mm)</label>
+                                          <input
+                                            type="number"
+                                            value={pdfSettings.marginBottom}
+                                            onChange={(e) => setPdfSettings(prev => ({ ...prev, marginBottom: Number(e.target.value) }))}
+                                            className="w-full px-2 py-1.5 text-xs border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                                            min="0"
+                                            max="50"
+                                          />
+                                        </div>
+                                        <div>
+                                          <label className="text-xs text-gray-600 mb-1 block">Left Margin (mm)</label>
+                                          <input
+                                            type="number"
+                                            value={pdfSettings.marginLeft}
+                                            onChange={(e) => setPdfSettings(prev => ({ ...prev, marginLeft: Number(e.target.value) }))}
+                                            className="w-full px-2 py-1.5 text-xs border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                                            min="0"
+                                            max="50"
+                                          />
+                                        </div>
+                                        <div>
+                                          <label className="text-xs text-gray-600 mb-1 block">Right Margin (mm)</label>
+                                          <input
+                                            type="number"
+                                            value={pdfSettings.marginRight}
+                                            onChange={(e) => setPdfSettings(prev => ({ ...prev, marginRight: Number(e.target.value) }))}
+                                            className="w-full px-2 py-1.5 text-xs border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                                            min="0"
+                                            max="50"
+                                          />
+                                        </div>
+                                      </div>
+                                    </div>
+                                  </div>
+
+                                  {/* Typography Section */}
+                                  <div>
+                                    <h4 className="text-xs font-semibold text-gray-700 uppercase mb-2">Typography</h4>
+                                    <div className="space-y-3">
+                                      <div>
+                                        <label className="text-xs text-gray-600 mb-1 block">Font Family</label>
+                                        <select
+                                          value={pdfSettings.fontFamily}
+                                          onChange={(e) => setPdfSettings(prev => ({ ...prev, fontFamily: e.target.value as any }))}
+                                          className="w-full px-2 py-1.5 text-xs border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                                        >
+                                          <option value="sans-serif">Sans Serif</option>
+                                          <option value="serif">Serif</option>
+                                          <option value="monospace">Monospace</option>
+                                        </select>
+                                      </div>
+                                      
+                                      <div>
+                                        <label className="text-xs text-gray-600 mb-1 block">Font Size: {pdfSettings.fontSize}px</label>
+                                        <input
+                                          type="range"
+                                          value={pdfSettings.fontSize}
+                                          onChange={(e) => setPdfSettings(prev => ({ ...prev, fontSize: Number(e.target.value) }))}
+                                          className="w-full"
+                                          min="10"
+                                          max="24"
+                                          step="1"
+                                        />
+                                      </div>
+                                      
+                                      <div>
+                                        <label className="text-xs text-gray-600 mb-1 block">Line Height: {pdfSettings.lineHeight}</label>
+                                        <input
+                                          type="range"
+                                          value={pdfSettings.lineHeight}
+                                          onChange={(e) => setPdfSettings(prev => ({ ...prev, lineHeight: Number(e.target.value) }))}
+                                          className="w-full"
+                                          min="1"
+                                          max="2.5"
+                                          step="0.1"
+                                        />
+                                      </div>
+                                    </div>
+                                  </div>
+
+                                  {/* Colors Section */}
+                                  <div>
+                                    <h4 className="text-xs font-semibold text-gray-700 uppercase mb-2">Colors</h4>
+                                    <div className="space-y-3">
+                                      <div>
+                                        <label className="text-xs text-gray-600 mb-1 block">Text Color</label>
+                                        <input
+                                          type="color"
+                                          value={pdfSettings.textColor}
+                                          onChange={(e) => setPdfSettings(prev => ({ ...prev, textColor: e.target.value }))}
+                                          className="w-full h-10 rounded-lg border border-gray-300 cursor-pointer"
+                                        />
+                                      </div>
+                                      
+                                      <div>
+                                        <label className="text-xs text-gray-600 mb-1 block">Heading Color</label>
+                                        <input
+                                          type="color"
+                                          value={pdfSettings.headingColor}
+                                          onChange={(e) => setPdfSettings(prev => ({ ...prev, headingColor: e.target.value }))}
+                                          className="w-full h-10 rounded-lg border border-gray-300 cursor-pointer"
+                                        />
+                                      </div>
+                                      
+                                      <div>
+                                        <label className="text-xs text-gray-600 mb-1 block">Background Color</label>
+                                        <input
+                                          type="color"
+                                          value={pdfSettings.backgroundColor}
+                                          onChange={(e) => setPdfSettings(prev => ({ ...prev, backgroundColor: e.target.value }))}
+                                          className="w-full h-10 rounded-lg border border-gray-300 cursor-pointer"
+                                        />
+                                      </div>
+                                    </div>
+                                  </div>
+
+                                  {/* Options Section */}
+                                  <div>
+                                    <h4 className="text-xs font-semibold text-gray-700 uppercase mb-2">Options</h4>
+                                    <div className="space-y-2">
+                                      <label className="flex items-center gap-2 cursor-pointer">
+                                        <input
+                                          type="checkbox"
+                                          checked={pdfSettings.includeTitle}
+                                          onChange={(e) => setPdfSettings(prev => ({ ...prev, includeTitle: e.target.checked }))}
+                                          className="rounded border-gray-300 text-blue-500 focus:ring-blue-500"
+                                        />
+                                        <span className="text-xs text-gray-700">Include note title</span>
+                                      </label>
+                                      
+                                      <label className="flex items-center gap-2 cursor-pointer">
+                                        <input
+                                          type="checkbox"
+                                          checked={pdfSettings.includeDate}
+                                          onChange={(e) => setPdfSettings(prev => ({ ...prev, includeDate: e.target.checked }))}
+                                          className="rounded border-gray-300 text-blue-500 focus:ring-blue-500"
+                                        />
+                                        <span className="text-xs text-gray-700">Include export date</span>
+                                      </label>
+                                      
+                                      <label className="flex items-center gap-2 cursor-pointer">
+                                        <input
+                                          type="checkbox"
+                                          checked={pdfSettings.includePageNumbers}
+                                          onChange={(e) => setPdfSettings(prev => ({ ...prev, includePageNumbers: e.target.checked }))}
+                                          className="rounded border-gray-300 text-blue-500 focus:ring-blue-500"
+                                        />
+                                        <span className="text-xs text-gray-700">Include page numbers</span>
+                                      </label>
+                                    </div>
+                                  </div>
+
+                                  {/* Export Button */}
+                                  <button
+                                    onClick={handleExportToPDF}
+                                    className="w-full px-4 py-2.5 bg-gradient-to-r from-blue-500 to-purple-500 text-white rounded-lg font-semibold hover:from-blue-600 hover:to-purple-600 transition-all shadow-md hover:shadow-lg"
+                                  >
+                                    Export PDF with Custom Settings
+                                  </button>
+                                </div>
+                              </div>
+                            )}
+                            
+                            <button
                               onClick={handleExportToPDF}
                               className="w-full px-4 py-3 text-left hover:bg-gray-50 transition-colors flex items-center gap-3 group"
                             >
                               <FileDown size={18} className="text-red-500 group-hover:scale-110 transition-transform" />
                               <div className="flex-1">
-                                <div className="text-sm font-semibold text-gray-900">Export to PDF</div>
-                                <div className="text-xs text-gray-500">Print-friendly PDF format</div>
+                                <div className="text-sm font-semibold text-gray-900">Quick Export to PDF</div>
+                                <div className="text-xs text-gray-500">Export with current settings</div>
                               </div>
                             </button>
                             <button
