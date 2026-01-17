@@ -36,6 +36,8 @@ import {
   Type,
   ArrowRight,
   MousePointerClick,
+  Zap,
+  MoreHorizontal,
 } from 'lucide-react'
 import {
   chat,
@@ -262,13 +264,13 @@ function renderMarkdown(content: string): string {
   }
 }
 
-// Markdown content component
+// Markdown content component with liquid glass styling
 function MarkdownContent({ content, className = '' }: { content: string; className?: string }) {
   const html = useMemo(() => renderMarkdown(content), [content])
   
   return (
     <div 
-      className={`prose prose-sm max-w-none prose-p:my-1 prose-headings:my-2 prose-ul:my-1 prose-ol:my-1 prose-li:my-0.5 prose-pre:my-2 prose-pre:bg-gray-800 prose-pre:text-gray-100 prose-code:text-purple-600 prose-code:bg-purple-50 prose-code:px-1 prose-code:py-0.5 prose-code:rounded prose-code:before:content-none prose-code:after:content-none ${className}`}
+      className={`prose prose-sm max-w-none prose-p:my-1.5 prose-headings:my-2 prose-ul:my-1.5 prose-ol:my-1.5 prose-li:my-0.5 prose-pre:my-2 prose-pre:bg-black/90 prose-pre:text-gray-100 prose-pre:border prose-pre:border-white/10 prose-code:text-black prose-code:bg-black/5 prose-code:px-1.5 prose-code:py-0.5 prose-code:rounded-md prose-code:font-medium prose-code:before:content-none prose-code:after:content-none prose-a:text-black prose-a:underline prose-a:decoration-black/30 hover:prose-a:decoration-black/60 ${className}`}
       dangerouslySetInnerHTML={{ __html: html }}
     />
   )
@@ -934,53 +936,67 @@ export default function AIAssistant({
     }
   }, [handleSend])
   
-  // Render chat history panel
+  // Render chat history panel with liquid glass theme
   const renderChatHistory = () => (
     <div className="flex-1 overflow-y-auto">
       {isLoadingHistory ? (
-        <div className="flex items-center justify-center py-8">
-          <Loader2 size={24} className="animate-spin text-gray-400" />
+        <div className="flex items-center justify-center py-12">
+          <div className="flex flex-col items-center gap-3">
+            <div className="w-10 h-10 rounded-full bg-black/5 backdrop-blur-sm flex items-center justify-center">
+              <Loader2 size={20} className="animate-spin text-black/40" />
+            </div>
+            <span className="text-xs text-black/40">Loading history...</span>
+          </div>
         </div>
       ) : chatHistory.length === 0 ? (
-        <div className="flex flex-col items-center justify-center py-8 text-gray-500">
-          <MessageSquare size={32} className="mb-2 opacity-50" />
-          <p className="text-sm">No chat history</p>
-          <p className="text-xs text-gray-400 mt-1">
-            Start a conversation to save it here
+        <div className="flex flex-col items-center justify-center py-12 px-6">
+          <div className="w-16 h-16 rounded-2xl bg-gradient-to-br from-black/5 to-black/10 backdrop-blur-md flex items-center justify-center mb-4">
+            <MessageSquare size={28} className="text-black/30" />
+          </div>
+          <p className="text-sm font-medium text-black/60">No conversations yet</p>
+          <p className="text-xs text-black/40 mt-1 text-center">
+            Start a conversation to see it saved here
           </p>
         </div>
       ) : (
-        <div className="p-2 space-y-2">
+        <div className="p-3 space-y-2">
           {chatHistory.map(chat => (
             <button
               key={chat.id}
               onClick={() => loadChat(chat)}
-              className={`w-full p-3 text-left rounded-lg transition-colors group ${
+              className={`w-full p-3 text-left rounded-xl transition-all duration-200 group ${
                 currentChatId === chat.id
-                  ? 'bg-purple-100 border border-purple-200'
-                  : 'bg-gray-50 hover:bg-gray-100 border border-transparent'
+                  ? 'bg-black text-white shadow-lg'
+                  : 'bg-white/60 backdrop-blur-sm hover:bg-white/80 border border-black/5 hover:border-black/10'
               }`}
             >
               <div className="flex items-start justify-between gap-2">
                 <div className="flex-1 min-w-0">
-                  <h4 className="text-sm font-medium text-gray-900 truncate">
+                  <h4 className={`text-sm font-medium truncate ${
+                    currentChatId === chat.id ? 'text-white' : 'text-black/80'
+                  }`}>
                     {chat.title}
                   </h4>
-                  <p className="text-xs text-gray-500 mt-0.5">
-                    {chat.messages.length} message{chat.messages.length !== 1 ? 's' : ''}
-                  </p>
-                  <p className="text-xs text-gray-400 mt-1">
-                    {new Date(chat.updated_at).toLocaleDateString(undefined, {
-                      month: 'short',
-                      day: 'numeric',
-                      hour: '2-digit',
-                      minute: '2-digit',
-                    })}
-                  </p>
+                  <div className={`flex items-center gap-2 mt-1 text-xs ${
+                    currentChatId === chat.id ? 'text-white/60' : 'text-black/40'
+                  }`}>
+                    <span>{chat.messages.length} messages</span>
+                    <span>·</span>
+                    <span>
+                      {new Date(chat.updated_at).toLocaleDateString(undefined, {
+                        month: 'short',
+                        day: 'numeric',
+                      })}
+                    </span>
+                  </div>
                 </div>
                 <button
                   onClick={(e) => handleDeleteChat(chat.id, e)}
-                  className="p-1.5 text-gray-400 hover:text-red-500 opacity-0 group-hover:opacity-100 transition-all"
+                  className={`p-1.5 rounded-lg opacity-0 group-hover:opacity-100 transition-all ${
+                    currentChatId === chat.id
+                      ? 'hover:bg-white/20 text-white/70 hover:text-white'
+                      : 'hover:bg-black/5 text-black/30 hover:text-red-500'
+                  }`}
                   title="Delete chat"
                 >
                   <Trash2 size={14} />
@@ -991,38 +1007,40 @@ export default function AIAssistant({
         </div>
       )}
       
-      {/* New Chat Button at bottom */}
-      <div className="p-3 border-t border-gray-200">
+      {/* New Chat Button */}
+      <div className="p-3 border-t border-black/5">
         <button
           onClick={startNewChat}
-          className="w-full flex items-center justify-center gap-2 px-4 py-2 bg-purple-600 text-white text-sm font-medium rounded-lg hover:bg-purple-700 transition-colors"
+          className="w-full flex items-center justify-center gap-2 px-4 py-3 bg-black text-white text-sm font-medium rounded-xl hover:bg-black/90 transition-all duration-200 shadow-lg hover:shadow-xl"
         >
           <Plus size={16} />
-          New Chat
+          New Conversation
         </button>
       </div>
     </div>
   )
   
-  // Render settings panel
+  // Render settings panel with liquid glass theme
   const renderSettings = () => (
-    <div className="p-4 bg-gray-50 border-b border-gray-200">
-      <div className="flex items-center justify-between mb-3">
-        <h3 className="text-sm font-semibold text-gray-700 flex items-center gap-2">
-          <Key size={16} />
+    <div className="p-4 bg-gradient-to-b from-white/80 to-white/60 backdrop-blur-xl border-b border-black/5">
+      <div className="flex items-center justify-between mb-4">
+        <h3 className="text-sm font-semibold text-black flex items-center gap-2">
+          <div className="w-7 h-7 rounded-lg bg-black/5 flex items-center justify-center">
+            <Key size={14} className="text-black/60" />
+          </div>
           API Configuration
         </h3>
         <button
           onClick={() => setShowSettings(false)}
-          className="p-1 hover:bg-gray-200 rounded transition-colors"
+          className="p-1.5 hover:bg-black/5 rounded-lg transition-colors"
         >
-          <X size={16} />
+          <X size={16} className="text-black/40" />
         </button>
       </div>
       
-      <div className="space-y-3">
+      <div className="space-y-4">
         <div>
-          <label className="block text-xs font-medium text-gray-600 mb-1">
+          <label className="block text-xs font-medium text-black/60 mb-2">
             DeepSeek API Key
           </label>
           <div className="relative">
@@ -1031,23 +1049,23 @@ export default function AIAssistant({
               value={apiKey}
               onChange={(e) => setApiKeyState(e.target.value)}
               placeholder="sk-..."
-              className="w-full px-3 py-2 pr-10 text-sm border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+              className="w-full px-4 py-2.5 pr-10 text-sm bg-white/80 backdrop-blur-sm border border-black/10 rounded-xl focus:ring-2 focus:ring-black/20 focus:border-black/20 focus:outline-none transition-all placeholder:text-black/30"
             />
             <button
               type="button"
               onClick={() => setShowApiKey(!showApiKey)}
-              className="absolute right-2 top-1/2 -translate-y-1/2 p-1 text-gray-400 hover:text-gray-600"
+              className="absolute right-3 top-1/2 -translate-y-1/2 p-1 text-black/30 hover:text-black/60 transition-colors"
             >
               {showApiKey ? <EyeOff size={16} /> : <Eye size={16} />}
             </button>
           </div>
-          <p className="mt-1 text-xs text-gray-500">
+          <p className="mt-2 text-xs text-black/40">
             Get your API key from{' '}
             <a
               href="https://platform.deepseek.com/api_keys"
               target="_blank"
               rel="noopener noreferrer"
-              className="text-blue-600 hover:underline"
+              className="text-black/60 underline hover:text-black transition-colors"
             >
               DeepSeek Platform
             </a>
@@ -1057,7 +1075,7 @@ export default function AIAssistant({
         <button
           onClick={handleSaveApiKey}
           disabled={!apiKey.trim()}
-          className="w-full px-4 py-2 bg-blue-600 text-white text-sm font-medium rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+          className="w-full px-4 py-2.5 bg-black text-white text-sm font-medium rounded-xl hover:bg-black/90 disabled:opacity-40 disabled:cursor-not-allowed transition-all shadow-md hover:shadow-lg"
         >
           Save API Key
         </button>
@@ -1065,7 +1083,7 @@ export default function AIAssistant({
     </div>
   )
   
-  // Render quick actions
+  // Render quick actions with liquid glass theme
   const renderQuickActions = () => {
     const noteActions: { action: QuickAction; icon: React.ReactNode; label: string }[] = [
       { action: 'summarize', icon: <FileText size={14} />, label: 'Summarize' },
@@ -1089,92 +1107,94 @@ export default function AIAssistant({
     ]
     
     const otherActions: { action: QuickAction; icon: React.ReactNode; label: string; show: boolean }[] = [
-      { action: 'suggest-tasks', icon: <CheckSquare size={14} />, label: 'Suggest Tasks', show: true },
-      { action: 'suggest-events', icon: <Calendar size={14} />, label: 'Suggest Events', show: true },
-      { action: 'mindmap-ideas', icon: <Network size={14} />, label: 'Mindmap Ideas', show: !!mindmapData },
+      { action: 'suggest-tasks', icon: <CheckSquare size={14} />, label: 'Tasks', show: true },
+      { action: 'suggest-events', icon: <Calendar size={14} />, label: 'Events', show: true },
+      { action: 'mindmap-ideas', icon: <Network size={14} />, label: 'Mindmap', show: !!mindmapData },
     ]
     
     const hasSelection = selectedText && selectedText.trim().length > 0
     
     return (
-      <div className="p-3 border-b border-gray-200 bg-gradient-to-br from-purple-50 to-blue-50">
-        <div className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2 flex items-center gap-1.5">
-          <Lightbulb size={12} />
-          Quick Actions
-        </div>
-        
-        {/* Selection-based actions - shown prominently when text is selected */}
+      <div className="p-4 border-b border-black/5 bg-gradient-to-b from-black/[0.02] to-transparent">
+        {/* Selection Actions - Primary when text is selected */}
         {hasSelection && (
-          <div className="mb-3">
-            <div className="text-xs text-purple-600 mb-1.5 flex items-center gap-1">
-              <MousePointerClick size={12} />
-              Selection ({selectedText.length > TEXT_TRUNCATION_SHORT ? `${selectedText.slice(0, TEXT_TRUNCATION_SHORT)}...` : selectedText})
+          <div className="mb-4">
+            <div className="flex items-center gap-2 mb-3">
+              <div className="w-6 h-6 rounded-lg bg-black flex items-center justify-center">
+                <MousePointerClick size={12} className="text-white" />
+              </div>
+              <span className="text-xs font-medium text-black/80">Selection</span>
+              <span className="text-xs text-black/40 truncate max-w-[140px]">
+                &quot;{selectedText.slice(0, 30)}{selectedText.length > 30 ? '...' : ''}&quot;
+              </span>
             </div>
-            <div className="flex flex-wrap gap-1.5">
+            <div className="grid grid-cols-4 gap-2">
               {selectionActions.map(({ action, icon, label }) => (
                 <button
                   key={action}
                   onClick={() => handleQuickAction(action)}
                   disabled={isLoading}
-                  className="inline-flex items-center gap-1 px-2 py-1 text-xs font-medium bg-purple-100 border border-purple-200 text-purple-700 rounded-md hover:bg-purple-200 hover:border-purple-300 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                  className="flex flex-col items-center gap-1.5 p-2.5 bg-black text-white rounded-xl hover:bg-black/90 disabled:opacity-40 disabled:cursor-not-allowed transition-all shadow-sm hover:shadow-md"
                 >
                   {icon}
-                  {label}
+                  <span className="text-[10px] font-medium">{label}</span>
                 </button>
               ))}
             </div>
           </div>
         )}
         
-        {/* Writing assistance */}
-        {writingActions.some(a => a.show) && (
-          <div className="mb-2">
-            <div className="text-xs text-gray-500 mb-1.5">Writing</div>
-            <div className="flex flex-wrap gap-1.5">
-              {writingActions.filter(a => a.show).map(({ action, icon, label }) => (
-                <button
-                  key={action}
-                  onClick={() => handleQuickAction(action)}
-                  disabled={isLoading}
-                  className="inline-flex items-center gap-1 px-2 py-1 text-xs font-medium bg-blue-50 border border-blue-200 text-blue-700 rounded-md hover:bg-blue-100 hover:border-blue-300 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-                >
-                  {icon}
-                  {label}
-                </button>
-              ))}
-            </div>
+        {/* Quick Actions Grid */}
+        <div className="flex items-center gap-2 mb-3">
+          <div className="w-6 h-6 rounded-lg bg-black/5 flex items-center justify-center">
+            <Zap size={12} className="text-black/60" />
           </div>
-        )}
+          <span className="text-xs font-medium text-black/60">Quick Actions</span>
+        </div>
         
-        {note && (
-          <div className="mb-2">
-            <div className="text-xs text-gray-500 mb-1.5">Note</div>
-            <div className="flex flex-wrap gap-1.5">
-              {noteActions.map(({ action, icon, label }) => (
-                <button
-                  key={action}
-                  onClick={() => handleQuickAction(action)}
-                  disabled={isLoading}
-                  className="inline-flex items-center gap-1 px-2 py-1 text-xs font-medium bg-white border border-gray-200 rounded-md hover:bg-gray-50 hover:border-gray-300 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-                >
-                  {icon}
-                  {label}
-                </button>
-              ))}
-            </div>
-          </div>
-        )}
-        
-        <div className="flex flex-wrap gap-1.5">
+        <div className="grid grid-cols-4 gap-2">
+          {/* Writing Actions */}
+          {writingActions.filter(a => a.show).map(({ action, icon, label }) => (
+            <button
+              key={action}
+              onClick={() => handleQuickAction(action)}
+              disabled={isLoading}
+              className="flex flex-col items-center gap-1.5 p-2.5 bg-white/80 backdrop-blur-sm border border-black/5 rounded-xl hover:bg-white hover:border-black/10 disabled:opacity-40 disabled:cursor-not-allowed transition-all group"
+            >
+              <div className="text-black/50 group-hover:text-black/70 transition-colors">
+                {icon}
+              </div>
+              <span className="text-[10px] font-medium text-black/60 group-hover:text-black/80">{label}</span>
+            </button>
+          ))}
+          
+          {/* Note Actions */}
+          {note && noteActions.map(({ action, icon, label }) => (
+            <button
+              key={action}
+              onClick={() => handleQuickAction(action)}
+              disabled={isLoading}
+              className="flex flex-col items-center gap-1.5 p-2.5 bg-white/80 backdrop-blur-sm border border-black/5 rounded-xl hover:bg-white hover:border-black/10 disabled:opacity-40 disabled:cursor-not-allowed transition-all group"
+            >
+              <div className="text-black/50 group-hover:text-black/70 transition-colors">
+                {icon}
+              </div>
+              <span className="text-[10px] font-medium text-black/60 group-hover:text-black/80">{label}</span>
+            </button>
+          ))}
+          
+          {/* Other Actions */}
           {otherActions.filter(a => a.show).map(({ action, icon, label }) => (
             <button
               key={action}
               onClick={() => handleQuickAction(action)}
               disabled={isLoading}
-              className="inline-flex items-center gap-1 px-2 py-1 text-xs font-medium bg-white border border-gray-200 rounded-md hover:bg-gray-50 hover:border-gray-300 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+              className="flex flex-col items-center gap-1.5 p-2.5 bg-white/80 backdrop-blur-sm border border-black/5 rounded-xl hover:bg-white hover:border-black/10 disabled:opacity-40 disabled:cursor-not-allowed transition-all group"
             >
-              {icon}
-              {label}
+              <div className="text-black/50 group-hover:text-black/70 transition-colors">
+                {icon}
+              </div>
+              <span className="text-[10px] font-medium text-black/60 group-hover:text-black/80">{label}</span>
             </button>
           ))}
         </div>
@@ -1182,54 +1202,64 @@ export default function AIAssistant({
     )
   }
   
-  // Render suggestions panel
+  // Render suggestions panel with liquid glass theme
   const renderSuggestions = () => {
     if (!showSuggestions) return null
     
     return (
-      <div className="p-3 border-b border-gray-200 bg-amber-50">
-        <div className="flex items-center justify-between mb-2">
-          <div className="text-xs font-semibold text-amber-700 uppercase tracking-wide flex items-center gap-1.5">
-            <Sparkles size={12} />
-            AI Suggestions
+      <div className="p-4 border-b border-black/5 bg-gradient-to-b from-black/[0.03] to-transparent">
+        <div className="flex items-center justify-between mb-3">
+          <div className="flex items-center gap-2">
+            <div className="w-6 h-6 rounded-lg bg-black flex items-center justify-center">
+              <Sparkles size={12} className="text-white" />
+            </div>
+            <span className="text-xs font-semibold text-black/80">AI Suggestions</span>
           </div>
           <button
             onClick={() => {
               setSuggestions({})
               setShowSuggestions(false)
             }}
-            className="p-1 hover:bg-amber-100 rounded transition-colors text-amber-600"
+            className="p-1.5 hover:bg-black/5 rounded-lg transition-colors"
           >
-            <X size={14} />
+            <X size={14} className="text-black/40" />
           </button>
         </div>
         
         {/* Summary */}
         {suggestions.summary && (
-          <div className="bg-white rounded-lg p-3 mb-2 border border-amber-200">
-            <div className="text-sm font-medium text-gray-800 mb-2">Summary</div>
-            <p className="text-sm text-gray-700 mb-2">{suggestions.summary.summary}</p>
+          <div className="bg-white/80 backdrop-blur-sm rounded-xl p-4 mb-3 border border-black/5 shadow-sm">
+            <div className="text-xs font-semibold text-black/70 mb-2 flex items-center gap-1.5">
+              <FileText size={12} />
+              Summary
+            </div>
+            <p className="text-sm text-black/70 leading-relaxed">{suggestions.summary.summary}</p>
             {suggestions.summary.keyPoints.length > 0 && (
-              <div className="mt-2">
-                <div className="text-xs font-medium text-gray-600 mb-1">Key Points:</div>
-                <ul className="list-disc list-inside text-xs text-gray-600 space-y-0.5">
+              <div className="mt-3 pt-3 border-t border-black/5">
+                <div className="text-xs font-medium text-black/50 mb-2">Key Points</div>
+                <ul className="space-y-1.5">
                   {suggestions.summary.keyPoints.map((point, i) => (
-                    <li key={i}>{point}</li>
+                    <li key={i} className="flex gap-2 text-xs text-black/60">
+                      <span className="w-4 h-4 rounded-full bg-black/5 flex items-center justify-center flex-shrink-0 text-[10px] font-medium">
+                        {i + 1}
+                      </span>
+                      {point}
+                    </li>
                   ))}
                 </ul>
               </div>
             )}
             {suggestions.summary.suggestedTasks && suggestions.summary.suggestedTasks.length > 0 && (
-              <div className="mt-2 pt-2 border-t border-amber-100">
-                <div className="text-xs font-medium text-gray-600 mb-1">Suggested Tasks:</div>
-                <div className="space-y-1">
+              <div className="mt-3 pt-3 border-t border-black/5">
+                <div className="text-xs font-medium text-black/50 mb-2">Suggested Tasks</div>
+                <div className="space-y-1.5">
                   {suggestions.summary.suggestedTasks.map((task, i) => (
                     <button
                       key={i}
                       onClick={() => handleApplyTask({ title: task })}
-                      className="flex items-center gap-1.5 text-xs text-blue-600 hover:text-blue-700"
+                      className="flex items-center gap-2 w-full text-left text-xs text-black/60 hover:text-black transition-colors p-2 rounded-lg hover:bg-black/5"
                     >
-                      <Plus size={12} />
+                      <Plus size={12} className="text-black/40" />
                       {task}
                     </button>
                   ))}
@@ -1241,39 +1271,39 @@ export default function AIAssistant({
         
         {/* Task Suggestions */}
         {suggestions.tasks && suggestions.tasks.length > 0 && (
-          <div className="bg-white rounded-lg p-3 mb-2 border border-amber-200">
-            <div className="text-sm font-medium text-gray-800 mb-2 flex items-center gap-1.5">
-              <CheckSquare size={14} className="text-blue-600" />
+          <div className="bg-white/80 backdrop-blur-sm rounded-xl p-4 mb-3 border border-black/5 shadow-sm">
+            <div className="text-xs font-semibold text-black/70 mb-3 flex items-center gap-1.5">
+              <CheckSquare size={12} />
               Task Suggestions
             </div>
             <div className="space-y-2">
               {suggestions.tasks.map((task, i) => (
-                <div key={i} className="flex items-start justify-between gap-2 p-2 bg-gray-50 rounded-md">
+                <div key={i} className="flex items-start justify-between gap-3 p-3 bg-black/[0.02] rounded-lg">
                   <div className="flex-1 min-w-0">
-                    <div className="text-sm font-medium text-gray-800">{task.title}</div>
+                    <div className="text-sm font-medium text-black/80">{task.title}</div>
                     {task.description && (
-                      <div className="text-xs text-gray-600 mt-0.5">{task.description}</div>
+                      <div className="text-xs text-black/50 mt-1">{task.description}</div>
                     )}
-                    <div className="flex items-center gap-2 mt-1">
+                    <div className="flex items-center gap-2 mt-2">
                       {task.priority && (
-                        <span className={`text-xs px-1.5 py-0.5 rounded ${
-                          task.priority === 'urgent' ? 'bg-red-100 text-red-700' :
-                          task.priority === 'high' ? 'bg-orange-100 text-orange-700' :
-                          task.priority === 'low' ? 'bg-gray-100 text-gray-600' :
-                          'bg-blue-100 text-blue-700'
+                        <span className={`text-[10px] px-2 py-0.5 rounded-full font-medium ${
+                          task.priority === 'urgent' ? 'bg-black text-white' :
+                          task.priority === 'high' ? 'bg-black/80 text-white' :
+                          task.priority === 'low' ? 'bg-black/10 text-black/60' :
+                          'bg-black/20 text-black/70'
                         }`}>
                           {task.priority}
                         </span>
                       )}
                       {task.dueDate && (
-                        <span className="text-xs text-gray-500">{task.dueDate}</span>
+                        <span className="text-[10px] text-black/40">{task.dueDate}</span>
                       )}
                     </div>
                   </div>
                   {onCreateTask && (
                     <button
                       onClick={() => handleApplyTask(task)}
-                      className="px-2 py-1 text-xs font-medium bg-blue-600 text-white rounded hover:bg-blue-700 transition-colors flex-shrink-0"
+                      className="px-3 py-1.5 text-xs font-medium bg-black text-white rounded-lg hover:bg-black/90 transition-colors flex-shrink-0"
                     >
                       Add
                     </button>
@@ -1286,20 +1316,20 @@ export default function AIAssistant({
         
         {/* Event Suggestions */}
         {suggestions.events && suggestions.events.length > 0 && (
-          <div className="bg-white rounded-lg p-3 mb-2 border border-amber-200">
-            <div className="text-sm font-medium text-gray-800 mb-2 flex items-center gap-1.5">
-              <Calendar size={14} className="text-purple-600" />
+          <div className="bg-white/80 backdrop-blur-sm rounded-xl p-4 mb-3 border border-black/5 shadow-sm">
+            <div className="text-xs font-semibold text-black/70 mb-3 flex items-center gap-1.5">
+              <Calendar size={12} />
               Event Suggestions
             </div>
             <div className="space-y-2">
               {suggestions.events.map((event, i) => (
-                <div key={i} className="flex items-start justify-between gap-2 p-2 bg-gray-50 rounded-md">
+                <div key={i} className="flex items-start justify-between gap-3 p-3 bg-black/[0.02] rounded-lg">
                   <div className="flex-1 min-w-0">
-                    <div className="text-sm font-medium text-gray-800">{event.title}</div>
+                    <div className="text-sm font-medium text-black/80">{event.title}</div>
                     {event.description && (
-                      <div className="text-xs text-gray-600 mt-0.5">{event.description}</div>
+                      <div className="text-xs text-black/50 mt-1">{event.description}</div>
                     )}
-                    <div className="flex items-center gap-2 mt-1 text-xs text-gray-500">
+                    <div className="flex items-center gap-2 mt-2 text-[10px] text-black/40">
                       {event.suggestedDate && <span>{event.suggestedDate}</span>}
                       {event.duration && <span>({event.duration} min)</span>}
                     </div>
@@ -1307,7 +1337,7 @@ export default function AIAssistant({
                   {onCreateEvent && event.suggestedDate && (
                     <button
                       onClick={() => handleApplyEvent(event)}
-                      className="px-2 py-1 text-xs font-medium bg-purple-600 text-white rounded hover:bg-purple-700 transition-colors flex-shrink-0"
+                      className="px-3 py-1.5 text-xs font-medium bg-black text-white rounded-lg hover:bg-black/90 transition-colors flex-shrink-0"
                     >
                       Add
                     </button>
@@ -1320,23 +1350,23 @@ export default function AIAssistant({
         
         {/* Mindmap Suggestions */}
         {suggestions.mindmap && suggestions.mindmap.length > 0 && (
-          <div className="bg-white rounded-lg p-3 border border-amber-200">
-            <div className="text-sm font-medium text-gray-800 mb-2 flex items-center gap-1.5">
-              <Network size={14} className="text-green-600" />
+          <div className="bg-white/80 backdrop-blur-sm rounded-xl p-4 border border-black/5 shadow-sm">
+            <div className="text-xs font-semibold text-black/70 mb-3 flex items-center gap-1.5">
+              <Network size={12} />
               Mindmap Ideas
             </div>
             <div className="space-y-2">
               {suggestions.mindmap.map((suggestion, i) => (
-                <div key={i} className="flex items-start justify-between gap-2 p-2 bg-gray-50 rounded-md">
+                <div key={i} className="flex items-start justify-between gap-3 p-3 bg-black/[0.02] rounded-lg">
                   <div className="flex-1 min-w-0">
-                    <div className="text-sm font-medium text-gray-800">{suggestion.nodeText}</div>
+                    <div className="text-sm font-medium text-black/80">{suggestion.nodeText}</div>
                     {suggestion.description && (
-                      <div className="text-xs text-gray-600 mt-0.5">{suggestion.description}</div>
+                      <div className="text-xs text-black/50 mt-1">{suggestion.description}</div>
                     )}
                     {suggestion.childSuggestions && suggestion.childSuggestions.length > 0 && (
-                      <div className="mt-1 flex flex-wrap gap-1">
+                      <div className="mt-2 flex flex-wrap gap-1">
                         {suggestion.childSuggestions.map((child, j) => (
-                          <span key={j} className="text-xs px-1.5 py-0.5 bg-green-50 text-green-700 rounded">
+                          <span key={j} className="text-[10px] px-2 py-0.5 bg-black/5 text-black/60 rounded-full">
                             {child}
                           </span>
                         ))}
@@ -1346,7 +1376,7 @@ export default function AIAssistant({
                   {onAddMindmapNode && (
                     <button
                       onClick={() => handleApplyMindmapNode(suggestion)}
-                      className="px-2 py-1 text-xs font-medium bg-green-600 text-white rounded hover:bg-green-700 transition-colors flex-shrink-0"
+                      className="px-3 py-1.5 text-xs font-medium bg-black text-white rounded-lg hover:bg-black/90 transition-colors flex-shrink-0"
                     >
                       Add
                     </button>
@@ -1360,7 +1390,7 @@ export default function AIAssistant({
     )
   }
   
-  // Render structured content (parsed JSON response)
+  // Render structured content with liquid glass theme
   const renderStructuredContent = (parsed: ParsedAIResponse) => {
     if (parsed.type === 'text') {
       // Render plain text responses as markdown
@@ -1368,32 +1398,32 @@ export default function AIAssistant({
     }
     
     return (
-      <div className="space-y-3">
+      <div className="space-y-4">
         {/* Summary */}
         {parsed.summary && (
           <div>
-            <div className="text-xs font-semibold text-purple-700 uppercase tracking-wide mb-1 flex items-center gap-1">
-              <FileText size={12} />
+            <div className="text-[10px] font-semibold text-black/50 uppercase tracking-wider mb-1.5 flex items-center gap-1">
+              <FileText size={10} />
               Summary
             </div>
-            <p className="text-sm text-gray-700 leading-relaxed">{parsed.summary}</p>
+            <p className="text-sm text-black/80 leading-relaxed">{parsed.summary}</p>
           </div>
         )}
         
         {/* Key Points */}
         {parsed.keyPoints && parsed.keyPoints.length > 0 && (
           <div>
-            <div className="text-xs font-semibold text-blue-700 uppercase tracking-wide mb-1.5 flex items-center gap-1">
-              <Lightbulb size={12} />
+            <div className="text-[10px] font-semibold text-black/50 uppercase tracking-wider mb-2 flex items-center gap-1">
+              <Lightbulb size={10} />
               Key Points
             </div>
-            <ul className="space-y-1.5">
+            <ul className="space-y-2">
               {parsed.keyPoints.map((point, i) => (
-                <li key={i} className="flex gap-2 text-sm text-gray-700">
-                  <span className="flex-shrink-0 w-5 h-5 rounded-full bg-blue-100 text-blue-700 text-xs font-medium flex items-center justify-center">
+                <li key={i} className="flex gap-2.5 text-sm text-black/70">
+                  <span className="flex-shrink-0 w-5 h-5 rounded-full bg-black text-white text-[10px] font-medium flex items-center justify-center">
                     {i + 1}
                   </span>
-                  <span className="leading-relaxed">{point}</span>
+                  <span className="leading-relaxed pt-0.5">{point}</span>
                 </li>
               ))}
             </ul>
@@ -1403,20 +1433,20 @@ export default function AIAssistant({
         {/* Suggested Tasks */}
         {parsed.suggestedTasks && parsed.suggestedTasks.length > 0 && (
           <div>
-            <div className="text-xs font-semibold text-green-700 uppercase tracking-wide mb-1.5 flex items-center gap-1">
-              <CheckSquare size={12} />
+            <div className="text-[10px] font-semibold text-black/50 uppercase tracking-wider mb-2 flex items-center gap-1">
+              <CheckSquare size={10} />
               Suggested Tasks
             </div>
-            <ul className="space-y-1">
+            <ul className="space-y-1.5">
               {parsed.suggestedTasks.map((task, i) => (
                 <li key={i} className="flex items-start gap-2 group">
-                  <div className="flex-1 text-sm text-gray-700 bg-green-50 px-2 py-1.5 rounded-md border border-green-100">
+                  <div className="flex-1 text-sm text-black/70 bg-black/[0.03] px-3 py-2 rounded-lg border border-black/5">
                     {task}
                   </div>
                   {onCreateTask && (
                     <button
                       onClick={() => handleApplyTask({ title: task })}
-                      className="flex-shrink-0 p-1.5 text-green-600 hover:bg-green-100 rounded transition-colors opacity-0 group-hover:opacity-100"
+                      className="flex-shrink-0 p-2 text-black/30 hover:text-black hover:bg-black/5 rounded-lg transition-all opacity-0 group-hover:opacity-100"
                       title="Add as task"
                     >
                       <Plus size={14} />
@@ -1431,15 +1461,17 @@ export default function AIAssistant({
     )
   }
   
-  // Render messages
+  // Render messages with liquid glass theme
   const renderMessages = () => (
-    <div className="flex-1 overflow-y-auto p-3 space-y-3">
+    <div className="flex-1 overflow-y-auto p-4 space-y-4">
       {messages.length === 0 ? (
-        <div className="text-center py-8">
-          <Bot size={40} className="mx-auto text-gray-300 mb-3" />
-          <p className="text-sm text-gray-500 mb-1">AI Assistant</p>
-          <p className="text-xs text-gray-400">
-            Ask me anything about your notes, tasks, or ideas!
+        <div className="flex flex-col items-center justify-center py-12">
+          <div className="w-20 h-20 rounded-3xl bg-gradient-to-br from-black/5 to-black/10 backdrop-blur-md flex items-center justify-center mb-4">
+            <Bot size={36} className="text-black/30" />
+          </div>
+          <p className="text-sm font-medium text-black/60">AI Assistant</p>
+          <p className="text-xs text-black/40 mt-1 text-center max-w-[200px]">
+            Ask me anything about your notes, tasks, or ideas
           </p>
         </div>
       ) : (
@@ -1452,29 +1484,32 @@ export default function AIAssistant({
           return (
             <div
               key={message.id}
-              className={`flex gap-2 ${message.role === 'user' ? 'flex-row-reverse' : ''}`}
+              className={`flex gap-3 ${message.role === 'user' ? 'flex-row-reverse' : ''}`}
             >
-              <div className={`flex-shrink-0 w-7 h-7 rounded-full flex items-center justify-center ${
+              <div className={`flex-shrink-0 w-8 h-8 rounded-xl flex items-center justify-center shadow-sm ${
                 message.role === 'user'
-                  ? 'bg-blue-600 text-white'
-                  : 'bg-gradient-to-br from-purple-500 to-blue-500 text-white'
+                  ? 'bg-black text-white'
+                  : 'bg-white/80 backdrop-blur-sm border border-black/5 text-black/60'
               }`}>
                 {message.role === 'user' ? <User size={14} /> : <Sparkles size={14} />}
               </div>
               
               <div className={`flex-1 ${message.role === 'user' ? 'text-right' : ''}`} style={{ maxWidth: isStructured ? '100%' : '85%' }}>
-                <div className={`inline-block px-3 py-2 rounded-xl text-sm ${
+                <div className={`inline-block px-4 py-3 rounded-2xl text-sm shadow-sm ${
                   message.role === 'user'
-                    ? 'bg-blue-600 text-white rounded-br-sm'
+                    ? 'bg-black text-white rounded-tr-md'
                     : isStructured
-                      ? 'bg-gradient-to-br from-purple-50 to-blue-50 text-gray-800 rounded-bl-sm border border-purple-100 w-full'
-                      : 'bg-gray-100 text-gray-800 rounded-bl-sm'
+                      ? 'bg-white/80 backdrop-blur-sm text-black/80 rounded-tl-md border border-black/5 w-full'
+                      : 'bg-white/80 backdrop-blur-sm text-black/80 rounded-tl-md border border-black/5'
                 }`}>
                   {message.isStreaming ? (
                     streamingContent ? (
                       <MarkdownContent content={streamingContent} className="prose-invert-none" />
                     ) : (
-                      <Loader2 size={14} className="animate-spin" />
+                      <div className="flex items-center gap-2">
+                        <Loader2 size={14} className="animate-spin" />
+                        <span className="text-xs text-black/40">Thinking...</span>
+                      </div>
                     )
                   ) : parsed ? (
                     renderStructuredContent(parsed)
@@ -1486,10 +1521,10 @@ export default function AIAssistant({
                 </div>
                 
                 {message.role === 'assistant' && !message.isStreaming && (
-                  <div className="flex items-center gap-1 mt-1 flex-wrap">
+                  <div className="flex items-center gap-0.5 mt-2 flex-wrap">
                     <button
                       onClick={() => handleCopy(message.content, message.id)}
-                      className="p-1 text-gray-400 hover:text-gray-600 transition-colors"
+                      className="p-1.5 text-black/30 hover:text-black hover:bg-black/5 rounded-lg transition-all"
                       title="Copy"
                     >
                       {copiedId === message.id ? <Check size={12} /> : <Copy size={12} />}
@@ -1497,7 +1532,7 @@ export default function AIAssistant({
                     {onInsertText && (
                       <button
                         onClick={() => handleInsertToNote(message.content)}
-                        className="p-1 text-gray-400 hover:text-gray-600 transition-colors"
+                        className="p-1.5 text-black/30 hover:text-black hover:bg-black/5 rounded-lg transition-all"
                         title="Append to note"
                       >
                         <FileText size={12} />
@@ -1506,7 +1541,7 @@ export default function AIAssistant({
                     {onInsertAtCursor && (
                       <button
                         onClick={() => handleInsertAtCursorPosition(message.content)}
-                        className="p-1 text-gray-400 hover:text-blue-600 transition-colors"
+                        className="p-1.5 text-black/30 hover:text-black hover:bg-black/5 rounded-lg transition-all"
                         title="Insert at cursor"
                       >
                         <PenLine size={12} />
@@ -1515,7 +1550,7 @@ export default function AIAssistant({
                     {selectedText && onReplaceSelection && (
                       <button
                         onClick={() => handleReplaceSelectionWithResponse(message.content)}
-                        className="p-1 text-gray-400 hover:text-purple-600 transition-colors"
+                        className="p-1.5 text-black/30 hover:text-black hover:bg-black/5 rounded-lg transition-all"
                         title="Replace selection"
                       >
                         <ArrowRight size={12} />
@@ -1532,29 +1567,29 @@ export default function AIAssistant({
     </div>
   )
   
-  // Render input area
+  // Render input area with liquid glass theme
   const renderInput = () => (
-    <div className="p-3 border-t border-gray-200 bg-white">
+    <div className="p-4 border-t border-black/5 bg-gradient-to-t from-white to-white/80 backdrop-blur-xl">
       {error && (
-        <div className="mb-2 px-3 py-2 bg-red-50 border border-red-200 rounded-lg text-xs text-red-600 flex items-center gap-2">
-          <X size={14} className="flex-shrink-0" />
-          <span>{error}</span>
+        <div className="mb-3 px-4 py-2.5 bg-black/5 border border-black/10 rounded-xl text-xs text-black/70 flex items-center gap-2">
+          <X size={14} className="flex-shrink-0 text-black/40" />
+          <span className="flex-1">{error}</span>
           <button
             onClick={() => setError(null)}
-            className="ml-auto p-0.5 hover:bg-red-100 rounded"
+            className="p-1 hover:bg-black/10 rounded-lg transition-colors"
           >
-            <X size={12} />
+            <X size={12} className="text-black/40" />
           </button>
         </div>
       )}
       
       {/* Selected text indicator */}
       {selectedText && selectedText.trim() && (
-        <div className="mb-2 px-3 py-2 bg-purple-50 border border-purple-200 rounded-lg text-xs text-purple-700 flex items-start gap-2">
-          <MousePointerClick size={14} className="flex-shrink-0 mt-0.5" />
+        <div className="mb-3 px-4 py-2.5 bg-black/[0.03] border border-black/5 rounded-xl text-xs flex items-start gap-2">
+          <MousePointerClick size={14} className="flex-shrink-0 mt-0.5 text-black/40" />
           <div className="flex-1 min-w-0">
-            <span className="font-medium">Selected text:</span>
-            <span className="ml-1 text-purple-600 italic">
+            <span className="font-medium text-black/60">Selected:</span>
+            <span className="ml-1 text-black/50 italic">
               &quot;{selectedText.length > TEXT_TRUNCATION_MEDIUM ? selectedText.slice(0, TEXT_TRUNCATION_MEDIUM) + '...' : selectedText}&quot;
             </span>
           </div>
@@ -1569,37 +1604,37 @@ export default function AIAssistant({
           onKeyDown={handleKeyDown}
           placeholder={hasKey 
             ? selectedText 
-              ? "Ask about the selection, or type 'improve', 'explain', 'simplify'..." 
+              ? "Ask about the selection..." 
               : "Ask anything..." 
             : "Configure API key to start..."}
           disabled={isLoading || !hasKey}
           rows={1}
-          className="w-full px-3 py-2 pr-10 text-sm border border-gray-200 rounded-lg resize-none focus:ring-2 focus:ring-blue-500 focus:border-transparent disabled:bg-gray-50 disabled:cursor-not-allowed"
-          style={{ minHeight: '40px', maxHeight: '120px' }}
+          className="w-full px-4 py-3 pr-12 text-sm bg-white/80 backdrop-blur-sm border border-black/10 rounded-xl resize-none focus:ring-2 focus:ring-black/10 focus:border-black/20 focus:outline-none disabled:bg-black/5 disabled:cursor-not-allowed transition-all placeholder:text-black/30"
+          style={{ minHeight: '48px', maxHeight: '120px' }}
         />
         <button
           onClick={handleSend}
           disabled={!inputValue.trim() || isLoading || !hasKey}
-          className="absolute right-2 top-1/2 -translate-y-1/2 p-1.5 bg-blue-600 text-white rounded-md hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+          className="absolute right-2 top-1/2 -translate-y-1/2 p-2 bg-black text-white rounded-lg hover:bg-black/90 disabled:opacity-30 disabled:cursor-not-allowed transition-all shadow-sm"
         >
           {isLoading ? <Loader2 size={16} className="animate-spin" /> : <Send size={16} />}
         </button>
       </div>
       
-      <div className="flex items-center justify-between mt-2 text-xs text-gray-400">
-        <span>Press Enter to send, Shift+Enter for new line</span>
-        <div className="flex items-center gap-2">
+      <div className="flex items-center justify-between mt-3 text-[10px] text-black/40">
+        <span>Enter to send · Shift+Enter for new line</span>
+        <div className="flex items-center gap-1">
           <button
             onClick={handleClearChat}
             disabled={messages.length === 0}
-            className="p-1 hover:text-gray-600 disabled:opacity-50 transition-colors"
+            className="p-1.5 hover:bg-black/5 hover:text-black/60 disabled:opacity-30 rounded-lg transition-all"
             title="Clear chat"
           >
             <Trash2 size={14} />
           </button>
           <button
             onClick={() => setShowSettings(!showSettings)}
-            className="p-1 hover:text-gray-600 transition-colors"
+            className="p-1.5 hover:bg-black/5 hover:text-black/60 rounded-lg transition-all"
             title="Settings"
           >
             <Settings size={14} />
@@ -1610,28 +1645,28 @@ export default function AIAssistant({
   )
   
   return (
-    <div className="flex flex-col h-full bg-white">
-      {/* Header */}
-      <div className="p-3 border-b border-gray-200 bg-gradient-to-r from-purple-600 to-blue-600">
+    <div className="flex flex-col h-full bg-gradient-to-b from-white/95 to-white/90 backdrop-blur-2xl">
+      {/* Header with liquid glass effect */}
+      <div className="p-4 border-b border-black/5 bg-white/80 backdrop-blur-xl">
         <div className="flex items-center justify-between">
-          <div className="flex items-center gap-2 text-white">
+          <div className="flex items-center gap-3">
             {showChatHistory ? (
               <button
                 onClick={() => setShowChatHistory(false)}
-                className="p-1.5 hover:bg-white/20 rounded-lg transition-colors"
+                className="p-2 hover:bg-black/5 rounded-xl transition-colors"
               >
-                <ChevronLeft size={18} />
+                <ChevronLeft size={18} className="text-black/60" />
               </button>
             ) : (
-              <div className="p-1.5 bg-white/20 rounded-lg">
-                <Sparkles size={18} />
+              <div className="w-10 h-10 rounded-xl bg-black flex items-center justify-center shadow-lg">
+                <Sparkles size={18} className="text-white" />
               </div>
             )}
             <div>
-              <h3 className="font-semibold text-sm">
-                {showChatHistory ? 'Chat History' : 'AI Assistant'}
+              <h3 className="font-semibold text-sm text-black">
+                {showChatHistory ? 'History' : 'AI Assistant'}
               </h3>
-              <p className="text-xs text-white/70">
+              <p className="text-[10px] text-black/40">
                 {showChatHistory 
                   ? `${chatHistory.length} conversation${chatHistory.length !== 1 ? 's' : ''}`
                   : 'Powered by DeepSeek'
@@ -1645,14 +1680,14 @@ export default function AIAssistant({
               <>
                 <button
                   onClick={() => setShowChatHistory(true)}
-                  className="p-1.5 text-white/70 hover:text-white hover:bg-white/10 rounded transition-colors"
+                  className="p-2 text-black/40 hover:text-black/70 hover:bg-black/5 rounded-xl transition-all"
                   title="Chat History"
                 >
                   <History size={16} />
                 </button>
                 <button
                   onClick={startNewChat}
-                  className="p-1.5 text-white/70 hover:text-white hover:bg-white/10 rounded transition-colors"
+                  className="p-2 text-black/40 hover:text-black/70 hover:bg-black/5 rounded-xl transition-all"
                   title="New Chat"
                 >
                   <Plus size={16} />
@@ -1660,14 +1695,14 @@ export default function AIAssistant({
               </>
             )}
             {hasKey && !showChatHistory && (
-              <span className="px-2 py-0.5 bg-green-400/20 text-green-100 text-xs rounded-full">
+              <span className="px-2 py-1 bg-black/5 text-black/50 text-[10px] font-medium rounded-full ml-1">
                 Connected
               </span>
             )}
             {onToggleExpand && (
               <button
                 onClick={onToggleExpand}
-                className="p-1.5 text-white/70 hover:text-white hover:bg-white/10 rounded transition-colors"
+                className="p-2 text-black/40 hover:text-black/70 hover:bg-black/5 rounded-xl transition-all"
               >
                 {isExpanded ? <ChevronDown size={16} /> : <ChevronUp size={16} />}
               </button>

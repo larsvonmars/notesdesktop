@@ -215,6 +215,12 @@ const MAX_REPLACE_MATCHES = 1000
 // Regex patterns
 const REGEX_ESCAPE_PATTERN = /[.*+?^${}()|[\]\\]/g
 
+const BLOCK_ROOT_CLASS =
+  'block-root rounded-xl border border-slate-200 bg-white/80 px-3 py-2 my-3 shadow-sm'
+
+// Prevent overlapping block normalizations that can cause visual rubberbanding
+const blockNormalizationGuard = { active: false }
+
 const splitLinesToFragment = (text: string): DocumentFragment => {
   const fragment = document.createDocumentFragment()
   const lines = text.split(/\r?\n|\r/g)
@@ -271,6 +277,34 @@ const RichTextEditor = forwardRef<RichTextEditorHandle, RichTextEditorProps>(
     const blockIdCounterRef = useRef(0)
     const activeFormatsFrameRef = useRef<number | null>(null)
 
+    const createEmptyBlock = useCallback(() => {
+      const block = document.createElement('div')
+      block.setAttribute('data-block', 'true')
+      block.className = BLOCK_ROOT_CLASS
+
+      const paragraph = document.createElement('p')
+      paragraph.appendChild(document.createElement('br'))
+      block.appendChild(paragraph)
+
+      return block
+    }, [])
+
+    const ensureBlockHasContent = useCallback((block: HTMLElement) => {
+      const hasContent = Array.from(block.childNodes).some((node) => {
+        if (node.nodeType === Node.ELEMENT_NODE) return true
+        if (node.nodeType === Node.TEXT_NODE) {
+          return (node.textContent || '').trim().length > 0
+        }
+        return false
+      })
+
+      if (!hasContent) {
+        const paragraph = document.createElement('p')
+        paragraph.appendChild(document.createElement('br'))
+        block.appendChild(paragraph)
+      }
+    }, [])
+
     const ensureBlockId = useCallback((node: HTMLElement | null) => {
       if (!node) return ''
       try {
@@ -286,6 +320,144 @@ const RichTextEditor = forwardRef<RichTextEditorHandle, RichTextEditorProps>(
         return ''
       }
     }, [])
+
+    const wrapNodeInBlock = useCallback(
+      (node: Node) => {
+        if (!editorRef.current || !editorRef.current.isConnected) return null
+
+        const block = document.createElement('div')
+        block.setAttribute('data-block', 'true')
+        block.className = BLOCK_ROOT_CLASS
+
+        // Insert wrapper before moving the node to preserve order
+        try {
+          editorRef.current.insertBefore(block, node)
+          block.appendChild(node)
+          ensureBlockId(block)
+          ensureBlockHasContent(block)
+          return block
+        } catch (error) {
+          console.error('Error wrapping node in block:', error)
+          return null
+        }
+      },
+      [ensureBlockHasContent, ensureBlockId]
+    )
+
+    const enforceBlockStructure = useCallback(
+      (options?: { preserveSelection?: boolean; forceCursorInside?: boolean }) => {
+        if (!editorRef.current || !editorRef.current.isConnected) return
+        if (blockNormalizationGuard.active) return
+
+        blockNormalizationGuard.active = true
+
+        try {
+          const preserveSelection = options?.preserveSelection ?? true
+          const forceCursorInside = options?.forceCursorInside ?? true
+
+          const editor = editorRef.current
+          const savedCursor = preserveSelection ? saveCursorPosition() : null
+
+          let blockCount = 0
+          const nodes = Array.from(editor.childNodes)
+
+          nodes.forEach((node) => {
+            if (node.nodeType === Node.ELEMENT_NODE) {
+              const el = node as HTMLElement
+              if (el.getAttribute('data-block') === 'true') {
+                ensureBlockId(el)
+                ensureBlockHasContent(el)
+                blockCount += 1
+                return
+              }
+            }
+
+            const wrapped = wrapNodeInBlock(node)
+            if (wrapped) {
+              blockCount += 1
+            }
+          })
+
+          if (blockCount === 0) {
+            const block = createEmptyBlock()
+            editor.appendChild(block)
+            ensureBlockId(block)
+            blockCount = 1
+          }
+
+          let anchorBlock: HTMLElement | null = null
+          if (forceCursorInside) {
+            const selection = window.getSelection()
+            if (selection && selection.rangeCount > 0) {
+              const anchor = selection.getRangeAt(0).startContainer
+              anchorBlock = (anchor instanceof HTMLElement ? anchor : anchor.parentElement)?.closest(
+                '[data-block-id]'
+              ) as HTMLElement | null
+            }
+
+            if (!anchorBlock && editor.firstElementChild instanceof HTMLElement) {
+              const targetBlock = editor.firstElementChild
+              ensureBlockId(targetBlock)
+              const focusTarget =
+                (targetBlock.querySelector('p, div, span, li, blockquote') as HTMLElement | null) ??
+                targetBlock
+              try {
+                positionCursorInElement(focusTarget, 'start', editor)
+              } catch (error) {
+                console.warn('Error positioning cursor in normalized block:', error)
+              }
+              setActiveBlockId(targetBlock.getAttribute('data-block-id'))
+              anchorBlock = targetBlock
+            }
+          }
+
+          if (preserveSelection && savedCursor && savedCursor.range.startContainer?.isConnected && savedCursor.range.endContainer?.isConnected) {
+            try {
+              restoreCursorPosition(savedCursor, editor)
+            } catch (error) {
+              console.warn('Could not restore cursor after block normalization:', error)
+            }
+          }
+        } finally {
+          blockNormalizationGuard.active = false
+        }
+      },
+      [createEmptyBlock, ensureBlockHasContent, ensureBlockId, wrapNodeInBlock]
+    )
+
+    const ensureSelectionWithinBlock = useCallback(() => {
+      enforceBlockStructure({ preserveSelection: true, forceCursorInside: false })
+
+      if (!editorRef.current || !editorRef.current.isConnected) return null
+
+      const editor = editorRef.current
+      const selection = window.getSelection()
+      let block: HTMLElement | null = null
+
+      if (selection && selection.rangeCount > 0) {
+        const anchor = selection.getRangeAt(0).startContainer
+        block = (anchor instanceof HTMLElement ? anchor : anchor.parentElement)?.closest(
+          '[data-block-id]'
+        ) as HTMLElement | null
+      }
+
+      if (block && block.isConnected) {
+        ensureBlockId(block)
+        return block
+      }
+
+      const newBlock = createEmptyBlock()
+      editor.appendChild(newBlock)
+      ensureBlockId(newBlock)
+      const focusTarget = (newBlock.querySelector('p, div, span') as HTMLElement | null) ?? newBlock
+      try {
+        positionCursorInElement(focusTarget, 'start', editor)
+      } catch (error) {
+        console.warn('Error positioning cursor in new block:', error)
+      }
+      setActiveBlockId(newBlock.getAttribute('data-block-id'))
+      return newBlock
+    }, [createEmptyBlock, enforceBlockStructure, ensureBlockId])
 
     const updateBlockMetadata = useCallback(() => {
       if (!editorRef.current) return
@@ -425,6 +597,8 @@ const RichTextEditor = forwardRef<RichTextEditorHandle, RichTextEditorProps>(
         (fragment: DocumentFragment) => {
           if (!editorRef.current) return false
 
+          ensureSelectionWithinBlock()
+
           try {
             let selection = window.getSelection()
             if (!selection || selection.rangeCount === 0) {
@@ -478,7 +652,7 @@ const RichTextEditor = forwardRef<RichTextEditorHandle, RichTextEditorProps>(
             return false
           }
         },
-        [editorRef]
+        [editorRef, ensureSelectionWithinBlock]
       )
 
         const insertCustomBlockAtSelection = useCallback(
@@ -1153,6 +1327,8 @@ const RichTextEditor = forwardRef<RichTextEditorHandle, RichTextEditorProps>(
           console.warn('Command execution already in progress, skipping:', command)
           return
         }
+
+        if (!ensureSelectionWithinBlock()) return
         
         isProcessingCommandRef.current = true
         
@@ -1231,11 +1407,13 @@ const RichTextEditor = forwardRef<RichTextEditorHandle, RichTextEditorProps>(
           isProcessingCommandRef.current = false
         }
       },
-      [disabled, emitChange]
+      [disabled, emitChange, ensureSelectionWithinBlock]
     )
 
     const applyCode = useCallback(() => {
       if (disabled || !editorRef.current || !editorRef.current.isConnected) return
+      
+      if (!ensureSelectionWithinBlock()) return
       
       try {
         applyInlineStyle('code')
@@ -1252,10 +1430,12 @@ const RichTextEditor = forwardRef<RichTextEditorHandle, RichTextEditorProps>(
       } catch (error) {
         console.error('Error in applyCode:', error);
       }
-    }, [disabled, emitChange])
+    }, [disabled, emitChange, ensureSelectionWithinBlock])
 
     const toggleChecklist = useCallback(() => {
       if (disabled || !editorRef.current || !editorRef.current.isConnected) return
+      
+      if (!ensureSelectionWithinBlock()) return
       
       const editor = editorRef.current
       
@@ -1275,7 +1455,7 @@ const RichTextEditor = forwardRef<RichTextEditorHandle, RichTextEditorProps>(
       } catch (error) {
         console.error('Error in toggleChecklist:', error);
       }
-    }, [disabled, emitChange])
+    }, [disabled, emitChange, ensureSelectionWithinBlock])
 
     /**
      * Apply heading format - improved with better cursor positioning
@@ -1284,6 +1464,8 @@ const RichTextEditor = forwardRef<RichTextEditorHandle, RichTextEditorProps>(
     const applyHeading = useCallback(
       (level: 1 | 2 | 3) => {
         if (disabled || !editorRef.current || !editorRef.current.isConnected) return
+        
+        if (!ensureSelectionWithinBlock()) return
         
         const editor = editorRef.current
         
@@ -1377,7 +1559,7 @@ const RichTextEditor = forwardRef<RichTextEditorHandle, RichTextEditorProps>(
           }
         }
       },
-      [disabled, emitChange]
+      [disabled, emitChange, ensureSelectionWithinBlock]
     )
 
     const getHeadings = useCallback(() => {
@@ -1903,6 +2085,8 @@ const RichTextEditor = forwardRef<RichTextEditorHandle, RichTextEditorProps>(
     const insertHorizontalRule = useCallback(() => {
       if (disabled || !editorRef.current || !editorRef.current.isConnected) return
       
+      if (!ensureSelectionWithinBlock()) return
+      
       const editor = editorRef.current
       
       try {
@@ -1951,7 +2135,7 @@ const RichTextEditor = forwardRef<RichTextEditorHandle, RichTextEditorProps>(
       } catch (error) {
         console.error('Error inserting horizontal rule:', error)
       }
-    }, [disabled, emitChange])
+    }, [disabled, emitChange, ensureSelectionWithinBlock])
 
     const createRootLevelBlock = useCallback(() => {
       if (!editorRef.current || !editorRef.current.isConnected) return null
@@ -1961,7 +2145,7 @@ const RichTextEditor = forwardRef<RichTextEditorHandle, RichTextEditorProps>(
         
         const newBlock = document.createElement('div')
         newBlock.setAttribute('data-block', 'true')
-        newBlock.className = 'block-root rounded-xl border border-slate-200 bg-white/80 px-3 py-2 my-3 shadow-sm'
+        newBlock.className = BLOCK_ROOT_CLASS
 
         const paragraph = document.createElement('p')
         paragraph.appendChild(document.createElement('br'))
@@ -2029,45 +2213,24 @@ const RichTextEditor = forwardRef<RichTextEditorHandle, RichTextEditorProps>(
      * Creates a default block if the editor is empty
      */
     const ensureDefaultBlock = useCallback(() => {
-      if (!editorRef.current || !editorRef.current.isConnected) return
+      enforceBlockStructure({ preserveSelection: true, forceCursorInside: true })
+    }, [enforceBlockStructure])
 
-      try {
-        const editor = editorRef.current
-        
-        // Check if editor is effectively empty (no content or only whitespace)
-        const hasContent = editor.textContent && editor.textContent.trim().length > 0
-        const hasBlocks = editor.children.length > 0
-        
-        // If editor is completely empty AND has no blocks, create a default one
-        if (!hasContent && !hasBlocks) {
-          const newBlock = document.createElement('div')
-          newBlock.setAttribute('data-block', 'true')
-          newBlock.className = 'block-root rounded-xl border border-slate-200 bg-white/80 px-3 py-2 my-3 shadow-sm'
+    const applyHistoryAction = useCallback(
+      (action: 'undo' | 'redo') => {
+        if (!historyManagerRef.current) return
 
-          const paragraph = document.createElement('p')
-          paragraph.appendChild(document.createElement('br'))
-          newBlock.appendChild(paragraph)
-
-          // Clear any existing content and append the new block
-          editor.innerHTML = ''
-          editor.appendChild(newBlock)
-          
-          ensureBlockId(newBlock)
-          
-          // Position cursor in the new block
-          const target = (newBlock.querySelector('p, div, span') as HTMLElement | null) ?? newBlock
-          try {
-            positionCursorInElement(target, 'start', editor)
-          } catch (e) {
-            console.warn('Error positioning cursor in default block:', e)
-          }
-          
-          updateBlockMetadata()
+        if (action === 'undo') {
+          historyManagerRef.current.undo()
+        } else {
+          historyManagerRef.current.redo()
         }
-      } catch (error) {
-        console.error('Error ensuring default block:', error)
-      }
-    }, [ensureBlockId, updateBlockMetadata])
+
+        enforceBlockStructure({ preserveSelection: true, forceCursorInside: true })
+        emitChange()
+      },
+      [emitChange, enforceBlockStructure]
+    )
 
     /**
      * Execute a rich text command
@@ -2118,13 +2281,13 @@ const RichTextEditor = forwardRef<RichTextEditorHandle, RichTextEditorProps>(
           insertLink()
           break
         case 'undo':
-          historyManagerRef.current?.undo()
+          applyHistoryAction('undo')
           break
         case 'redo':
-          historyManagerRef.current?.redo()
+          applyHistoryAction('redo')
           break
       }
-    }, [execCommand, applyCode, toggleChecklist, applyHeading, insertHorizontalRule, insertLink])
+    }, [execCommand, applyCode, toggleChecklist, applyHeading, insertHorizontalRule, insertLink, applyHistoryAction])
 
     const handleBlockTypeChange = useCallback((value: string) => {
       if (disabled || !editorRef.current || !editorRef.current.isConnected) return
@@ -2384,6 +2547,7 @@ const RichTextEditor = forwardRef<RichTextEditorHandle, RichTextEditorProps>(
           console.warn('Editor disconnected during input')
           return
         }
+        enforceBlockStructure({ preserveSelection: true, forceCursorInside: true })
         emitChange()
       } catch (error) {
         console.error('Error in handleInput:', error)
@@ -2394,6 +2558,10 @@ const RichTextEditor = forwardRef<RichTextEditorHandle, RichTextEditorProps>(
     try {
       // Validate editor state
       if (disabled || !editorRef.current || !editorRef.current.isConnected) {
+        return
+      }
+
+      if (!ensureSelectionWithinBlock()) {
         return
       }
 
@@ -2619,9 +2787,9 @@ const RichTextEditor = forwardRef<RichTextEditorHandle, RichTextEditorProps>(
         } else if (key === 'z') {
           event.preventDefault()
           if (event.shiftKey) {
-            historyManagerRef.current?.redo()
+            applyHistoryAction('redo')
           } else {
-            historyManagerRef.current?.undo()
+            applyHistoryAction('undo')
           }
         }
       } catch (error) {
@@ -2640,6 +2808,7 @@ const RichTextEditor = forwardRef<RichTextEditorHandle, RichTextEditorProps>(
         const finalizeInsertion = () => {
           try {
             if (editorRef.current) {
+              enforceBlockStructure({ preserveSelection: true, forceCursorInside: true })
               normalizeEditorContent(editorRef.current)
               mergeAdjacentLists(editorRef.current)
             }
@@ -2772,8 +2941,8 @@ const RichTextEditor = forwardRef<RichTextEditorHandle, RichTextEditorProps>(
         <EditorToolbar
           onCommand={executeRichTextCommand}
           onBlockTypeChange={handleBlockTypeChange}
-          onUndo={() => historyManagerRef.current?.undo()}
-          onRedo={() => historyManagerRef.current?.redo()}
+          onUndo={() => applyHistoryAction('undo')}
+          onRedo={() => applyHistoryAction('redo')}
           onNewBlock={createRootLevelBlock}
           onToggleBlockPanel={() => setBlockPanelOpen((prev) => !prev)}
           onToggleBlockOutlines={() => setShowBlockOutlines((prev) => !prev)}

@@ -1244,7 +1244,7 @@ export default function UnifiedPanel({
             {userEmail && onSignOut && (
               <div className="px-5 py-3 flex items-center justify-between border-b border-gray-100">
                 <div className="flex items-center gap-3">
-                  <div className="w-8 h-8 rounded-full bg-gradient-to-br from-blue-500 to-purple-600 flex items-center justify-center text-white text-sm font-medium">
+                  <div className="w-8 h-8 rounded-full bg-blue-600 flex items-center justify-center text-white text-sm font-medium">
                     {userEmail.charAt(0).toUpperCase()}
                   </div>
                   <span className="text-sm text-gray-700 font-medium truncate max-w-[200px]">{userEmail}</span>
@@ -1394,7 +1394,7 @@ export default function UnifiedPanel({
                         onOpenKnowledgeGraph()
                         setIsOpen(false)
                       }}
-                      className="px-4 py-3.5 bg-gradient-to-br from-indigo-500 to-purple-600 text-white text-sm font-semibold rounded-xl hover:from-indigo-600 hover:to-purple-700 transition-all shadow-sm hover:shadow-md flex items-center justify-center gap-2"
+                      className="px-4 py-3.5 bg-blue-600 text-white text-sm font-semibold rounded-xl hover:bg-blue-700 transition-all shadow-sm hover:shadow-md flex items-center justify-center gap-2"
                       title="Open Knowledge Graph - Visualize note connections"
                     >
                       <Network size={18} />
@@ -1642,7 +1642,7 @@ export default function UnifiedPanel({
                                   {/* Export Button */}
                                   <button
                                     onClick={handleExportToPDF}
-                                    className="w-full px-4 py-2.5 bg-gradient-to-r from-blue-500 to-purple-500 text-white rounded-lg font-semibold hover:from-blue-600 hover:to-purple-600 transition-all shadow-md hover:shadow-lg"
+                                    className="w-full px-4 py-2.5 bg-blue-600 text-white rounded-lg font-semibold hover:bg-blue-700 transition-all shadow-md hover:shadow-lg"
                                   >
                                     Export PDF with Custom Settings
                                   </button>
@@ -1699,7 +1699,7 @@ export default function UnifiedPanel({
 
                 {/* Current Note Card */}
                 {note && (
-                  <div className="bg-gradient-to-br from-blue-50/50 to-purple-50/50 rounded-2xl p-5 border border-blue-100/50">
+                  <div className="bg-blue-50/50 rounded-2xl p-5 border border-blue-100/50">
                     <div className="flex items-start justify-between mb-4">
                       <div className="flex items-center gap-3">
                         <div className={`w-10 h-10 rounded-xl flex items-center justify-center ${
@@ -1778,7 +1778,7 @@ export default function UnifiedPanel({
                       onOpenTaskCalendar()
                       setIsOpen(false)
                     }}
-                    className="w-full px-4 py-3.5 bg-gradient-to-r from-blue-500 to-purple-600 text-white text-sm font-semibold rounded-xl hover:from-blue-600 hover:to-purple-700 transition-all shadow-sm hover:shadow-md flex items-center justify-center gap-2"
+                    className="w-full px-4 py-3.5 bg-blue-600 text-white text-sm font-semibold rounded-xl hover:bg-blue-700 transition-all shadow-sm hover:shadow-md flex items-center justify-center gap-2"
                     title="Open Tasks & Calendar"
                   >
                     <Calendar size={18} />
@@ -1818,7 +1818,7 @@ export default function UnifiedPanel({
 
                 {/* Task Stats */}
                 {taskStats && (
-                  <div className="bg-gradient-to-br from-blue-50 to-purple-50 rounded-xl p-4 border border-blue-100/50">
+                  <div className="bg-blue-50 rounded-xl p-4 border border-blue-100/50">
                     <div className="grid grid-cols-4 gap-3 text-center">
                       <div className="bg-white/80 rounded-xl p-3">
                         <div className="text-2xl font-bold text-blue-600">{taskStats.todo}</div>

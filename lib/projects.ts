@@ -126,12 +126,15 @@ export async function deleteProject(id: string): Promise<void> {
 
 /**
  * Move a folder to a project
+ * Note: This also updates all notes in the folder to have the same project_id
+ * for consistency.
  */
 export async function moveFolderToProject(
   folderId: string,
   projectId: string | null
 ): Promise<void> {
-  const { error } = await supabase
+  // Update the folder's project
+  const { error: folderError } = await supabase
     .from('folders')
     .update({ 
       project_id: projectId,
@@ -139,7 +142,19 @@ export async function moveFolderToProject(
     })
     .eq('id', folderId)
 
-  if (error) throw error
+  if (folderError) throw folderError
+  
+  // Update all notes in this folder to match the new project
+  // This ensures folder-project-note consistency
+  const { error: notesError } = await supabase
+    .from('notes')
+    .update({ 
+      project_id: projectId,
+      updated_at: new Date().toISOString()
+    })
+    .eq('folder_id', folderId)
+
+  if (notesError) throw notesError
 }
 
 /**

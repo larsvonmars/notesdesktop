@@ -1,6 +1,6 @@
 'use client'
 
-import React, { useRef, useEffect, useState, useCallback, forwardRef, useImperativeHandle, useMemo } from 'react'
+import React, { useRef, useEffect, useCallback, forwardRef, useImperativeHandle, useMemo, useReducer } from 'react'
 import {
   Plus,
   Minus,
@@ -13,6 +13,10 @@ import {
   X,
   RotateCcw
 } from 'lucide-react'
+
+// ============================================================================
+// Types & Interfaces
+// ============================================================================
 
 export interface MindmapNode {
   id: string
@@ -39,27 +43,33 @@ export interface MindmapAttachment {
   type: 'image' | 'link'
 }
 
+interface LayoutSnapshotNode {
+  id: string
+  x: number
+  y: number
+  color: string
+  visibility: number
+  isRoot: boolean
+  isSelected: boolean
+}
+
+interface LayoutSnapshotEdge {
+  from: { x: number; y: number }
+  to: { x: number; y: number }
+  visibility: number
+}
+
+interface LayoutBounds {
+  minX: number
+  minY: number
+  maxX: number
+  maxY: number
+}
+
 interface LayoutSnapshot {
-  nodes: Array<{
-    id: string
-    x: number
-    y: number
-    color: string
-    visibility: number
-    isRoot: boolean
-    isSelected: boolean
-  }>
-  edges: Array<{
-    from: { x: number; y: number }
-    to: { x: number; y: number }
-    visibility: number
-  }>
-  bounds: {
-    minX: number
-    minY: number
-    maxX: number
-    maxY: number
-  }
+  nodes: LayoutSnapshotNode[]
+  edges: LayoutSnapshotEdge[]
+  bounds: LayoutBounds
 }
 
 export interface MindmapEditorHandle {
@@ -83,6 +93,260 @@ interface NodeDetailDraft {
   color: string
 }
 
+interface AttachmentInput {
+  label: string
+  url: string
+  type: 'image' | 'link'
+}
+
+interface Point {
+  x: number
+  y: number
+}
+
+interface NodeMetrics {
+  width: number
+  height: number
+  rect: {
+    left: number
+    right: number
+    top: number
+    bottom: number
+  }
+  collapseBounds: {
+    left: number
+    right: number
+    top: number
+    bottom: number
+  } | null
+}
+
+// ============================================================================
+// State Management - Reducer
+// ============================================================================
+
+interface EditorState {
+  mindmapData: MindmapData
+  scale: number
+  offset: Point
+  selectedNodeId: string | null
+  detailNodeId: string | null
+  detailDraft: NodeDetailDraft | null
+  newAttachmentInput: AttachmentInput
+  draggingNodeId: string | null
+  dragStart: Point | null
+  isPanning: boolean
+  panStart: Point | null
+  isHoveringEmptySpace: boolean
+}
+
+type EditorAction =
+  | { type: 'SET_MINDMAP_DATA'; payload: MindmapData }
+  | { type: 'UPDATE_NODE'; payload: { nodeId: string; updates: Partial<MindmapNode> } }
+  | { type: 'UPDATE_NODES'; payload: { [nodeId: string]: Partial<MindmapNode> } }
+  | { type: 'ADD_NODE'; payload: { parentId: string; node: MindmapNode } }
+  | { type: 'DELETE_NODE'; payload: { nodeId: string; parentId: string } }
+  | { type: 'SET_SCALE'; payload: number }
+  | { type: 'SET_OFFSET'; payload: Point }
+  | { type: 'SET_SELECTED_NODE_ID'; payload: string | null }
+  | { type: 'SET_DETAIL_NODE_ID'; payload: string | null }
+  | { type: 'SET_DETAIL_DRAFT'; payload: NodeDetailDraft | null }
+  | { type: 'UPDATE_DETAIL_DRAFT'; payload: Partial<NodeDetailDraft> }
+  | { type: 'SET_NEW_ATTACHMENT_INPUT'; payload: AttachmentInput }
+  | { type: 'START_DRAGGING'; payload: { nodeId: string; start: Point } }
+  | { type: 'STOP_DRAGGING' }
+  | { type: 'START_PANNING'; payload: Point }
+  | { type: 'STOP_PANNING' }
+  | { type: 'SET_HOVERING_EMPTY_SPACE'; payload: boolean }
+  | { type: 'RESET_VIEW' }
+  | { type: 'RESET_ALL'; payload: MindmapData }
+  | { type: 'OPEN_DETAIL'; payload: { nodeId: string; draft: NodeDetailDraft } }
+  | { type: 'CLOSE_DETAIL' }
+
+const DEFAULT_ATTACHMENT_INPUT: AttachmentInput = { label: '', url: '', type: 'image' }
+
+function editorReducer(state: EditorState, action: EditorAction): EditorState {
+  switch (action.type) {
+    case 'SET_MINDMAP_DATA':
+      return { ...state, mindmapData: action.payload }
+
+    case 'UPDATE_NODE': {
+      const { nodeId, updates } = action.payload
+      const node = state.mindmapData.nodes[nodeId]
+      if (!node) return state
+      return {
+        ...state,
+        mindmapData: {
+          ...state.mindmapData,
+          nodes: {
+            ...state.mindmapData.nodes,
+            [nodeId]: { ...node, ...updates },
+          },
+        },
+      }
+    }
+
+    case 'UPDATE_NODES': {
+      const newNodes = { ...state.mindmapData.nodes }
+      for (const [nodeId, updates] of Object.entries(action.payload)) {
+        if (newNodes[nodeId]) {
+          newNodes[nodeId] = { ...newNodes[nodeId], ...updates }
+        }
+      }
+      return {
+        ...state,
+        mindmapData: { ...state.mindmapData, nodes: newNodes },
+      }
+    }
+
+    case 'ADD_NODE': {
+      const { parentId, node } = action.payload
+      const parent = state.mindmapData.nodes[parentId]
+      if (!parent) return state
+      return {
+        ...state,
+        mindmapData: {
+          ...state.mindmapData,
+          nodes: {
+            ...state.mindmapData.nodes,
+            [parentId]: {
+              ...parent,
+              children: [...parent.children, node.id],
+              collapsed: false,
+            },
+            [node.id]: node,
+          },
+        },
+      }
+    }
+
+    case 'DELETE_NODE': {
+      const { nodeId, parentId } = action.payload
+      const parent = state.mindmapData.nodes[parentId]
+      if (!parent) return state
+      
+      // Collect all nodes to delete (including descendants)
+      const nodesToRemove = new Set<string>()
+      const collectNodes = (id: string) => {
+        nodesToRemove.add(id)
+        const node = state.mindmapData.nodes[id]
+        if (node) node.children.forEach(collectNodes)
+      }
+      collectNodes(nodeId)
+
+      const newNodes = { ...state.mindmapData.nodes }
+      nodesToRemove.forEach(id => delete newNodes[id])
+      newNodes[parentId] = {
+        ...parent,
+        children: parent.children.filter(id => id !== nodeId),
+      }
+
+      return {
+        ...state,
+        mindmapData: { ...state.mindmapData, nodes: newNodes },
+        selectedNodeId: null,
+      }
+    }
+
+    case 'SET_SCALE':
+      return { ...state, scale: action.payload }
+
+    case 'SET_OFFSET':
+      return { ...state, offset: action.payload }
+
+    case 'SET_SELECTED_NODE_ID':
+      return { ...state, selectedNodeId: action.payload }
+
+    case 'SET_DETAIL_NODE_ID':
+      return { ...state, detailNodeId: action.payload }
+
+    case 'SET_DETAIL_DRAFT':
+      return { ...state, detailDraft: action.payload }
+
+    case 'UPDATE_DETAIL_DRAFT':
+      if (!state.detailDraft) return state
+      return { ...state, detailDraft: { ...state.detailDraft, ...action.payload } }
+
+    case 'SET_NEW_ATTACHMENT_INPUT':
+      return { ...state, newAttachmentInput: action.payload }
+
+    case 'START_DRAGGING':
+      return {
+        ...state,
+        draggingNodeId: action.payload.nodeId,
+        dragStart: action.payload.start,
+      }
+
+    case 'STOP_DRAGGING':
+      return { ...state, draggingNodeId: null, dragStart: null }
+
+    case 'START_PANNING':
+      return { ...state, isPanning: true, panStart: action.payload }
+
+    case 'STOP_PANNING':
+      return { ...state, isPanning: false, panStart: null }
+
+    case 'SET_HOVERING_EMPTY_SPACE':
+      return { ...state, isHoveringEmptySpace: action.payload }
+
+    case 'RESET_VIEW':
+      return { ...state, scale: 1, offset: { x: 0, y: 0 } }
+
+    case 'RESET_ALL':
+      return {
+        ...state,
+        mindmapData: action.payload,
+        selectedNodeId: action.payload.rootId,
+        scale: 1,
+        offset: { x: 0, y: 0 },
+        detailNodeId: null,
+        detailDraft: null,
+        newAttachmentInput: DEFAULT_ATTACHMENT_INPUT,
+      }
+
+    case 'OPEN_DETAIL':
+      return {
+        ...state,
+        detailNodeId: action.payload.nodeId,
+        detailDraft: action.payload.draft,
+        newAttachmentInput: DEFAULT_ATTACHMENT_INPUT,
+      }
+
+    case 'CLOSE_DETAIL':
+      return {
+        ...state,
+        detailNodeId: null,
+        detailDraft: null,
+        newAttachmentInput: DEFAULT_ATTACHMENT_INPUT,
+      }
+
+    default:
+      return state
+  }
+}
+
+function createInitialState(initialData?: MindmapData): EditorState {
+  const mindmapData = normalizeMindmapData(initialData)
+  return {
+    mindmapData,
+    scale: 1,
+    offset: { x: 0, y: 0 },
+    selectedNodeId: null,
+    detailNodeId: null,
+    detailDraft: null,
+    newAttachmentInput: DEFAULT_ATTACHMENT_INPUT,
+    draggingNodeId: null,
+    dragStart: null,
+    isPanning: false,
+    panStart: null,
+    isHoveringEmptySpace: false,
+  }
+}
+
+// ============================================================================
+// Constants
+// ============================================================================
+
 const DEFAULT_COLORS = [
   '#3B82F6', // blue
   '#10B981', // green
@@ -100,12 +364,215 @@ const MIN_NODE_WIDTH = 120
 const COLLAPSE_INDICATOR_SIZE = 26
 const COLLAPSE_ANIMATION_DURATION = 260
 
+// ============================================================================
+// Hit Testing Types
+// ============================================================================
+
 type NodeHitArea = 'body' | 'collapse'
 
 interface NodeHit {
   nodeId: string
   area: NodeHitArea
 }
+
+// ============================================================================
+// Canvas Rendering Utilities
+// ============================================================================
+
+interface RenderContext {
+  ctx: CanvasRenderingContext2D
+  mindmapData: MindmapData
+  selectedNodeId: string | null
+  now: number
+  resolveVisibility: (nodeId: string, now: number) => { value: number; animating: boolean }
+}
+
+/**
+ * Computes the metrics (dimensions, bounding rect, collapse button bounds) for a node
+ */
+function computeNodeMetrics(
+  ctx: CanvasRenderingContext2D,
+  node: MindmapNode,
+  isRoot: boolean
+): NodeMetrics {
+  ctx.save()
+  ctx.setTransform(1, 0, 0, 1, 0, 0)
+  ctx.font = isRoot ? 'bold 16px sans-serif' : '14px sans-serif'
+  const label = node.text || ''
+  const textWidth = ctx.measureText(label).width
+  ctx.restore()
+
+  const width = Math.max(textWidth + NODE_PADDING * 2, MIN_NODE_WIDTH)
+  const height = NODE_HEIGHT
+  const halfWidth = width / 2
+  const halfHeight = height / 2
+
+  const rect = {
+    left: node.x - halfWidth,
+    right: node.x + halfWidth,
+    top: node.y - halfHeight,
+    bottom: node.y + halfHeight,
+  }
+
+  const collapsePadding = 8
+  const collapseBounds = node.children.length > 0
+    ? {
+        left: rect.right - COLLAPSE_INDICATOR_SIZE - collapsePadding,
+        right: rect.right - collapsePadding,
+        top: rect.bottom - COLLAPSE_INDICATOR_SIZE - collapsePadding,
+        bottom: rect.bottom - collapsePadding,
+      }
+    : null
+
+  return { width, height, rect, collapseBounds }
+}
+
+/**
+ * Draws an edge (connection line) between parent and child nodes
+ */
+function drawEdge(
+  ctx: CanvasRenderingContext2D,
+  from: Point,
+  to: Point,
+  visibility: number
+): void {
+  ctx.save()
+  ctx.strokeStyle = 'rgba(100, 116, 139, 0.35)'
+  ctx.lineWidth = Math.max(1, 2 * visibility)
+  ctx.beginPath()
+  ctx.moveTo(from.x, from.y)
+  ctx.lineTo(to.x, to.y)
+  ctx.stroke()
+  ctx.restore()
+}
+
+/**
+ * Draws the collapse/expand indicator button on a node
+ */
+function drawCollapseIndicator(
+  ctx: CanvasRenderingContext2D,
+  collapseBounds: NonNullable<NodeMetrics['collapseBounds']>,
+  nodeColor: string,
+  isCollapsed: boolean,
+  isSelected: boolean
+): void {
+  const centerX = (collapseBounds.left + collapseBounds.right) / 2
+  const centerY = (collapseBounds.top + collapseBounds.bottom) / 2
+  const indicatorRadius = COLLAPSE_INDICATOR_SIZE / 2
+
+  // Background circle
+  ctx.fillStyle = isSelected ? 'rgba(255, 255, 255, 0.98)' : 'rgba(255, 255, 255, 0.93)'
+  ctx.beginPath()
+  ctx.arc(centerX, centerY, indicatorRadius, 0, Math.PI * 2)
+  ctx.fill()
+
+  // Border
+  ctx.strokeStyle = nodeColor
+  ctx.lineWidth = 2
+  ctx.stroke()
+
+  // Plus/Minus icon
+  ctx.beginPath()
+  ctx.moveTo(centerX - indicatorRadius + 5, centerY)
+  ctx.lineTo(centerX + indicatorRadius - 5, centerY)
+  if (isCollapsed) {
+    ctx.moveTo(centerX, centerY - indicatorRadius + 5)
+    ctx.lineTo(centerX, centerY + indicatorRadius - 5)
+  }
+  ctx.stroke()
+}
+
+/**
+ * Draws a single node (rounded rectangle with text)
+ */
+function drawNodeBody(
+  ctx: CanvasRenderingContext2D,
+  node: MindmapNode,
+  metrics: NodeMetrics,
+  isRoot: boolean,
+  isSelected: boolean,
+  visibility: number,
+  renderX: number,
+  renderY: number
+): void {
+  ctx.save()
+  ctx.globalAlpha = Math.max(visibility, 0.1)
+  ctx.fillStyle = node.color
+  ctx.strokeStyle = isSelected ? '#0f172a' : node.color
+  ctx.lineWidth = isSelected ? 3 : 2
+
+  // Node background
+  ctx.beginPath()
+  ctx.roundRect(
+    metrics.rect.left,
+    metrics.rect.top,
+    metrics.rect.right - metrics.rect.left,
+    metrics.rect.bottom - metrics.rect.top,
+    Math.min(metrics.height / 2, 20)
+  )
+  ctx.fill()
+  if (isSelected) ctx.stroke()
+
+  // Node text
+  ctx.fillStyle = '#fff'
+  ctx.textAlign = 'center'
+  ctx.textBaseline = 'middle'
+  ctx.font = isRoot ? 'bold 16px sans-serif' : '14px sans-serif'
+  ctx.fillText(node.text, renderX, renderY)
+
+  // Collapse indicator
+  if (metrics.collapseBounds) {
+    drawCollapseIndicator(ctx, metrics.collapseBounds, node.color, node.collapsed, isSelected)
+  }
+
+  ctx.restore()
+}
+
+/**
+ * Calculates the interpolated render position based on visibility (for animations)
+ */
+function calculateRenderPosition(
+  node: MindmapNode,
+  visibility: number,
+  parentPosition?: Point
+): Point {
+  if (!parentPosition) {
+    return { x: node.x, y: node.y }
+  }
+  return {
+    x: parentPosition.x + (node.x - parentPosition.x) * visibility,
+    y: parentPosition.y + (node.y - parentPosition.y) * visibility,
+  }
+}
+
+/**
+ * Creates an empty layout snapshot for collecting render data
+ */
+function createEmptyLayoutSnapshot(): LayoutSnapshot {
+  return {
+    nodes: [],
+    edges: [],
+    bounds: { minX: Infinity, minY: Infinity, maxX: -Infinity, maxY: -Infinity },
+  }
+}
+
+/**
+ * Updates the layout snapshot bounds with node metrics
+ */
+function updateSnapshotBounds(snapshot: LayoutSnapshot, metrics: NodeMetrics): void {
+  snapshot.bounds.minX = Math.min(snapshot.bounds.minX, metrics.rect.left)
+  snapshot.bounds.minY = Math.min(snapshot.bounds.minY, metrics.rect.top)
+  snapshot.bounds.maxX = Math.max(snapshot.bounds.maxX, metrics.rect.right)
+  snapshot.bounds.maxY = Math.max(snapshot.bounds.maxY, metrics.rect.bottom)
+}
+
+// ============================================================================
+// Data Normalization
+// ============================================================================
+
+// ============================================================================
+// Data Normalization
+// ============================================================================
 
 const createDefaultMindmap = (): MindmapData => {
   const rootId = 'root'
@@ -201,33 +668,60 @@ const normalizeMindmapData = (input?: MindmapData | null): MindmapData => {
   }
 }
 
+// ============================================================================
+// Device Pixel Ratio Utility
+// ============================================================================
+
+function getDevicePixelRatio(): number {
+  return typeof window !== 'undefined' && typeof window.devicePixelRatio === 'number'
+    ? window.devicePixelRatio
+    : 1
+}
+
+// ============================================================================
+// Canvas Context Utility
+// ============================================================================
+
+function getCanvasContext(canvas: HTMLCanvasElement | null): CanvasRenderingContext2D | null {
+  if (!canvas) return null
+  return canvas.getContext('2d')
+}
+
+// ============================================================================
+// Main Component
+// ============================================================================
+
 const MindmapEditor = forwardRef<MindmapEditorHandle, MindmapEditorProps>(
   ({ initialData, onChange, onSelectedNodeChange, readOnly = false }, ref) => {
     const canvasRef = useRef<HTMLCanvasElement>(null)
     const containerRef = useRef<HTMLDivElement>(null)
-    const [mindmapData, setMindmapData] = useState<MindmapData>(() => normalizeMindmapData(initialData))
-    const [scale, setScale] = useState(1)
-    const [offset, setOffset] = useState({ x: 0, y: 0 })
-    const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null)
-  const [detailNodeId, setDetailNodeId] = useState<string | null>(null)
-  const [detailDraft, setDetailDraft] = useState<NodeDetailDraft | null>(null)
-    const [newAttachmentInput, setNewAttachmentInput] = useState<{
-      label: string
-      url: string
-      type: 'image' | 'link'
-    }>({ label: '', url: '', type: 'image' })
-    const [draggingNodeId, setDraggingNodeId] = useState<string | null>(null)
-    const [dragStart, setDragStart] = useState<{ x: number; y: number } | null>(null)
-    const [isPanning, setIsPanning] = useState(false)
-    const [panStart, setPanStart] = useState<{ x: number; y: number } | null>(null)
+    
+    // Consolidated state using reducer
+    const [state, dispatch] = useReducer(editorReducer, initialData, createInitialState)
+    const {
+      mindmapData,
+      scale,
+      offset,
+      selectedNodeId,
+      detailNodeId,
+      detailDraft,
+      newAttachmentInput,
+      draggingNodeId,
+      dragStart,
+      isPanning,
+      panStart,
+      isHoveringEmptySpace,
+    } = state
+
+    // Refs for values that don't need to trigger re-renders
     const skipOnChangeRef = useRef(false)
     const mindmapDataRef = useRef<MindmapData>(mindmapData)
     const animationsRef = useRef<Map<string, { direction: 'collapse' | 'expand'; startTime: number }>>(new Map())
     const animationFrameRef = useRef<number | null>(null)
     const lastRenderTimeRef = useRef<number>(performance.now())
-  const suppressClickRef = useRef(false)
-  const collapseTargetRef = useRef<string | null>(null)
-  const collapsePointerStartRef = useRef<{ x: number; y: number } | null>(null)
+    const suppressClickRef = useRef(false)
+    const collapseTargetRef = useRef<string | null>(null)
+    const collapsePointerStartRef = useRef<Point | null>(null)
     const miniMapCanvasRef = useRef<HTMLCanvasElement>(null)
     const miniMapTransformRef = useRef<{
       minX: number
@@ -236,7 +730,6 @@ const MindmapEditor = forwardRef<MindmapEditorHandle, MindmapEditorProps>(
       offsetX: number
       offsetY: number
     } | null>(null)
-    const [isHoveringEmptySpace, setIsHoveringEmptySpace] = useState(false)
 
     useImperativeHandle(ref, () => ({
       getData: () => mindmapData,
@@ -248,13 +741,7 @@ const MindmapEditor = forwardRef<MindmapEditorHandle, MindmapEditorProps>(
           cancelAnimationFrame(animationFrameRef.current)
           animationFrameRef.current = null
         }
-        setMindmapData(normalized)
-        setSelectedNodeId((previous) => (previous && normalized.nodes[previous] ? previous : normalized.rootId))
-        setScale(1)
-        setOffset({ x: 0, y: 0 })
-        setDetailNodeId(null)
-        setDetailDraft(null)
-        setNewAttachmentInput({ label: '', url: '', type: 'image' })
+        dispatch({ type: 'RESET_ALL', payload: normalized })
       },
       clear: () => {
         const reset = createDefaultMindmap()
@@ -264,13 +751,7 @@ const MindmapEditor = forwardRef<MindmapEditorHandle, MindmapEditorProps>(
           cancelAnimationFrame(animationFrameRef.current)
           animationFrameRef.current = null
         }
-        setMindmapData(reset)
-        setSelectedNodeId(reset.rootId)
-        setScale(1)
-        setOffset({ x: 0, y: 0 })
-        setDetailNodeId(null)
-        setDetailDraft(null)
-        setNewAttachmentInput({ label: '', url: '', type: 'image' })
+        dispatch({ type: 'RESET_ALL', payload: reset })
       },
       getSelectedNodeId: () => selectedNodeId,
     }))
@@ -300,13 +781,7 @@ const MindmapEditor = forwardRef<MindmapEditorHandle, MindmapEditorProps>(
         cancelAnimationFrame(animationFrameRef.current)
         animationFrameRef.current = null
       }
-      setMindmapData(nextData)
-      setSelectedNodeId((previous) => (previous && nextData.nodes[previous] ? previous : nextData.rootId))
-      setScale(1)
-      setOffset({ x: 0, y: 0 })
-      setDetailNodeId(null)
-      setDetailDraft(null)
-      setNewAttachmentInput({ label: '', url: '', type: 'image' })
+      dispatch({ type: 'RESET_ALL', payload: nextData })
     }, [initialData])
 
     useEffect(() => {
@@ -343,42 +818,6 @@ const MindmapEditor = forwardRef<MindmapEditorHandle, MindmapEditorProps>(
       [mindmapData.nodes]
     )
 
-    const computeNodeMetrics = useCallback(
-      (ctx: CanvasRenderingContext2D, node: MindmapNode, isRoot: boolean) => {
-        ctx.save()
-        ctx.setTransform(1, 0, 0, 1, 0, 0)
-        ctx.font = isRoot ? 'bold 16px sans-serif' : '14px sans-serif'
-        const label = node.text || ''
-        const textWidth = ctx.measureText(label).width
-        ctx.restore()
-
-        const width = Math.max(textWidth + NODE_PADDING * 2, MIN_NODE_WIDTH)
-        const height = NODE_HEIGHT
-        const halfWidth = width / 2
-        const halfHeight = height / 2
-
-        const rect = {
-          left: node.x - halfWidth,
-          right: node.x + halfWidth,
-          top: node.y - halfHeight,
-          bottom: node.y + halfHeight,
-        }
-
-        const collapsePadding = 8
-        const collapseBounds = node.children.length > 0
-          ? {
-              left: rect.right - COLLAPSE_INDICATOR_SIZE - collapsePadding,
-              right: rect.right - collapsePadding,
-              top: rect.bottom - COLLAPSE_INDICATOR_SIZE - collapsePadding,
-              bottom: rect.bottom - collapsePadding,
-            }
-          : null
-
-        return { width, height, rect, collapseBounds }
-      },
-      []
-    )
-
     const mapClientToWorld = useCallback(
       (clientX: number, clientY: number) => {
         const rect = canvasRef.current?.getBoundingClientRect()
@@ -402,7 +841,7 @@ const MindmapEditor = forwardRef<MindmapEditorHandle, MindmapEditorProps>(
         const miniCanvas = miniMapCanvasRef.current
         if (!miniCanvas) return
 
-        const ctx = miniCanvas.getContext('2d')
+        const ctx = getCanvasContext(miniCanvas)
         if (!ctx) return
 
         const styleWidth = miniCanvas.clientWidth || 1
@@ -412,9 +851,7 @@ const MindmapEditor = forwardRef<MindmapEditorHandle, MindmapEditorProps>(
           return
         }
 
-  const devicePixelRatio = typeof window !== 'undefined' && typeof window.devicePixelRatio === 'number' 
-        ? window.devicePixelRatio 
-        : 1
+        const devicePixelRatio = getDevicePixelRatio()
         const requiredWidth = Math.max(1, Math.round(styleWidth * devicePixelRatio))
         const requiredHeight = Math.max(1, Math.round(styleHeight * devicePixelRatio))
 
@@ -462,6 +899,7 @@ const MindmapEditor = forwardRef<MindmapEditorHandle, MindmapEditorProps>(
           offsetY,
         }
 
+        // Draw edges
         snapshot.edges.forEach((edge) => {
           const alpha = Math.max(Math.min(edge.visibility, 1), 0.15)
           ctx.globalAlpha = alpha
@@ -473,6 +911,7 @@ const MindmapEditor = forwardRef<MindmapEditorHandle, MindmapEditorProps>(
           ctx.stroke()
         })
 
+        // Draw nodes
         ctx.globalAlpha = 1
         snapshot.nodes.forEach((node) => {
           const x = offsetX + (node.x - minX) * mapScale
@@ -497,6 +936,7 @@ const MindmapEditor = forwardRef<MindmapEditorHandle, MindmapEditorProps>(
 
         ctx.globalAlpha = 1
 
+        // Draw viewport indicator
         const mainCanvas = canvasRef.current
         if (mainCanvas && miniMapTransformRef.current) {
           const viewportWidthWorld = mainCanvas.width / scale
@@ -524,7 +964,7 @@ const MindmapEditor = forwardRef<MindmapEditorHandle, MindmapEditorProps>(
 
     const hitTestNodes = useCallback(
       (worldX: number, worldY: number): NodeHit | null => {
-        const ctx = canvasRef.current?.getContext('2d') as CanvasRenderingContext2D | null
+        const ctx = getCanvasContext(canvasRef.current)
         if (!ctx) return null
 
         const now = lastRenderTimeRef.current ?? performance.now()
@@ -532,7 +972,7 @@ const MindmapEditor = forwardRef<MindmapEditorHandle, MindmapEditorProps>(
         const traverse = (
           nodeId: string,
           visibility: number,
-          parentPosition?: { x: number; y: number }
+          parentPosition?: Point
         ): NodeHit | null => {
           const node = mindmapData.nodes[nodeId]
           if (!node) return null
@@ -540,10 +980,9 @@ const MindmapEditor = forwardRef<MindmapEditorHandle, MindmapEditorProps>(
           const clampedVisibility = Math.max(0, Math.min(visibility, 1))
           const parentNode = node.parentId ? mindmapData.nodes[node.parentId] : null
           const origin = parentPosition ?? (parentNode ? { x: parentNode.x, y: parentNode.y } : undefined)
-          const renderX = origin ? origin.x + (node.x - origin.x) * clampedVisibility : node.x
-          const renderY = origin ? origin.y + (node.y - origin.y) * clampedVisibility : node.y
+          const renderPos = calculateRenderPosition(node, clampedVisibility, origin)
 
-          const metrics = computeNodeMetrics(ctx, { ...node, x: renderX, y: renderY }, nodeId === mindmapData.rootId)
+          const metrics = computeNodeMetrics(ctx, { ...node, x: renderPos.x, y: renderPos.y }, nodeId === mindmapData.rootId)
 
           if (
             worldX >= metrics.rect.left &&
@@ -569,7 +1008,7 @@ const MindmapEditor = forwardRef<MindmapEditorHandle, MindmapEditorProps>(
             return null
           }
 
-          const nextParentPosition = { x: renderX, y: renderY }
+          const nextParentPosition = { x: renderPos.x, y: renderPos.y }
           for (const childId of node.children) {
             const hit = traverse(childId, childVisibility, nextParentPosition)
             if (hit) return hit
@@ -580,7 +1019,7 @@ const MindmapEditor = forwardRef<MindmapEditorHandle, MindmapEditorProps>(
 
         return traverse(mindmapData.rootId, 1)
       },
-      [computeNodeMetrics, mindmapData, resolveChildrenVisibility]
+      [mindmapData, resolveChildrenVisibility]
     )
 
     const renderMindmap = useCallback(
@@ -588,7 +1027,7 @@ const MindmapEditor = forwardRef<MindmapEditorHandle, MindmapEditorProps>(
         const canvas = canvasRef.current
         if (!canvas) return
 
-        const ctx = canvas.getContext('2d') as CanvasRenderingContext2D | null
+        const ctx = getCanvasContext(canvas)
         if (!ctx) return
 
         if (typeof timestamp === 'number') {
@@ -603,120 +1042,61 @@ const MindmapEditor = forwardRef<MindmapEditorHandle, MindmapEditorProps>(
         ctx.translate(offset.x, offset.y)
         ctx.scale(scale, scale)
 
+        // Draw background
         ctx.fillStyle = '#f8fafc'
         ctx.fillRect(-offset.x / scale, -offset.y / scale, canvas.width / scale, canvas.height / scale)
 
-        const layoutSnapshot: LayoutSnapshot = {
-          nodes: [],
-          edges: [],
-          bounds: { minX: Infinity, minY: Infinity, maxX: -Infinity, maxY: -Infinity },
-        }
+        const layoutSnapshot = createEmptyLayoutSnapshot()
 
+        // Recursive node drawing function
         const drawNode = (
           nodeId: string,
           visibility: number,
-          parentPosition?: { x: number; y: number }
-        ) => {
+          parentPosition?: Point
+        ): void => {
           const node = mindmapData.nodes[nodeId]
           if (!node) return
 
           const clampedVisibility = Math.max(0, Math.min(visibility, 1))
           const parentNode = node.parentId ? mindmapData.nodes[node.parentId] : null
           const origin = parentPosition ?? (parentNode ? { x: parentNode.x, y: parentNode.y } : undefined)
-          const renderX = origin ? origin.x + (node.x - origin.x) * clampedVisibility : node.x
-          const renderY = origin ? origin.y + (node.y - origin.y) * clampedVisibility : node.y
+          const renderPos = calculateRenderPosition(node, clampedVisibility, origin)
 
+          // Draw edge to parent
           const edgeFrom = parentNode
             ? parentPosition ?? { x: parentNode.x, y: parentNode.y }
             : null
 
           if (edgeFrom) {
-            ctx.save()
-            ctx.strokeStyle = 'rgba(100, 116, 139, 0.35)'
-            ctx.lineWidth = Math.max(1, 2 * clampedVisibility)
-            ctx.beginPath()
-            ctx.moveTo(edgeFrom.x, edgeFrom.y)
-            ctx.lineTo(renderX, renderY)
-            ctx.stroke()
-            ctx.restore()
-
+            drawEdge(ctx, edgeFrom, renderPos, clampedVisibility)
             layoutSnapshot.edges.push({
               from: edgeFrom,
-              to: { x: renderX, y: renderY },
+              to: renderPos,
               visibility: clampedVisibility,
             })
           }
 
-          const metrics = computeNodeMetrics(
-            ctx,
-            { ...node, x: renderX, y: renderY },
-            nodeId === mindmapData.rootId
-          )
+          // Compute node metrics
+          const isRoot = nodeId === mindmapData.rootId
+          const metrics = computeNodeMetrics(ctx, { ...node, x: renderPos.x, y: renderPos.y }, isRoot)
           const isSelected = selectedNodeId === nodeId
 
+          // Update layout snapshot
           layoutSnapshot.nodes.push({
             id: nodeId,
-            x: renderX,
-            y: renderY,
+            x: renderPos.x,
+            y: renderPos.y,
             color: node.color,
             visibility: clampedVisibility,
-            isRoot: nodeId === mindmapData.rootId,
+            isRoot,
             isSelected,
           })
-          layoutSnapshot.bounds.minX = Math.min(layoutSnapshot.bounds.minX, metrics.rect.left)
-          layoutSnapshot.bounds.minY = Math.min(layoutSnapshot.bounds.minY, metrics.rect.top)
-          layoutSnapshot.bounds.maxX = Math.max(layoutSnapshot.bounds.maxX, metrics.rect.right)
-          layoutSnapshot.bounds.maxY = Math.max(layoutSnapshot.bounds.maxY, metrics.rect.bottom)
+          updateSnapshotBounds(layoutSnapshot, metrics)
 
-          ctx.save()
-          ctx.globalAlpha = Math.max(clampedVisibility, 0.1)
-          ctx.fillStyle = node.color
-          ctx.strokeStyle = isSelected ? '#0f172a' : node.color
-          ctx.lineWidth = isSelected ? 3 : 2
+          // Draw the node
+          drawNodeBody(ctx, node, metrics, isRoot, isSelected, clampedVisibility, renderPos.x, renderPos.y)
 
-          ctx.beginPath()
-          ctx.roundRect(
-            metrics.rect.left,
-            metrics.rect.top,
-            metrics.rect.right - metrics.rect.left,
-            metrics.rect.bottom - metrics.rect.top,
-            Math.min(metrics.height / 2, 20)
-          )
-          ctx.fill()
-          if (isSelected) ctx.stroke()
-
-          ctx.fillStyle = '#fff'
-          ctx.textAlign = 'center'
-          ctx.textBaseline = 'middle'
-          ctx.font = nodeId === mindmapData.rootId ? 'bold 16px sans-serif' : '14px sans-serif'
-          ctx.fillText(node.text, renderX, renderY)
-
-          if (metrics.collapseBounds) {
-            const centerX = (metrics.collapseBounds.left + metrics.collapseBounds.right) / 2
-            const centerY = (metrics.collapseBounds.top + metrics.collapseBounds.bottom) / 2
-            const indicatorRadius = COLLAPSE_INDICATOR_SIZE / 2
-
-            ctx.fillStyle = isSelected ? 'rgba(255, 255, 255, 0.98)' : 'rgba(255, 255, 255, 0.93)'
-            ctx.beginPath()
-            ctx.arc(centerX, centerY, indicatorRadius, 0, Math.PI * 2)
-            ctx.fill()
-
-            ctx.strokeStyle = node.color
-            ctx.lineWidth = 2
-            ctx.stroke()
-
-            ctx.beginPath()
-            ctx.moveTo(centerX - indicatorRadius + 5, centerY)
-            ctx.lineTo(centerX + indicatorRadius - 5, centerY)
-            if (node.collapsed) {
-              ctx.moveTo(centerX, centerY - indicatorRadius + 5)
-              ctx.lineTo(centerX, centerY + indicatorRadius - 5)
-            }
-            ctx.stroke()
-          }
-
-          ctx.restore()
-
+          // Process children
           const { value: childProgress, animating } = resolveChildrenVisibility(nodeId, now)
           if (animating) {
             hasActiveAnimation = true
@@ -727,25 +1107,26 @@ const MindmapEditor = forwardRef<MindmapEditorHandle, MindmapEditorProps>(
             return
           }
 
-          const nextParentPosition = { x: renderX, y: renderY }
           node.children.forEach((childId) => {
-            drawNode(childId, Math.max(childVisibility, 0), nextParentPosition)
+            drawNode(childId, Math.max(childVisibility, 0), renderPos)
           })
         }
 
+        // Start drawing from root
         drawNode(mindmapData.rootId, 1)
 
         ctx.restore()
         renderMiniMap(layoutSnapshot)
         lastRenderTimeRef.current = now
 
+        // Schedule next frame if animating
         if (hasActiveAnimation) {
           animationFrameRef.current = requestAnimationFrame(renderMindmap)
         } else {
           animationFrameRef.current = null
         }
       },
-      [mindmapData, offset, scale, selectedNodeId, computeNodeMetrics, resolveChildrenVisibility, renderMiniMap]
+      [mindmapData, offset, scale, selectedNodeId, resolveChildrenVisibility, renderMiniMap]
     )
 
     useEffect(() => {
@@ -841,7 +1222,7 @@ const MindmapEditor = forwardRef<MindmapEditorHandle, MindmapEditorProps>(
       collapseTargetRef.current = null
       collapsePointerStartRef.current = null
       if (hit.area === 'body') {
-        setSelectedNodeId(hit.nodeId)
+        dispatch({ type: 'SET_SELECTED_NODE_ID', payload: hit.nodeId })
         // keep detail drawer untouched on simple select
       }
     }
@@ -873,7 +1254,7 @@ const MindmapEditor = forwardRef<MindmapEditorHandle, MindmapEditorProps>(
         if (hit?.area === 'collapse') {
           collapseTargetRef.current = hit.nodeId
           collapsePointerStartRef.current = { x: screenX, y: screenY }
-          setSelectedNodeId(hit.nodeId)
+          dispatch({ type: 'SET_SELECTED_NODE_ID', payload: hit.nodeId })
           return
         }
 
@@ -881,20 +1262,17 @@ const MindmapEditor = forwardRef<MindmapEditorHandle, MindmapEditorProps>(
         collapsePointerStartRef.current = null
 
         if (hit?.nodeId) {
-          setSelectedNodeId(hit.nodeId)
-          setDraggingNodeId(hit.nodeId)
-          setDragStart({ x: screenX, y: screenY })
+          dispatch({ type: 'SET_SELECTED_NODE_ID', payload: hit.nodeId })
+          dispatch({ type: 'START_DRAGGING', payload: { nodeId: hit.nodeId, start: { x: screenX, y: screenY } } })
         } else {
           // Click on empty canvas - start panning (no modifier keys needed)
-          setIsPanning(true)
-          setPanStart({ x: screenX - offset.x, y: screenY - offset.y })
+          dispatch({ type: 'START_PANNING', payload: { x: screenX - offset.x, y: screenY - offset.y } })
         }
       } else if (e.button === 1 || e.button === 2) {
         e.preventDefault()
         collapseTargetRef.current = null
         collapsePointerStartRef.current = null
-        setIsPanning(true)
-        setPanStart({ x: screenX - offset.x, y: screenY - offset.y })
+        dispatch({ type: 'START_PANNING', payload: { x: screenX - offset.x, y: screenY - offset.y } })
       }
     }
 
@@ -919,27 +1297,23 @@ const MindmapEditor = forwardRef<MindmapEditorHandle, MindmapEditorProps>(
           }
         }
 
-        setMindmapData(prev => ({
-          ...prev,
-          nodes: {
-            ...prev.nodes,
-            [draggingNodeId]: {
-              ...prev.nodes[draggingNodeId],
-              x: prev.nodes[draggingNodeId].x + dx,
-              y: prev.nodes[draggingNodeId].y + dy,
+        const node = mindmapData.nodes[draggingNodeId]
+        if (node) {
+          dispatch({
+            type: 'UPDATE_NODE',
+            payload: {
+              nodeId: draggingNodeId,
+              updates: { x: node.x + dx, y: node.y + dy },
             },
-          },
-        }))
+          })
+        }
 
-        setDragStart({ x: screenX, y: screenY })
+        dispatch({ type: 'START_DRAGGING', payload: { nodeId: draggingNodeId, start: { x: screenX, y: screenY } } })
       } else if (isPanning && panStart) {
         suppressClickRef.current = true
         collapseTargetRef.current = null
         collapsePointerStartRef.current = null
-        setOffset({
-          x: screenX - panStart.x,
-          y: screenY - panStart.y,
-        })
+        dispatch({ type: 'SET_OFFSET', payload: { x: screenX - panStart.x, y: screenY - panStart.y } })
       } else if (collapseTargetRef.current && collapsePointerStartRef.current) {
         const distance = Math.hypot(
           screenX - collapsePointerStartRef.current.x,
@@ -952,7 +1326,7 @@ const MindmapEditor = forwardRef<MindmapEditorHandle, MindmapEditorProps>(
       } else {
         // Update hover state for cursor feedback
         const hit = hitTestNodes(worldX, worldY)
-        setIsHoveringEmptySpace(!hit)
+        dispatch({ type: 'SET_HOVERING_EMPTY_SPACE', payload: !hit })
       }
     }
 
@@ -960,10 +1334,8 @@ const MindmapEditor = forwardRef<MindmapEditorHandle, MindmapEditorProps>(
       if (draggingNodeId || isPanning) {
         suppressClickRef.current = true
       }
-      setDraggingNodeId(null)
-      setDragStart(null)
-      setIsPanning(false)
-      setPanStart(null)
+      dispatch({ type: 'STOP_DRAGGING' })
+      dispatch({ type: 'STOP_PANNING' })
     }
 
     const handleWheel = (e: React.WheelEvent<HTMLCanvasElement>) => {
@@ -986,8 +1358,8 @@ const MindmapEditor = forwardRef<MindmapEditorHandle, MindmapEditorProps>(
         y: mouseY - worldY * newScale,
       }
 
-      setScale(newScale)
-      setOffset(newOffset)
+      dispatch({ type: 'SET_SCALE', payload: newScale })
+      dispatch({ type: 'SET_OFFSET', payload: newOffset })
     }
 
     const openNodeDetail = useCallback(
@@ -995,22 +1367,24 @@ const MindmapEditor = forwardRef<MindmapEditorHandle, MindmapEditorProps>(
         const node = mindmapData.nodes[nodeId]
         if (!node) return
 
-        setDetailNodeId(nodeId)
-        setDetailDraft({
-          text: node.text,
-          description: node.description,
-          attachments: node.attachments.map((attachment) => ({ ...attachment })),
-          color: node.color,
+        dispatch({
+          type: 'OPEN_DETAIL',
+          payload: {
+            nodeId,
+            draft: {
+              text: node.text,
+              description: node.description,
+              attachments: node.attachments.map((attachment) => ({ ...attachment })),
+              color: node.color,
+            },
+          },
         })
-        setNewAttachmentInput({ label: '', url: '', type: 'image' })
       },
       [mindmapData.nodes]
     )
 
     const closeNodeDetail = useCallback(() => {
-      setDetailNodeId(null)
-      setDetailDraft(null)
-      setNewAttachmentInput({ label: '', url: '', type: 'image' })
+      dispatch({ type: 'CLOSE_DETAIL' })
     }, [])
 
     const saveNodeDetail = useCallback(() => {
@@ -1018,26 +1392,20 @@ const MindmapEditor = forwardRef<MindmapEditorHandle, MindmapEditorProps>(
 
       const nextText = detailDraft.text.trim() || 'Untitled Node'
 
-      setMindmapData(prev => {
-        const node = prev.nodes[detailNodeId]
-        if (!node) return prev
-
-        return {
-          ...prev,
-          nodes: {
-            ...prev.nodes,
-            [detailNodeId]: {
-              ...node,
-              text: nextText,
-              description: detailDraft.description,
-              attachments: detailDraft.attachments.map((attachment) => ({ ...attachment })),
-              color: detailDraft.color,
-            },
+      dispatch({
+        type: 'UPDATE_NODE',
+        payload: {
+          nodeId: detailNodeId,
+          updates: {
+            text: nextText,
+            description: detailDraft.description,
+            attachments: detailDraft.attachments.map((attachment) => ({ ...attachment })),
+            color: detailDraft.color,
           },
-        }
+        },
       })
 
-      setSelectedNodeId(detailNodeId)
+      dispatch({ type: 'SET_SELECTED_NODE_ID', payload: detailNodeId })
       closeNodeDetail()
     }, [detailDraft, detailNodeId, closeNodeDetail])
 
@@ -1052,26 +1420,20 @@ const MindmapEditor = forwardRef<MindmapEditorHandle, MindmapEditorProps>(
         type: newAttachmentInput.type,
       }
 
-      setDetailDraft(prev => {
-        if (!prev) return prev
-        return {
-          ...prev,
-          attachments: [...prev.attachments, attachment],
-        }
+      dispatch({
+        type: 'UPDATE_DETAIL_DRAFT',
+        payload: { attachments: [...detailDraft.attachments, attachment] },
       })
-
-      setNewAttachmentInput({ label: '', url: '', type: 'image' })
+      dispatch({ type: 'SET_NEW_ATTACHMENT_INPUT', payload: DEFAULT_ATTACHMENT_INPUT })
     }, [detailDraft, newAttachmentInput])
 
     const removeAttachmentFromDraft = useCallback((attachmentId: string) => {
-      setDetailDraft(prev => {
-        if (!prev) return prev
-        return {
-          ...prev,
-          attachments: prev.attachments.filter((attachment) => attachment.id !== attachmentId),
-        }
+      if (!detailDraft) return
+      dispatch({
+        type: 'UPDATE_DETAIL_DRAFT',
+        payload: { attachments: detailDraft.attachments.filter((attachment) => attachment.id !== attachmentId) },
       })
-    }, [])
+    }, [detailDraft])
 
     useEffect(() => {
       if (!detailNodeId) return
@@ -1099,6 +1461,8 @@ const MindmapEditor = forwardRef<MindmapEditorHandle, MindmapEditorProps>(
       if (!selectedNodeId || readOnly) return
 
       const parentNode = mindmapData.nodes[selectedNodeId]
+      if (!parentNode) return
+      
       const newNodeId = `node-${Date.now()}`
 
       // Calculate position for new child
@@ -1112,36 +1476,22 @@ const MindmapEditor = forwardRef<MindmapEditorHandle, MindmapEditorProps>(
       const colorIndex = (parentNode.children.length) % DEFAULT_COLORS.length
       const newColor = DEFAULT_COLORS[colorIndex]
 
-      let parentWasCollapsed = false
-      setMindmapData(prev => {
-        const parent = prev.nodes[selectedNodeId]
-        if (!parent) return prev
+      const parentWasCollapsed = parentNode.collapsed
 
-        parentWasCollapsed = parent.collapsed
-        return {
-          ...prev,
-          nodes: {
-            ...prev.nodes,
-            [selectedNodeId]: {
-              ...parent,
-              children: [...parent.children, newNodeId],
-              collapsed: false,
-            },
-            [newNodeId]: {
-              id: newNodeId,
-              text: 'New Node',
-              x: newX,
-              y: newY,
-              parentId: selectedNodeId,
-              children: [],
-              collapsed: false,
-              color: newColor,
-              description: '',
-              attachments: [],
-            },
-          },
-        }
-      })
+      const newNode: MindmapNode = {
+        id: newNodeId,
+        text: 'New Node',
+        x: newX,
+        y: newY,
+        parentId: selectedNodeId,
+        children: [],
+        collapsed: false,
+        color: newColor,
+        description: '',
+        attachments: [],
+      }
+
+      dispatch({ type: 'ADD_NODE', payload: { parentId: selectedNodeId, node: newNode } })
 
       if (parentWasCollapsed) {
         animationsRef.current.set(selectedNodeId, {
@@ -1153,43 +1503,16 @@ const MindmapEditor = forwardRef<MindmapEditorHandle, MindmapEditorProps>(
         }
       }
 
-      setSelectedNodeId(newNodeId)
+      dispatch({ type: 'SET_SELECTED_NODE_ID', payload: newNodeId })
     }
 
     const deleteNode = () => {
       if (!selectedNodeId || selectedNodeId === mindmapData.rootId || readOnly) return
 
       const nodeToDelete = mindmapData.nodes[selectedNodeId]
-      if (!nodeToDelete.parentId) return
+      if (!nodeToDelete?.parentId) return
 
-      // Remove from parent's children
-      const parentNode = mindmapData.nodes[nodeToDelete.parentId]
-      const updatedChildren = parentNode.children.filter(id => id !== selectedNodeId)
-
-      // Remove node and all its descendants
-      const nodesToRemove = new Set<string>()
-      const collectNodes = (nodeId: string) => {
-        nodesToRemove.add(nodeId)
-        const node = mindmapData.nodes[nodeId]
-        if (node) {
-          node.children.forEach(collectNodes)
-        }
-      }
-      collectNodes(selectedNodeId)
-
-      const newNodes = { ...mindmapData.nodes }
-      nodesToRemove.forEach(id => delete newNodes[id])
-      newNodes[nodeToDelete.parentId] = {
-        ...parentNode,
-        children: updatedChildren,
-      }
-
-      setMindmapData(prev => ({
-        ...prev,
-        nodes: newNodes,
-      }))
-
-      setSelectedNodeId(null)
+      dispatch({ type: 'DELETE_NODE', payload: { nodeId: selectedNodeId, parentId: nodeToDelete.parentId } })
     }
 
     const toggleCollapse = useCallback(
@@ -1199,33 +1522,25 @@ const MindmapEditor = forwardRef<MindmapEditorHandle, MindmapEditorProps>(
         const targetId = nodeId ?? selectedNodeId
         if (!targetId) return
 
-        setMindmapData(prev => {
-          const targetNode = prev.nodes[targetId]
-          if (!targetNode || targetNode.children.length === 0) return prev
+        const targetNode = mindmapData.nodes[targetId]
+        if (!targetNode || targetNode.children.length === 0) return
 
-          const direction: 'collapse' | 'expand' = targetNode.collapsed ? 'expand' : 'collapse'
-          animationsRef.current.set(targetId, {
-            direction,
-            startTime: performance.now(),
-          })
+        const direction: 'collapse' | 'expand' = targetNode.collapsed ? 'expand' : 'collapse'
+        animationsRef.current.set(targetId, {
+          direction,
+          startTime: performance.now(),
+        })
 
-          return {
-            ...prev,
-            nodes: {
-              ...prev.nodes,
-              [targetId]: {
-                ...targetNode,
-                collapsed: !targetNode.collapsed,
-              },
-            },
-          }
+        dispatch({
+          type: 'UPDATE_NODE',
+          payload: { nodeId: targetId, updates: { collapsed: !targetNode.collapsed } },
         })
 
         if (animationFrameRef.current === null) {
           animationFrameRef.current = requestAnimationFrame(renderMindmap)
         }
       },
-      [readOnly, selectedNodeId, renderMindmap]
+      [readOnly, selectedNodeId, mindmapData.nodes, renderMindmap]
     )
 
     // Keyboard navigation for moving between nodes
@@ -1247,12 +1562,12 @@ const MindmapEditor = forwardRef<MindmapEditorHandle, MindmapEditorProps>(
             event.preventDefault()
             if (!currentNode) {
               // No selection - select root
-              setSelectedNodeId(mindmapData.rootId)
+              dispatch({ type: 'SET_SELECTED_NODE_ID', payload: mindmapData.rootId })
               return
             }
             // Navigate to parent
             if (currentNode.parentId && mindmapData.nodes[currentNode.parentId]) {
-              setSelectedNodeId(currentNode.parentId)
+              dispatch({ type: 'SET_SELECTED_NODE_ID', payload: currentNode.parentId })
             }
             break
           }
@@ -1261,19 +1576,19 @@ const MindmapEditor = forwardRef<MindmapEditorHandle, MindmapEditorProps>(
             event.preventDefault()
             if (!currentNode) {
               // No selection - select root
-              setSelectedNodeId(mindmapData.rootId)
+              dispatch({ type: 'SET_SELECTED_NODE_ID', payload: mindmapData.rootId })
               return
             }
             // Navigate to first visible child
             if (currentNode.children.length > 0 && !currentNode.collapsed) {
-              setSelectedNodeId(currentNode.children[0])
+              dispatch({ type: 'SET_SELECTED_NODE_ID', payload: currentNode.children[0] })
             }
             break
           }
           case 'Tab': {
             event.preventDefault()
             if (!currentNode) {
-              setSelectedNodeId(mindmapData.rootId)
+              dispatch({ type: 'SET_SELECTED_NODE_ID', payload: mindmapData.rootId })
               return
             }
             // Navigate to next sibling (or wrap to first)
@@ -1283,10 +1598,10 @@ const MindmapEditor = forwardRef<MindmapEditorHandle, MindmapEditorProps>(
               const currentIndex = siblings.indexOf(currentNode.id)
               const direction = event.shiftKey ? -1 : 1
               const nextIndex = (currentIndex + direction + siblings.length) % siblings.length
-              setSelectedNodeId(siblings[nextIndex])
+              dispatch({ type: 'SET_SELECTED_NODE_ID', payload: siblings[nextIndex] })
             } else if (currentNode.children.length > 0 && !currentNode.collapsed) {
               // Root node - go to first child
-              setSelectedNodeId(currentNode.children[0])
+              dispatch({ type: 'SET_SELECTED_NODE_ID', payload: currentNode.children[0] })
             }
             break
           }
@@ -1306,18 +1621,21 @@ const MindmapEditor = forwardRef<MindmapEditorHandle, MindmapEditorProps>(
           }
           case 'Escape': {
             event.preventDefault()
-            setSelectedNodeId(null)
+            dispatch({ type: 'SET_SELECTED_NODE_ID', payload: null })
             break
           }
           case 'Home': {
             event.preventDefault()
-            setSelectedNodeId(mindmapData.rootId)
+            dispatch({ type: 'SET_SELECTED_NODE_ID', payload: mindmapData.rootId })
             // Center on root node
             const rootNode = mindmapData.nodes[mindmapData.rootId]
             if (rootNode && canvasRef.current) {
-              setOffset({
-                x: canvasRef.current.width / 2 - rootNode.x * scale,
-                y: canvasRef.current.height / 2 - rootNode.y * scale,
+              dispatch({
+                type: 'SET_OFFSET',
+                payload: {
+                  x: canvasRef.current.width / 2 - rootNode.x * scale,
+                  y: canvasRef.current.height / 2 - rootNode.y * scale,
+                },
               })
             }
             break
@@ -1330,16 +1648,15 @@ const MindmapEditor = forwardRef<MindmapEditorHandle, MindmapEditorProps>(
     }, [detailNodeId, readOnly, selectedNodeId, mindmapData, scale, toggleCollapse, openNodeDetail])
 
     const zoomIn = () => {
-      setScale(prev => Math.min(3, prev * 1.2))
+      dispatch({ type: 'SET_SCALE', payload: Math.min(3, scale * 1.2) })
     }
 
     const zoomOut = () => {
-      setScale(prev => Math.max(0.1, prev / 1.2))
+      dispatch({ type: 'SET_SCALE', payload: Math.max(0.1, scale / 1.2) })
     }
 
     const resetView = () => {
-      setScale(1)
-      setOffset({ x: 0, y: 0 })
+      dispatch({ type: 'RESET_VIEW' })
     }
 
     const fitToView = () => {
@@ -1367,10 +1684,13 @@ const MindmapEditor = forwardRef<MindmapEditorHandle, MindmapEditorProps>(
       const centerX = (minX + maxX) / 2
       const centerY = (minY + maxY) / 2
 
-      setScale(newScale)
-      setOffset({
-        x: canvas.width / 2 - centerX * newScale,
-        y: canvas.height / 2 - centerY * newScale,
+      dispatch({ type: 'SET_SCALE', payload: newScale })
+      dispatch({
+        type: 'SET_OFFSET',
+        payload: {
+          x: canvas.width / 2 - centerX * newScale,
+          y: canvas.height / 2 - centerY * newScale,
+        },
       })
     }
 
@@ -1395,10 +1715,8 @@ const MindmapEditor = forwardRef<MindmapEditorHandle, MindmapEditorProps>(
     const handleBreadcrumbClick = useCallback(
       (nodeId: string) => {
         if (!mindmapData.nodes[nodeId]) return
-        setSelectedNodeId(nodeId)
-        setDetailNodeId(null)
-        setDetailDraft(null)
-        setNewAttachmentInput({ label: '', url: '', type: 'image' })
+        dispatch({ type: 'SET_SELECTED_NODE_ID', payload: nodeId })
+        dispatch({ type: 'CLOSE_DETAIL' })
       },
       [mindmapData]
     )
@@ -1420,12 +1738,15 @@ const MindmapEditor = forwardRef<MindmapEditorHandle, MindmapEditorProps>(
         const worldX = (pointerX - transform.offsetX) / transform.scale + transform.minX
         const worldY = (pointerY - transform.offsetY) / transform.scale + transform.minY
 
-        setOffset({
-          x: mainCanvas.width / 2 - worldX * scale,
-          y: mainCanvas.height / 2 - worldY * scale,
+        dispatch({
+          type: 'SET_OFFSET',
+          payload: {
+            x: mainCanvas.width / 2 - worldX * scale,
+            y: mainCanvas.height / 2 - worldY * scale,
+          },
         })
       },
-      [scale, setOffset]
+      [scale]
     )
 
     return (
@@ -1582,7 +1903,7 @@ const MindmapEditor = forwardRef<MindmapEditorHandle, MindmapEditorProps>(
                     type="text"
                     value={detailDraft.text}
                     onChange={(e) =>
-                      setDetailDraft(prev => (prev ? { ...prev, text: e.target.value } : prev))
+                      dispatch({ type: 'UPDATE_DETAIL_DRAFT', payload: { text: e.target.value } })
                     }
                     className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm shadow-sm focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-200"
                     placeholder="Node title"
@@ -1597,7 +1918,7 @@ const MindmapEditor = forwardRef<MindmapEditorHandle, MindmapEditorProps>(
                     id="mindmap-node-description"
                     value={detailDraft.description}
                     onChange={(e) =>
-                      setDetailDraft(prev => (prev ? { ...prev, description: e.target.value } : prev))
+                      dispatch({ type: 'UPDATE_DETAIL_DRAFT', payload: { description: e.target.value } })
                     }
                     rows={5}
                     className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm shadow-sm focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-200"
@@ -1615,7 +1936,7 @@ const MindmapEditor = forwardRef<MindmapEditorHandle, MindmapEditorProps>(
                           key={color}
                           type="button"
                           onClick={() =>
-                            setDetailDraft(prev => (prev ? { ...prev, color } : prev))
+                            dispatch({ type: 'UPDATE_DETAIL_DRAFT', payload: { color } })
                           }
                           className={`h-9 w-9 rounded-full border-2 transition-transform focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-400 ${
                             isActive ? 'border-slate-900 scale-105' : 'border-transparent'
@@ -1689,7 +2010,7 @@ const MindmapEditor = forwardRef<MindmapEditorHandle, MindmapEditorProps>(
                       type="text"
                       value={newAttachmentInput.label}
                       onChange={(e) =>
-                        setNewAttachmentInput(prev => ({ ...prev, label: e.target.value }))
+                        dispatch({ type: 'SET_NEW_ATTACHMENT_INPUT', payload: { ...newAttachmentInput, label: e.target.value } })
                       }
                       placeholder="Attachment label"
                       className="rounded-lg border border-slate-200 px-3 py-2 text-sm shadow-sm focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-200"
@@ -1698,7 +2019,7 @@ const MindmapEditor = forwardRef<MindmapEditorHandle, MindmapEditorProps>(
                       type="url"
                       value={newAttachmentInput.url}
                       onChange={(e) =>
-                        setNewAttachmentInput(prev => ({ ...prev, url: e.target.value }))
+                        dispatch({ type: 'SET_NEW_ATTACHMENT_INPUT', payload: { ...newAttachmentInput, url: e.target.value } })
                       }
                       placeholder="https://example.com/image.png"
                       className="rounded-lg border border-slate-200 px-3 py-2 text-sm shadow-sm focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-200"
@@ -1706,10 +2027,10 @@ const MindmapEditor = forwardRef<MindmapEditorHandle, MindmapEditorProps>(
                     <select
                       value={newAttachmentInput.type}
                       onChange={(e) =>
-                        setNewAttachmentInput(prev => ({
-                          ...prev,
-                          type: e.target.value === 'link' ? 'link' : 'image',
-                        }))
+                        dispatch({
+                          type: 'SET_NEW_ATTACHMENT_INPUT',
+                          payload: { ...newAttachmentInput, type: e.target.value === 'link' ? 'link' : 'image' },
+                        })
                       }
                       className="rounded-lg border border-slate-200 px-3 py-2 text-sm shadow-sm focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-200"
                     >

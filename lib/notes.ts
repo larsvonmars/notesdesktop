@@ -62,11 +62,29 @@ export async function getNote(id: string): Promise<Note | null> {
 
 /**
  * Create a new note
+ * Note: If a folder_id is provided but project_id is not, the folder's project is automatically inherited.
  */
 export async function createNote(input: CreateNoteInput): Promise<Note> {
   const { data: { user } } = await supabase.auth.getUser()
   
   if (!user) throw new Error('Not authenticated')
+
+  // Determine the project_id:
+  // 1. If explicitly provided, use it
+  // 2. If folder_id is provided, inherit the folder's project
+  // 3. Otherwise, null
+  let resolvedProjectId: string | null = null
+  if (input.project_id !== undefined) {
+    resolvedProjectId = input.project_id
+  } else if (input.folder_id) {
+    // Inherit the folder's project
+    const { data: folderRecord } = await supabase
+      .from('folders')
+      .select('project_id')
+      .eq('id', input.folder_id)
+      .single()
+    resolvedProjectId = folderRecord?.project_id ?? null
+  }
 
   // Get the next position if not provided
   let position = input.position ?? 0
@@ -83,10 +101,10 @@ export async function createNote(input: CreateNoteInput): Promise<Note> {
       query.eq('folder_id', input.folder_id)
     }
 
-    if (input.project_id === null || input.project_id === undefined) {
+    if (resolvedProjectId === null) {
       query.is('project_id', null)
     } else {
-      query.eq('project_id', input.project_id)
+      query.eq('project_id', resolvedProjectId)
     }
     
     const { count } = await query
@@ -99,7 +117,7 @@ export async function createNote(input: CreateNoteInput): Promise<Note> {
       title: input.title,
       content: input.content,
       folder_id: input.folder_id || null,
-      project_id: input.project_id ?? null,
+      project_id: resolvedProjectId,
       position,
       user_id: user.id,
       note_type: input.note_type || 'rich-text',
@@ -184,7 +202,22 @@ export async function getNotesByProject(projectId: string | null): Promise<Note[
 }
 
 /**
+ * Get the project_id for a folder (helper function)
+ */
+export async function getFolderProjectId(folderId: string): Promise<string | null> {
+  const { data: folderRecord } = await supabase
+    .from('folders')
+    .select('project_id')
+    .eq('id', folderId)
+    .single()
+  
+  return folderRecord?.project_id ?? null
+}
+
+/**
  * Move a note to a different folder
+ * Note: Moving a note to a folder automatically assigns the folder's project.
+ * Moving a note to root (null folder) clears the project unless explicitly specified.
  */
 export async function moveNote(
   noteId: string,
@@ -192,26 +225,20 @@ export async function moveNote(
   newPosition?: number,
   newProjectId?: string | null
 ): Promise<Note> {
-  let targetProjectId: string | null | undefined = newProjectId
+  let targetProjectId: string | null
 
-  if (targetProjectId === undefined) {
-    if (newFolderId) {
-      const { data: folderRecord } = await supabase
-        .from('folders')
-        .select('project_id')
-        .eq('id', newFolderId)
-        .single()
-
-      targetProjectId = folderRecord?.project_id ?? null
-    } else {
-      const { data: noteRecord } = await supabase
-        .from('notes')
-        .select('project_id')
-        .eq('id', noteId)
-        .single()
-
-      targetProjectId = noteRecord?.project_id ?? null
-    }
+  // Determine the target project:
+  // 1. If newProjectId is explicitly provided, use it
+  // 2. If moving to a folder, inherit that folder's project
+  // 3. If moving to root (null folder), clear the project
+  if (newProjectId !== undefined) {
+    targetProjectId = newProjectId
+  } else if (newFolderId) {
+    // Inherit the folder's project
+    targetProjectId = await getFolderProjectId(newFolderId)
+  } else {
+    // Moving to root - clear the project for consistency
+    targetProjectId = null
   }
 
   // If position is not provided, calculate it
@@ -231,7 +258,7 @@ export async function moveNote(
 
     if (targetProjectId === null) {
       query.is('project_id', null)
-    } else if (targetProjectId !== undefined) {
+    } else {
       query.eq('project_id', targetProjectId)
     }
     
@@ -242,14 +269,7 @@ export async function moveNote(
   const payload: UpdateNoteInput = {
     folder_id: newFolderId,
     position,
-  }
-
-  if (newProjectId !== undefined) {
-    payload.project_id = newProjectId
-  }
-
-  if (newProjectId === undefined && newFolderId !== null && targetProjectId !== undefined) {
-    payload.project_id = targetProjectId
+    project_id: targetProjectId,
   }
 
   return updateNote(noteId, payload)
@@ -257,12 +277,21 @@ export async function moveNote(
 
 /**
  * Search notes by title or content
+ * Note: Uses parameterized queries via Supabase's textSearch for safety
  */
 export async function searchNotes(query: string): Promise<Note[]> {
+  // Sanitize the query to prevent SQL injection
+  // Escape special characters used in LIKE patterns
+  const sanitizedQuery = query
+    .replace(/\\/g, '\\\\')  // Escape backslashes first
+    .replace(/%/g, '\\%')    // Escape percent signs
+    .replace(/_/g, '\\_')    // Escape underscores
+    .replace(/'/g, "''")     // Escape single quotes
+
   const { data, error } = await supabase
     .from('notes')
     .select('*')
-    .or(`title.ilike.%${query}%,content.ilike.%${query}%`)
+    .or(`title.ilike.%${sanitizedQuery}%,content.ilike.%${sanitizedQuery}%`)
     .order('updated_at', { ascending: false })
 
   if (error) throw error

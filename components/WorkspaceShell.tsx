@@ -550,30 +550,35 @@ function WorkspaceContent() {
 
   const handleMoveNote = async (noteId: string, newFolderId: string | null) => {
     try {
-      await moveNote(noteId, newFolderId)
+      const movedNote = await moveNote(noteId, newFolderId)
       await loadNotesInFolder(selectedFolderId)
       loadFolders()
-      if (newFolderId) {
-        const folder = folders.find((f) => f.id === newFolderId)
-        setSelectedProjectId(folder?.project_id ?? null)
-      } else {
-        setSelectedProjectId(null)
+      
+      // Update project state based on the moved note's new project
+      setSelectedProjectId(movedNote.project_id ?? null)
+      
+      // If the moved note was selected, update it
+      if (selectedNote?.id === noteId) {
+        setSelectedNote(movedNote)
       }
 
-      // Show success toast
-      const note = notes.find((n) => n.id === noteId)
+      // Show success toast with folder and project info
       const folderName =
         newFolderId === null
-          ? 'All Notes'
+          ? 'All Notes (Root)'
           : folders.find((f) => f.id === newFolderId)?.name || 'Unknown folder'
       toast.push({
         title: 'Note moved',
-        description: `"${note?.title || 'Untitled'}" moved to ${folderName}`,
+        description: `"${movedNote.title || 'Untitled'}" moved to ${folderName}`,
         duration: 3000,
       })
     } catch (error) {
       console.error('Error moving note:', error)
-      alert('Failed to move note')
+      toast.push({
+        title: 'Move failed',
+        description: error instanceof Error ? error.message : 'Failed to move note',
+        duration: 5000,
+      })
     }
   }
 
@@ -581,9 +586,19 @@ function WorkspaceContent() {
     try {
       await moveFolder(folderId, newParentId)
       loadFolders()
+      toast.push({
+        title: 'Folder moved',
+        description: 'Folder has been moved successfully.',
+        duration: 3000,
+      })
     } catch (error) {
       console.error('Error moving folder:', error)
-      alert('Failed to move folder')
+      const message = error instanceof Error ? error.message : 'Failed to move folder'
+      toast.push({
+        title: 'Move failed',
+        description: message,
+        duration: 5000,
+      })
     }
   }
 

@@ -1,7 +1,7 @@
-'use client'
+"use client"
 
 import React, { useState, useEffect, useRef, useMemo } from 'react'
-import { X, ZoomIn, ZoomOut, Maximize2, FolderTree, Loader2 } from 'lucide-react'
+import { X, ZoomIn, ZoomOut, Maximize2, FolderTree, Loader2, RefreshCw, Crosshair } from 'lucide-react'
 import type { Note } from '@/lib/notes'
 import { getNotes } from '@/lib/notes'
 import type { FolderNode } from '@/lib/folders'
@@ -22,7 +22,7 @@ interface GraphNode {
   y: number
   vx: number
   vy: number
-  links: number // number of connections
+  connections: number
   folderId?: string | null
 }
 
@@ -32,26 +32,33 @@ interface GraphLink {
 }
 
 const GOLDEN_ANGLE = Math.PI * (3 - Math.sqrt(5))
-const NODE_BASE_RADIUS = 16
-const NODE_RADIUS_SCALE = 6
-const NODE_MAX_RADIUS = 34
+const NODE_MIN_RADIUS = 9
+const NODE_BASE_RADIUS = 13
+const NODE_RADIUS_SCALE = 3.2
+const NODE_MAX_RADIUS = 28
+const ARROW_SIZE = 8
+const LABEL_FONT = '500 12px "Inter", "SF Pro Text", system-ui, sans-serif'
+const STATS_FONT = '600 14px "Inter", "SF Pro Text", system-ui, sans-serif'
+const TEXT_COLOR = '#1f2937'
+const GRID_COLOR = 'rgba(148, 163, 184, 0.2)'
 
 function getNodeRadius(node: GraphNode): number {
-  const connections = Math.max(0, node.links)
-  return Math.min(NODE_MAX_RADIUS, NODE_BASE_RADIUS + Math.sqrt(connections) * NODE_RADIUS_SCALE)
+  const c = Math.max(0, node.connections)
+  const scaled = NODE_BASE_RADIUS + Math.log2(c + 1) * NODE_RADIUS_SCALE
+  return Math.min(NODE_MAX_RADIUS, Math.max(NODE_MIN_RADIUS, scaled))
 }
 
 function applyInitialLayout(nodes: GraphNode[], currentNodeId?: string | null): GraphNode[] {
   const count = nodes.length
   if (count === 0) return []
   if (count === 1) {
-    const single = nodes[0]
-    return [{ ...single, x: 0, y: 0, vx: 0, vy: 0 }]
+    const n = nodes[0]
+    return [{ ...n, x: 0, y: 0, vx: 0, vy: 0 }]
   }
 
-  const spacing = Math.max(120, Math.sqrt(count) * 55)
+  const spacing = Math.max(70, Math.sqrt(count) * 32)
 
-  const arranged = nodes.map((node, index) => {
+  const placed = nodes.map((node, index) => {
     const radius = spacing * Math.sqrt(index + 1)
     const angle = index * GOLDEN_ANGLE
     return {
@@ -64,42 +71,33 @@ function applyInitialLayout(nodes: GraphNode[], currentNodeId?: string | null): 
   })
 
   if (currentNodeId) {
-    const centerNode = arranged.find(node => node.id === currentNodeId)
-    if (centerNode) {
-      const offsetX = centerNode.x
-      const offsetY = centerNode.y
-      return arranged.map(node => ({
-        ...node,
-        x: node.x - offsetX,
-        y: node.y - offsetY,
-      }))
+    const center = placed.find(n => n.id === currentNodeId)
+    if (center) {
+      return placed.map(n => ({ ...n, x: n.x - center.x, y: n.y - center.y }))
     }
   }
 
-  const avgX = arranged.reduce((sum, node) => sum + node.x, 0) / count
-  const avgY = arranged.reduce((sum, node) => sum + node.y, 0) / count
-  return arranged.map(node => ({
-    ...node,
-    x: node.x - avgX,
-    y: node.y - avgY,
-  }))
+  const avgX = placed.reduce((s, n) => s + n.x, 0) / count
+  const avgY = placed.reduce((s, n) => s + n.y, 0) / count
+  return placed.map(n => ({ ...n, x: n.x - avgX, y: n.y - avgY }))
 }
 
 function calculateGraphBounds(nodes: GraphNode[]): { minX: number; maxX: number; minY: number; maxY: number } {
-  if (nodes.length === 0) {
-    return { minX: -1, maxX: 1, minY: -1, maxY: 1 }
-  }
+  if (nodes.length === 0) return { minX: -1, maxX: 1, minY: -1, maxY: 1 }
+
   let minX = Infinity
   let maxX = -Infinity
   let minY = Infinity
   let maxY = -Infinity
+
   nodes.forEach(node => {
-    const radius = getNodeRadius(node)
-    minX = Math.min(minX, node.x - radius)
-    maxX = Math.max(maxX, node.x + radius)
-    minY = Math.min(minY, node.y - radius)
-    maxY = Math.max(maxY, node.y + radius)
+    const r = getNodeRadius(node)
+    minX = Math.min(minX, node.x - r)
+    maxX = Math.max(maxX, node.x + r)
+    minY = Math.min(minY, node.y - r)
+    maxY = Math.max(maxY, node.y + r)
   })
+
   return { minX, maxX, minY, maxY }
 }
 
@@ -205,29 +203,20 @@ export default function KnowledgeGraphModal({
 
   // Filter notes based on selected folder
   const filteredNotes = useMemo(() => {
-    if (filterFolderId === 'all') {
-      return allNotes
-    }
-    
-    if (filterFolderId === null) {
-      // Root folder only
-      return allNotes.filter((note: Note) => note.folder_id === null)
-    }
+    if (filterFolderId === 'all') return allNotes
+    if (filterFolderId === null) return allNotes.filter(n => n.folder_id === null)
 
-    // Get all folder IDs including nested folders
     const folderIds = getAllFolderIds(filterFolderId)
-    return allNotes.filter((note: Note) => 
-      note.folder_id && folderIds.includes(note.folder_id)
-    )
+    return allNotes.filter(n => n.folder_id && folderIds.includes(n.folder_id))
   }, [allNotes, filterFolderId, folders])
 
   // Build graph data from filtered notes
   const { nodes, links } = useMemo(() => {
     const nodeMap = new Map<string, GraphNode>()
     const linkList: GraphLink[] = []
+    const linkSet = new Set<string>()
 
-    // Create nodes for all filtered notes
-    filteredNotes.forEach((note: Note) => {
+    filteredNotes.forEach(note => {
       if (!nodeMap.has(note.id)) {
         nodeMap.set(note.id, {
           id: note.id,
@@ -236,43 +225,37 @@ export default function KnowledgeGraphModal({
           y: 0,
           vx: 0,
           vy: 0,
-          links: 0,
-          folderId: note.folder_id
+          connections: 0,
+          folderId: note.folder_id,
         })
       }
     })
 
-    // Extract links and create edges
-    filteredNotes.forEach((note: Note) => {
+    filteredNotes.forEach(note => {
       const linkedIds = extractNoteLinkIds(note.content)
       linkedIds.forEach(targetId => {
-        if (nodeMap.has(targetId) && targetId !== note.id) {
-          linkList.push({
-            source: note.id,
-            target: targetId
-          })
-          // Increment link count
-          const sourceNode = nodeMap.get(note.id)
-          const targetNode = nodeMap.get(targetId)
-          if (sourceNode) sourceNode.links++
-          if (targetNode) targetNode.links++
-        }
+        if (!nodeMap.has(targetId) || targetId === note.id) return
+        const key = [note.id, targetId].sort().join('|')
+        if (linkSet.has(key)) return
+        linkSet.add(key)
+        linkList.push({ source: note.id, target: targetId })
+
+        const a = nodeMap.get(note.id)
+        const b = nodeMap.get(targetId)
+        if (a) a.connections += 1
+        if (b) b.connections += 1
       })
     })
 
-    return {
-      nodes: Array.from(nodeMap.values()),
-      links: linkList
-    }
+    return { nodes: Array.from(nodeMap.values()), links: linkList }
   }, [filteredNotes])
 
   // Initialize nodes and links refs
   useEffect(() => {
     if (!isOpen) return
 
-    const preparedNodes = applyInitialLayout(nodes.map(node => ({ ...node })), currentNoteId)
-    nodesRef.current = preparedNodes
-    linksRef.current = links.map(link => ({ ...link }))
+    nodesRef.current = applyInitialLayout(nodes.map(n => ({ ...n })), currentNoteId)
+    linksRef.current = links.map(l => ({ ...l }))
     setSelectedNode(currentNoteId || null)
     setHasAutoFit(false)
   }, [isOpen, nodes, links, currentNoteId])
@@ -286,13 +269,11 @@ export default function KnowledgeGraphModal({
     if (width === 0 || height === 0) return
 
     const bounds = calculateGraphBounds(nodesRef.current)
-    const padding = 200
+    const padding = 120
     const graphWidth = Math.max(bounds.maxX - bounds.minX, 1) + padding
     const graphHeight = Math.max(bounds.maxY - bounds.minY, 1) + padding
     const scale = Math.min(width / graphWidth, height / graphHeight)
-    const clampedScale = Math.max(0.3, Math.min(2.5, scale || 1))
-
-    setZoom(clampedScale)
+    setZoom(Math.max(0.4, Math.min(2.4, scale || 1)))
     setPan({ x: 0, y: 0 })
     setHasAutoFit(true)
   }, [isOpen, filteredNotes, hasAutoFit, isLoadingNotes, loadError])
@@ -316,12 +297,12 @@ export default function KnowledgeGraphModal({
       const links = linksRef.current
 
       // Apply forces
-  const nodeCount = Math.max(nodes.length, 1)
-  const damping = 0.82
-  const repulsion = 2400 * (1 + Math.log10(nodeCount + 1))
-  const targetDistance = 140 + Math.sqrt(nodeCount) * 18
-  const attractionStrength = 0.015
-  const centerForce = 0.02
+      const nodeCount = Math.max(nodes.length, 1)
+      const damping = 0.86
+      const repulsion = 1400 * (1 + Math.log10(nodeCount + 1))
+      const targetDistance = 90 + Math.sqrt(nodeCount) * 10
+      const attractionStrength = 0.02
+      const centerForce = 0.012
 
       // Repulsion between all nodes
       for (let i = 0; i < nodes.length; i++) {
@@ -329,9 +310,9 @@ export default function KnowledgeGraphModal({
           const dx = nodes[j].x - nodes[i].x
           const dy = nodes[j].y - nodes[i].y
           const dist = Math.sqrt(dx * dx + dy * dy) || 1
-          const minDistance = getNodeRadius(nodes[i]) + getNodeRadius(nodes[j]) + 30
+          const minDistance = getNodeRadius(nodes[i]) + getNodeRadius(nodes[j]) + 24
           const overlap = Math.max(0, minDistance - dist)
-          const force = repulsion / (dist * dist) + overlap * 25
+          const force = repulsion / (dist * dist) + overlap * 14
           const fx = (dx / dist) * force
           const fy = (dy / dist) * force
           nodes[i].vx -= fx
@@ -345,20 +326,18 @@ export default function KnowledgeGraphModal({
       links.forEach(link => {
         const source = nodes.find(n => n.id === link.source)
         const target = nodes.find(n => n.id === link.target)
-        if (source && target) {
-          const dx = target.x - source.x
-          const dy = target.y - source.y
-          const dist = Math.sqrt(dx * dx + dy * dy) || 1
-          const diff = dist - targetDistance
-          const force = diff * attractionStrength
-          const limitedForce = Math.max(-160, Math.min(160, force))
-          const fx = (dx / dist) * limitedForce
-          const fy = (dy / dist) * limitedForce
-          source.vx += fx
-          source.vy += fy
-          target.vx -= fx
-          target.vy -= fy
-        }
+        if (!source || !target) return
+        const dx = target.x - source.x
+        const dy = target.y - source.y
+        const dist = Math.sqrt(dx * dx + dy * dy) || 1
+        const diff = dist - targetDistance
+        const force = diff * attractionStrength
+        const fx = (dx / dist) * force
+        const fy = (dy / dist) * force
+        source.vx += fx
+        source.vy += fy
+        target.vx -= fx
+        target.vy -= fy
       })
 
       // Center force (pull towards origin)
@@ -371,8 +350,8 @@ export default function KnowledgeGraphModal({
       nodes.forEach(node => {
         node.vx *= damping
         node.vy *= damping
-        node.vx = Math.max(-600, Math.min(600, node.vx))
-        node.vy = Math.max(-600, Math.min(600, node.vy))
+        node.vx = Math.max(-450, Math.min(450, node.vx))
+        node.vy = Math.max(-450, Math.min(450, node.vy))
         node.x += node.vx * dt
         node.y += node.vy * dt
       })
@@ -388,12 +367,36 @@ export default function KnowledgeGraphModal({
       const ctx = canvas?.getContext('2d')
       if (!canvas || !ctx) return
 
-      // Clear canvas
-      ctx.clearRect(0, 0, canvas.width, canvas.height)
+      const dpr = window.devicePixelRatio || 1
 
-      // Apply transformations
       ctx.save()
-      ctx.translate(canvas.width / 2 + pan.x, canvas.height / 2 + pan.y)
+      ctx.clearRect(0, 0, canvas.width, canvas.height)
+      ctx.scale(dpr, dpr)
+
+      const cssWidth = canvas.width / dpr
+      const cssHeight = canvas.height / dpr
+
+      // Subtle grid background for orientation
+      ctx.save()
+      ctx.translate(cssWidth / 2, cssHeight / 2)
+      ctx.strokeStyle = GRID_COLOR
+      ctx.lineWidth = 1
+      const gridSize = 80
+      for (let x = -cssWidth; x < cssWidth; x += gridSize) {
+        ctx.beginPath()
+        ctx.moveTo(x + pan.x, -cssHeight)
+        ctx.lineTo(x + pan.x, cssHeight)
+        ctx.stroke()
+      }
+      for (let y = -cssHeight; y < cssHeight; y += gridSize) {
+        ctx.beginPath()
+        ctx.moveTo(-cssWidth, y + pan.y)
+        ctx.lineTo(cssWidth, y + pan.y)
+        ctx.stroke()
+      }
+      ctx.restore()
+
+      ctx.translate(cssWidth / 2 + pan.x, cssHeight / 2 + pan.y)
       ctx.scale(zoom, zoom)
 
       // Draw links with arrows
@@ -404,41 +407,42 @@ export default function KnowledgeGraphModal({
           const dx = target.x - source.x
           const dy = target.y - source.y
           const distance = Math.sqrt(dx * dx + dy * dy)
+          if (distance < 0.1) return // Skip if nodes overlap
+          
           const angle = Math.atan2(dy, dx)
           
+          // Get node radii (in graph coordinates)
+          const sourceRadius = getNodeRadius(source)
+          const targetRadius = getNodeRadius(target)
+          
           // Calculate start and end points (adjust for node radius)
-          const sourceRadius = getNodeRadius(source) / zoom
-          const targetRadius = getNodeRadius(target) / zoom
           const startX = source.x + (dx / distance) * sourceRadius
           const startY = source.y + (dy / distance) * sourceRadius
           const endX = target.x - (dx / distance) * targetRadius
           const endY = target.y - (dy / distance) * targetRadius
 
-          // Draw line
-          ctx.strokeStyle = '#94a3b8'
-          ctx.lineWidth = 1.5 / zoom
+          ctx.strokeStyle = '#cbd5e1'
+          ctx.lineWidth = 1.4
           ctx.beginPath()
           ctx.moveTo(startX, startY)
           ctx.lineTo(endX, endY)
           ctx.stroke()
 
-          // Draw arrowhead at the target end
-          const arrowSize = 10 / zoom
-          const arrowX = endX - (dx / distance) * (arrowSize * 0.5)
-          const arrowY = endY - (dy / distance) * (arrowSize * 0.5)
+          const arrowX = endX - (dx / distance) * (ARROW_SIZE * 0.35)
+          const arrowY = endY - (dy / distance) * (ARROW_SIZE * 0.35)
 
           ctx.beginPath()
           ctx.moveTo(arrowX, arrowY)
           ctx.lineTo(
-            arrowX - arrowSize * Math.cos(angle - Math.PI / 6),
-            arrowY - arrowSize * Math.sin(angle - Math.PI / 6)
+            arrowX - ARROW_SIZE * Math.cos(angle - Math.PI / 6),
+            arrowY - ARROW_SIZE * Math.sin(angle - Math.PI / 6)
           )
           ctx.lineTo(
-            arrowX - arrowSize * Math.cos(angle + Math.PI / 6),
-            arrowY - arrowSize * Math.sin(angle + Math.PI / 6)
+            arrowX - ARROW_SIZE * Math.cos(angle + Math.PI / 6),
+            arrowY - ARROW_SIZE * Math.sin(angle + Math.PI / 6)
           )
           ctx.closePath()
-          ctx.fillStyle = '#94a3b8'
+          ctx.fillStyle = '#cbd5e1'
           ctx.fill()
         }
       })
@@ -448,68 +452,70 @@ export default function KnowledgeGraphModal({
         const isHovered = hoveredNode === node.id
         const isSelected = selectedNode === node.id
         const isCurrent = currentNoteId === node.id
-  const radius = getNodeRadius(node) / zoom
+        const radius = getNodeRadius(node)
 
         // Determine node color based on note type
-        let nodeColor = '#dbeafe' // default blue for text notes
-        let strokeColor = '#3b82f6'
+        let nodeColor = '#e0f2fe'
+        let strokeColor = '#2563eb'
         
         const note = allNotes.find((n: Note) => n.id === node.id)
         if (note) {
           if (note.note_type === 'drawing') {
-            nodeColor = '#e9d5ff' // purple
-            strokeColor = '#a855f7'
+            nodeColor = '#f3e8ff'
+            strokeColor = '#9333ea'
           } else if (note.note_type === 'mindmap') {
-            nodeColor = '#d1fae5' // green
-            strokeColor = '#10b981'
+            nodeColor = '#dcfce7'
+            strokeColor = '#16a34a'
           }
         }
 
-        // Adjust colors for states
         if (isCurrent) {
-          nodeColor = '#fef3c7' // yellow highlight for current
+          nodeColor = '#fef9c3'
           strokeColor = '#f59e0b'
         } else if (isSelected) {
-          // Brighten the color
-          strokeColor = isCurrent ? strokeColor : strokeColor
+          strokeColor = '#0ea5e9'
         } else if (isHovered) {
-          // Slightly brighten on hover
-          nodeColor = nodeColor
+          strokeColor = '#3b82f6'
         }
 
-        // Node circle
+        ctx.save()
+        ctx.shadowColor = 'rgba(0, 0, 0, 0.18)'
+        ctx.shadowBlur = 5
+        ctx.shadowOffsetX = 1
+        ctx.shadowOffsetY = 2
         ctx.beginPath()
         ctx.arc(node.x, node.y, radius, 0, Math.PI * 2)
         ctx.fillStyle = nodeColor
         ctx.fill()
-        
+        ctx.restore()
+
+        ctx.beginPath()
+        ctx.arc(node.x, node.y, radius, 0, Math.PI * 2)
         ctx.strokeStyle = strokeColor
-        ctx.lineWidth = (isCurrent ? 3 : isSelected || isHovered ? 2.5 : 2) / zoom
+        ctx.lineWidth = isCurrent ? 3 : isSelected || isHovered ? 2.4 : 1.4
         ctx.stroke()
 
-        // Node label
-        if (isHovered || isSelected || isCurrent || zoom > 0.8) {
-          ctx.fillStyle = '#1e293b'
-          ctx.font = `${Math.min(14 / zoom, 14)}px sans-serif`
+        const showLabel = isHovered || isSelected || isCurrent || zoom > 0.55
+        if (showLabel) {
+          const label = node.label.length > 28 ? `${node.label.slice(0, 28)}...` : node.label
+          ctx.font = LABEL_FONT
           ctx.textAlign = 'center'
           ctx.textBaseline = 'top'
-          
-          const maxWidth = 100 / zoom
-          const label = node.label.length > 20 ? node.label.substring(0, 20) + '...' : node.label
-          
-          // Background for text
+
           const metrics = ctx.measureText(label)
-          const padding = 4 / zoom
-          ctx.fillStyle = 'rgba(255, 255, 255, 0.95)'
+          const padding = 4
+          const labelY = node.y + radius + 8
+
+          ctx.fillStyle = 'rgba(255, 255, 255, 0.94)'
           ctx.fillRect(
             node.x - metrics.width / 2 - padding,
-            node.y + radius + 4 / zoom - padding,
+            labelY - padding,
             metrics.width + padding * 2,
-            14 / zoom + padding * 2
+            16 + padding * 2
           )
-          
-          ctx.fillStyle = '#1e293b'
-          ctx.fillText(label, node.x, node.y + radius + 4 / zoom)
+
+          ctx.fillStyle = TEXT_COLOR
+          ctx.fillText(label, node.x, labelY)
         }
       })
 
@@ -526,7 +532,7 @@ export default function KnowledgeGraphModal({
     }
   }, [isOpen, zoom, pan, hoveredNode, selectedNode, currentNoteId])
 
-  // Handle canvas resize
+  // Resize canvas for HiDPI
   useEffect(() => {
     if (!isOpen || !canvasRef.current || !containerRef.current) return
 
@@ -536,8 +542,11 @@ export default function KnowledgeGraphModal({
       if (!canvas || !container) return
 
       const rect = container.getBoundingClientRect()
-      canvas.width = rect.width
-      canvas.height = rect.height
+      const dpr = window.devicePixelRatio || 1
+      canvas.width = rect.width * dpr
+      canvas.height = rect.height * dpr
+      canvas.style.width = `${rect.width}px`
+      canvas.style.height = `${rect.height}px`
     }
 
     resizeCanvas()
@@ -551,18 +560,19 @@ export default function KnowledgeGraphModal({
     if (!canvas) return
 
     const rect = canvas.getBoundingClientRect()
+    // Use CSS dimensions (rect), not canvas.width/height which includes DPR scaling
     const x = e.clientX - rect.left
     const y = e.clientY - rect.top
 
-    // Transform to graph coordinates
-    const graphX = (x - canvas.width / 2 - pan.x) / zoom
-    const graphY = (y - canvas.height / 2 - pan.y) / zoom
+    // Transform to graph coordinates using CSS dimensions
+    const graphX = (x - rect.width / 2 - pan.x) / zoom
+    const graphY = (y - rect.height / 2 - pan.y) / zoom
 
-    // Check if clicking on a node
+    // Check if clicking on a node (radius is in graph coordinates, graphX/Y are also in graph coordinates)
     const clickedNode = nodesRef.current.find(node => {
       const dx = node.x - graphX
       const dy = node.y - graphY
-      const radius = getNodeRadius(node) / zoom
+      const radius = getNodeRadius(node)
       return Math.sqrt(dx * dx + dy * dy) < radius
     })
 
@@ -591,17 +601,17 @@ export default function KnowledgeGraphModal({
         y: e.clientY - dragStart.y
       })
     } else {
-      // Check hover
+      // Check hover - use CSS dimensions from getBoundingClientRect
       const rect = canvas.getBoundingClientRect()
       const x = e.clientX - rect.left
       const y = e.clientY - rect.top
-      const graphX = (x - canvas.width / 2 - pan.x) / zoom
-      const graphY = (y - canvas.height / 2 - pan.y) / zoom
+      const graphX = (x - rect.width / 2 - pan.x) / zoom
+      const graphY = (y - rect.height / 2 - pan.y) / zoom
 
       const hoveredNode = nodesRef.current.find(node => {
         const dx = node.x - graphX
         const dy = node.y - graphY
-        const radius = getNodeRadius(node) / zoom
+        const radius = getNodeRadius(node)
         return Math.sqrt(dx * dx + dy * dy) < radius
       })
 
@@ -643,7 +653,7 @@ export default function KnowledgeGraphModal({
   const stats = {
     totalNotes: filteredNotes.length,
     totalLinks: links.length,
-    connectedNotes: nodes.filter(n => n.links > 0).length
+    connectedNotes: nodes.filter(n => n.connections > 0).length,
   }
 
   // Build folder options for dropdown
@@ -691,40 +701,48 @@ export default function KnowledgeGraphModal({
       <div className="bg-white rounded-lg shadow-xl w-full h-full max-w-7xl max-h-[90vh] flex flex-col">
         {/* Header */}
         <div className="flex items-center justify-between p-4 border-b border-gray-200">
-          <div className="flex items-center gap-4 flex-1">
+          <div className="flex items-start gap-4 flex-1">
             <div>
-              <h2 className="text-lg font-semibold text-gray-900">Knowledge Graph</h2>
-              <p className="text-sm text-gray-500">
-                {stats.totalNotes} notes · {stats.totalLinks} links · {stats.connectedNotes} connected
-              </p>
+              <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-blue-50 text-blue-700 text-xs font-semibold uppercase tracking-wide">
+                Knowledge Graph
+              </div>
+              <div className="mt-2 flex items-center gap-4 text-sm text-gray-700" style={{ fontFamily: 'Inter, system-ui, sans-serif' }}>
+                <span>{stats.totalNotes} notes</span>
+                <span>•</span>
+                <span>{stats.totalLinks} links</span>
+                <span>•</span>
+                <span>{stats.connectedNotes} connected</span>
+              </div>
             </div>
-            
-            {/* Folder Filter */}
-            <div className="flex items-center gap-2 ml-auto mr-4">
+
+            <div className="flex items-center gap-2 ml-auto">
               <FolderTree size={16} className="text-gray-500" />
               <select
                 value={filterFolderId === null ? 'root' : filterFolderId}
                 onChange={(e) => {
                   const value = e.target.value
-                  if (value === 'all') {
-                    setFilterFolderId('all')
-                  } else if (value === 'root') {
-                    setFilterFolderId(null)
-                  } else {
-                    setFilterFolderId(value)
-                  }
+                  if (value === 'all') setFilterFolderId('all')
+                  else if (value === 'root') setFilterFolderId(null)
+                  else setFilterFolderId(value)
                 }}
                 className="text-sm px-3 py-1.5 border border-gray-300 rounded-md bg-white hover:border-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
               >
                 {folderOptions.map(option => (
-                  <option 
-                    key={option.id === null ? 'root' : option.id} 
+                  <option
+                    key={option.id === null ? 'root' : option.id}
                     value={option.id === null ? 'root' : option.id}
                   >
                     {'\u00A0'.repeat(option.depth * 2)}{option.name}
                   </option>
                 ))}
               </select>
+              <button
+                onClick={() => setHasAutoFit(false)}
+                className="p-2 rounded-md border border-gray-200 text-gray-600 hover:border-gray-300 hover:text-gray-800"
+                title="Re-center graph"
+              >
+                <Crosshair size={16} />
+              </button>
             </div>
           </div>
           <button
@@ -772,60 +790,58 @@ export default function KnowledgeGraphModal({
           )}
         </div>
 
-        {/* Controls - only show when not loading */}
         {!isLoadingNotes && !loadError && allNotes.length > 0 && (
-          <div className="absolute bottom-6 right-6 flex flex-col gap-2">
-          <button
-            onClick={handleZoomIn}
-            className="p-2 bg-white rounded-lg shadow-lg hover:bg-gray-50 transition-colors"
-            title="Zoom In"
-          >
-            <ZoomIn size={20} />
-          </button>
-          <button
-            onClick={handleZoomOut}
-            className="p-2 bg-white rounded-lg shadow-lg hover:bg-gray-50 transition-colors"
-            title="Zoom Out"
-          >
-            <ZoomOut size={20} />
-          </button>
-          <button
-            onClick={handleReset}
-            className="p-2 bg-white rounded-lg shadow-lg hover:bg-gray-50 transition-colors"
-            title="Reset View"
-          >
-            <Maximize2 size={20} />
-          </button>
-        </div>
-        )}
+          <>
+            <div className="absolute bottom-6 right-6 flex flex-col gap-2">
+              <button
+                onClick={handleZoomIn}
+                className="p-2 bg-white rounded-lg shadow-lg hover:bg-gray-50 transition-colors"
+                title="Zoom In"
+              >
+                <ZoomIn size={20} />
+              </button>
+              <button
+                onClick={handleZoomOut}
+                className="p-2 bg-white rounded-lg shadow-lg hover:bg-gray-50 transition-colors"
+                title="Zoom Out"
+              >
+                <ZoomOut size={20} />
+              </button>
+              <button
+                onClick={handleReset}
+                className="p-2 bg-white rounded-lg shadow-lg hover:bg-gray-50 transition-colors"
+                title="Reset View"
+              >
+                <Maximize2 size={20} />
+              </button>
+            </div>
 
-        {/* Legend - only show when not loading */}
-        {!isLoadingNotes && !loadError && allNotes.length > 0 && (
-          <div className="absolute bottom-6 left-6 bg-white rounded-lg shadow-lg p-4 text-sm max-w-xs">
-          <div className="font-medium text-gray-900 mb-2">Legend</div>
-          <div className="space-y-2">
-            <div className="flex items-center gap-2">
-              <div className="w-4 h-4 rounded-full bg-yellow-100 border-2 border-orange-500"></div>
-              <span className="text-gray-600">Current Note</span>
+            <div className="absolute bottom-6 left-6 bg-white rounded-lg shadow-lg p-4 text-sm max-w-xs">
+              <div className="font-medium text-gray-900 mb-2">Legend</div>
+              <div className="space-y-2">
+                <div className="flex items-center gap-2">
+                  <div className="w-4 h-4 rounded-full bg-yellow-100 border-2 border-orange-500"></div>
+                  <span className="text-gray-600">Current Note</span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <div className="w-4 h-4 rounded-full bg-blue-100 border-2 border-blue-500"></div>
+                  <span className="text-gray-600">Text Note</span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <div className="w-4 h-4 rounded-full bg-purple-100 border-2 border-purple-500"></div>
+                  <span className="text-gray-600">Drawing Note</span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <div className="w-4 h-4 rounded-full bg-green-100 border-2 border-green-500"></div>
+                  <span className="text-gray-600">Mindmap Note</span>
+                </div>
+              </div>
+              <div className="mt-3 pt-3 border-t border-gray-200 text-xs text-gray-500">
+                <div>Larger nodes = more connections</div>
+                <div className="mt-1">Drag to pan · Scroll to zoom · Click to open</div>
+              </div>
             </div>
-            <div className="flex items-center gap-2">
-              <div className="w-4 h-4 rounded-full bg-blue-100 border-2 border-blue-500"></div>
-              <span className="text-gray-600">Text Note</span>
-            </div>
-            <div className="flex items-center gap-2">
-              <div className="w-4 h-4 rounded-full bg-purple-100 border-2 border-purple-500"></div>
-              <span className="text-gray-600">Drawing Note</span>
-            </div>
-            <div className="flex items-center gap-2">
-              <div className="w-4 h-4 rounded-full bg-green-100 border-2 border-green-500"></div>
-              <span className="text-gray-600">Mindmap Note</span>
-            </div>
-          </div>
-          <div className="mt-3 pt-3 border-t border-gray-200 text-xs text-gray-500">
-            <div>Larger nodes = more connections</div>
-            <div className="mt-1">Drag to pan · Scroll to zoom · Click to open</div>
-          </div>
-        </div>
+          </>
         )}
       </div>
     </div>

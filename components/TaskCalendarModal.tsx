@@ -564,7 +564,7 @@ export default function TaskCalendarModal({
     <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/60 p-4">
       <div className="flex w-full max-w-7xl max-h-[90vh] flex-col overflow-hidden rounded-2xl border border-gray-200 bg-white shadow-2xl">
         {/* Header */}
-        <div className="flex items-center justify-between border-b border-gray-200 bg-gradient-to-r from-blue-50 to-purple-50 px-6 py-4">
+        <div className="flex items-center justify-between border-b border-gray-200 bg-blue-50 px-6 py-4">
           <div className="flex items-center gap-4">
             <div className="flex items-center gap-2">
               <CheckSquare size={24} className="text-blue-600" />

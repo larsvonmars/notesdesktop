@@ -160,17 +160,72 @@ export async function deleteFolder(id: string): Promise<void> {
 }
 
 /**
+ * Check if a folder is a descendant of another folder
+ * Used to prevent circular references when moving folders
+ */
+async function isDescendantOf(
+  potentialDescendantId: string,
+  potentialAncestorId: string
+): Promise<boolean> {
+  // Walk up the tree from potentialDescendantId to check if we hit potentialAncestorId
+  let currentId: string | null = potentialDescendantId
+  const visited = new Set<string>()
+  
+  while (currentId) {
+    // Prevent infinite loops in case of existing circular references
+    if (visited.has(currentId)) {
+      console.warn('Circular reference detected in folder hierarchy')
+      return true
+    }
+    visited.add(currentId)
+    
+    if (currentId === potentialAncestorId) {
+      return true
+    }
+    
+    const { data: folder } = await supabase
+      .from('folders')
+      .select('parent_id')
+      .eq('id', currentId)
+      .single()
+    
+    currentId = folder?.parent_id ?? null
+  }
+  
+  return false
+}
+
+/**
  * Move a folder to a new parent
+ * Note: When moving to a new parent, the folder inherits the parent's project.
+ * When moving to root, the folder keeps its current project unless the parent had one.
+ * All notes in the folder are also updated to match the new project for consistency.
  */
 export async function moveFolder(
   folderId: string,
   newParentId: string | null,
   newPosition?: number
 ): Promise<Folder> {
-  // Determine target project for ordering context
+  // Prevent moving a folder to itself
+  if (folderId === newParentId) {
+    throw new Error('Cannot move a folder into itself')
+  }
+
+  // Prevent circular references: ensure newParentId is not a descendant of folderId
+  if (newParentId !== null) {
+    const wouldCreateCycle = await isDescendantOf(newParentId, folderId)
+    if (wouldCreateCycle) {
+      throw new Error('Cannot move a folder into one of its subfolders')
+    }
+  }
+
+  // Determine target project:
+  // - If moving into a folder, inherit that folder's project
+  // - If moving to root, keep current project (could be null)
   let targetProjectId: string | null = null
 
   if (newParentId) {
+    // Inherit project from new parent
     const { data: parentFolder } = await supabase
       .from('folders')
       .select('project_id')
@@ -179,6 +234,7 @@ export async function moveFolder(
 
     targetProjectId = parentFolder?.project_id ?? null
   } else {
+    // Moving to root - keep current project
     const { data: folderRecord } = await supabase
       .from('folders')
       .select('project_id')
@@ -213,10 +269,29 @@ export async function moveFolder(
     position = (count || 0) + 1
   }
   
-  return updateFolder(folderId, {
+  // Update the folder with new parent, position, and project
+  const updatedFolder = await updateFolder(folderId, {
     parent_id: newParentId,
     position,
+    project_id: targetProjectId,
   })
+
+  // Also update all notes in this folder to match the new project
+  // This ensures folder-project-note consistency
+  const { error: notesError } = await supabase
+    .from('notes')
+    .update({ 
+      project_id: targetProjectId,
+      updated_at: new Date().toISOString()
+    })
+    .eq('folder_id', folderId)
+
+  if (notesError) {
+    console.error('Failed to update notes project_id:', notesError)
+    // Don't throw - the folder move succeeded, notes can be fixed later
+  }
+
+  return updatedFolder
 }
 
 /**

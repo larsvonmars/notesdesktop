@@ -53,6 +53,7 @@ import UnifiedPanel from './UnifiedPanel'
 import ProjectsWorkspaceModal from './ProjectsWorkspaceModal'
 import { useToast } from './ToastProvider'
 import { Note as LibNote } from '../lib/notes'
+import { getProjects, Project } from '../lib/projects'
 import NoteLinkDialog from './NoteLinkDialog'
 import KnowledgeGraphModal from './KnowledgeGraphModal'
 import { noteLinkBlock } from '../lib/editor/noteLinkBlock'
@@ -182,6 +183,20 @@ export default function NoteEditor({
   const [showKnowledgeGraph, setShowKnowledgeGraph] = useState(false)
   const [showProjectsModal, setShowProjectsModal] = useState(false)
   const [showBlockOutlines, setShowBlockOutlines] = useState(false)
+  const [projects, setProjects] = useState<Project[]>([])
+  
+  // Load projects for display
+  useEffect(() => {
+    const loadProjects = async () => {
+      try {
+        const fetchedProjects = await getProjects()
+        setProjects(fetchedProjects)
+      } catch (error) {
+        console.error('Failed to load projects:', error)
+      }
+    }
+    loadProjects()
+  }, [])
   
   // Selected text state for AI assistant integration
   const [selectedText, setSelectedText] = useState('')
@@ -1116,6 +1131,13 @@ export default function NoteEditor({
     return path ? path.join(' / ') : 'All Notes'
   }, [note?.folder_id, folders])
 
+  // Get project name for display
+  const projectInfo = useMemo(() => {
+    if (!note?.project_id) return null
+    const project = projects.find(p => p.id === note.project_id)
+    return project ? { name: project.name, color: project.color } : null
+  }, [note?.project_id, projects])
+
   // Format last save time
   const lastSaveDisplay = useMemo(() => {
     if (!lastSaveTime) return null
@@ -1526,6 +1548,21 @@ export default function NoteEditor({
               <div className="flex items-center gap-1.5 text-gray-500">
                 <FolderOpen size={12} />
                 <span>{folderPath}</span>
+              </div>
+            )}
+
+            {/* Project Badge */}
+            {note && projectInfo && (
+              <div 
+                className="flex items-center gap-1.5 px-2 py-0.5 rounded-full text-xs font-medium"
+                style={{ 
+                  backgroundColor: `${projectInfo.color}20`,
+                  color: projectInfo.color
+                }}
+                title={`Project: ${projectInfo.name}`}
+              >
+                <Target size={10} />
+                <span>{projectInfo.name}</span>
               </div>
             )}
 
