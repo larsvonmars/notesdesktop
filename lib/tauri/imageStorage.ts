@@ -142,7 +142,7 @@ export async function readImageAsDataUrl(filePath: string): Promise<string | nul
     }
     
     // Convert to base64
-    const base64 = btoa(String.fromCharCode(...contents))
+    const base64 = btoa(String.fromCharCode.apply(null, Array.from(contents)))
     
     return `data:${mimeType};base64,${base64}`
   } catch (error) {
