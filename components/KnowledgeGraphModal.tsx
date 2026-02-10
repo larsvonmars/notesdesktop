@@ -32,15 +32,15 @@ interface GraphLink {
 }
 
 const GOLDEN_ANGLE = Math.PI * (3 - Math.sqrt(5))
-const NODE_MIN_RADIUS = 9
-const NODE_BASE_RADIUS = 13
-const NODE_RADIUS_SCALE = 3.2
-const NODE_MAX_RADIUS = 28
-const ARROW_SIZE = 8
-const LABEL_FONT = '500 12px "Inter", "SF Pro Text", system-ui, sans-serif'
-const STATS_FONT = '600 14px "Inter", "SF Pro Text", system-ui, sans-serif'
+const NODE_MIN_RADIUS = 4
+const NODE_BASE_RADIUS = 5
+const NODE_RADIUS_SCALE = 1.8
+const NODE_MAX_RADIUS = 14
+const ARROW_SIZE = 4
+const LABEL_FONT = '500 10px "Inter", "SF Pro Text", system-ui, sans-serif'
+const STATS_FONT = '600 12px "Inter", "SF Pro Text", system-ui, sans-serif'
 const TEXT_COLOR = '#1f2937'
-const GRID_COLOR = 'rgba(148, 163, 184, 0.2)'
+const GRID_COLOR = 'rgba(148, 163, 184, 0.13)'
 
 function getNodeRadius(node: GraphNode): number {
   const c = Math.max(0, node.connections)
@@ -56,7 +56,7 @@ function applyInitialLayout(nodes: GraphNode[], currentNodeId?: string | null): 
     return [{ ...n, x: 0, y: 0, vx: 0, vy: 0 }]
   }
 
-  const spacing = Math.max(70, Math.sqrt(count) * 32)
+  const spacing = Math.max(20, Math.sqrt(count) * 12)
 
   const placed = nodes.map((node, index) => {
     const radius = spacing * Math.sqrt(index + 1)
@@ -269,22 +269,34 @@ export default function KnowledgeGraphModal({
     if (width === 0 || height === 0) return
 
     const bounds = calculateGraphBounds(nodesRef.current)
-    const padding = 120
+    const padding = 60
     const graphWidth = Math.max(bounds.maxX - bounds.minX, 1) + padding
     const graphHeight = Math.max(bounds.maxY - bounds.minY, 1) + padding
     const scale = Math.min(width / graphWidth, height / graphHeight)
-    setZoom(Math.max(0.4, Math.min(2.4, scale || 1)))
+    setZoom(Math.max(0.5, Math.min(3, scale || 1)))
     setPan({ x: 0, y: 0 })
     setHasAutoFit(true)
   }, [isOpen, filteredNotes, hasAutoFit, isLoadingNotes, loadError])
 
   // Physics simulation for force-directed layout
   useEffect(() => {
-    if (!isOpen || !canvasRef.current) return
+    if (!isOpen || !canvasRef.current || !containerRef.current) return
 
     const canvas = canvasRef.current
     const ctx = canvas.getContext('2d')
     if (!ctx) return
+
+    // Ensure canvas is sized before first render
+    const rect = containerRef.current.getBoundingClientRect()
+    const dpr = window.devicePixelRatio || 1
+    const newW = Math.round(rect.width * dpr)
+    const newH = Math.round(rect.height * dpr)
+    if (canvas.width !== newW || canvas.height !== newH) {
+      canvas.width = newW
+      canvas.height = newH
+      canvas.style.width = `${rect.width}px`
+      canvas.style.height = `${rect.height}px`
+    }
 
     let lastTime = Date.now()
 
@@ -299,10 +311,10 @@ export default function KnowledgeGraphModal({
       // Apply forces
       const nodeCount = Math.max(nodes.length, 1)
       const damping = 0.86
-      const repulsion = 1400 * (1 + Math.log10(nodeCount + 1))
-      const targetDistance = 90 + Math.sqrt(nodeCount) * 10
-      const attractionStrength = 0.02
-      const centerForce = 0.012
+      const repulsion = 400 * (1 + Math.log10(nodeCount + 1))
+      const targetDistance = 35 + Math.sqrt(nodeCount) * 4
+      const attractionStrength = 0.03
+      const centerForce = 0.015
 
       // Repulsion between all nodes
       for (let i = 0; i < nodes.length; i++) {
@@ -310,9 +322,9 @@ export default function KnowledgeGraphModal({
           const dx = nodes[j].x - nodes[i].x
           const dy = nodes[j].y - nodes[i].y
           const dist = Math.sqrt(dx * dx + dy * dy) || 1
-          const minDistance = getNodeRadius(nodes[i]) + getNodeRadius(nodes[j]) + 24
+          const minDistance = getNodeRadius(nodes[i]) + getNodeRadius(nodes[j]) + 8
           const overlap = Math.max(0, minDistance - dist)
-          const force = repulsion / (dist * dist) + overlap * 14
+          const force = repulsion / (dist * dist) + overlap * 6
           const fx = (dx / dist) * force
           const fy = (dy / dist) * force
           nodes[i].vx -= fx
@@ -350,8 +362,8 @@ export default function KnowledgeGraphModal({
       nodes.forEach(node => {
         node.vx *= damping
         node.vy *= damping
-        node.vx = Math.max(-450, Math.min(450, node.vx))
-        node.vy = Math.max(-450, Math.min(450, node.vy))
+        node.vx = Math.max(-200, Math.min(200, node.vx))
+        node.vy = Math.max(-200, Math.min(200, node.vy))
         node.x += node.vx * dt
         node.y += node.vy * dt
       })
@@ -368,34 +380,39 @@ export default function KnowledgeGraphModal({
       if (!canvas || !ctx) return
 
       const dpr = window.devicePixelRatio || 1
-
-      ctx.save()
-      ctx.clearRect(0, 0, canvas.width, canvas.height)
-      ctx.scale(dpr, dpr)
-
       const cssWidth = canvas.width / dpr
       const cssHeight = canvas.height / dpr
+
+      // Reset transform completely before clearing to avoid accumulation
+      ctx.setTransform(1, 0, 0, 1, 0, 0)
+      ctx.clearRect(0, 0, canvas.width, canvas.height)
+
+      // Scale for HiDPI — all subsequent drawing uses CSS coordinates
+      ctx.setTransform(dpr, 0, 0, dpr, 0, 0)
 
       // Subtle grid background for orientation
       ctx.save()
       ctx.translate(cssWidth / 2, cssHeight / 2)
       ctx.strokeStyle = GRID_COLOR
-      ctx.lineWidth = 1
-      const gridSize = 80
+      ctx.lineWidth = 0.5
+      const gridSize = 50
+      const gridOffsetX = pan.x % gridSize
+      const gridOffsetY = pan.y % gridSize
       for (let x = -cssWidth; x < cssWidth; x += gridSize) {
         ctx.beginPath()
-        ctx.moveTo(x + pan.x, -cssHeight)
-        ctx.lineTo(x + pan.x, cssHeight)
+        ctx.moveTo(x + gridOffsetX, -cssHeight)
+        ctx.lineTo(x + gridOffsetX, cssHeight)
         ctx.stroke()
       }
       for (let y = -cssHeight; y < cssHeight; y += gridSize) {
         ctx.beginPath()
-        ctx.moveTo(-cssWidth, y + pan.y)
-        ctx.lineTo(cssWidth, y + pan.y)
+        ctx.moveTo(-cssWidth, y + gridOffsetY)
+        ctx.lineTo(cssWidth, y + gridOffsetY)
         ctx.stroke()
       }
       ctx.restore()
 
+      ctx.save()
       ctx.translate(cssWidth / 2 + pan.x, cssHeight / 2 + pan.y)
       ctx.scale(zoom, zoom)
 
@@ -422,14 +439,14 @@ export default function KnowledgeGraphModal({
           const endY = target.y - (dy / distance) * targetRadius
 
           ctx.strokeStyle = '#cbd5e1'
-          ctx.lineWidth = 1.4
+          ctx.lineWidth = 1
           ctx.beginPath()
           ctx.moveTo(startX, startY)
           ctx.lineTo(endX, endY)
           ctx.stroke()
 
-          const arrowX = endX - (dx / distance) * (ARROW_SIZE * 0.35)
-          const arrowY = endY - (dy / distance) * (ARROW_SIZE * 0.35)
+          const arrowX = endX - (dx / distance) * (ARROW_SIZE * 0.25)
+          const arrowY = endY - (dy / distance) * (ARROW_SIZE * 0.25)
 
           ctx.beginPath()
           ctx.moveTo(arrowX, arrowY)
@@ -479,10 +496,10 @@ export default function KnowledgeGraphModal({
         }
 
         ctx.save()
-        ctx.shadowColor = 'rgba(0, 0, 0, 0.18)'
-        ctx.shadowBlur = 5
-        ctx.shadowOffsetX = 1
-        ctx.shadowOffsetY = 2
+        ctx.shadowColor = 'rgba(0, 0, 0, 0.14)'
+        ctx.shadowBlur = 3
+        ctx.shadowOffsetX = 0.5
+        ctx.shadowOffsetY = 1
         ctx.beginPath()
         ctx.arc(node.x, node.y, radius, 0, Math.PI * 2)
         ctx.fillStyle = nodeColor
@@ -492,26 +509,26 @@ export default function KnowledgeGraphModal({
         ctx.beginPath()
         ctx.arc(node.x, node.y, radius, 0, Math.PI * 2)
         ctx.strokeStyle = strokeColor
-        ctx.lineWidth = isCurrent ? 3 : isSelected || isHovered ? 2.4 : 1.4
+        ctx.lineWidth = isCurrent ? 2 : isSelected || isHovered ? 1.6 : 1
         ctx.stroke()
 
-        const showLabel = isHovered || isSelected || isCurrent || zoom > 0.55
+        const showLabel = isHovered || isSelected || isCurrent || zoom > 0.7
         if (showLabel) {
-          const label = node.label.length > 28 ? `${node.label.slice(0, 28)}...` : node.label
+          const label = node.label.length > 24 ? `${node.label.slice(0, 24)}...` : node.label
           ctx.font = LABEL_FONT
           ctx.textAlign = 'center'
           ctx.textBaseline = 'top'
 
           const metrics = ctx.measureText(label)
-          const padding = 4
-          const labelY = node.y + radius + 8
+          const padding = 2
+          const labelY = node.y + radius + 4
 
-          ctx.fillStyle = 'rgba(255, 255, 255, 0.94)'
+          ctx.fillStyle = 'rgba(255, 255, 255, 0.92)'
           ctx.fillRect(
             node.x - metrics.width / 2 - padding,
-            labelY - padding,
+            labelY - 1,
             metrics.width + padding * 2,
-            16 + padding * 2
+            12 + padding * 2
           )
 
           ctx.fillStyle = TEXT_COLOR
@@ -543,15 +560,26 @@ export default function KnowledgeGraphModal({
 
       const rect = container.getBoundingClientRect()
       const dpr = window.devicePixelRatio || 1
-      canvas.width = rect.width * dpr
-      canvas.height = rect.height * dpr
-      canvas.style.width = `${rect.width}px`
-      canvas.style.height = `${rect.height}px`
+      
+      // Only resize if dimensions actually changed
+      const newWidth = Math.round(rect.width * dpr)
+      const newHeight = Math.round(rect.height * dpr)
+      if (canvas.width !== newWidth || canvas.height !== newHeight) {
+        canvas.width = newWidth
+        canvas.height = newHeight
+        canvas.style.width = `${rect.width}px`
+        canvas.style.height = `${rect.height}px`
+      }
     }
 
     resizeCanvas()
+    const observer = new ResizeObserver(resizeCanvas)
+    observer.observe(containerRef.current)
     window.addEventListener('resize', resizeCanvas)
-    return () => window.removeEventListener('resize', resizeCanvas)
+    return () => {
+      observer.disconnect()
+      window.removeEventListener('resize', resizeCanvas)
+    }
   }, [isOpen])
 
   // Handle mouse interactions
@@ -785,60 +813,60 @@ export default function KnowledgeGraphModal({
               onMouseUp={handleMouseUp}
               onMouseLeave={handleMouseLeave}
               onWheel={handleWheel}
-              className="w-full h-full"
+              style={{ display: 'block', width: '100%', height: '100%' }}
             />
           )}
         </div>
 
         {!isLoadingNotes && !loadError && allNotes.length > 0 && (
           <>
-            <div className="absolute bottom-6 right-6 flex flex-col gap-2">
+            <div className="absolute bottom-4 right-4 flex flex-col gap-1.5">
               <button
                 onClick={handleZoomIn}
-                className="p-2 bg-white rounded-lg shadow-lg hover:bg-gray-50 transition-colors"
+                className="p-1.5 bg-white rounded-md shadow-lg hover:bg-gray-50 transition-colors"
                 title="Zoom In"
               >
-                <ZoomIn size={20} />
+                <ZoomIn size={16} />
               </button>
               <button
                 onClick={handleZoomOut}
-                className="p-2 bg-white rounded-lg shadow-lg hover:bg-gray-50 transition-colors"
+                className="p-1.5 bg-white rounded-md shadow-lg hover:bg-gray-50 transition-colors"
                 title="Zoom Out"
               >
-                <ZoomOut size={20} />
+                <ZoomOut size={16} />
               </button>
               <button
                 onClick={handleReset}
-                className="p-2 bg-white rounded-lg shadow-lg hover:bg-gray-50 transition-colors"
+                className="p-1.5 bg-white rounded-md shadow-lg hover:bg-gray-50 transition-colors"
                 title="Reset View"
               >
-                <Maximize2 size={20} />
+                <Maximize2 size={16} />
               </button>
             </div>
 
-            <div className="absolute bottom-6 left-6 bg-white rounded-lg shadow-lg p-4 text-sm max-w-xs">
-              <div className="font-medium text-gray-900 mb-2">Legend</div>
-              <div className="space-y-2">
-                <div className="flex items-center gap-2">
-                  <div className="w-4 h-4 rounded-full bg-yellow-100 border-2 border-orange-500"></div>
+            <div className="absolute bottom-4 left-4 bg-white rounded-lg shadow-lg p-3 text-xs max-w-[200px]">
+              <div className="font-medium text-gray-900 mb-1.5 text-xs">Legend</div>
+              <div className="space-y-1">
+                <div className="flex items-center gap-1.5">
+                  <div className="w-2.5 h-2.5 rounded-full bg-yellow-100 border-[1.5px] border-orange-500 flex-shrink-0"></div>
                   <span className="text-gray-600">Current Note</span>
                 </div>
-                <div className="flex items-center gap-2">
-                  <div className="w-4 h-4 rounded-full bg-alpine-100 border-2 border-alpine-500"></div>
+                <div className="flex items-center gap-1.5">
+                  <div className="w-2.5 h-2.5 rounded-full bg-alpine-100 border-[1.5px] border-alpine-500 flex-shrink-0"></div>
                   <span className="text-gray-600">Text Note</span>
                 </div>
-                <div className="flex items-center gap-2">
-                  <div className="w-4 h-4 rounded-full bg-purple-100 border-2 border-purple-500"></div>
+                <div className="flex items-center gap-1.5">
+                  <div className="w-2.5 h-2.5 rounded-full bg-purple-100 border-[1.5px] border-purple-500 flex-shrink-0"></div>
                   <span className="text-gray-600">Drawing Note</span>
                 </div>
-                <div className="flex items-center gap-2">
-                  <div className="w-4 h-4 rounded-full bg-green-100 border-2 border-green-500"></div>
+                <div className="flex items-center gap-1.5">
+                  <div className="w-2.5 h-2.5 rounded-full bg-green-100 border-[1.5px] border-green-500 flex-shrink-0"></div>
                   <span className="text-gray-600">Mindmap Note</span>
                 </div>
               </div>
-              <div className="mt-3 pt-3 border-t border-gray-200 text-xs text-gray-500">
+              <div className="mt-2 pt-2 border-t border-gray-200 text-[10px] text-gray-500">
                 <div>Larger nodes = more connections</div>
-                <div className="mt-1">Drag to pan · Scroll to zoom · Click to open</div>
+                <div className="mt-0.5">Drag to pan · Scroll to zoom · Click to open</div>
               </div>
             </div>
           </>
