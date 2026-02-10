@@ -57,6 +57,15 @@
     },
     "notification": {
       "all": true
+    },
+    "dialog": {
+      "all": true
+    },
+    "fs": {
+      "scope": [
+        "$APPDATA/**",
+        "$APPDATA/images/**"
+      ]
     }
   }
 }
