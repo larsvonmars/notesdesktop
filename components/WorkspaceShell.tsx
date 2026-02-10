@@ -8,6 +8,8 @@ import TaskCalendarModal from '@/components/TaskCalendarModal'
 import WelcomeBackModal from '@/components/WelcomeBackModal'
 import { Loader2, FileEdit, Sparkles, FileText, PenTool, Network, X } from 'lucide-react'
 import type { NoteType } from '@/lib/notes'
+import NotificationCenter, { ToastContainer, NotificationSettings } from '@/components/NotificationCenter'
+import { initNotifications, destroyNotifications, type AppNotification } from '@/lib/notifications'
 
 type NoteCreationContext = {
   folderArg?: string | null
@@ -65,6 +67,36 @@ function WorkspaceContent() {
   // Welcome Back modal state
   const [showWelcomeBack, setShowWelcomeBack] = useState(false)
   const hasShownWelcomeBackRef = useRef(false)
+
+  // Notification state
+  const [showNotificationSettings, setShowNotificationSettings] = useState(false)
+
+  // Initialize notification system when user is authenticated
+  useEffect(() => {
+    if (user && !loading) {
+      initNotifications()
+      return () => destroyNotifications()
+    }
+  }, [user, loading])
+
+  const handleNotificationAction = useCallback((notification: AppNotification) => {
+    if (notification.action) {
+      switch (notification.action.type) {
+        case 'open_task':
+          setShowTaskCalendar(true)
+          break
+        case 'open_event':
+          setShowTaskCalendar(true)
+          break
+        case 'open_note':
+          if (notification.action.payload) {
+            const note = allNotes.find(n => n.id === notification.action!.payload)
+            if (note) setSelectedNote(note)
+          }
+          break
+      }
+    }
+  }, [allNotes])
 
   const updateFolderParam = useCallback((folderId: string | null) => {
     if (typeof window === 'undefined') return
@@ -663,6 +695,17 @@ function WorkspaceContent() {
 
   return (
     <div className="min-h-screen flex flex-col">
+      {/* Notification Toasts */}
+      <ToastContainer onAction={handleNotificationAction} />
+
+      {/* Notification Bell (floating, top-right) */}
+      <div className="fixed top-3 right-3 z-50">
+        <NotificationCenter
+          onAction={handleNotificationAction}
+          onOpenSettings={() => setShowNotificationSettings(true)}
+        />
+      </div>
+
       {/* Main content area - completely clean */}
       <main className="flex-1 w-full h-screen overflow-hidden">
         {shouldShowEditor ? (
@@ -817,6 +860,12 @@ function WorkspaceContent() {
         linkedProjectId={selectedProjectId || undefined}
       />
       
+      {/* Notification Settings Modal */}
+      <NotificationSettings
+        isOpen={showNotificationSettings}
+        onClose={() => setShowNotificationSettings(false)}
+      />
+
       {/* Welcome Back Modal */}
       <WelcomeBackModal
         isOpen={showWelcomeBack}
