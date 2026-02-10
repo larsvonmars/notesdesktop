@@ -38,3 +38,6 @@ next-env.d.ts
 # tauri
 /src-tauri/target
 .env.local
+
+# snap files
+*.snap

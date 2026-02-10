@@ -1,0 +1,44 @@
+name: saentis-notes
+version: '0.1.0'
+summary: An Alpine-themed desktop notes application
+description: |
+  Saentis Notes is a desktop notes application built with Tauri and Next.js,
+  featuring rich text editing, drawing, Kanban boards, AI assistance,
+  and Supabase-powered sync and authentication.
+grade: devel
+confinement: strict
+base: core22
+
+architectures:
+  - build-on: amd64
+
+apps:
+  saentis-notes:
+    command: usr/bin/notesdesktop
+    extensions: [gnome]
+    plugs:
+      - network
+      - network-bind
+      - home
+      - desktop
+      - desktop-legacy
+      - wayland
+      - x11
+      - opengl
+      - browser-support
+
+parts:
+  saentis-notes:
+    plugin: dump
+    source: src-tauri/target/release/bundle/deb/Saentis Notes_0.1.0_amd64.deb
+    source-type: deb
+    stage-packages:
+      - libwebkit2gtk-4.1-0
+      - libgtk-3-0
+      - libayatana-appindicator3-1
+
+  icons:
+    plugin: dump
+    source: src-tauri/icons
+    organize:
+      icon.png: meta/gui/icon.png
