@@ -177,6 +177,8 @@ export const imageBlock: CustomBlockDescriptor = {
           <div class="image-resize-handle image-resize-e absolute top-1/2 -translate-y-1/2 -right-1.5 w-3 h-3 bg-blue-500 border-2 border-white rounded-full cursor-e-resize opacity-0 group-hover:opacity-100 transition-opacity shadow-md z-10" data-direction="e" contenteditable="false"></div>
         </div>
         ${caption ? `<div class="image-caption text-sm text-gray-600 italic mt-2 px-2 text-center" contenteditable="true">${caption}</div>` : ''}
+        <!-- Note: Caption is escaped during render and further sanitized by DOMPurify in RichTextEditor.
+             The contenteditable="true" allows editing, and content is sanitized on save. -->
       </div>
     </div>`
   },

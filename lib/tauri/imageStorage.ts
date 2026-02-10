@@ -141,8 +141,16 @@ export async function readImageAsDataUrl(filePath: string): Promise<string | nul
       mimeType = 'image/bmp'
     }
     
-    // Convert to base64
-    const base64 = btoa(String.fromCharCode.apply(null, Array.from(contents)))
+    // Convert to base64 in chunks to avoid stack overflow with large images
+    const chunkSize = 8192
+    let base64 = ''
+    
+    for (let i = 0; i < contents.length; i += chunkSize) {
+      const chunk = contents.slice(i, i + chunkSize)
+      base64 += String.fromCharCode.apply(null, Array.from(chunk))
+    }
+    
+    base64 = btoa(base64)
     
     return `data:${mimeType};base64,${base64}`
   } catch (error) {
