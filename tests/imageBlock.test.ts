@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
-import { imageBlock, initializeImageBlockInteractions, type ImagePayload } from '@/lib/editor/imageBlock'
+import { imageBlock, initializeImageBlockInteractions, type ImagePayload, type CropData, type ImageAlignment } from '@/lib/editor/imageBlock'
 
 describe('Image Block', () => {
   let container: HTMLDivElement
@@ -359,6 +359,194 @@ describe('Image Block', () => {
       handles.forEach(handle => {
         expect(handle.getAttribute('contenteditable')).toBe('false')
       })
+    })
+  })
+
+  describe('alignment', () => {
+    it('should default to center alignment', () => {
+      const payload: ImagePayload = {
+        src: 'data:image/png;base64,test',
+        alt: 'Test image'
+      }
+
+      const html = imageBlock.render(payload)
+      
+      expect(html).toContain('data-alignment="center"')
+      expect(html).toContain('mx-auto')
+    })
+
+    it('should render left alignment', () => {
+      const payload: ImagePayload = {
+        src: 'data:image/png;base64,test',
+        alt: 'Test image',
+        alignment: 'left'
+      }
+
+      const html = imageBlock.render(payload)
+      
+      expect(html).toContain('data-alignment="left"')
+      expect(html).toContain('mr-auto')
+    })
+
+    it('should render right alignment', () => {
+      const payload: ImagePayload = {
+        src: 'data:image/png;base64,test',
+        alt: 'Test image',
+        alignment: 'right'
+      }
+
+      const html = imageBlock.render(payload)
+      
+      expect(html).toContain('data-alignment="right"')
+      expect(html).toContain('ml-auto')
+    })
+
+    it('should render full width alignment', () => {
+      const payload: ImagePayload = {
+        src: 'data:image/png;base64,test',
+        alt: 'Test image',
+        alignment: 'full'
+      }
+
+      const html = imageBlock.render(payload)
+      
+      expect(html).toContain('data-alignment="full"')
+      expect(html).toContain('w-full')
+    })
+
+    it('should render alignment buttons', () => {
+      const payload: ImagePayload = {
+        src: 'data:image/png;base64,test',
+        alt: 'Test image'
+      }
+
+      const html = imageBlock.render(payload)
+      
+      expect(html).toContain('image-align-btn')
+      expect(html).toContain('data-align="left"')
+      expect(html).toContain('data-align="center"')
+      expect(html).toContain('data-align="right"')
+      expect(html).toContain('data-align="full"')
+    })
+
+    it('should parse alignment from data attribute', () => {
+      const html = `<div class="image-block-container" data-block="true" data-block-type="image" data-alignment="right">
+        <div class="image-block-wrapper">
+          <div class="relative w-full">
+            <img src="data:image/png;base64,test" alt="Test" class="image-block-img" />
+          </div>
+        </div>
+      </div>`
+      
+      const tempDiv = document.createElement('div')
+      tempDiv.innerHTML = html
+      const blockElement = tempDiv.firstElementChild as HTMLElement
+
+      const parsed = imageBlock.parse?.(blockElement)
+
+      expect(parsed?.alignment).toBe('right')
+    })
+  })
+
+  describe('caption', () => {
+    it('should render caption when provided', () => {
+      const payload: ImagePayload = {
+        src: 'data:image/png;base64,test',
+        alt: 'Test image',
+        caption: 'This is a test caption'
+      }
+
+      const html = imageBlock.render(payload)
+      
+      expect(html).toContain('image-caption')
+      expect(html).toContain('This is a test caption')
+    })
+
+    it('should not render caption element when not provided', () => {
+      const payload: ImagePayload = {
+        src: 'data:image/png;base64,test',
+        alt: 'Test image'
+      }
+
+      const html = imageBlock.render(payload)
+      
+      expect(html).not.toContain('image-caption')
+    })
+
+    it('should escape HTML in caption', () => {
+      const payload: ImagePayload = {
+        src: 'data:image/png;base64,test',
+        alt: 'Test image',
+        caption: '<script>alert("xss")</script>'
+      }
+
+      const html = imageBlock.render(payload)
+      
+      expect(html).not.toContain('<script>')
+      expect(html).toContain('&lt;script&gt;')
+    })
+
+    it('should parse caption from element', () => {
+      const html = `<div class="image-block-container" data-block="true" data-block-type="image">
+        <div class="image-block-wrapper">
+          <div class="relative w-full">
+            <img src="data:image/png;base64,test" alt="Test" class="image-block-img" />
+          </div>
+          <div class="image-caption">My caption</div>
+        </div>
+      </div>`
+      
+      const tempDiv = document.createElement('div')
+      tempDiv.innerHTML = html
+      const blockElement = tempDiv.firstElementChild as HTMLElement
+
+      const parsed = imageBlock.parse?.(blockElement)
+
+      expect(parsed?.caption).toBe('My caption')
+    })
+  })
+
+  describe('crop functionality', () => {
+    it('should render crop button', () => {
+      const payload: ImagePayload = {
+        src: 'data:image/png;base64,test',
+        alt: 'Test image'
+      }
+
+      const html = imageBlock.render(payload)
+      
+      expect(html).toContain('image-crop-btn')
+      expect(html).toContain('Crop image')
+    })
+
+    it('should apply crop styles when crop data is provided', () => {
+      const payload: ImagePayload = {
+        src: 'data:image/png;base64,test',
+        alt: 'Test image',
+        crop: {
+          x: 10,
+          y: 20,
+          width: 80,
+          height: 60
+        }
+      }
+
+      const html = imageBlock.render(payload)
+      
+      expect(html).toContain('object-fit: cover')
+      expect(html).toContain('object-position: 10% 20%')
+      expect(html).toContain('padding-bottom: 60%')
+    })
+
+    it('should not apply crop styles when crop data is not provided', () => {
+      const payload: ImagePayload = {
+        src: 'data:image/png;base64,test',
+        alt: 'Test image'
+      }
+
+      const html = imageBlock.render(payload)
+      
+      expect(html).not.toContain('object-fit: cover')
     })
   })
 })

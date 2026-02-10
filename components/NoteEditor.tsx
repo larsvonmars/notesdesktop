@@ -690,43 +690,72 @@ export default function NoteEditor({
     })
   }, [hideContentBlocksMenu])
 
-  const handleInsertImage = useCallback(() => {
-    hideContentBlocksMenu(() => {
-      // Create a file input element to allow user to select an image
-      const input = document.createElement('input')
-      input.type = 'file'
-      input.accept = 'image/*'
-      input.onchange = (e: Event) => {
-        const target = e.target as HTMLInputElement
-        const file = target.files?.[0]
-        if (file) {
-          // Validate file size
-          if (file.size > MAX_IMAGE_SIZE_BYTES) {
-            toast.push({ title: 'Image too large', description: 'Image file is too large. Maximum size is 10MB.' })
-            return
-          }
-
-          // Convert the image to a data URL
-          const reader = new FileReader()
-          reader.onload = (readerEvent) => {
-            const dataUrl = readerEvent.target?.result as string
+  const handleInsertImage = useCallback(async () => {
+    hideContentBlocksMenu(async () => {
+      try {
+        // Try to use Tauri native file dialog first
+        const { isTauriEnvironment, selectImageFile, readImageAsDataUrl, saveImageToLocal } = await import('@/lib/tauri/imageStorage')
+        
+        if (isTauriEnvironment()) {
+          // Use Tauri native file dialog
+          const selected = await selectImageFile()
+          
+          if (selected) {
+            // Read the image as data URL
+            const dataUrl = await readImageAsDataUrl(selected.path)
+            
             if (dataUrl && editorRef.current && editorRef.current.insertCustomBlock) {
-              // Sanitize filename for use as alt text
-              const sanitizedAlt = file.name.replace(/[<>"']/g, '')
+              // Save to local storage and get file:// URL
+              const localUrl = await saveImageToLocal(dataUrl, selected.name)
+              
               editorRef.current.insertCustomBlock('image', {
-                src: dataUrl,
-                alt: sanitizedAlt || 'Image'
+                src: localUrl,
+                alt: selected.name
               })
               setHasChanges(true)
             }
           }
-          reader.onerror = () => {
-            toast.push({ title: 'Error reading file', description: 'Failed to read image file. Please try again.' })
+        } else {
+          // Fall back to web file input
+          const input = document.createElement('input')
+          input.type = 'file'
+          input.accept = 'image/*'
+          input.onchange = (e: Event) => {
+            const target = e.target as HTMLInputElement
+            const file = target.files?.[0]
+            if (file) {
+              // Validate file size
+              if (file.size > MAX_IMAGE_SIZE_BYTES) {
+                toast.push({ title: 'Image too large', description: 'Image file is too large. Maximum size is 10MB.' })
+                return
+              }
+
+              // Convert the image to a data URL
+              const reader = new FileReader()
+              reader.onload = (readerEvent) => {
+                const dataUrl = readerEvent.target?.result as string
+                if (dataUrl && editorRef.current && editorRef.current.insertCustomBlock) {
+                  // Sanitize filename for use as alt text
+                  const sanitizedAlt = file.name.replace(/[<>"']/g, '')
+                  editorRef.current.insertCustomBlock('image', {
+                    src: dataUrl,
+                    alt: sanitizedAlt || 'Image'
+                  })
+                  setHasChanges(true)
+                }
+              }
+              reader.onerror = () => {
+                toast.push({ title: 'Error reading file', description: 'Failed to read image file. Please try again.' })
+              }
+              reader.readAsDataURL(file)
+            }
           }
-          reader.readAsDataURL(file)
+          input.click()
         }
+      } catch (error) {
+        console.error('Failed to insert image:', error)
+        toast.push({ title: 'Error', description: 'Failed to insert image. Please try again.' })
       }
-      input.click()
     })
   }, [hideContentBlocksMenu, toast])
 
