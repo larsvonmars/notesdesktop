@@ -8,7 +8,7 @@ import TaskCalendarModal from '@/components/TaskCalendarModal'
 import WelcomeBackModal from '@/components/WelcomeBackModal'
 import { Loader2, FileEdit, Sparkles, FileText, PenTool, Network, X } from 'lucide-react'
 import type { NoteType } from '@/lib/notes'
-import NotificationCenter, { ToastContainer, NotificationSettings } from '@/components/NotificationCenter'
+import { ToastContainer } from '@/components/NotificationCenter'
 import { initNotifications, destroyNotifications, type AppNotification } from '@/lib/notifications'
 
 type NoteCreationContext = {
@@ -68,8 +68,7 @@ function WorkspaceContent() {
   const [showWelcomeBack, setShowWelcomeBack] = useState(false)
   const hasShownWelcomeBackRef = useRef(false)
 
-  // Notification state
-  const [showNotificationSettings, setShowNotificationSettings] = useState(false)
+
 
   // Initialize notification system when user is authenticated
   useEffect(() => {
@@ -698,14 +697,6 @@ function WorkspaceContent() {
       {/* Notification Toasts */}
       <ToastContainer onAction={handleNotificationAction} />
 
-      {/* Notification Bell (floating, top-right) */}
-      <div className="fixed top-3 right-3 z-50">
-        <NotificationCenter
-          onAction={handleNotificationAction}
-          onOpenSettings={() => setShowNotificationSettings(true)}
-        />
-      </div>
-
       {/* Main content area - completely clean */}
       <main className="flex-1 w-full h-screen overflow-hidden">
         {shouldShowEditor ? (
@@ -734,6 +725,7 @@ function WorkspaceContent() {
             userEmail={user.email}
             autoOpenPanelKey={autoOpenPanelKey}
             onOpenTaskCalendar={() => setShowTaskCalendar(true)}
+            onNotificationAction={handleNotificationAction}
           />
         ) : (
           <div className="flex items-center justify-center h-full">
@@ -860,12 +852,6 @@ function WorkspaceContent() {
         linkedProjectId={selectedProjectId || undefined}
       />
       
-      {/* Notification Settings Modal */}
-      <NotificationSettings
-        isOpen={showNotificationSettings}
-        onClose={() => setShowNotificationSettings(false)}
-      />
-
       {/* Welcome Back Modal */}
       <WelcomeBackModal
         isOpen={showWelcomeBack}

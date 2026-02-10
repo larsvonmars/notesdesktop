@@ -42,6 +42,8 @@ import AIAssistant from './AIAssistant'
 import type { MindmapData } from './MindmapEditor'
 import { getEvents, type CalendarEvent } from '@/lib/events'
 import { getTasks, createTask, completeTask, uncompleteTask, toggleTaskStar, getTaskStats, type Task, type TaskStats } from '@/lib/tasks'
+import NotificationCenter, { NotificationSettings } from './NotificationCenter'
+import type { AppNotification } from '@/lib/notifications'
 
 interface UnifiedPanelProps {
   // Note controls
@@ -115,6 +117,9 @@ interface UnifiedPanelProps {
   
   // All notes for AI tool calling
   allNotes?: Note[]
+
+  // Notifications
+  onNotificationAction?: (notification: AppNotification) => void
 }
 
 export default function UnifiedPanel({
@@ -164,9 +169,11 @@ export default function UnifiedPanel({
   onCreateTaskFromAI,
   onAddMindmapNode,
   allNotes: allNotesForAI,
+  onNotificationAction,
 }: UnifiedPanelProps) {
   const [isOpen, setIsOpen] = useState(false)
   const [activeTab, setActiveTab] = useState<'browse' | 'toc' | 'tasks' | 'ai'>('browse')
+  const [showNotificationSettings, setShowNotificationSettings] = useState(false)
   
   // Calendar events for AI
   const [calendarEvents, setCalendarEvents] = useState<CalendarEvent[]>([])
@@ -1222,6 +1229,12 @@ export default function UnifiedPanel({
 
   return (
     <>
+      {/* Notification Settings Modal */}
+      <NotificationSettings
+        isOpen={showNotificationSettings}
+        onClose={() => setShowNotificationSettings(false)}
+      />
+
       {/* Floating Menu Button — sits below the formatting toolbar */}
       <button
         onClick={() => setIsOpen(!isOpen)}
@@ -1249,13 +1262,19 @@ export default function UnifiedPanel({
                   </div>
                   <span className="text-sm text-gray-700 font-medium truncate max-w-[200px]">{userEmail}</span>
                 </div>
-                <button
-                  onClick={onSignOut}
-                  className="flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium text-gray-500 hover:text-red-600 hover:bg-red-50 rounded-lg transition-all"
-                  title="Sign Out"
-                >
-                  <LogOut size={15} />
-                </button>
+                <div className="flex items-center gap-1">
+                  <NotificationCenter
+                    onAction={onNotificationAction}
+                    onOpenSettings={() => setShowNotificationSettings(true)}
+                  />
+                  <button
+                    onClick={onSignOut}
+                    className="flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium text-gray-500 hover:text-red-600 hover:bg-red-50 rounded-lg transition-all"
+                    title="Sign Out"
+                  >
+                    <LogOut size={15} />
+                  </button>
+                </div>
               </div>
             )}
 

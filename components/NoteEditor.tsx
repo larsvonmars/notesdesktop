@@ -117,6 +117,7 @@ interface NoteEditorWithPanelProps extends NoteEditorProps {
   onSignOut?: () => void
   autoOpenPanelKey?: string | number
   onOpenTaskCalendar?: () => void
+  onNotificationAction?: (notification: any) => void
 }
 
 export default function NoteEditor({ 
@@ -144,6 +145,7 @@ export default function NoteEditor({
   onSignOut,
   autoOpenPanelKey,
   onOpenTaskCalendar,
+  onNotificationAction,
 }: NoteEditorWithPanelProps) {
   const toast = useToast()
   const [title, setTitle] = useState('')
@@ -1390,6 +1392,7 @@ export default function NoteEditor({
         onInsertAtCursor={handleAIInsertAtCursor}
         onAddMindmapNode={handleAIAddMindmapNode}
         allNotes={allNotes}
+        onNotificationAction={onNotificationAction}
       />
 
       {/* Clean Editor Area */}
