@@ -1,0 +1,9 @@
+[Desktop Entry]
+Categories=Office;
+Comment=An Alpine-themed desktop notes application
+Exec=notesdesktop
+StartupWMClass=notesdesktop
+Icon=notesdesktop
+Name=Saentis Notes
+Terminal=false
+Type=Application

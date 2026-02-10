@@ -36,7 +36,7 @@ yarn-error.log*
 next-env.d.ts
 
 # tauri
-/src-tauri/target
+/src-tauri/target/debug
 .env.local
 
 # snap files

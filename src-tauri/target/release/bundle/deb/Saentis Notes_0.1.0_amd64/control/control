@@ -1,0 +1,9 @@
+Package: saentis-notes
+Version: 0.1.0
+Architecture: amd64
+Installed-Size: 17132
+Maintainer: you
+Priority: optional
+Depends: libwebkit2gtk-4.1-0, libgtk-3-0, libayatana-appindicator3-1, libwebkit2gtk-4.1-0, libgtk-3-0
+Description: An Alpine-themed desktop notes application
+ (none)
