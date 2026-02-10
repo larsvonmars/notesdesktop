@@ -107,8 +107,10 @@ export const imageBlock: CustomBlockDescriptor = {
 
     // Create an image block with custom UI elements
     return `<div class="${containerClasses}" data-block="true" data-block-type="image" data-alignment="${alignment}">
-      <div class="image-block-wrapper relative inline-block max-w-full"${wrapperStyleAttr}>
-        <div class="relative">
+
+      <div class="image-block-wrapper relative inline-flex flex-col justify-center items-center max-w-full"${wrapperStyleAttr}>
+        <div class="relative w-full">
+
           <img src="${src}" alt="${alt}" class="${imgClasses}" style="${imgStyles}" draggable="false" contenteditable="false" />
           
           <!-- Toolbar (top-left corner, shows on hover) -->
@@ -165,18 +167,18 @@ export const imageBlock: CustomBlockDescriptor = {
               <line x1="14" y1="11" x2="14" y2="17" />
             </svg>
           </button>
+
+          
+          <!-- Resize handles -->
+          <div class="image-resize-handle image-resize-nw absolute -top-1.5 -left-1.5 w-3 h-3 bg-blue-500 border-2 border-white rounded-full cursor-nw-resize opacity-0 group-hover:opacity-100 transition-opacity shadow-md z-10" data-direction="nw" contenteditable="false"></div>
+          <div class="image-resize-handle image-resize-ne absolute -top-1.5 -right-1.5 w-3 h-3 bg-blue-500 border-2 border-white rounded-full cursor-ne-resize opacity-0 group-hover:opacity-100 transition-opacity shadow-md z-10" data-direction="ne" contenteditable="false"></div>
+          <div class="image-resize-handle image-resize-sw absolute -bottom-1.5 -left-1.5 w-3 h-3 bg-blue-500 border-2 border-white rounded-full cursor-sw-resize opacity-0 group-hover:opacity-100 transition-opacity shadow-md z-10" data-direction="sw" contenteditable="false"></div>
+          <div class="image-resize-handle image-resize-se absolute -bottom-1.5 -right-1.5 w-3 h-3 bg-blue-500 border-2 border-white rounded-full cursor-se-resize opacity-0 group-hover:opacity-100 transition-opacity shadow-md z-10" data-direction="se" contenteditable="false"></div>
+          <div class="image-resize-handle image-resize-n absolute -top-1.5 left-1/2 -translate-x-1/2 w-3 h-3 bg-blue-500 border-2 border-white rounded-full cursor-n-resize opacity-0 group-hover:opacity-100 transition-opacity shadow-md z-10" data-direction="n" contenteditable="false"></div>
+          <div class="image-resize-handle image-resize-s absolute -bottom-1.5 left-1/2 -translate-x-1/2 w-3 h-3 bg-blue-500 border-2 border-white rounded-full cursor-s-resize opacity-0 group-hover:opacity-100 transition-opacity shadow-md z-10" data-direction="s" contenteditable="false"></div>
+          <div class="image-resize-handle image-resize-w absolute top-1/2 -translate-y-1/2 -left-1.5 w-3 h-3 bg-blue-500 border-2 border-white rounded-full cursor-w-resize opacity-0 group-hover:opacity-100 transition-opacity shadow-md z-10" data-direction="w" contenteditable="false"></div>
+          <div class="image-resize-handle image-resize-e absolute top-1/2 -translate-y-1/2 -right-1.5 w-3 h-3 bg-blue-500 border-2 border-white rounded-full cursor-e-resize opacity-0 group-hover:opacity-100 transition-opacity shadow-md z-10" data-direction="e" contenteditable="false"></div>
         </div>
-        
-        <!-- Resize handles (positioned relative to wrapper) -->
-        <div class="image-resize-handle image-resize-nw absolute -top-1.5 -left-1.5 w-3 h-3 bg-blue-500 border-2 border-white rounded-full cursor-nw-resize opacity-0 group-hover:opacity-100 transition-opacity shadow-md z-10" data-direction="nw" contenteditable="false"></div>
-        <div class="image-resize-handle image-resize-ne absolute -top-1.5 -right-1.5 w-3 h-3 bg-blue-500 border-2 border-white rounded-full cursor-ne-resize opacity-0 group-hover:opacity-100 transition-opacity shadow-md z-10" data-direction="ne" contenteditable="false"></div>
-        <div class="image-resize-handle image-resize-sw absolute -bottom-1.5 -left-1.5 w-3 h-3 bg-blue-500 border-2 border-white rounded-full cursor-sw-resize opacity-0 group-hover:opacity-100 transition-opacity shadow-md z-10" data-direction="sw" contenteditable="false"></div>
-        <div class="image-resize-handle image-resize-se absolute -bottom-1.5 -right-1.5 w-3 h-3 bg-blue-500 border-2 border-white rounded-full cursor-se-resize opacity-0 group-hover:opacity-100 transition-opacity shadow-md z-10" data-direction="se" contenteditable="false"></div>
-        <div class="image-resize-handle image-resize-n absolute -top-1.5 left-1/2 -translate-x-1/2 w-3 h-3 bg-blue-500 border-2 border-white rounded-full cursor-n-resize opacity-0 group-hover:opacity-100 transition-opacity shadow-md z-10" data-direction="n" contenteditable="false"></div>
-        <div class="image-resize-handle image-resize-s absolute -bottom-1.5 left-1/2 -translate-x-1/2 w-3 h-3 bg-blue-500 border-2 border-white rounded-full cursor-s-resize opacity-0 group-hover:opacity-100 transition-opacity shadow-md z-10" data-direction="s" contenteditable="false"></div>
-        <div class="image-resize-handle image-resize-w absolute top-1/2 -translate-y-1/2 -left-1.5 w-3 h-3 bg-blue-500 border-2 border-white rounded-full cursor-w-resize opacity-0 group-hover:opacity-100 transition-opacity shadow-md z-10" data-direction="w" contenteditable="false"></div>
-        <div class="image-resize-handle image-resize-e absolute top-1/2 -translate-y-1/2 -right-1.5 w-3 h-3 bg-blue-500 border-2 border-white rounded-full cursor-e-resize opacity-0 group-hover:opacity-100 transition-opacity shadow-md z-10" data-direction="e" contenteditable="false"></div>
-        
         ${caption ? `<div class="image-caption text-sm text-gray-600 italic mt-2 px-2 text-center" contenteditable="true">${caption}</div>` : ''}
         <!-- Note: Caption is escaped during render and further sanitized by DOMPurify in RichTextEditor.
              The contenteditable="true" allows editing, and content is sanitized on save. -->
@@ -239,8 +241,228 @@ export const imageBlock: CustomBlockDescriptor = {
       alignment: alignment || undefined,
       caption,
       crop
+
     }
   }
+}
+
+/**
+ * Enter crop mode for an image
+ */
+function enterCropMode(container: HTMLElement, onContentChange: () => void) {
+  container.classList.add('cropping')
+  
+  const img = container.querySelector('.image-block-img') as HTMLImageElement
+  const wrapper = container.querySelector('.image-block-wrapper') as HTMLElement
+  
+  if (!img || !wrapper) return
+  
+  // Create crop overlay
+  const overlay = document.createElement('div')
+  overlay.className = 'crop-overlay absolute inset-0 bg-black bg-opacity-50 z-30'
+  overlay.contentEditable = 'false'
+  
+  // Create crop area (initially covers the whole image)
+  const cropArea = document.createElement('div')
+  cropArea.className = 'crop-area absolute border-2 border-white shadow-lg cursor-move'
+  cropArea.style.cssText = 'top: 10%; left: 10%; width: 80%; height: 80%;'
+  cropArea.contentEditable = 'false'
+  
+  // Add crop handles
+  const handles = ['nw', 'ne', 'sw', 'se', 'n', 's', 'e', 'w']
+  handles.forEach(dir => {
+    const handle = document.createElement('div')
+    handle.className = `crop-handle crop-handle-${dir} absolute w-3 h-3 bg-white border-2 border-blue-500 rounded-full`
+    handle.setAttribute('data-direction', dir)
+    handle.contentEditable = 'false'
+    
+    // Position handles
+    if (dir === 'nw') handle.style.cssText = 'top: -6px; left: -6px; cursor: nw-resize;'
+    if (dir === 'ne') handle.style.cssText = 'top: -6px; right: -6px; cursor: ne-resize;'
+    if (dir === 'sw') handle.style.cssText = 'bottom: -6px; left: -6px; cursor: sw-resize;'
+    if (dir === 'se') handle.style.cssText = 'bottom: -6px; right: -6px; cursor: se-resize;'
+    if (dir === 'n') handle.style.cssText = 'top: -6px; left: 50%; transform: translateX(-50%); cursor: n-resize;'
+    if (dir === 's') handle.style.cssText = 'bottom: -6px; left: 50%; transform: translateX(-50%); cursor: s-resize;'
+    if (dir === 'w') handle.style.cssText = 'top: 50%; left: -6px; transform: translateY(-50%); cursor: w-resize;'
+    if (dir === 'e') handle.style.cssText = 'top: 50%; right: -6px; transform: translateY(-50%); cursor: e-resize;'
+    
+    cropArea.appendChild(handle)
+  })
+  
+  // Add action buttons
+  const actions = document.createElement('div')
+  actions.className = 'crop-actions absolute bottom-4 left-1/2 transform -translate-x-1/2 flex gap-2 z-40'
+  actions.contentEditable = 'false'
+  
+  const applyBtn = document.createElement('button')
+  applyBtn.type = 'button'
+  applyBtn.className = 'px-4 py-2 bg-blue-500 hover:bg-blue-600 text-white rounded shadow-lg'
+  applyBtn.textContent = 'Apply'
+  applyBtn.contentEditable = 'false'
+  
+  const cancelBtn = document.createElement('button')
+  cancelBtn.type = 'button'
+  cancelBtn.className = 'px-4 py-2 bg-gray-500 hover:bg-gray-600 text-white rounded shadow-lg'
+  cancelBtn.textContent = 'Cancel'
+  cancelBtn.contentEditable = 'false'
+  
+  actions.appendChild(applyBtn)
+  actions.appendChild(cancelBtn)
+  
+  overlay.appendChild(cropArea)
+  overlay.appendChild(actions)
+  
+  const imageContainer = img.parentElement
+  if (imageContainer) {
+    imageContainer.appendChild(overlay)
+  }
+  
+  // Setup crop area dragging and resizing
+  let isDragging = false
+  let isResizing = false
+  let currentHandle: HTMLElement | null = null
+  let startX = 0
+  let startY = 0
+  let startTop = 0
+  let startLeft = 0
+  let startWidth = 0
+  let startHeight = 0
+  
+  const handleCropPointerDown = (e: PointerEvent) => {
+    const target = e.target as HTMLElement
+    
+    if (target.classList.contains('crop-handle')) {
+      // Resizing
+      isResizing = true
+      currentHandle = target
+      e.stopPropagation()
+    } else if (target === cropArea) {
+      // Dragging
+      isDragging = true
+    } else {
+      return
+    }
+    
+    e.preventDefault()
+    startX = e.clientX
+    startY = e.clientY
+    
+    const rect = cropArea.getBoundingClientRect()
+    const parentRect = cropArea.parentElement!.getBoundingClientRect()
+    
+    startTop = ((rect.top - parentRect.top) / parentRect.height) * 100
+    startLeft = ((rect.left - parentRect.left) / parentRect.width) * 100
+    startWidth = (rect.width / parentRect.width) * 100
+    startHeight = (rect.height / parentRect.height) * 100
+  }
+  
+  const handleCropPointerMove = (e: PointerEvent) => {
+    if (!isDragging && !isResizing) return
+    
+    e.preventDefault()
+    
+    const parentRect = cropArea.parentElement!.getBoundingClientRect()
+    const deltaX = ((e.clientX - startX) / parentRect.width) * 100
+    const deltaY = ((e.clientY - startY) / parentRect.height) * 100
+    
+    if (isDragging) {
+      let newLeft = startLeft + deltaX
+      let newTop = startTop + deltaY
+      
+      // Constrain to parent
+      newLeft = Math.max(0, Math.min(100 - startWidth, newLeft))
+      newTop = Math.max(0, Math.min(100 - startHeight, newTop))
+      
+      cropArea.style.left = `${newLeft}%`
+      cropArea.style.top = `${newTop}%`
+    } else if (isResizing && currentHandle) {
+      const direction = currentHandle.getAttribute('data-direction')
+      let newLeft = startLeft
+      let newTop = startTop
+      let newWidth = startWidth
+      let newHeight = startHeight
+      
+      // Handle resizing based on direction
+      if (direction?.includes('e')) {
+        newWidth = Math.max(10, Math.min(100 - startLeft, startWidth + deltaX))
+      }
+      if (direction?.includes('w')) {
+        const maxDelta = startLeft
+        const constrainedDelta = Math.max(-maxDelta, Math.min(startWidth - 10, deltaX))
+        newLeft = startLeft + constrainedDelta
+        newWidth = startWidth - constrainedDelta
+      }
+      if (direction?.includes('s')) {
+        newHeight = Math.max(10, Math.min(100 - startTop, startHeight + deltaY))
+      }
+      if (direction?.includes('n')) {
+        const maxDelta = startTop
+        const constrainedDelta = Math.max(-maxDelta, Math.min(startHeight - 10, deltaY))
+        newTop = startTop + constrainedDelta
+        newHeight = startHeight - constrainedDelta
+      }
+      
+      cropArea.style.left = `${newLeft}%`
+      cropArea.style.top = `${newTop}%`
+      cropArea.style.width = `${newWidth}%`
+      cropArea.style.height = `${newHeight}%`
+
+    }
+  }
+  
+  const handleCropPointerUp = () => {
+    isDragging = false
+    isResizing = false
+    currentHandle = null
+  }
+  
+  cropArea.addEventListener('pointerdown', handleCropPointerDown)
+  document.addEventListener('pointermove', handleCropPointerMove)
+  document.addEventListener('pointerup', handleCropPointerUp)
+  
+  // Apply crop
+  applyBtn.addEventListener('click', (e) => {
+    e.preventDefault()
+    e.stopPropagation()
+    
+    // Get crop coordinates as percentages
+    const rect = cropArea.getBoundingClientRect()
+    const parentRect = cropArea.parentElement!.getBoundingClientRect()
+    
+    const cropData: CropData = {
+      x: ((rect.left - parentRect.left) / parentRect.width) * 100,
+      y: ((rect.top - parentRect.top) / parentRect.height) * 100,
+      width: (rect.width / parentRect.width) * 100,
+      height: (rect.height / parentRect.height) * 100
+    }
+    
+    // Apply crop to image using object-fit
+    img.style.objectFit = 'cover'
+    img.style.objectPosition = `${cropData.x}% ${cropData.y}%`
+    img.style.height = '0'
+    img.style.paddingBottom = `${cropData.height}%`
+    
+    // Store crop data in a data attribute for persistence
+    container.setAttribute('data-crop', JSON.stringify(cropData))
+    
+    exitCropMode(container)
+    onContentChange()
+    
+    // Cleanup
+    document.removeEventListener('pointermove', handleCropPointerMove)
+    document.removeEventListener('pointerup', handleCropPointerUp)
+  })
+  
+  // Cancel crop
+  cancelBtn.addEventListener('click', (e) => {
+    e.preventDefault()
+    e.stopPropagation()
+    exitCropMode(container)
+    
+    // Cleanup
+    document.removeEventListener('pointermove', handleCropPointerMove)
+    document.removeEventListener('pointerup', handleCropPointerUp)
+  })
 }
 
 /**
@@ -460,8 +682,6 @@ function enterCropMode(container: HTMLElement, onContentChange: () => void) {
     document.removeEventListener('pointerup', handleCropPointerUp)
   })
 }
-
-/**
  * Exit crop mode for an image
  */
 function exitCropMode(container: HTMLElement) {
