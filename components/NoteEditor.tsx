@@ -1482,9 +1482,9 @@ export default function NoteEditor({
                 type="button"
                 onMouseDown={(event) => event.preventDefault()}
                 onClick={() => handleCommand(command)}
-                className={`inline-flex h-9 w-9 items-center justify-center rounded-full border text-gray-600 transition-colors focus:outline-none focus:ring-2 focus:ring-blue-500 ${
+                className={`inline-flex h-9 w-9 items-center justify-center rounded-full border text-gray-600 transition-colors focus:outline-none focus:ring-2 focus:ring-alpine-500 ${
                   isActive
-                    ? 'border-blue-300 bg-blue-100 text-blue-700'
+                    ? 'border-alpine-300 bg-alpine-100 text-alpine-700'
                     : 'border-transparent hover:border-gray-300 hover:text-gray-900'
                 }`}
                 title={`${label} (${commandShortcuts[command]})`}
@@ -1510,7 +1510,7 @@ export default function NoteEditor({
                   handleCommand(command)
                 }
               }}
-              className="inline-flex h-9 w-9 items-center justify-center rounded-full border border-transparent text-gray-500 transition-colors hover:border-gray-300 hover:text-gray-800 focus:outline-none focus:ring-2 focus:ring-blue-500"
+              className="inline-flex h-9 w-9 items-center justify-center rounded-full border border-transparent text-gray-500 transition-colors hover:border-gray-300 hover:text-gray-800 focus:outline-none focus:ring-2 focus:ring-alpine-500"
               title={command ? `${label} (${commandShortcuts[command]})` : label}
             >
               {icon}
@@ -1527,8 +1527,8 @@ export default function NoteEditor({
             <div className="flex items-center gap-1.5">
               {isSaving ? (
                 <>
-                  <Loader2 size={12} className="animate-spin text-blue-500" />
-                  <span className="text-blue-600 font-medium">Saving...</span>
+                  <Loader2 size={12} className="animate-spin text-alpine-500" />
+                  <span className="text-alpine-600 font-medium">Saving...</span>
                 </>
               ) : hasChanges ? (
                 <>
@@ -1578,10 +1578,10 @@ export default function NoteEditor({
             {/* Project Manager Button */}
             <button
               onClick={() => setShowProjectsModal(true)}
-              className="flex items-center gap-1.5 px-2 py-1 text-gray-600 hover:text-blue-600 hover:bg-blue-50 rounded transition-colors font-medium"
+              className="flex items-center gap-1.5 px-2 py-1 text-gray-600 hover:text-alpine-600 hover:bg-alpine-50 rounded transition-colors font-medium"
               title="Open Project Manager"
             >
-              <Target size={14} className="text-blue-500" />
+              <Target size={14} className="text-alpine-500" />
               <span>Projects</span>
             </button>
           </div>
@@ -1593,7 +1593,7 @@ export default function NoteEditor({
               {wordGoal && wordGoalProgress ? (
                 <div className="flex items-center gap-2">
                   <div className="flex items-center gap-1.5">
-                    <Target size={12} className={wordGoalProgress.isComplete ? 'text-green-500' : 'text-blue-500'} />
+                    <Target size={12} className={wordGoalProgress.isComplete ? 'text-green-500' : 'text-alpine-500'} />
                     <span className={wordGoalProgress.isComplete ? 'text-green-600 font-medium' : 'text-gray-700'}>
                       {stats.words}/{wordGoal} words
                     </span>
@@ -1603,7 +1603,7 @@ export default function NoteEditor({
                       className={`absolute left-0 top-0 h-full transition-all duration-300 rounded-full ${
                         wordGoalProgress.isComplete 
                           ? 'bg-gradient-to-r from-green-400 to-green-500' 
-                          : 'bg-gradient-to-r from-blue-400 to-blue-500'
+                          : 'bg-gradient-to-r from-alpine-400 to-alpine-500'
                       }`}
                       style={{ width: `${wordGoalProgress.percentage}%` }}
                     />
@@ -1622,7 +1622,7 @@ export default function NoteEditor({
                   {note && (
                     <button
                       onClick={() => setShowWordGoalInput(true)}
-                      className="flex items-center gap-1 text-blue-500 hover:text-blue-600 transition-colors font-medium"
+                      className="flex items-center gap-1 text-alpine-500 hover:text-alpine-600 transition-colors font-medium"
                       title="Set word goal"
                     >
                       <Target size={12} />
@@ -1646,8 +1646,8 @@ export default function NoteEditor({
         <div className="fixed inset-0 z-[70] flex items-center justify-center p-4 bg-black/50">
           <div className="bg-white rounded-xl shadow-2xl border border-gray-200 max-w-md w-full p-6">
             <div className="flex items-start gap-4 mb-4">
-              <div className="flex-shrink-0 w-12 h-12 rounded-full bg-blue-100 flex items-center justify-center">
-                <Target size={24} className="text-blue-600" />
+              <div className="flex-shrink-0 w-12 h-12 rounded-full bg-alpine-100 flex items-center justify-center">
+                <Target size={24} className="text-alpine-600" />
               </div>
               <div className="flex-1">
                 <h3 className="text-lg font-semibold text-gray-900 mb-1">Set Word Goal</h3>
@@ -1676,7 +1676,7 @@ export default function NoteEditor({
                     setShowWordGoalInput(false)
                   }
                 }}
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-alpine-500 focus:border-transparent"
               />
               <p className="text-xs text-gray-400 mt-1">Current: {stats.words} words</p>
             </div>
@@ -1704,7 +1704,7 @@ export default function NoteEditor({
                       }
                     }
                   }}
-                  className="px-4 py-2 text-sm font-medium text-white bg-blue-600 rounded-lg hover:bg-blue-700 transition-colors"
+                  className="px-4 py-2 text-sm font-medium text-white bg-alpine-600 rounded-lg hover:bg-alpine-700 transition-colors"
                 >
                   Set Goal
                 </button>
@@ -1746,7 +1746,7 @@ export default function NoteEditor({
       {noteType === 'rich-text' && !showContentBlocksMenu && (
         <button
           onClick={openContentBlocksMenu}
-          className="fixed right-6 bottom-24 z-40 w-14 h-14 rounded-full bg-blue-600 hover:bg-blue-700 text-white shadow-lg hover:shadow-xl transition-all duration-200 flex items-center justify-center group"
+          className="fixed right-6 bottom-24 z-40 w-14 h-14 rounded-full bg-alpine-600 hover:bg-alpine-700 text-white shadow-lg hover:shadow-xl transition-all duration-200 flex items-center justify-center group"
           title="Insert content block"
         >
           <Plus size={24} className="transition-transform group-hover:rotate-90" />
@@ -1793,7 +1793,7 @@ export default function NoteEditor({
                     }}
                     onKeyDown={handleBlockMenuKeyDown}
                     placeholder="Search blocks..."
-                    className="w-full pl-9 pr-3 py-2 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                    className="w-full pl-9 pr-3 py-2 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-alpine-500 focus:border-transparent"
                   />
                 </div>
                 <p className="text-xs text-gray-500 mt-2">
@@ -1843,7 +1843,7 @@ export default function NoteEditor({
                             onClick={() => executeBlockAction(block.id)}
                             className={`w-full flex items-center gap-3 px-3 py-3 rounded-lg transition-colors text-left ${
                               isSelected 
-                                ? 'bg-blue-50 ring-2 ring-blue-500 ring-inset' 
+                                ? 'bg-alpine-50 ring-2 ring-alpine-500 ring-inset' 
                                 : 'hover:bg-gray-50'
                             }`}
                             onMouseEnter={() => setSelectedBlockIndex(blockIndex)}

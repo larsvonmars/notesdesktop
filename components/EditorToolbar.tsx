@@ -69,10 +69,10 @@ const EditorToolbar: React.FC<EditorToolbarProps> = ({
   disabled = false
 }) => {
   const toolbarButtonClass =
-    'inline-flex h-9 w-9 items-center justify-center rounded-lg border border-transparent bg-white text-slate-600 shadow-sm hover:bg-slate-100 hover:text-slate-900 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-500 disabled:opacity-40 disabled:cursor-not-allowed transition-colors'
+    'inline-flex h-9 w-9 items-center justify-center rounded-lg border border-transparent bg-white text-slate-600 shadow-sm hover:bg-slate-100 hover:text-slate-900 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-alpine-500 disabled:opacity-40 disabled:cursor-not-allowed transition-colors'
 
   const activeButtonClass =
-    'inline-flex h-9 w-9 items-center justify-center rounded-lg border border-transparent bg-blue-50 text-blue-700 shadow-sm hover:bg-blue-100 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-500 disabled:opacity-40 disabled:cursor-not-allowed transition-colors'
+    'inline-flex h-9 w-9 items-center justify-center rounded-lg border border-transparent bg-alpine-50 text-alpine-700 shadow-sm hover:bg-alpine-100 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-alpine-500 disabled:opacity-40 disabled:cursor-not-allowed transition-colors'
 
   // Determine the current block type based on active formats
   // Memoize with useMemo since activeFormats is a Set and would change reference
@@ -158,7 +158,7 @@ const EditorToolbar: React.FC<EditorToolbarProps> = ({
             <span>Block</span>
           </div>
           <select
-            className="h-9 rounded-lg border border-slate-200 bg-white px-3 text-sm text-slate-700 focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:opacity-40 disabled:cursor-not-allowed"
+            className="h-9 rounded-lg border border-slate-200 bg-white px-3 text-sm text-slate-700 focus:border-alpine-500 focus:outline-none focus:ring-2 focus:ring-alpine-500 disabled:opacity-40 disabled:cursor-not-allowed"
             value={currentBlockType}
             onChange={(event) => onBlockTypeChange(event.target.value)}
             disabled={disabled}
@@ -255,7 +255,7 @@ const EditorToolbar: React.FC<EditorToolbarProps> = ({
         {/* Block Controls Group */}
         <div className="flex flex-wrap items-center gap-2">
           <button
-            className="inline-flex items-center gap-2 rounded-xl bg-blue-600 px-3 py-2 text-sm font-medium text-white shadow hover:bg-blue-700 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-500 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+            className="inline-flex items-center gap-2 rounded-xl bg-alpine-600 px-3 py-2 text-sm font-medium text-white shadow hover:bg-alpine-700 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-alpine-500 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
             onMouseDown={(e) => e.preventDefault()}
             onClick={onNewBlock}
             disabled={disabled}

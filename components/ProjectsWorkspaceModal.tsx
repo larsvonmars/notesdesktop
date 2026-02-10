@@ -490,7 +490,7 @@ export default function ProjectsWorkspaceModal({
       <div key={node.id} className="space-y-0.5">
         <div
           className={`group relative flex items-center gap-2 rounded-lg px-2 py-1.5 text-sm transition-colors ${
-            isSelected ? 'bg-blue-100 text-blue-700 font-medium' : 'hover:bg-gray-100 text-gray-700'
+            isSelected ? 'bg-alpine-100 text-alpine-700 font-medium' : 'hover:bg-gray-100 text-gray-700'
           } ${isPinned ? 'border-l-2 border-amber-400' : ''}`}
           style={{ paddingLeft: `${depth * 16 + 8}px` }}
           onClick={() => {
@@ -648,7 +648,7 @@ export default function ProjectsWorkspaceModal({
       case 'mindmap':
         return <Network size={16} className="text-green-500" />
       default:
-        return <FileText size={16} className="text-blue-500" />
+        return <FileText size={16} className="text-alpine-500" />
     }
   }
 
@@ -1006,13 +1006,13 @@ export default function ProjectsWorkspaceModal({
       <div className="relative flex w-full max-w-6xl max-h-[calc(100vh-2rem)] flex-col overflow-hidden rounded-2xl border border-gray-200 bg-white shadow-2xl sm:max-h-[calc(100vh-3rem)]">
         {isLoading && (
           <div className="absolute inset-0 z-20 flex items-center justify-center bg-white/70 backdrop-blur-sm">
-            <Loader2 className="h-6 w-6 animate-spin text-blue-500" />
+            <Loader2 className="h-6 w-6 animate-spin text-alpine-500" />
           </div>
         )}
 
         <div className="flex flex-col gap-4 border-b border-gray-200 px-4 py-4 sm:flex-row sm:items-center sm:justify-between sm:px-6">
           <div className="flex items-center gap-3">
-            <div className="flex h-11 w-11 items-center justify-center rounded-full bg-blue-500 shadow-inner">
+            <div className="flex h-11 w-11 items-center justify-center rounded-full bg-alpine-500 shadow-inner">
               <Target size={20} className="text-white" />
             </div>
             <div>
@@ -1040,14 +1040,14 @@ export default function ProjectsWorkspaceModal({
           </div>
           <button
             type="button"
-            className="inline-flex items-center gap-2 rounded-full border border-gray-200 px-3 py-1.5 text-gray-600 transition hover:border-blue-400 hover:text-blue-600"
+            className="inline-flex items-center gap-2 rounded-full border border-gray-200 px-3 py-1.5 text-gray-600 transition hover:border-alpine-400 hover:text-alpine-600"
             onClick={handleRefresh}
             disabled={isRefreshing}
           >
-            {isRefreshing ? <Loader2 size={14} className="animate-spin text-blue-500" /> : <RefreshCw size={14} />}
+            {isRefreshing ? <Loader2 size={14} className="animate-spin text-alpine-500" /> : <RefreshCw size={14} />}
             Refresh
           </button>
-          <div className="flex w-full items-center gap-2 rounded-lg border border-gray-200 bg-white px-3 py-1.5 text-gray-500 focus-within:border-blue-400 focus-within:ring-1 focus-within:ring-blue-400 sm:ml-auto sm:w-auto sm:min-w-[280px] sm:bg-transparent sm:px-0 sm:py-0 sm:focus-within:ring-0 sm:focus-within:border-transparent">
+          <div className="flex w-full items-center gap-2 rounded-lg border border-gray-200 bg-white px-3 py-1.5 text-gray-500 focus-within:border-alpine-400 focus-within:ring-1 focus-within:ring-alpine-400 sm:ml-auto sm:w-auto sm:min-w-[280px] sm:bg-transparent sm:px-0 sm:py-0 sm:focus-within:ring-0 sm:focus-within:border-transparent">
             <Search size={14} className="text-gray-400" />
             <input
               ref={searchInputRef}
@@ -1073,14 +1073,14 @@ export default function ProjectsWorkspaceModal({
               data-projects-interactive="true"
               className={`inline-flex items-center gap-2 rounded-full border px-3 py-1.5 text-gray-600 transition ${
                 noteTypeFilter !== 'all' || showFilterMenu
-                  ? 'border-blue-400 bg-blue-50 text-blue-600'
-                  : 'border-gray-200 hover:border-blue-400 hover:text-blue-600'
+                  ? 'border-alpine-400 bg-alpine-50 text-alpine-600'
+                  : 'border-gray-200 hover:border-alpine-400 hover:text-alpine-600'
               }`}
               onClick={() => setShowFilterMenu(!showFilterMenu)}
             >
               <Filter size={14} />
               Filters
-              {noteTypeFilter !== 'all' && <span className="flex h-2 w-2 rounded-full bg-blue-500" />}
+              {noteTypeFilter !== 'all' && <span className="flex h-2 w-2 rounded-full bg-alpine-500" />}
             </button>
             {showFilterMenu && (
               <div
@@ -1092,7 +1092,7 @@ export default function ProjectsWorkspaceModal({
                 </div>
                 <button
                   className={`flex w-full items-center justify-between px-3 py-2 text-left text-sm hover:bg-gray-100 ${
-                    noteTypeFilter === 'all' ? 'bg-blue-50 text-blue-600' : ''
+                    noteTypeFilter === 'all' ? 'bg-alpine-50 text-alpine-600' : ''
                   }`}
                   onClick={() => {
                     setNoteTypeFilter('all')
@@ -1104,7 +1104,7 @@ export default function ProjectsWorkspaceModal({
                 </button>
                 <button
                   className={`flex w-full items-center justify-between gap-2 px-3 py-2 text-left text-sm hover:bg-gray-100 ${
-                    noteTypeFilter === 'rich-text' ? 'bg-blue-50 text-blue-600' : ''
+                    noteTypeFilter === 'rich-text' ? 'bg-alpine-50 text-alpine-600' : ''
                   }`}
                   onClick={() => {
                     setNoteTypeFilter('rich-text')
@@ -1112,14 +1112,14 @@ export default function ProjectsWorkspaceModal({
                   }}
                 >
                   <span className="flex items-center gap-2">
-                    <FileText size={14} className="text-blue-500" />
+                    <FileText size={14} className="text-alpine-500" />
                     Rich Text
                   </span>
                   {noteTypeFilter === 'rich-text' && <Check size={14} />}
                 </button>
                 <button
                   className={`flex w-full items-center justify-between gap-2 px-3 py-2 text-left text-sm hover:bg-gray-100 ${
-                    noteTypeFilter === 'drawing' ? 'bg-blue-50 text-blue-600' : ''
+                    noteTypeFilter === 'drawing' ? 'bg-alpine-50 text-alpine-600' : ''
                   }`}
                   onClick={() => {
                     setNoteTypeFilter('drawing')
@@ -1134,7 +1134,7 @@ export default function ProjectsWorkspaceModal({
                 </button>
                 <button
                   className={`flex w-full items-center justify-between gap-2 px-3 py-2 text-left text-sm hover:bg-gray-100 ${
-                    noteTypeFilter === 'mindmap' ? 'bg-blue-50 text-blue-600' : ''
+                    noteTypeFilter === 'mindmap' ? 'bg-alpine-50 text-alpine-600' : ''
                   }`}
                   onClick={() => {
                     setNoteTypeFilter('mindmap')
@@ -1158,7 +1158,7 @@ export default function ProjectsWorkspaceModal({
               <span className="text-xs font-semibold uppercase tracking-wide text-gray-500">Projects</span>
               <button
                 type="button"
-                className="inline-flex items-center gap-1 rounded-full bg-blue-500 px-2 py-1 text-xs font-medium text-white hover:bg-blue-600"
+                className="inline-flex items-center gap-1 rounded-full bg-alpine-500 px-2 py-1 text-xs font-medium text-white hover:bg-alpine-600"
                 onClick={openProjectCreate}
               >
                 <Plus size={12} />
@@ -1175,8 +1175,8 @@ export default function ProjectsWorkspaceModal({
                     key={entry.id}
                     className={`relative rounded-xl border px-3 py-2 text-left shadow-sm transition ${
                       isActive
-                        ? 'border-blue-500 bg-blue-50'
-                        : 'border-gray-200 hover:border-blue-300 hover:bg-blue-50/50'
+                        ? 'border-alpine-500 bg-alpine-50'
+                        : 'border-gray-200 hover:border-alpine-300 hover:bg-alpine-50/50'
                     }`}
                   >
                     <div
@@ -1193,7 +1193,7 @@ export default function ProjectsWorkspaceModal({
                     >
                       <div className="mt-1 flex h-3 w-3 flex-shrink-0 items-center justify-center">
                         {entry.id === 'all' ? (
-                          <Target size={14} className="text-blue-500" />
+                          <Target size={14} className="text-alpine-500" />
                         ) : entry.id === 'unassigned' ? (
                           <FolderTree size={14} className="text-gray-400" />
                         ) : (
@@ -1310,7 +1310,7 @@ export default function ProjectsWorkspaceModal({
                 {canBrowseStructure && (
                   <button
                     type="button"
-                    className="inline-flex items-center gap-1 rounded-full border border-gray-300 px-2 py-1 text-xs font-medium text-gray-600 hover:border-blue-400 hover:text-blue-600"
+                    className="inline-flex items-center gap-1 rounded-full border border-gray-300 px-2 py-1 text-xs font-medium text-gray-600 hover:border-alpine-400 hover:text-alpine-600"
                     onClick={() => {
                       const resolved = resolveProjectId(activeProjectId)
                       setFolderDialog({
@@ -1446,7 +1446,7 @@ export default function ProjectsWorkspaceModal({
               <div className="flex flex-wrap items-center gap-2 sm:flex-nowrap">
                 <button
                   type="button"
-                  className="inline-flex items-center gap-2 rounded-md bg-blue-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-blue-700 disabled:opacity-50"
+                  className="inline-flex items-center gap-2 rounded-md bg-alpine-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-alpine-700 disabled:opacity-50"
                   onClick={() => handleCreateNote()}
                   disabled={activeProjectResolved === undefined}
                 >
@@ -1478,7 +1478,7 @@ export default function ProjectsWorkspaceModal({
                   return (
                     <div
                       key={note.id}
-                      className="group relative rounded-xl border border-gray-200 bg-white p-4 shadow-sm transition hover:border-blue-300 hover:shadow"
+                      className="group relative rounded-xl border border-gray-200 bg-white p-4 shadow-sm transition hover:border-alpine-300 hover:shadow"
                     >
                       <div className="flex items-start justify-between gap-3">
                         <button
@@ -1617,7 +1617,7 @@ export default function ProjectsWorkspaceModal({
                 <input
                   value={projectForm.name}
                   onChange={(event) => setProjectForm((prev) => ({ ...prev, name: event.target.value }))}
-                  className="mt-1 w-full rounded-md border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-200"
+                  className="mt-1 w-full rounded-md border border-gray-300 px-3 py-2 text-sm focus:border-alpine-500 focus:outline-none focus:ring-2 focus:ring-alpine-200"
                   placeholder="Project name"
                 />
               </label>
@@ -1630,7 +1630,7 @@ export default function ProjectsWorkspaceModal({
                     setProjectForm((prev) => ({ ...prev, description: event.target.value }))
                   }
                   rows={3}
-                  className="mt-1 w-full resize-none rounded-md border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-200"
+                  className="mt-1 w-full resize-none rounded-md border border-gray-300 px-3 py-2 text-sm focus:border-alpine-500 focus:outline-none focus:ring-2 focus:ring-alpine-200"
                   placeholder="Optional description"
                 />
               </label>
@@ -1643,7 +1643,7 @@ export default function ProjectsWorkspaceModal({
                       key={color}
                       type="button"
                       className={`flex h-8 w-8 items-center justify-center rounded-full border ${
-                        projectForm.color === color ? 'border-blue-500 ring-2 ring-blue-200' : 'border-transparent'
+                        projectForm.color === color ? 'border-alpine-500 ring-2 ring-alpine-200' : 'border-transparent'
                       }`}
                       style={{ backgroundColor: color }}
                       onClick={() => setProjectForm((prev) => ({ ...prev, color }))}
@@ -1666,7 +1666,7 @@ export default function ProjectsWorkspaceModal({
               </button>
               <button
                 type="button"
-                className="rounded-md bg-blue-600 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-700 disabled:opacity-50"
+                className="rounded-md bg-alpine-600 px-4 py-2 text-sm font-semibold text-white hover:bg-alpine-700 disabled:opacity-50"
                 onClick={handleProjectFormSubmit}
                 disabled={actionLoading}
               >
@@ -1727,7 +1727,7 @@ export default function ProjectsWorkspaceModal({
             <input
               value={folderNameInput}
               onChange={(event) => setFolderNameInput(event.target.value)}
-              className="mt-4 w-full rounded-md border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-200"
+              className="mt-4 w-full rounded-md border border-gray-300 px-3 py-2 text-sm focus:border-alpine-500 focus:outline-none focus:ring-2 focus:ring-alpine-200"
               placeholder="Folder name"
               onKeyDown={(event) => {
                 if (event.key === 'Enter') handleFolderDialogSubmit()
@@ -1744,7 +1744,7 @@ export default function ProjectsWorkspaceModal({
               </button>
               <button
                 type="button"
-                className="rounded-md bg-blue-600 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-700 disabled:opacity-50"
+                className="rounded-md bg-alpine-600 px-4 py-2 text-sm font-semibold text-white hover:bg-alpine-700 disabled:opacity-50"
                 onClick={handleFolderDialogSubmit}
                 disabled={actionLoading}
               >
@@ -1848,8 +1848,8 @@ export default function ProjectsWorkspaceModal({
               
               if (folder) {
                 return (
-                  <div className="mt-3 rounded-lg bg-blue-50 border border-blue-200 p-3">
-                    <p className="text-xs text-blue-700">
+                  <div className="mt-3 rounded-lg bg-alpine-50 border border-alpine-200 p-3">
+                    <p className="text-xs text-alpine-700">
                       <strong>Note:</strong> This note is in folder &ldquo;{folder.name}&rdquo;.
                       {folderBelongsToDifferentProject && (
                         <span className="block mt-1">
@@ -1870,7 +1870,7 @@ export default function ProjectsWorkspaceModal({
                 className={`flex w-full items-center justify-between rounded-lg border px-3 py-2 text-left text-sm transition ${
                   relocationOriginProjectId === null 
                     ? 'border-gray-300 bg-gray-50 text-gray-400 cursor-not-allowed' 
-                    : 'border-gray-200 hover:border-blue-400'
+                    : 'border-gray-200 hover:border-alpine-400'
                 }`}
                 onClick={() => handleRelocateToProject('unassigned')}
                 disabled={actionLoading || relocationOriginProjectId === null}
@@ -1889,7 +1889,7 @@ export default function ProjectsWorkspaceModal({
                     className={`flex w-full items-center justify-between rounded-lg border px-3 py-2 text-left text-sm transition ${
                       isCurrent
                         ? 'border-gray-300 bg-gray-50 text-gray-400 cursor-not-allowed'
-                        : 'border-gray-200 hover:border-blue-400'
+                        : 'border-gray-200 hover:border-alpine-400'
                     }`}
                     onClick={() => handleRelocateToProject(project.id)}
                     disabled={actionLoading || isCurrent}

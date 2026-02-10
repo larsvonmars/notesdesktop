@@ -44,7 +44,7 @@ const noteTypeIcon = (type: NoteType) => {
     case 'drawing':
       return <PenTool size={16} className="text-purple-500" />
     default:
-      return <FileText size={16} className="text-blue-500" />
+      return <FileText size={16} className="text-alpine-500" />
   }
 }
 
@@ -126,7 +126,7 @@ export default function FolderContentsModal({
               <button
                 type="button"
                 onClick={() => onOpenFolder?.(folder.parent_id!)}
-                className="inline-flex items-center gap-2 rounded-md border border-gray-300 px-3 py-1.5 text-sm font-medium text-gray-600 hover:border-blue-400 hover:text-blue-600"
+                className="inline-flex items-center gap-2 rounded-md border border-gray-300 px-3 py-1.5 text-sm font-medium text-gray-600 hover:border-alpine-400 hover:text-alpine-600"
               >
                 <ArrowLeft size={16} />
                 Parent folder
@@ -137,7 +137,7 @@ export default function FolderContentsModal({
               onClick={() => {
                 onOpenFolderInWorkspace?.(folder.id)
               }}
-              className="inline-flex items-center gap-2 rounded-md border border-gray-300 px-3 py-1.5 text-sm font-medium text-gray-600 hover:border-blue-400 hover:text-blue-600"
+              className="inline-flex items-center gap-2 rounded-md border border-gray-300 px-3 py-1.5 text-sm font-medium text-gray-600 hover:border-alpine-400 hover:text-alpine-600"
             >
               <FolderOpen size={16} />
               Open in workspace
@@ -176,7 +176,7 @@ export default function FolderContentsModal({
                       {item.name}
                     </button>
                   ) : (
-                    <span className="rounded-md bg-blue-50 px-2 py-1 text-xs font-semibold text-blue-700">
+                    <span className="rounded-md bg-alpine-50 px-2 py-1 text-xs font-semibold text-alpine-700">
                       {item.name}
                     </span>
                   )}
@@ -196,7 +196,7 @@ export default function FolderContentsModal({
                 <button
                   type="button"
                   onClick={() => onCreateSubfolder?.(folder.id)}
-                  className="inline-flex items-center gap-2 rounded-md border border-gray-300 px-3 py-1.5 text-xs font-medium text-gray-600 hover:border-blue-400 hover:text-blue-600"
+                  className="inline-flex items-center gap-2 rounded-md border border-gray-300 px-3 py-1.5 text-xs font-medium text-gray-600 hover:border-alpine-400 hover:text-alpine-600"
                 >
                   <FolderPlus size={14} />
                   New subfolder
@@ -223,7 +223,7 @@ export default function FolderContentsModal({
                         <button
                           type="button"
                           onClick={() => onOpenFolder?.(child.id)}
-                          className="inline-flex items-center gap-2 rounded-md bg-blue-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-blue-700"
+                          className="inline-flex items-center gap-2 rounded-md bg-alpine-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-alpine-700"
                         >
                           <FolderOpen size={14} />
                           View contents
@@ -231,7 +231,7 @@ export default function FolderContentsModal({
                         <button
                           type="button"
                           onClick={() => onOpenFolderInWorkspace?.(child.id)}
-                          className="inline-flex items-center gap-2 rounded-md border border-gray-300 px-3 py-1.5 text-xs font-medium text-gray-600 hover:border-blue-400 hover:text-blue-600"
+                          className="inline-flex items-center gap-2 rounded-md border border-gray-300 px-3 py-1.5 text-xs font-medium text-gray-600 hover:border-alpine-400 hover:text-alpine-600"
                         >
                           Open in workspace
                         </button>
@@ -252,7 +252,7 @@ export default function FolderContentsModal({
                   <button
                     type="button"
                     onClick={() => onCreateNote?.(undefined, folder.id, projectId)}
-                    className="inline-flex items-center gap-2 rounded-md bg-blue-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-blue-700"
+                    className="inline-flex items-center gap-2 rounded-md bg-alpine-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-alpine-700"
                   >
                     <FilePlus2 size={14} />
                     New note
@@ -260,7 +260,7 @@ export default function FolderContentsModal({
                   <button
                     type="button"
                     onClick={() => onCreateNote?.('mindmap', folder.id, projectId)}
-                    className="inline-flex items-center gap-2 rounded-md border border-gray-300 px-3 py-1.5 text-xs font-medium text-gray-600 hover:border-blue-400 hover:text-blue-600"
+                    className="inline-flex items-center gap-2 rounded-md border border-gray-300 px-3 py-1.5 text-xs font-medium text-gray-600 hover:border-alpine-400 hover:text-alpine-600"
                   >
                     <NotebookPen size={14} />
                     New mind map
@@ -291,7 +291,7 @@ export default function FolderContentsModal({
                         <button
                           type="button"
                           onClick={() => onSelectNote?.(note)}
-                          className="inline-flex items-center gap-2 rounded-md bg-blue-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-blue-700"
+                          className="inline-flex items-center gap-2 rounded-md bg-alpine-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-alpine-700"
                         >
                           <FileText size={14} />
                           Open note
@@ -300,7 +300,7 @@ export default function FolderContentsModal({
                           <button
                             type="button"
                             onClick={() => onDuplicateNote(note)}
-                            className="inline-flex items-center gap-2 rounded-md border border-gray-300 px-3 py-1.5 text-xs font-medium text-gray-600 hover:border-blue-400 hover:text-blue-600"
+                            className="inline-flex items-center gap-2 rounded-md border border-gray-300 px-3 py-1.5 text-xs font-medium text-gray-600 hover:border-alpine-400 hover:text-alpine-600"
                           >
                             Duplicate
                           </button>

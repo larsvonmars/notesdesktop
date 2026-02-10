@@ -91,7 +91,7 @@ export default function NoteLinkDialog({
         {/* Header */}
         <div className="flex items-center justify-between p-4 border-b border-gray-200">
           <div className="flex items-center gap-2">
-            <FileText size={20} className="text-blue-600" />
+            <FileText size={20} className="text-alpine-600" />
             <h2 className="text-lg font-semibold">Link to Note</h2>
           </div>
           <button
@@ -115,7 +115,7 @@ export default function NoteLinkDialog({
               placeholder="Search notes..."
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+              className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-alpine-500"
               autoFocus
             />
           </div>
@@ -140,14 +140,14 @@ export default function NoteLinkDialog({
                 <button
                   key={note.id}
                   onClick={() => handleSelect(note)}
-                  className="w-full text-left p-3 rounded-lg border border-gray-200 hover:border-blue-300 hover:bg-blue-50 transition-colors group"
+                  className="w-full text-left p-3 rounded-lg border border-gray-200 hover:border-alpine-300 hover:bg-alpine-50 transition-colors group"
                 >
                   <div className="flex items-start justify-between gap-2">
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center gap-2 mb-1">
                         <FileText
                           size={16}
-                          className="text-gray-400 group-hover:text-blue-600 flex-shrink-0"
+                          className="text-gray-400 group-hover:text-alpine-600 flex-shrink-0"
                         />
                         <h3 className="font-medium text-gray-900 truncate">
                           {note.title || 'Untitled Note'}

@@ -709,7 +709,7 @@ const DrawingEditor = forwardRef<DrawingEditorHandle, DrawingEditorProps>(
             <button
               onClick={() => setCurrentTool('pen')}
               className={`p-1.5 rounded hover:bg-gray-200 transition-colors ${
-                currentTool === 'pen' ? 'bg-blue-100 text-blue-600' : 'text-gray-700'
+                currentTool === 'pen' ? 'bg-alpine-100 text-alpine-600' : 'text-gray-700'
               }`}
               title="Pen"
               disabled={disabled}
@@ -723,7 +723,7 @@ const DrawingEditor = forwardRef<DrawingEditorHandle, DrawingEditorProps>(
             <button
               onClick={() => setCurrentTool('highlighter')}
               className={`p-1.5 rounded hover:bg-gray-200 transition-colors ${
-                currentTool === 'highlighter' ? 'bg-blue-100 text-blue-600' : 'text-gray-700'
+                currentTool === 'highlighter' ? 'bg-alpine-100 text-alpine-600' : 'text-gray-700'
               }`}
               title="Highlighter"
               disabled={disabled}
@@ -736,7 +736,7 @@ const DrawingEditor = forwardRef<DrawingEditorHandle, DrawingEditorProps>(
             <button
               onClick={() => setCurrentTool('eraser')}
               className={`p-1.5 rounded hover:bg-gray-200 transition-colors ${
-                currentTool === 'eraser' ? 'bg-blue-100 text-blue-600' : 'text-gray-700'
+                currentTool === 'eraser' ? 'bg-alpine-100 text-alpine-600' : 'text-gray-700'
               }`}
               title="Eraser"
               disabled={disabled}
@@ -760,7 +760,7 @@ const DrawingEditor = forwardRef<DrawingEditorHandle, DrawingEditorProps>(
                   onClick={() => setCurrentColor(color.value)}
                   className={`w-5 h-5 rounded border transition-all ${
                     currentColor === color.value
-                      ? 'border-blue-500 ring-1 ring-blue-300'
+                      ? 'border-alpine-500 ring-1 ring-alpine-300'
                       : 'border-gray-300 hover:border-gray-400'
                   }`}
                   style={{ backgroundColor: color.value }}
@@ -781,7 +781,7 @@ const DrawingEditor = forwardRef<DrawingEditorHandle, DrawingEditorProps>(
                 onClick={() => setCurrentSize(size.value)}
                 className={`p-1.5 rounded hover:bg-gray-200 transition-colors ${
                   currentSize === size.value
-                    ? 'bg-blue-100 text-blue-600'
+                    ? 'bg-alpine-100 text-alpine-600'
                     : 'text-gray-700'
                 }`}
                 title={size.name}
@@ -802,7 +802,7 @@ const DrawingEditor = forwardRef<DrawingEditorHandle, DrawingEditorProps>(
             <button
               onClick={() => changeBackground('none')}
               className={`p-1.5 rounded hover:bg-gray-200 transition-colors ${
-                backgroundType === 'none' ? 'bg-blue-100 text-blue-600' : 'text-gray-700'
+                backgroundType === 'none' ? 'bg-alpine-100 text-alpine-600' : 'text-gray-700'
               }`}
               title="No Background"
               disabled={disabled}
@@ -814,7 +814,7 @@ const DrawingEditor = forwardRef<DrawingEditorHandle, DrawingEditorProps>(
             <button
               onClick={() => changeBackground('grid')}
               className={`p-1.5 rounded hover:bg-gray-200 transition-colors ${
-                backgroundType === 'grid' ? 'bg-blue-100 text-blue-600' : 'text-gray-700'
+                backgroundType === 'grid' ? 'bg-alpine-100 text-alpine-600' : 'text-gray-700'
               }`}
               title="Grid"
               disabled={disabled}
@@ -829,7 +829,7 @@ const DrawingEditor = forwardRef<DrawingEditorHandle, DrawingEditorProps>(
             <button
               onClick={() => changeBackground('lines')}
               className={`p-1.5 rounded hover:bg-gray-200 transition-colors ${
-                backgroundType === 'lines' ? 'bg-blue-100 text-blue-600' : 'text-gray-700'
+                backgroundType === 'lines' ? 'bg-alpine-100 text-alpine-600' : 'text-gray-700'
               }`}
               title="Lines"
               disabled={disabled}
@@ -843,7 +843,7 @@ const DrawingEditor = forwardRef<DrawingEditorHandle, DrawingEditorProps>(
             <button
               onClick={() => changeBackground('dots')}
               className={`p-1.5 rounded hover:bg-gray-200 transition-colors ${
-                backgroundType === 'dots' ? 'bg-blue-100 text-blue-600' : 'text-gray-700'
+                backgroundType === 'dots' ? 'bg-alpine-100 text-alpine-600' : 'text-gray-700'
               }`}
               title="Dots"
               disabled={disabled}

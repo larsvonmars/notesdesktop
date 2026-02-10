@@ -1,6 +1,6 @@
 #!/bin/bash
 
-echo "🚀 Starting Notes Desktop (Web Version)..."
+echo "🏔️  Starting Saentis Notes (Web Version)..."
 echo ""
 echo "Note: Using web version due to macOS Tauri compatibility issue"
 echo "All features work identically in the browser!"

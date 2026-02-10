@@ -703,7 +703,7 @@ export default function KnowledgeGraphModal({
         <div className="flex items-center justify-between p-4 border-b border-gray-200">
           <div className="flex items-start gap-4 flex-1">
             <div>
-              <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-blue-50 text-blue-700 text-xs font-semibold uppercase tracking-wide">
+              <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-alpine-50 text-alpine-700 text-xs font-semibold uppercase tracking-wide">
                 Knowledge Graph
               </div>
               <div className="mt-2 flex items-center gap-4 text-sm text-gray-700" style={{ fontFamily: 'Inter, system-ui, sans-serif' }}>
@@ -725,7 +725,7 @@ export default function KnowledgeGraphModal({
                   else if (value === 'root') setFilterFolderId(null)
                   else setFilterFolderId(value)
                 }}
-                className="text-sm px-3 py-1.5 border border-gray-300 rounded-md bg-white hover:border-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                className="text-sm px-3 py-1.5 border border-gray-300 rounded-md bg-white hover:border-gray-400 focus:outline-none focus:ring-2 focus:ring-alpine-500 focus:border-transparent"
               >
                 {folderOptions.map(option => (
                   <option
@@ -759,7 +759,7 @@ export default function KnowledgeGraphModal({
           {isLoadingNotes ? (
             <div className="absolute inset-0 flex items-center justify-center">
               <div className="text-center">
-                <Loader2 size={48} className="animate-spin text-blue-500 mx-auto mb-4" />
+                <Loader2 size={48} className="animate-spin text-alpine-500 mx-auto mb-4" />
                 <p className="text-gray-600">Loading all notes...</p>
               </div>
             </div>
@@ -824,7 +824,7 @@ export default function KnowledgeGraphModal({
                   <span className="text-gray-600">Current Note</span>
                 </div>
                 <div className="flex items-center gap-2">
-                  <div className="w-4 h-4 rounded-full bg-blue-100 border-2 border-blue-500"></div>
+                  <div className="w-4 h-4 rounded-full bg-alpine-100 border-2 border-alpine-500"></div>
                   <span className="text-gray-600">Text Note</span>
                 </div>
                 <div className="flex items-center gap-2">

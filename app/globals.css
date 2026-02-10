@@ -2,6 +2,23 @@
 @tailwind components;
 @tailwind utilities;
 
+/* ===== Saentis Notes – Alpine Theme ===== */
+@layer base {
+  :root {
+    --alpine-gradient-from: #EFF8FF;
+    --alpine-gradient-to:   #F0FDFA;
+  }
+
+  body {
+    @apply bg-gradient-to-br from-[var(--alpine-gradient-from)] to-[var(--alpine-gradient-to)] min-h-screen;
+  }
+
+  /* Subtle frosted-glass card surfaces */
+  .alpine-surface {
+    @apply bg-white/80 backdrop-blur-sm;
+  }
+}
+
 /* RichTextEditor Styles */
 @layer utilities {
   /* Placeholder styling */
@@ -113,22 +130,22 @@
 
   /* Link styling - Enhanced */
   [contenteditable='true'] a {
-    @apply text-blue-600 cursor-pointer relative;
+    @apply text-alpine-600 cursor-pointer relative;
     text-decoration: underline;
-    text-decoration-color: rgba(37, 99, 235, 0.4);
+    text-decoration-color: rgba(37, 112, 235, 0.4);
     text-decoration-thickness: 2px;
     text-underline-offset: 2px;
     transition: all 0.2s ease;
   }
 
   [contenteditable='true'] a:hover {
-    @apply text-blue-800;
-    text-decoration-color: rgba(30, 64, 175, 0.6);
+    @apply text-alpine-800;
+    text-decoration-color: rgba(30, 74, 175, 0.6);
     text-decoration-thickness: 2px;
   }
 
   [contenteditable='true'] a:active {
-    @apply text-blue-900;
+    @apply text-alpine-900;
   }
 
   /* Link icon indicator (optional visual enhancement) */

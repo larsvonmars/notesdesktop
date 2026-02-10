@@ -667,9 +667,9 @@ export default function UnifiedPanel({
                 handleFolderToggle(folder.id)
               }
             }}
-            className={`group flex items-center gap-1.5 px-2 py-1.5 rounded-md transition-all duration-150 focus:outline-none focus:ring-2 focus:ring-offset-1 focus:ring-blue-500 ${
-              isSelected ? 'bg-blue-50 text-blue-700 font-medium shadow-sm' : 'hover:bg-gray-50 text-gray-700'
-            } ${hoverFolderId === folderKey(folder.id) ? 'ring-2 ring-blue-400 bg-blue-50 shadow-sm' : ''}`}
+            className={`group flex items-center gap-1.5 px-2 py-1.5 rounded-md transition-all duration-150 focus:outline-none focus:ring-2 focus:ring-offset-1 focus:ring-alpine-500 ${
+              isSelected ? 'bg-alpine-50 text-alpine-700 font-medium shadow-sm' : 'hover:bg-gray-50 text-gray-700'
+            } ${hoverFolderId === folderKey(folder.id) ? 'ring-2 ring-alpine-400 bg-alpine-50 shadow-sm' : ''}`}
             style={{ paddingLeft: `${level * 12 + 8}px` }}
             aria-expanded={isExpanded}
             aria-label={`Folder: ${folder.name}, ${noteCount} notes`}
@@ -679,11 +679,11 @@ export default function UnifiedPanel({
               className={`flex-shrink-0 transition-transform duration-200 ${isExpanded ? 'rotate-90' : ''} ${hasChildren ? 'text-gray-600' : 'text-gray-300'}`}
               aria-hidden="true"
             />
-            <FolderTreeIcon size={14} className={`flex-shrink-0 ${isExpanded ? 'text-blue-500' : 'text-gray-500'}`} aria-hidden="true" />
+            <FolderTreeIcon size={14} className={`flex-shrink-0 ${isExpanded ? 'text-alpine-500' : 'text-gray-500'}`} aria-hidden="true" />
             <span className="text-sm truncate flex-1">{folder.name}</span>
             {isLoadingFolder && <span className="text-xs text-gray-400">Loading...</span>}
             {noteCount > 0 && !isLoadingFolder && (
-              <span className="text-xs bg-blue-100 text-blue-700 px-1.5 py-0.5 rounded-full font-semibold flex-shrink-0">
+              <span className="text-xs bg-alpine-100 text-alpine-700 px-1.5 py-0.5 rounded-full font-semibold flex-shrink-0">
                 {noteCount}
               </span>
             )}
@@ -730,7 +730,7 @@ export default function UnifiedPanel({
                     onContextMenu={(e) => handleNoteContextMenu(e, n)}
                     className={`group w-full text-left px-2 py-1.5 rounded-md transition-all duration-150 flex items-start justify-between ${
                       selectedNoteId === n.id
-                        ? 'bg-blue-100 text-blue-700 font-medium shadow-sm'
+                        ? 'bg-alpine-100 text-alpine-700 font-medium shadow-sm'
                         : 'hover:bg-gray-50 text-gray-700 hover:shadow-sm'
                     }`}
                     aria-label={`Note: ${n.title || 'Untitled'}`}
@@ -743,7 +743,7 @@ export default function UnifiedPanel({
                         ) : n.note_type === 'mindmap' ? (
                           <Network size={12} className="text-green-500 flex-shrink-0" aria-hidden="true" />
                         ) : (
-                          <FileText size={12} className="text-blue-500 flex-shrink-0" aria-hidden="true" />
+                          <FileText size={12} className="text-alpine-500 flex-shrink-0" aria-hidden="true" />
                         )}
                         <div className="text-sm truncate">{n.title || 'Untitled'}</div>
                       </div>
@@ -1222,29 +1222,29 @@ export default function UnifiedPanel({
 
   return (
     <>
-      {/* Floating Menu Button */}
+      {/* Floating Menu Button — sits below the formatting toolbar */}
       <button
         onClick={() => setIsOpen(!isOpen)}
-        className="fixed top-28 right-6 z-50 p-3.5 bg-white border border-gray-200 rounded-2xl shadow-lg hover:shadow-xl hover:scale-105 transition-all duration-200 group"
+        className="fixed top-14 right-6 z-50 p-3 bg-white border border-gray-200 rounded-2xl shadow-lg hover:shadow-xl hover:scale-105 transition-all duration-200 group"
         aria-label={isOpen ? 'Close menu' : 'Open menu (⌘\\)'}
         title={isOpen ? 'Close menu' : 'Open menu (⌘\\)'}
       >
-        {isOpen ? <X size={22} className="text-gray-700" /> : <Menu size={22} className="text-gray-700 group-hover:text-blue-600 transition-colors" />}
+        {isOpen ? <X size={22} className="text-gray-700" /> : <Menu size={22} className="text-gray-700 group-hover:text-alpine-600 transition-colors" />}
       </button>
 
       {/* Unified Panel - Redesigned */}
       {isOpen && (
         <div
           ref={panelRef}
-          className="fixed top-20 right-6 z-40 w-[440px] max-h-[calc(100vh-6rem)] bg-white rounded-2xl shadow-2xl border border-gray-100 flex flex-col overflow-hidden animate-in slide-in-from-right duration-200"
+          className="fixed top-28 right-6 z-40 w-[440px] max-h-[calc(100vh-8rem)] bg-white rounded-2xl shadow-2xl border border-gray-100 flex flex-col overflow-hidden animate-in slide-in-from-right duration-200"
         >
           {/* Header Section - User & Note Title */}
-          <div className="bg-gradient-to-br from-slate-50 via-white to-blue-50 border-b border-gray-100">
+          <div className="bg-gradient-to-br from-slate-50 via-white to-alpine-50 border-b border-gray-100">
             {/* User Info Bar */}
             {userEmail && onSignOut && (
               <div className="px-5 py-3 flex items-center justify-between border-b border-gray-100">
                 <div className="flex items-center gap-3">
-                  <div className="w-8 h-8 rounded-full bg-blue-600 flex items-center justify-center text-white text-sm font-medium">
+                  <div className="w-8 h-8 rounded-full bg-alpine-600 flex items-center justify-center text-white text-sm font-medium">
                     {userEmail.charAt(0).toUpperCase()}
                   </div>
                   <span className="text-sm text-gray-700 font-medium truncate max-w-[200px]">{userEmail}</span>
@@ -1270,7 +1270,7 @@ export default function UnifiedPanel({
                   value={title}
                   onChange={(e) => onTitleChange(e.target.value)}
                   placeholder="Untitled note..."
-                  className="w-full px-4 py-3 text-lg font-semibold border border-gray-200 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white transition-all placeholder:text-gray-300"
+                  className="w-full px-4 py-3 text-lg font-semibold border border-gray-200 rounded-xl focus:ring-2 focus:ring-alpine-500 focus:border-transparent bg-white transition-all placeholder:text-gray-300"
                   disabled={isSaving || isDeleting}
                 />
               </div>
@@ -1280,7 +1280,7 @@ export default function UnifiedPanel({
                 <button
                   onClick={onSave}
                   disabled={isSaving || isDeleting || !hasChanges}
-                  className="flex-1 inline-flex items-center justify-center gap-2 px-4 py-2.5 bg-gradient-to-r from-blue-600 to-blue-700 text-white text-sm font-semibold rounded-xl hover:from-blue-700 hover:to-blue-800 disabled:opacity-50 disabled:cursor-not-allowed transition-all shadow-sm hover:shadow-md"
+                  className="flex-1 inline-flex items-center justify-center gap-2 px-4 py-2.5 bg-gradient-to-r from-alpine-600 to-alpine-700 text-white text-sm font-semibold rounded-xl hover:from-alpine-700 hover:to-alpine-800 disabled:opacity-50 disabled:cursor-not-allowed transition-all shadow-sm hover:shadow-md"
                   title="Save note (⌘S)"
                 >
                   {isSaving ? (
@@ -1328,7 +1328,7 @@ export default function UnifiedPanel({
                 onClick={() => setActiveTab('browse')}
                 className={`flex-1 px-2 py-2 text-xs font-medium transition-all rounded-lg flex items-center justify-center gap-1.5 min-w-0 ${
                   activeTab === 'browse'
-                    ? 'bg-white text-blue-600 shadow-sm'
+                    ? 'bg-white text-alpine-600 shadow-sm'
                     : 'text-gray-600 hover:text-gray-800 hover:bg-gray-50'
                 }`}
               >
@@ -1339,7 +1339,7 @@ export default function UnifiedPanel({
                 onClick={() => setActiveTab('toc')}
                 className={`flex-1 px-2 py-2 text-xs font-medium transition-all rounded-lg flex items-center justify-center gap-1.5 min-w-0 ${
                   activeTab === 'toc'
-                    ? 'bg-white text-blue-600 shadow-sm'
+                    ? 'bg-white text-alpine-600 shadow-sm'
                     : 'text-gray-600 hover:text-gray-800 hover:bg-gray-50'
                 }`}
                 disabled={headings.length === 0}
@@ -1347,7 +1347,7 @@ export default function UnifiedPanel({
                 <ListTree size={14} className="flex-shrink-0" />
                 <span className="truncate">Contents</span>
                 {headings.length > 0 && (
-                  <span className="px-1 py-0.5 text-[10px] bg-blue-100 text-blue-600 rounded-full font-semibold flex-shrink-0">
+                  <span className="px-1 py-0.5 text-[10px] bg-alpine-100 text-alpine-600 rounded-full font-semibold flex-shrink-0">
                     {headings.length}
                   </span>
                 )}
@@ -1356,7 +1356,7 @@ export default function UnifiedPanel({
                 onClick={() => setActiveTab('tasks')}
                 className={`flex-1 px-2 py-2 text-xs font-medium transition-all rounded-lg flex items-center justify-center gap-1.5 min-w-0 ${
                   activeTab === 'tasks'
-                    ? 'bg-white text-blue-600 shadow-sm'
+                    ? 'bg-white text-alpine-600 shadow-sm'
                     : 'text-gray-600 hover:text-gray-800 hover:bg-gray-50'
                 }`}
               >
@@ -1394,7 +1394,7 @@ export default function UnifiedPanel({
                         onOpenKnowledgeGraph()
                         setIsOpen(false)
                       }}
-                      className="px-4 py-3.5 bg-blue-600 text-white text-sm font-semibold rounded-xl hover:bg-blue-700 transition-all shadow-sm hover:shadow-md flex items-center justify-center gap-2"
+                      className="px-4 py-3.5 bg-alpine-600 text-white text-sm font-semibold rounded-xl hover:bg-alpine-700 transition-all shadow-sm hover:shadow-md flex items-center justify-center gap-2"
                       title="Open Knowledge Graph - Visualize note connections"
                     >
                       <Network size={18} />
@@ -1454,7 +1454,7 @@ export default function UnifiedPanel({
                                             onClick={() => setPdfSettings(prev => ({ ...prev, orientation: 'portrait' }))}
                                             className={`flex-1 px-3 py-2 text-xs rounded-lg transition-colors ${
                                               pdfSettings.orientation === 'portrait'
-                                                ? 'bg-blue-500 text-white'
+                                                ? 'bg-alpine-500 text-white'
                                                 : 'bg-white text-gray-700 hover:bg-gray-100 border border-gray-300'
                                             }`}
                                           >
@@ -1464,7 +1464,7 @@ export default function UnifiedPanel({
                                             onClick={() => setPdfSettings(prev => ({ ...prev, orientation: 'landscape' }))}
                                             className={`flex-1 px-3 py-2 text-xs rounded-lg transition-colors ${
                                               pdfSettings.orientation === 'landscape'
-                                                ? 'bg-blue-500 text-white'
+                                                ? 'bg-alpine-500 text-white'
                                                 : 'bg-white text-gray-700 hover:bg-gray-100 border border-gray-300'
                                             }`}
                                           >
@@ -1480,7 +1480,7 @@ export default function UnifiedPanel({
                                             type="number"
                                             value={pdfSettings.marginTop}
                                             onChange={(e) => setPdfSettings(prev => ({ ...prev, marginTop: Number(e.target.value) }))}
-                                            className="w-full px-2 py-1.5 text-xs border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                                            className="w-full px-2 py-1.5 text-xs border border-gray-300 rounded-lg focus:ring-2 focus:ring-alpine-500 focus:border-alpine-500"
                                             min="0"
                                             max="50"
                                           />
@@ -1491,7 +1491,7 @@ export default function UnifiedPanel({
                                             type="number"
                                             value={pdfSettings.marginBottom}
                                             onChange={(e) => setPdfSettings(prev => ({ ...prev, marginBottom: Number(e.target.value) }))}
-                                            className="w-full px-2 py-1.5 text-xs border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                                            className="w-full px-2 py-1.5 text-xs border border-gray-300 rounded-lg focus:ring-2 focus:ring-alpine-500 focus:border-alpine-500"
                                             min="0"
                                             max="50"
                                           />
@@ -1502,7 +1502,7 @@ export default function UnifiedPanel({
                                             type="number"
                                             value={pdfSettings.marginLeft}
                                             onChange={(e) => setPdfSettings(prev => ({ ...prev, marginLeft: Number(e.target.value) }))}
-                                            className="w-full px-2 py-1.5 text-xs border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                                            className="w-full px-2 py-1.5 text-xs border border-gray-300 rounded-lg focus:ring-2 focus:ring-alpine-500 focus:border-alpine-500"
                                             min="0"
                                             max="50"
                                           />
@@ -1513,7 +1513,7 @@ export default function UnifiedPanel({
                                             type="number"
                                             value={pdfSettings.marginRight}
                                             onChange={(e) => setPdfSettings(prev => ({ ...prev, marginRight: Number(e.target.value) }))}
-                                            className="w-full px-2 py-1.5 text-xs border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                                            className="w-full px-2 py-1.5 text-xs border border-gray-300 rounded-lg focus:ring-2 focus:ring-alpine-500 focus:border-alpine-500"
                                             min="0"
                                             max="50"
                                           />
@@ -1531,7 +1531,7 @@ export default function UnifiedPanel({
                                         <select
                                           value={pdfSettings.fontFamily}
                                           onChange={(e) => setPdfSettings(prev => ({ ...prev, fontFamily: e.target.value as any }))}
-                                          className="w-full px-2 py-1.5 text-xs border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                                          className="w-full px-2 py-1.5 text-xs border border-gray-300 rounded-lg focus:ring-2 focus:ring-alpine-500 focus:border-alpine-500"
                                         >
                                           <option value="sans-serif">Sans Serif</option>
                                           <option value="serif">Serif</option>
@@ -1612,7 +1612,7 @@ export default function UnifiedPanel({
                                           type="checkbox"
                                           checked={pdfSettings.includeTitle}
                                           onChange={(e) => setPdfSettings(prev => ({ ...prev, includeTitle: e.target.checked }))}
-                                          className="rounded border-gray-300 text-blue-500 focus:ring-blue-500"
+                                          className="rounded border-gray-300 text-alpine-500 focus:ring-alpine-500"
                                         />
                                         <span className="text-xs text-gray-700">Include note title</span>
                                       </label>
@@ -1622,7 +1622,7 @@ export default function UnifiedPanel({
                                           type="checkbox"
                                           checked={pdfSettings.includeDate}
                                           onChange={(e) => setPdfSettings(prev => ({ ...prev, includeDate: e.target.checked }))}
-                                          className="rounded border-gray-300 text-blue-500 focus:ring-blue-500"
+                                          className="rounded border-gray-300 text-alpine-500 focus:ring-alpine-500"
                                         />
                                         <span className="text-xs text-gray-700">Include export date</span>
                                       </label>
@@ -1632,7 +1632,7 @@ export default function UnifiedPanel({
                                           type="checkbox"
                                           checked={pdfSettings.includePageNumbers}
                                           onChange={(e) => setPdfSettings(prev => ({ ...prev, includePageNumbers: e.target.checked }))}
-                                          className="rounded border-gray-300 text-blue-500 focus:ring-blue-500"
+                                          className="rounded border-gray-300 text-alpine-500 focus:ring-alpine-500"
                                         />
                                         <span className="text-xs text-gray-700">Include page numbers</span>
                                       </label>
@@ -1642,7 +1642,7 @@ export default function UnifiedPanel({
                                   {/* Export Button */}
                                   <button
                                     onClick={handleExportToPDF}
-                                    className="w-full px-4 py-2.5 bg-blue-600 text-white rounded-lg font-semibold hover:bg-blue-700 transition-all shadow-md hover:shadow-lg"
+                                    className="w-full px-4 py-2.5 bg-alpine-600 text-white rounded-lg font-semibold hover:bg-alpine-700 transition-all shadow-md hover:shadow-lg"
                                   >
                                     Export PDF with Custom Settings
                                   </button>
@@ -1664,7 +1664,7 @@ export default function UnifiedPanel({
                               onClick={handleExportToMarkdown}
                               className="w-full px-4 py-3 text-left hover:bg-gray-50 transition-colors flex items-center gap-3 group"
                             >
-                              <FileDown size={18} className="text-blue-500 group-hover:scale-110 transition-transform" />
+                              <FileDown size={18} className="text-alpine-500 group-hover:scale-110 transition-transform" />
                               <div className="flex-1">
                                 <div className="text-sm font-semibold text-gray-900">Export to Markdown</div>
                                 <div className="text-xs text-gray-500">Plain text with formatting</div>
@@ -1699,19 +1699,19 @@ export default function UnifiedPanel({
 
                 {/* Current Note Card */}
                 {note && (
-                  <div className="bg-blue-50/50 rounded-2xl p-5 border border-blue-100/50">
+                  <div className="bg-alpine-50/50 rounded-2xl p-5 border border-alpine-100/50">
                     <div className="flex items-start justify-between mb-4">
                       <div className="flex items-center gap-3">
                         <div className={`w-10 h-10 rounded-xl flex items-center justify-center ${
                           note.note_type === 'drawing' ? 'bg-purple-100' :
-                          note.note_type === 'mindmap' ? 'bg-green-100' : 'bg-blue-100'
+                          note.note_type === 'mindmap' ? 'bg-green-100' : 'bg-alpine-100'
                         }`}>
                           {note.note_type === 'drawing' ? (
                             <PenTool size={20} className="text-purple-600" />
                           ) : note.note_type === 'mindmap' ? (
                             <Network size={20} className="text-green-600" />
                           ) : (
-                            <FileText size={20} className="text-blue-600" />
+                            <FileText size={20} className="text-alpine-600" />
                           )}
                         </div>
                         <div>
@@ -1778,7 +1778,7 @@ export default function UnifiedPanel({
                       onOpenTaskCalendar()
                       setIsOpen(false)
                     }}
-                    className="w-full px-4 py-3.5 bg-blue-600 text-white text-sm font-semibold rounded-xl hover:bg-blue-700 transition-all shadow-sm hover:shadow-md flex items-center justify-center gap-2"
+                    className="w-full px-4 py-3.5 bg-alpine-600 text-white text-sm font-semibold rounded-xl hover:bg-alpine-700 transition-all shadow-sm hover:shadow-md flex items-center justify-center gap-2"
                     title="Open Tasks & Calendar"
                   >
                     <Calendar size={18} />
@@ -1803,12 +1803,12 @@ export default function UnifiedPanel({
                         }
                       }}
                       placeholder="What needs to be done?"
-                      className="flex-1 px-4 py-2.5 text-sm border border-gray-200 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all"
+                      className="flex-1 px-4 py-2.5 text-sm border border-gray-200 rounded-xl focus:ring-2 focus:ring-alpine-500 focus:border-transparent transition-all"
                     />
                     <button
                       onClick={handleQuickAddTask}
                       disabled={!quickTaskTitle.trim()}
-                      className="px-4 py-2.5 bg-blue-600 text-white rounded-xl hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-all shadow-sm"
+                      className="px-4 py-2.5 bg-alpine-600 text-white rounded-xl hover:bg-alpine-700 disabled:opacity-50 disabled:cursor-not-allowed transition-all shadow-sm"
                       title="Add task"
                     >
                       <Plus size={18} />
@@ -1818,10 +1818,10 @@ export default function UnifiedPanel({
 
                 {/* Task Stats */}
                 {taskStats && (
-                  <div className="bg-blue-50 rounded-xl p-4 border border-blue-100/50">
+                  <div className="bg-alpine-50 rounded-xl p-4 border border-alpine-100/50">
                     <div className="grid grid-cols-4 gap-3 text-center">
                       <div className="bg-white/80 rounded-xl p-3">
-                        <div className="text-2xl font-bold text-blue-600">{taskStats.todo}</div>
+                        <div className="text-2xl font-bold text-alpine-600">{taskStats.todo}</div>
                         <div className="text-xs text-gray-500 mt-1">To Do</div>
                       </div>
                       <div className="bg-white/80 rounded-xl p-3">
@@ -1860,7 +1860,7 @@ export default function UnifiedPanel({
                           taskFilter === filter
                             ? filter === 'starred' ? 'bg-yellow-500 text-white' :
                               filter === 'overdue' ? 'bg-red-500 text-white' :
-                              'bg-blue-600 text-white'
+                              'bg-alpine-600 text-white'
                             : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
                         }`}
                       >
@@ -1873,7 +1873,7 @@ export default function UnifiedPanel({
 
                   {isLoadingTasks ? (
                     <div className="text-center py-10">
-                      <Loader2 size={28} className="animate-spin mx-auto text-blue-600 mb-3" />
+                      <Loader2 size={28} className="animate-spin mx-auto text-alpine-600 mb-3" />
                       <p className="text-sm text-gray-500">Loading tasks...</p>
                     </div>
                   ) : filteredTasks.length === 0 ? (
@@ -1907,7 +1907,7 @@ export default function UnifiedPanel({
                                 {task.status === 'completed' ? (
                                   <CheckCircle2 size={20} className="text-green-600" />
                                 ) : (
-                                  <Circle size={20} className="text-gray-300 group-hover:text-blue-400" />
+                                  <Circle size={20} className="text-gray-300 group-hover:text-alpine-400" />
                                 )}
                               </button>
 
@@ -1937,7 +1937,7 @@ export default function UnifiedPanel({
                                   
                                   {task.due_date && (
                                     <span className={`inline-flex items-center gap-1.5 px-2 py-1 rounded-md font-medium ${
-                                      isOverdue ? 'bg-red-100 text-red-700' : 'bg-blue-100 text-blue-700'
+                                      isOverdue ? 'bg-red-100 text-red-700' : 'bg-alpine-100 text-alpine-700'
                                     }`}>
                                       <Clock size={12} />
                                       {new Date(task.due_date).toLocaleDateString('default', { month: 'short', day: 'numeric' })}
@@ -1958,7 +1958,7 @@ export default function UnifiedPanel({
                               setIsOpen(false)
                             }
                           }}
-                          className="w-full px-4 py-3 text-sm text-blue-600 hover:bg-blue-50 rounded-xl transition-colors font-semibold"
+                          className="w-full px-4 py-3 text-sm text-alpine-600 hover:bg-alpine-50 rounded-xl transition-colors font-semibold"
                         >
                           View all {filteredTasks.length} {taskFilter !== 'all' ? taskFilter : ''} tasks →
                         </button>
@@ -1997,13 +1997,13 @@ export default function UnifiedPanel({
                               onScrollToHeading(heading.id)
                               setIsOpen(false)
                             }}
-                            className="w-full text-left px-4 py-3 hover:bg-blue-50 hover:text-blue-700 rounded-xl transition-all group border border-transparent hover:border-blue-100"
+                            className="w-full text-left px-4 py-3 hover:bg-alpine-50 hover:text-alpine-700 rounded-xl transition-all group border border-transparent hover:border-alpine-100"
                             style={{ paddingLeft: `${(heading.level - 1) * 16 + 16}px` }}
                             title={`Jump to ${levelLabel}: ${heading.text}`}
                           >
                             <div className="flex items-center gap-3">
                               <span className={`text-xs font-mono px-2 py-1 rounded-md ${
-                                heading.level === 1 ? 'bg-blue-100 text-blue-600' :
+                                heading.level === 1 ? 'bg-alpine-100 text-alpine-600' :
                                 heading.level === 2 ? 'bg-purple-100 text-purple-600' :
                                 'bg-gray-100 text-gray-600'
                               }`}>{levelLabel}</span>
@@ -2234,8 +2234,8 @@ export default function UnifiedPanel({
         <div className="fixed inset-0 z-[70] flex items-center justify-center p-4 bg-black/50">
           <div className="bg-white rounded-xl shadow-2xl border border-gray-200 max-w-md w-full p-6">
             <div className="flex items-start gap-4 mb-4">
-              <div className="flex-shrink-0 w-12 h-12 rounded-full bg-blue-100 flex items-center justify-center">
-                <Edit2 size={24} className="text-blue-600" />
+              <div className="flex-shrink-0 w-12 h-12 rounded-full bg-alpine-100 flex items-center justify-center">
+                <Edit2 size={24} className="text-alpine-600" />
               </div>
               <div className="flex-1">
                 <h3 className="text-lg font-semibold text-gray-900 mb-1">
@@ -2252,7 +2252,7 @@ export default function UnifiedPanel({
               value={renameFolderInput}
               onChange={(e) => setRenameFolderInput(e.target.value)}
               placeholder="Folder name"
-              className="w-full px-3 py-2 border border-gray-200 rounded-lg mb-4 focus:outline-none focus:ring-2 focus:ring-blue-500"
+              className="w-full px-3 py-2 border border-gray-200 rounded-lg mb-4 focus:outline-none focus:ring-2 focus:ring-alpine-500"
               onKeyDown={(e) => {
                 if (e.key === 'Enter') handleConfirmRename()
                 if (e.key === 'Escape') handleCancelRename()
@@ -2268,7 +2268,7 @@ export default function UnifiedPanel({
               <button
                 onClick={handleConfirmRename}
                 disabled={!renameFolderInput.trim()}
-                className="px-4 py-2 text-sm font-medium text-white bg-blue-600 rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                className="px-4 py-2 text-sm font-medium text-white bg-alpine-600 rounded-lg hover:bg-alpine-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
               >
                 Rename
               </button>

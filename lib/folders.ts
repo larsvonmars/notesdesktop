@@ -183,7 +183,7 @@ async function isDescendantOf(
       return true
     }
     
-    const { data: folder } = await supabase
+    const { data: folder }: { data: { parent_id: string | null } | null } = await supabase
       .from('folders')
       .select('parent_id')
       .eq('id', currentId)

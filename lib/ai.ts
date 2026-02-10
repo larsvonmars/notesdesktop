@@ -1,7 +1,7 @@
 /**
  * AI Assistant API - DeepSeek Integration
  * 
- * This module provides AI capabilities for the Notes Desktop app, including:
+ * This module provides AI capabilities for the Saentis Notes app, including:
  * - Note summarization
  * - Text generation and editing
  * - Mindmap node generation
@@ -177,7 +177,7 @@ export function clearAIApiKey(): void {
 // ============================================================================
 
 const SYSTEM_PROMPTS = {
-  general: `You are an intelligent AI assistant integrated into a note-taking desktop application called Notes Desktop. You help users with:
+  general: `You are an intelligent AI assistant integrated into a note-taking desktop application called Saentis Notes. You help users with:
 - Summarizing and analyzing their notes
 - Suggesting improvements to their text
 - Helping organize thoughts and ideas

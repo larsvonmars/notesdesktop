@@ -1782,7 +1782,7 @@ const MindmapEditor = forwardRef<MindmapEditorHandle, MindmapEditorProps>(
                       onClick={() => handleBreadcrumbClick(node.id)}
                       disabled={isActive}
                       className={`max-w-[160px] truncate transition-colors ${
-                        isActive ? 'cursor-default text-blue-600' : 'hover:text-blue-600'
+                        isActive ? 'cursor-default text-alpine-600' : 'hover:text-alpine-600'
                       }`}
                       title={node.text}
                     >
@@ -1905,7 +1905,7 @@ const MindmapEditor = forwardRef<MindmapEditorHandle, MindmapEditorProps>(
                     onChange={(e) =>
                       dispatch({ type: 'UPDATE_DETAIL_DRAFT', payload: { text: e.target.value } })
                     }
-                    className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm shadow-sm focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-200"
+                    className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm shadow-sm focus:border-alpine-500 focus:outline-none focus:ring-2 focus:ring-alpine-200"
                     placeholder="Node title"
                   />
                 </div>
@@ -1921,7 +1921,7 @@ const MindmapEditor = forwardRef<MindmapEditorHandle, MindmapEditorProps>(
                       dispatch({ type: 'UPDATE_DETAIL_DRAFT', payload: { description: e.target.value } })
                     }
                     rows={5}
-                    className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm shadow-sm focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-200"
+                    className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm shadow-sm focus:border-alpine-500 focus:outline-none focus:ring-2 focus:ring-alpine-200"
                     placeholder="Add more context, notes, or action items"
                   />
                 </div>
@@ -1938,7 +1938,7 @@ const MindmapEditor = forwardRef<MindmapEditorHandle, MindmapEditorProps>(
                           onClick={() =>
                             dispatch({ type: 'UPDATE_DETAIL_DRAFT', payload: { color } })
                           }
-                          className={`h-9 w-9 rounded-full border-2 transition-transform focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-400 ${
+                          className={`h-9 w-9 rounded-full border-2 transition-transform focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-alpine-400 ${
                             isActive ? 'border-slate-900 scale-105' : 'border-transparent'
                           }`}
                           style={{ backgroundColor: color }}
@@ -1988,7 +1988,7 @@ const MindmapEditor = forwardRef<MindmapEditorHandle, MindmapEditorProps>(
                               href={attachment.url}
                               target="_blank"
                               rel="noreferrer"
-                              className="text-xs text-blue-600 hover:underline break-all"
+                              className="text-xs text-alpine-600 hover:underline break-all"
                             >
                               {attachment.url}
                             </a>
@@ -2013,7 +2013,7 @@ const MindmapEditor = forwardRef<MindmapEditorHandle, MindmapEditorProps>(
                         dispatch({ type: 'SET_NEW_ATTACHMENT_INPUT', payload: { ...newAttachmentInput, label: e.target.value } })
                       }
                       placeholder="Attachment label"
-                      className="rounded-lg border border-slate-200 px-3 py-2 text-sm shadow-sm focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-200"
+                      className="rounded-lg border border-slate-200 px-3 py-2 text-sm shadow-sm focus:border-alpine-500 focus:outline-none focus:ring-2 focus:ring-alpine-200"
                     />
                     <input
                       type="url"
@@ -2022,7 +2022,7 @@ const MindmapEditor = forwardRef<MindmapEditorHandle, MindmapEditorProps>(
                         dispatch({ type: 'SET_NEW_ATTACHMENT_INPUT', payload: { ...newAttachmentInput, url: e.target.value } })
                       }
                       placeholder="https://example.com/image.png"
-                      className="rounded-lg border border-slate-200 px-3 py-2 text-sm shadow-sm focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-200"
+                      className="rounded-lg border border-slate-200 px-3 py-2 text-sm shadow-sm focus:border-alpine-500 focus:outline-none focus:ring-2 focus:ring-alpine-200"
                     />
                     <select
                       value={newAttachmentInput.type}
@@ -2032,7 +2032,7 @@ const MindmapEditor = forwardRef<MindmapEditorHandle, MindmapEditorProps>(
                           payload: { ...newAttachmentInput, type: e.target.value === 'link' ? 'link' : 'image' },
                         })
                       }
-                      className="rounded-lg border border-slate-200 px-3 py-2 text-sm shadow-sm focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-200"
+                      className="rounded-lg border border-slate-200 px-3 py-2 text-sm shadow-sm focus:border-alpine-500 focus:outline-none focus:ring-2 focus:ring-alpine-200"
                     >
                       <option value="image">Image</option>
                       <option value="link">Link</option>
@@ -2040,7 +2040,7 @@ const MindmapEditor = forwardRef<MindmapEditorHandle, MindmapEditorProps>(
                     <button
                       onClick={addAttachmentToDraft}
                       disabled={!newAttachmentInput.url.trim()}
-                      className="inline-flex items-center justify-center gap-2 rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white shadow-sm transition-colors hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-40"
+                      className="inline-flex items-center justify-center gap-2 rounded-lg bg-alpine-600 px-4 py-2 text-sm font-medium text-white shadow-sm transition-colors hover:bg-alpine-700 disabled:cursor-not-allowed disabled:opacity-40"
                     >
                       <Plus size={16} />
                       Add
@@ -2059,7 +2059,7 @@ const MindmapEditor = forwardRef<MindmapEditorHandle, MindmapEditorProps>(
                 </button>
                 <button
                   onClick={saveNodeDetail}
-                  className="inline-flex items-center gap-2 rounded-lg bg-blue-600 px-4 py-2 text-sm font-semibold text-white shadow-sm hover:bg-blue-700 transition-colors"
+                  className="inline-flex items-center gap-2 rounded-lg bg-alpine-600 px-4 py-2 text-sm font-semibold text-white shadow-sm hover:bg-alpine-700 transition-colors"
                 >
                   <Check size={16} />
                   Save changes
@@ -2090,7 +2090,7 @@ const MindmapEditor = forwardRef<MindmapEditorHandle, MindmapEditorProps>(
           <div className="text-gray-600">
             <div>Zoom: {Math.round(scale * 100)}%</div>
             {selectedNodeId && (
-              <div className="mt-1 text-blue-600 font-medium">
+              <div className="mt-1 text-alpine-600 font-medium">
                 Selected: {mindmapData.nodes[selectedNodeId]?.text}
               </div>
             )}

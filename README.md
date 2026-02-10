@@ -1,6 +1,6 @@
-# Notes Desktop
+# Saentis Notes 🏔️
 
-A desktop notes application built with Tauri, Next.js, and Supabase authentication.
+An Alpine-themed desktop notes application built with Tauri, Next.js, and Supabase authentication.
 
 ## Prerequisites
 

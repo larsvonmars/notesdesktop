@@ -604,9 +604,9 @@ function WorkspaceContent() {
 
   if (loading) {
     return (
-      <div className="flex items-center justify-center min-h-screen bg-white">
+      <div className="flex items-center justify-center min-h-screen">
         <div className="text-center">
-          <Loader2 className="w-12 h-12 text-blue-600 animate-spin mx-auto mb-4" />
+          <Loader2 className="w-12 h-12 text-alpine-600 animate-spin mx-auto mb-4" />
           <div className="text-lg text-gray-700 font-medium">Loading your workspace...</div>
         </div>
       </div>
@@ -619,9 +619,9 @@ function WorkspaceContent() {
 
   if (isLoadingFolders) {
     return (
-      <div className="flex items-center justify-center min-h-screen bg-white">
+      <div className="flex items-center justify-center min-h-screen">
         <div className="text-center">
-          <Loader2 className="w-12 h-12 text-blue-600 animate-spin mx-auto mb-4" />
+          <Loader2 className="w-12 h-12 text-alpine-600 animate-spin mx-auto mb-4" />
           <div className="text-lg text-gray-700 font-medium">Loading your workspace...</div>
         </div>
       </div>
@@ -643,7 +643,7 @@ function WorkspaceContent() {
       label: 'Text Note',
       description: 'Write with rich formatting, tables, and note links.',
       icon: FileText,
-      iconBg: 'bg-blue-100 text-blue-600',
+      iconBg: 'bg-alpine-100 text-alpine-600',
     },
     {
       type: 'drawing' as NoteType,
@@ -662,7 +662,7 @@ function WorkspaceContent() {
   ]
 
   return (
-    <div className="min-h-screen bg-white flex flex-col">
+    <div className="min-h-screen flex flex-col">
       {/* Main content area - completely clean */}
       <main className="flex-1 w-full h-screen overflow-hidden">
         {shouldShowEditor ? (
@@ -696,17 +696,17 @@ function WorkspaceContent() {
           <div className="flex items-center justify-center h-full">
             <div className="text-center p-8 max-w-md">
               <div className="relative mb-8">
-                <div className="absolute inset-0 bg-blue-100 rounded-full blur-3xl opacity-40"></div>
-                <FileEdit className="relative w-24 h-24 text-blue-500 mx-auto" strokeWidth={1.5} />
+                <div className="absolute inset-0 bg-alpine-100 rounded-full blur-3xl opacity-40"></div>
+                <FileEdit className="relative w-24 h-24 text-alpine-500 mx-auto" strokeWidth={1.5} />
               </div>
-              <h1 className="text-3xl font-bold text-gray-900 mb-3">Welcome to Notes Desktop</h1>
+              <h1 className="text-3xl font-bold text-gray-900 mb-3">Welcome to Saentis Notes</h1>
               <p className="text-lg text-gray-600 mb-8">
-                A distraction-free writing space designed for your thoughts
+                A distraction-free writing space, inspired by the Alps
               </p>
               <div className="space-y-3">
                 <button
                   onClick={() => handleNewNote()}
-                  className="w-full inline-flex items-center justify-center gap-3 px-6 py-3 bg-blue-600 text-white font-medium rounded-lg hover:bg-blue-700 transition-all duration-150 shadow-sm hover:shadow active:scale-95"
+                  className="w-full inline-flex items-center justify-center gap-3 px-6 py-3 bg-alpine-600 text-white font-medium rounded-lg hover:bg-alpine-700 transition-all duration-150 shadow-sm hover:shadow active:scale-95"
                 >
                   <Sparkles size={20} />
                   Start Writing
@@ -749,7 +749,7 @@ function WorkspaceContent() {
                 <button
                   key={type}
                   onClick={() => handleSelectNoteType(type)}
-                  className="flex h-full flex-col gap-4 rounded-xl border border-gray-200 bg-white p-4 text-left transition hover:border-blue-300 hover:shadow"
+                  className="flex h-full flex-col gap-4 rounded-xl border border-gray-200 bg-white p-4 text-left transition hover:border-alpine-300 hover:shadow"
                 >
                   <span className={`inline-flex h-10 w-10 items-center justify-center rounded-full ${iconBg}`}>
                     <Icon size={18} />
@@ -785,7 +785,7 @@ function WorkspaceContent() {
               value={newFolderName}
               onChange={(e) => setNewFolderName(e.target.value)}
               placeholder="Folder name"
-              className="w-full px-3 py-2 border border-gray-200 rounded mb-4 focus:outline-none focus:ring-2 focus:ring-blue-500"
+              className="w-full px-3 py-2 border border-gray-200 rounded mb-4 focus:outline-none focus:ring-2 focus:ring-alpine-500"
               onKeyDown={(e) => {
                 if (e.key === 'Enter') confirmCreateFolder()
                 if (e.key === 'Escape') cancelCreateFolder()
@@ -800,7 +800,7 @@ function WorkspaceContent() {
               </button>
               <button
                 onClick={confirmCreateFolder}
-                className="px-4 py-2 text-sm font-medium text-white bg-blue-600 rounded hover:bg-blue-700"
+                className="px-4 py-2 text-sm font-medium text-white bg-alpine-600 rounded hover:bg-alpine-700"
               >
                 Create
               </button>
@@ -839,9 +839,9 @@ function WorkspaceContent() {
 export default function WorkspaceShell() {
   return (
     <Suspense fallback={
-      <div className="flex items-center justify-center min-h-screen bg-white">
+      <div className="flex items-center justify-center min-h-screen">
         <div className="text-center">
-          <Loader2 className="w-12 h-12 text-blue-600 animate-spin mx-auto mb-4" />
+          <Loader2 className="w-12 h-12 text-alpine-600 animate-spin mx-auto mb-4" />
           <div className="text-lg text-gray-700 font-medium">Loading your workspace...</div>
         </div>
       </div>

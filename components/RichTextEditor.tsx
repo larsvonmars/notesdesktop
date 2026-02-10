@@ -1745,13 +1745,13 @@ const RichTextEditor = forwardRef<RichTextEditorHandle, RichTextEditorProps>(
         if (existingLink) {
           existingLink.setAttribute('href', normalizedUrl)
           existingLink.textContent = linkText || normalizedUrl
-          existingLink.className = 'text-blue-600 hover:text-blue-800 underline decoration-blue-400 decoration-2 underline-offset-2 transition-colors cursor-pointer inline-flex items-center gap-1'
+          existingLink.className = 'text-alpine-600 hover:text-alpine-800 underline decoration-alpine-400 decoration-2 underline-offset-2 transition-colors cursor-pointer inline-flex items-center gap-1'
         } else {
           const link = document.createElement('a')
           link.href = normalizedUrl
           link.target = '_blank'
           link.rel = 'noopener noreferrer'
-          link.className = 'text-blue-600 hover:text-blue-800 underline decoration-blue-400 decoration-2 underline-offset-2 transition-colors cursor-pointer inline-flex items-center gap-1'
+          link.className = 'text-alpine-600 hover:text-alpine-800 underline decoration-alpine-400 decoration-2 underline-offset-2 transition-colors cursor-pointer inline-flex items-center gap-1'
           link.textContent = linkText || normalizedUrl
 
           if (range.collapsed) {
@@ -2934,7 +2934,7 @@ const RichTextEditor = forwardRef<RichTextEditorHandle, RichTextEditorProps>(
     }
 
     const toolbarButtonClass =
-      'inline-flex h-9 w-9 items-center justify-center rounded-lg border border-transparent bg-white text-slate-600 shadow-sm hover:bg-slate-100 hover:text-slate-900 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-500 disabled:opacity-40'
+      'inline-flex h-9 w-9 items-center justify-center rounded-lg border border-transparent bg-white text-slate-600 shadow-sm hover:bg-slate-100 hover:text-slate-900 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-alpine-500 disabled:opacity-40'
 
     return (
       <div className="flex h-full min-h-0 flex-col overflow-hidden">
@@ -2994,7 +2994,7 @@ const RichTextEditor = forwardRef<RichTextEditorHandle, RichTextEditorProps>(
                     <button
                       key={block.id}
                       className={`flex w-full flex-col gap-1 px-4 py-3 text-left transition hover:bg-slate-50 ${
-                        activeBlockId === block.id ? 'bg-blue-50/80 ring-1 ring-blue-200' : ''
+                        activeBlockId === block.id ? 'bg-alpine-50/80 ring-1 ring-alpine-200' : ''
                       }`}
                       onClick={() => focusBlockById(block.id)}
                     >
@@ -3019,8 +3019,8 @@ const RichTextEditor = forwardRef<RichTextEditorHandle, RichTextEditorProps>(
             <div className="bg-white rounded-2xl shadow-2xl p-6 w-full max-w-lg border border-slate-200">
               <div className="flex items-center justify-between mb-6">
                 <div className="flex items-center gap-2">
-                  <div className="p-2 bg-blue-100 rounded-lg">
-                    <Link2 size={20} className="text-blue-600" />
+                  <div className="p-2 bg-alpine-100 rounded-lg">
+                    <Link2 size={20} className="text-alpine-600" />
                   </div>
                   <h3 className="text-xl font-semibold text-slate-900">Insert Link</h3>
                 </div>
@@ -3063,7 +3063,7 @@ const RichTextEditor = forwardRef<RichTextEditorHandle, RichTextEditorProps>(
                       className={`w-full px-4 py-3 pr-10 border-2 ${
                         linkUrlError 
                           ? 'border-red-300 focus:border-red-500 focus:ring-red-500' 
-                          : 'border-slate-200 focus:border-blue-500 focus:ring-blue-500'
+                          : 'border-slate-200 focus:border-alpine-500 focus:ring-alpine-500'
                       } rounded-xl focus:ring-2 focus:ring-offset-0 transition-all text-slate-900 placeholder-slate-400`}
                       autoFocus
                     />
@@ -3098,7 +3098,7 @@ const RichTextEditor = forwardRef<RichTextEditorHandle, RichTextEditorProps>(
                       }
                     }}
                     placeholder="Custom display text"
-                    className="w-full px-4 py-3 border-2 border-slate-200 rounded-xl focus:border-blue-500 focus:ring-2 focus:ring-blue-500 focus:ring-offset-0 transition-all text-slate-900 placeholder-slate-400"
+                    className="w-full px-4 py-3 border-2 border-slate-200 rounded-xl focus:border-alpine-500 focus:ring-2 focus:ring-alpine-500 focus:ring-offset-0 transition-all text-slate-900 placeholder-slate-400"
                   />
                   <p className="mt-2 text-xs text-slate-500">
                     Leave empty to use the URL as display text
@@ -3121,10 +3121,10 @@ const RichTextEditor = forwardRef<RichTextEditorHandle, RichTextEditorProps>(
                             setLinkText(recent.text)
                             setLinkUrlError('')
                           }}
-                          className="w-full px-3 py-2 text-left rounded-lg border border-slate-200 hover:border-blue-300 hover:bg-blue-50 transition-all group"
+                          className="w-full px-3 py-2 text-left rounded-lg border border-slate-200 hover:border-alpine-300 hover:bg-alpine-50 transition-all group"
                         >
                           <div className="flex items-center gap-2">
-                            <ExternalLink size={14} className="text-slate-400 group-hover:text-blue-600" />
+                            <ExternalLink size={14} className="text-slate-400 group-hover:text-alpine-600" />
                             <div className="flex-1 min-w-0">
                               <p className="text-sm font-medium text-slate-700 truncate">
                                 {recent.text}
@@ -3156,7 +3156,7 @@ const RichTextEditor = forwardRef<RichTextEditorHandle, RichTextEditorProps>(
                   <button
                     onClick={applyLink}
                     disabled={!linkUrl.trim()}
-                    className="px-5 py-2.5 bg-gradient-to-r from-blue-600 to-blue-700 text-white rounded-xl hover:from-blue-700 hover:to-blue-800 disabled:opacity-50 disabled:cursor-not-allowed transition-all font-medium shadow-lg shadow-blue-500/30 disabled:shadow-none flex items-center gap-2"
+                    className="px-5 py-2.5 bg-gradient-to-r from-alpine-600 to-alpine-700 text-white rounded-xl hover:from-alpine-700 hover:to-alpine-800 disabled:opacity-50 disabled:cursor-not-allowed transition-all font-medium shadow-lg shadow-alpine-500/30 disabled:shadow-none flex items-center gap-2"
                   >
                     <Check size={18} />
                     Insert Link
@@ -3179,8 +3179,8 @@ const RichTextEditor = forwardRef<RichTextEditorHandle, RichTextEditorProps>(
             onMouseLeave={hideLinkPopover}
           >
             <div className="flex items-start gap-3">
-              <div className="p-2 bg-blue-100 rounded-lg flex-shrink-0">
-                <ExternalLink size={16} className="text-blue-600" />
+              <div className="p-2 bg-alpine-100 rounded-lg flex-shrink-0">
+                <ExternalLink size={16} className="text-alpine-600" />
               </div>
               <div className="flex-1 min-w-0">
                 <p className="text-sm font-semibold text-slate-900 truncate mb-1">
@@ -3190,7 +3190,7 @@ const RichTextEditor = forwardRef<RichTextEditorHandle, RichTextEditorProps>(
                   href={hoveredLinkElement.href}
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="text-xs text-blue-600 hover:text-blue-800 truncate block mb-2"
+                  className="text-xs text-alpine-600 hover:text-alpine-800 truncate block mb-2"
                   onClick={(e) => e.stopPropagation()}
                 >
                   {hoveredLinkElement.href}
@@ -3198,7 +3198,7 @@ const RichTextEditor = forwardRef<RichTextEditorHandle, RichTextEditorProps>(
                 <div className="flex items-center gap-2">
                   <button
                     onClick={() => openLink(hoveredLinkElement.href)}
-                    className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-blue-600 bg-blue-50 hover:bg-blue-100 rounded-lg transition-colors"
+                    className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-alpine-600 bg-alpine-50 hover:bg-alpine-100 rounded-lg transition-colors"
                     title="Open link in new tab"
                   >
                     <ExternalLink size={14} />
@@ -3275,12 +3275,12 @@ const RichTextEditor = forwardRef<RichTextEditorHandle, RichTextEditorProps>(
                       value={searchQuery}
                       onChange={(e) => setSearchQuery(e.target.value)}
                       placeholder="Search text..."
-                      className="flex-1 px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                      className="flex-1 px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-alpine-500 focus:border-transparent"
                       autoFocus
                     />
                     <button
                       onClick={performSearch}
-                      className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors"
+                      className="px-4 py-2 bg-alpine-600 text-white rounded-md hover:bg-alpine-700 transition-colors"
                     >
                       Find
                     </button>
@@ -3314,7 +3314,7 @@ const RichTextEditor = forwardRef<RichTextEditorHandle, RichTextEditorProps>(
                     value={replaceQuery}
                     onChange={(e) => setReplaceQuery(e.target.value)}
                     placeholder="Replacement text..."
-                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-alpine-500 focus:border-transparent"
                   />
                 </div>
                 <div className="flex items-center gap-2">
@@ -3339,7 +3339,7 @@ const RichTextEditor = forwardRef<RichTextEditorHandle, RichTextEditorProps>(
                   <button
                     onClick={replaceAllMatches}
                     disabled={searchMatches.length === 0}
-                    className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                    className="px-4 py-2 bg-alpine-600 text-white rounded-md hover:bg-alpine-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
                   >
                     Replace All
                   </button>
@@ -3371,7 +3371,7 @@ const RichTextEditor = forwardRef<RichTextEditorHandle, RichTextEditorProps>(
                         onMouseLeave={() => { setHoverRows(null); setHoverCols(null) }}
                         onClick={() => { setTableRows(r + 1); setTableCols(c + 1) }}
                         aria-label={`${r + 1} by ${c + 1}`}
-                        className={`w-6 h-6 rounded-sm border ${isActive ? 'bg-blue-500 border-blue-500' : 'bg-white border-gray-200'} focus:outline-none`}
+                        className={`w-6 h-6 rounded-sm border ${isActive ? 'bg-alpine-500 border-alpine-500' : 'bg-white border-gray-200'} focus:outline-none`}
                       />
                     )
                   })}
@@ -3393,7 +3393,7 @@ const RichTextEditor = forwardRef<RichTextEditorHandle, RichTextEditorProps>(
                     insertCustomBlock('table', { rows: tableRows, cols: tableCols })
                     forceWebViewFocus()
                   }}
-                  className="px-3 py-1 rounded bg-blue-600 text-white text-sm"
+                  className="px-3 py-1 rounded bg-alpine-600 text-white text-sm"
                 >
                   Insert
                 </button>

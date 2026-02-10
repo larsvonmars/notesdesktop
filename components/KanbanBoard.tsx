@@ -87,13 +87,13 @@ function TaskCard({ task, onClick, isDragging, onToggleStar, onToggleComplete }:
   const priorityColors = {
     urgent: 'border-l-red-500 shadow-red-100',
     high: 'border-l-orange-500 shadow-orange-100',
-    medium: 'border-l-blue-500 shadow-blue-100',
+    medium: 'border-l-alpine-500 shadow-alpine-100',
     low: 'border-l-gray-400 shadow-gray-100',
   };
 
   const statusColors = {
     todo: 'bg-gradient-to-br from-gray-50 to-gray-100',
-    in_progress: 'bg-gradient-to-br from-blue-50 to-blue-100',
+    in_progress: 'bg-gradient-to-br from-alpine-50 to-alpine-100',
     waiting: 'bg-gradient-to-br from-amber-50 to-amber-100',
     completed: 'bg-gradient-to-br from-emerald-50 to-emerald-100',
     cancelled: 'bg-gradient-to-br from-gray-50 to-gray-100',
@@ -106,7 +106,7 @@ function TaskCard({ task, onClick, isDragging, onToggleStar, onToggleComplete }:
 
   const statusBadges: Record<string, string> = {
     todo: 'bg-gray-200 text-gray-700',
-    in_progress: 'bg-blue-100 text-blue-700',
+    in_progress: 'bg-alpine-100 text-alpine-700',
     waiting: 'bg-amber-100 text-amber-700',
     completed: 'bg-emerald-100 text-emerald-700',
     cancelled: 'bg-gray-100 text-gray-500',
@@ -129,7 +129,7 @@ function TaskCard({ task, onClick, isDragging, onToggleStar, onToggleComplete }:
         group bg-white border-l-4 ${priorityColors[task.priority]}
         rounded-lg p-3 shadow-md hover:shadow-xl transition-all duration-200 cursor-pointer
         ${statusColors[task.status]}
-        ${isDragging ? 'opacity-50 ring-4 ring-blue-300 scale-105' : 'hover:scale-[1.02]'}
+        ${isDragging ? 'opacity-50 ring-4 ring-alpine-300 scale-105' : 'hover:scale-[1.02]'}
         ${task.status === 'completed' ? 'opacity-75' : ''}
         transform
       `}
@@ -203,11 +203,11 @@ function TaskCard({ task, onClick, isDragging, onToggleStar, onToggleComplete }:
         <div className="mb-2">
           <div className="flex items-center justify-between mb-1">
             <span className="text-xs text-gray-500">Progress</span>
-            <span className="text-xs font-medium text-blue-600">{task.progress}%</span>
+            <span className="text-xs font-medium text-alpine-600">{task.progress}%</span>
           </div>
           <div className="w-full bg-gray-200 rounded-full h-2 overflow-hidden shadow-inner">
             <div
-              className="bg-gradient-to-r from-blue-500 to-blue-600 h-2 rounded-full transition-all duration-300 shadow-sm"
+              className="bg-gradient-to-r from-alpine-500 to-alpine-600 h-2 rounded-full transition-all duration-300 shadow-sm"
               style={{ width: `${task.progress}%` }}
             />
           </div>
@@ -356,7 +356,7 @@ function KanbanColumnComponent({
     <div 
       ref={setNodeRef} 
       className={`flex flex-col h-full bg-white rounded-xl shadow-md border border-gray-200 transition-all duration-200 ${
-        isOver ? 'ring-4 ring-blue-400 ring-opacity-50 bg-blue-50 scale-[1.02]' : ''
+        isOver ? 'ring-4 ring-alpine-400 ring-opacity-50 bg-alpine-50 scale-[1.02]' : ''
       }`}
     >
       {/* Column Header */}
@@ -384,7 +384,7 @@ function KanbanColumnComponent({
               <div className="flex-1 h-1.5 bg-gray-200 rounded-full overflow-hidden shadow-inner">
                 <div
                   className={`h-full transition-all duration-300 ${
-                    limitExceeded ? 'bg-gradient-to-r from-red-400 to-red-500' : 'bg-gradient-to-r from-blue-400 to-blue-500'
+                    limitExceeded ? 'bg-gradient-to-r from-red-400 to-red-500' : 'bg-gradient-to-r from-alpine-400 to-alpine-500'
                   }`}
                   style={{ width: `${limitProgress}%` }}
                 />
@@ -421,7 +421,7 @@ function KanbanColumnComponent({
                 <div>
                   <label className="block text-xs font-medium text-gray-700 mb-1">Column Name</label>
                   <input
-                    className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-alpine-500"
                     value={columnName}
                     onChange={(e) => setColumnName(e.target.value)}
                   />
@@ -442,7 +442,7 @@ function KanbanColumnComponent({
                       type="number"
                       min={0}
                       placeholder="None"
-                      className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-alpine-500"
                       value={columnLimit}
                       onChange={(e) => setColumnLimit(e.target.value)}
                     />
@@ -514,7 +514,7 @@ function KanbanColumnComponent({
             w-full flex items-center justify-center gap-2 py-2.5 px-3 rounded-lg text-sm font-medium transition-all duration-200
             ${isLimitReached
               ? 'bg-gray-200 text-gray-400 cursor-not-allowed'
-              : 'bg-gradient-to-r from-blue-500 to-blue-600 text-white hover:from-blue-600 hover:to-blue-700 shadow-md hover:shadow-lg active:scale-95'
+              : 'bg-gradient-to-r from-alpine-500 to-alpine-600 text-white hover:from-alpine-600 hover:to-alpine-700 shadow-md hover:shadow-lg active:scale-95'
             }
           `}
         >
@@ -921,7 +921,7 @@ export default function KanbanBoard({ boardId, onTaskClick, onCreateTask }: Kanb
     return (
       <div className="flex items-center justify-center h-full">
         <div className="text-center">
-          <div className="w-8 h-8 border-4 border-blue-500 border-t-transparent rounded-full animate-spin mx-auto mb-2" />
+          <div className="w-8 h-8 border-4 border-alpine-500 border-t-transparent rounded-full animate-spin mx-auto mb-2" />
           <p className="text-sm text-gray-600">Loading board...</p>
         </div>
       </div>
@@ -939,7 +939,7 @@ export default function KanbanBoard({ boardId, onTaskClick, onCreateTask }: Kanb
   }
 
   return (
-    <div className="h-full flex flex-col bg-gradient-to-br from-gray-50 to-blue-50">
+    <div className="h-full flex flex-col bg-gradient-to-br from-gray-50 to-alpine-50">
       {/* Board Header */}
       <div className="bg-white border-b border-gray-200 shadow-sm">
         <div className="flex items-center justify-between p-4">
@@ -976,7 +976,7 @@ export default function KanbanBoard({ boardId, onTaskClick, onCreateTask }: Kanb
         {/* Stats Bar */}
         <div className="flex items-center gap-6 px-4 py-3 bg-gray-50 border-t border-gray-200">
           <div className="flex items-center gap-2">
-            <div className="w-2 h-2 rounded-full bg-blue-500" />
+            <div className="w-2 h-2 rounded-full bg-alpine-500" />
             <span className="text-sm text-gray-600">Total: <span className="font-medium text-gray-900">{boardStats.total}</span></span>
           </div>
           <div className="flex items-center gap-2">
@@ -1010,7 +1010,7 @@ export default function KanbanBoard({ boardId, onTaskClick, onCreateTask }: Kanb
             <select
               value={filters.priority}
               onChange={(e) => setFilters(prev => ({ ...prev, priority: e.target.value as any }))}
-              className="text-xs border border-gray-200 rounded px-2 py-1 focus:outline-none focus:ring-2 focus:ring-blue-500"
+              className="text-xs border border-gray-200 rounded px-2 py-1 focus:outline-none focus:ring-2 focus:ring-alpine-500"
             >
               <option value="all">All Priorities</option>
               <option value="urgent">Urgent</option>
@@ -1021,7 +1021,7 @@ export default function KanbanBoard({ boardId, onTaskClick, onCreateTask }: Kanb
             <select
               value={filters.status}
               onChange={(e) => setFilters(prev => ({ ...prev, status: e.target.value as any }))}
-              className="text-xs border border-gray-200 rounded px-2 py-1 focus:outline-none focus:ring-2 focus:ring-blue-500"
+              className="text-xs border border-gray-200 rounded px-2 py-1 focus:outline-none focus:ring-2 focus:ring-alpine-500"
             >
               <option value="all">All Statuses</option>
               <option value="todo">To Do</option>
@@ -1034,7 +1034,7 @@ export default function KanbanBoard({ boardId, onTaskClick, onCreateTask }: Kanb
               <select
                 value={filters.label}
                 onChange={(e) => setFilters(prev => ({ ...prev, label: e.target.value }))}
-                className="text-xs border border-gray-200 rounded px-2 py-1 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                className="text-xs border border-gray-200 rounded px-2 py-1 focus:outline-none focus:ring-2 focus:ring-alpine-500"
               >
                 <option value="all">All Labels</option>
                 {labelOptions.map(label => (
@@ -1078,14 +1078,14 @@ export default function KanbanBoard({ boardId, onTaskClick, onCreateTask }: Kanb
 
       {/* Add Column Form */}
       {showAddColumnForm && (
-        <div className="px-4 py-3 bg-blue-50 border-b border-blue-100">
+        <div className="px-4 py-3 bg-alpine-50 border-b border-alpine-100">
           <form onSubmit={handleCreateColumn} className="flex items-center gap-3">
             <input
               type="text"
               placeholder="Column name..."
               value={newColumnName}
               onChange={(e) => setNewColumnName(e.target.value)}
-              className="flex-1 text-sm border border-blue-200 rounded px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
+              className="flex-1 text-sm border border-alpine-200 rounded px-3 py-2 focus:outline-none focus:ring-2 focus:ring-alpine-500"
               autoFocus
             />
             <div className="flex items-center gap-2">
@@ -1093,20 +1093,20 @@ export default function KanbanBoard({ boardId, onTaskClick, onCreateTask }: Kanb
                 type="color"
                 value={newColumnColor}
                 onChange={(e) => setNewColumnColor(e.target.value)}
-                className="w-8 h-8 rounded border border-blue-200"
+                className="w-8 h-8 rounded border border-alpine-200"
               />
               <input
                 type="number"
                 placeholder="Limit"
                 value={newColumnLimit}
                 onChange={(e) => setNewColumnLimit(e.target.value)}
-                className="w-20 text-sm border border-blue-200 rounded px-2 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                className="w-20 text-sm border border-alpine-200 rounded px-2 py-2 focus:outline-none focus:ring-2 focus:ring-alpine-500"
                 min={0}
               />
             </div>
             <button
               type="submit"
-              className="px-4 py-2 text-sm font-medium text-white bg-blue-600 rounded-lg hover:bg-blue-700"
+              className="px-4 py-2 text-sm font-medium text-white bg-alpine-600 rounded-lg hover:bg-alpine-700"
             >
               Add
             </button>

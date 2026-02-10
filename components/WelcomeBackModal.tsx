@@ -31,7 +31,7 @@ const noteTypeIcon = (type: string) => {
     case 'drawing':
       return <PenTool size={16} className="text-purple-500" />
     default:
-      return <FileText size={16} className="text-blue-500" />
+      return <FileText size={16} className="text-alpine-500" />
   }
 }
 
@@ -129,11 +129,11 @@ export default function WelcomeBackModal({
 
   return (
     <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/60 p-4 sm:p-6">
-      <div className="flex w-full max-w-4xl max-h-[calc(100vh-2rem)] flex-col overflow-hidden rounded-2xl border border-gray-200 bg-white shadow-2xl sm:max-h-[calc(100vh-4rem)]">
+      <div className="flex w-full max-w-4xl max-h-[calc(100vh-2rem)] flex-col overflow-hidden rounded-2xl border border-alpine-100 bg-white/95 backdrop-blur-sm shadow-2xl sm:max-h-[calc(100vh-4rem)]">
         {/* Header */}
-        <header className="flex flex-col gap-3 border-b border-gray-200 px-4 py-4 sm:flex-row sm:items-center sm:justify-between sm:px-6">
+        <header className="flex flex-col gap-3 border-b border-alpine-100 bg-gradient-to-r from-alpine-50 to-peak-50 px-4 py-4 sm:flex-row sm:items-center sm:justify-between sm:px-6">
           <div className="flex flex-col gap-1">
-            <h2 className="text-2xl font-bold text-gray-900">Welcome Back! 👋</h2>
+            <h2 className="text-2xl font-bold text-gray-900">Welcome Back! 🏔️</h2>
             <p className="text-sm text-gray-600">Here&apos;s what you&apos;ve been working on</p>
           </div>
           <button
@@ -151,20 +151,20 @@ export default function WelcomeBackModal({
           {isLoading ? (
             <div className="flex items-center justify-center py-12">
               <div className="text-center">
-                <div className="inline-block h-8 w-8 animate-spin rounded-full border-4 border-solid border-blue-600 border-r-transparent"></div>
+                <div className="inline-block h-8 w-8 animate-spin rounded-full border-4 border-solid border-alpine-600 border-r-transparent"></div>
                 <p className="mt-3 text-sm text-gray-600">Loading your workspace...</p>
               </div>
             </div>
           ) : (
             <div className="grid gap-6 lg:grid-cols-2">
               {/* Open Tasks Section */}
-              <section className="flex flex-col rounded-2xl border border-gray-200 bg-gray-50">
+              <section className="flex flex-col rounded-2xl border border-alpine-100 bg-alpine-50/50">
                 <div className="flex items-center justify-between border-b border-gray-200 px-4 py-3">
                   <div className="flex items-center gap-2">
-                    <CheckSquare size={18} className="text-blue-600" />
+                    <CheckSquare size={18} className="text-alpine-600" />
                     <h3 className="text-sm font-semibold text-gray-900">Open Tasks</h3>
                   </div>
-                  <span className="rounded-full bg-blue-100 px-2 py-0.5 text-xs font-medium text-blue-700">
+                  <span className="rounded-full bg-alpine-100 px-2 py-0.5 text-xs font-medium text-alpine-700">
                     {openTasks.length}
                   </span>
                 </div>
@@ -190,7 +190,7 @@ export default function WelcomeBackModal({
                                 {task.status === 'completed' ? (
                                   <CheckCircle2 size={18} className="text-green-600" />
                                 ) : task.status === 'in_progress' ? (
-                                  <Circle size={18} className="text-blue-600 fill-blue-600" />
+                                  <Circle size={18} className="text-alpine-600 fill-alpine-600" />
                                 ) : (
                                   <Circle size={18} className="text-gray-400" />
                                 )}
@@ -225,13 +225,13 @@ export default function WelcomeBackModal({
               </section>
 
               {/* Recent Notes Section */}
-              <section className="flex flex-col rounded-2xl border border-gray-200 bg-gray-50">
-                <div className="flex items-center justify-between border-b border-gray-200 px-4 py-3">
+              <section className="flex flex-col rounded-2xl border border-peak-100 bg-peak-50/50">
+                <div className="flex items-center justify-between border-b border-peak-100 px-4 py-3">
                   <div className="flex items-center gap-2">
-                    <Clock size={18} className="text-purple-600" />
+                    <Clock size={18} className="text-peak-600" />
                     <h3 className="text-sm font-semibold text-gray-900">Recent Notes</h3>
                   </div>
-                  <span className="rounded-full bg-purple-100 px-2 py-0.5 text-xs font-medium text-purple-700">
+                  <span className="rounded-full bg-peak-100 px-2 py-0.5 text-xs font-medium text-peak-700">
                     {recentNotes.length}
                   </span>
                 </div>
@@ -275,14 +275,14 @@ export default function WelcomeBackModal({
         </div>
 
         {/* Footer */}
-        <footer className="border-t border-gray-200 px-4 py-3 sm:px-6">
+        <footer className="border-t border-alpine-100 px-4 py-3 sm:px-6">
           <div className="flex justify-end">
             <button
               type="button"
               onClick={onClose}
-              className="inline-flex items-center gap-2 rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700"
+              className="inline-flex items-center gap-2 rounded-lg bg-alpine-600 px-4 py-2 text-sm font-medium text-white hover:bg-alpine-700 shadow-sm"
             >
-              Get Started
+              Get Started 🏔️
             </button>
           </div>
         </footer>

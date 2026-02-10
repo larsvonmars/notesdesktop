@@ -266,9 +266,9 @@ export default function ProjectManager({
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50">
       <div className="bg-white rounded-xl shadow-2xl border border-gray-200 w-full max-w-4xl max-h-[80vh] flex flex-col overflow-hidden">
         {/* Header */}
-        <div className="flex items-center justify-between p-4 border-b border-gray-200 bg-gradient-to-r from-blue-50 to-indigo-50">
+        <div className="flex items-center justify-between p-4 border-b border-gray-200 bg-gradient-to-r from-alpine-50 to-indigo-50">
           <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-full bg-blue-500 flex items-center justify-center">
+            <div className="w-10 h-10 rounded-full bg-alpine-500 flex items-center justify-center">
               <TargetIcon size={20} className="text-white" />
             </div>
             <div>
@@ -295,12 +295,12 @@ export default function ProjectManager({
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
                 placeholder="Search projects..."
-                className="w-full pl-10 pr-4 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                className="w-full pl-10 pr-4 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-alpine-500"
               />
             </div>
             <button
               onClick={openCreateModal}
-              className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white font-medium rounded-lg hover:bg-blue-700 transition-colors"
+              className="flex items-center gap-2 px-4 py-2 bg-alpine-600 text-white font-medium rounded-lg hover:bg-alpine-700 transition-colors"
             >
               <Plus size={16} />
               New Project
@@ -312,7 +312,7 @@ export default function ProjectManager({
         <div className="flex-1 overflow-y-auto p-4">
           {isLoading ? (
             <div className="flex items-center justify-center py-12">
-              <Loader2 size={32} className="animate-spin text-blue-500" />
+              <Loader2 size={32} className="animate-spin text-alpine-500" />
             </div>
           ) : filteredProjects.length === 0 ? (
             <div className="text-center py-12">
@@ -328,7 +328,7 @@ export default function ProjectManager({
                   <p className="text-sm text-gray-400">Create your first project to get started</p>
                   <button
                     onClick={openCreateModal}
-                    className="mt-4 px-4 py-2 bg-blue-600 text-white font-medium rounded-lg hover:bg-blue-700 transition-colors"
+                    className="mt-4 px-4 py-2 bg-alpine-600 text-white font-medium rounded-lg hover:bg-alpine-700 transition-colors"
                   >
                     Create Project
                   </button>
@@ -425,7 +425,7 @@ export default function ProjectManager({
                                   <button
                                     key={folder.id}
                                     onClick={() => onSelectFolder?.(folder.id)}
-                                    className="w-full flex items-center gap-2 px-2 py-1.5 bg-white hover:bg-blue-50 rounded text-sm text-gray-700 transition-colors"
+                                    className="w-full flex items-center gap-2 px-2 py-1.5 bg-white hover:bg-alpine-50 rounded text-sm text-gray-700 transition-colors"
                                   >
                                     <FolderTree size={14} className="text-amber-500" />
                                     <span>{folder.name}</span>
@@ -446,14 +446,14 @@ export default function ProjectManager({
                                   <button
                                     key={note.id}
                                     onClick={() => onSelectNote?.(note)}
-                                    className="w-full flex items-center gap-2 px-2 py-1.5 bg-white hover:bg-blue-50 rounded text-sm text-gray-700 transition-colors"
+                                    className="w-full flex items-center gap-2 px-2 py-1.5 bg-white hover:bg-alpine-50 rounded text-sm text-gray-700 transition-colors"
                                   >
                                     {note.note_type === 'drawing' ? (
                                       <PenTool size={14} className="text-purple-500" />
                                     ) : note.note_type === 'mindmap' ? (
                                       <Network size={14} className="text-green-500" />
                                     ) : (
-                                      <FileText size={14} className="text-blue-500" />
+                                      <FileText size={14} className="text-alpine-500" />
                                     )}
                                     <span>{note.title || 'Untitled'}</span>
                                   </button>
@@ -510,7 +510,7 @@ export default function ProjectManager({
                   value={projectName}
                   onChange={(e) => setProjectName(e.target.value)}
                   placeholder="My Awesome Project"
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-alpine-500"
                   onKeyDown={(e) => {
                     if (e.key === 'Enter') {
                       showCreateModal ? handleCreateProject() : handleUpdateProject()
@@ -531,7 +531,7 @@ export default function ProjectManager({
                   onChange={(e) => setProjectDescription(e.target.value)}
                   placeholder="What's this project about?"
                   rows={3}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none"
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-alpine-500 resize-none"
                 />
               </div>
               
@@ -545,7 +545,7 @@ export default function ProjectManager({
                       key={color}
                       onClick={() => setProjectColor(color)}
                       className={`w-8 h-8 rounded-full transition-all ${
-                        projectColor === color ? 'ring-2 ring-offset-2 ring-blue-500' : ''
+                        projectColor === color ? 'ring-2 ring-offset-2 ring-alpine-500' : ''
                       }`}
                       style={{ backgroundColor: color }}
                       title={color}
@@ -568,7 +568,7 @@ export default function ProjectManager({
               <button
                 onClick={showCreateModal ? handleCreateProject : handleUpdateProject}
                 disabled={!projectName.trim()}
-                className="px-4 py-2 text-sm font-medium text-white bg-blue-600 rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                className="px-4 py-2 text-sm font-medium text-white bg-alpine-600 rounded-lg hover:bg-alpine-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
               >
                 {showCreateModal ? 'Create' : 'Save'}
               </button>

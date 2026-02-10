@@ -23,7 +23,7 @@ export default function KeyboardShortcutsHelp({ isOpen, onClose }: KeyboardShort
         {/* Header */}
         <div className="flex items-center justify-between p-6 border-b">
           <div className="flex items-center gap-2">
-            <Keyboard size={24} className="text-blue-600" />
+            <Keyboard size={24} className="text-alpine-600" />
             <h2 className="text-xl font-semibold text-gray-900">Keyboard Shortcuts</h2>
           </div>
           <button
@@ -75,7 +75,7 @@ export default function KeyboardShortcutsHelp({ isOpen, onClose }: KeyboardShort
               {AUTOFORMAT_HELP.map((item, index) => (
                 <div key={index} className="flex items-center justify-between py-2 px-3 rounded hover:bg-gray-50">
                   <span className="text-gray-700 text-sm">{item.description}</span>
-                  <code className="px-2 py-1 text-xs font-mono bg-blue-50 text-blue-700 rounded border border-blue-200">
+                  <code className="px-2 py-1 text-xs font-mono bg-alpine-50 text-alpine-700 rounded border border-alpine-200">
                     {item.pattern}
                   </code>
                 </div>
@@ -84,13 +84,13 @@ export default function KeyboardShortcutsHelp({ isOpen, onClose }: KeyboardShort
           </div>
 
           {/* Additional Tips */}
-          <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
-            <h4 className="text-sm font-semibold text-blue-900 mb-2">💡 Pro Tips</h4>
-            <ul className="text-sm text-blue-800 space-y-1">
+          <div className="bg-alpine-50 border border-alpine-200 rounded-lg p-4">
+            <h4 className="text-sm font-semibold text-alpine-900 mb-2">💡 Pro Tips</h4>
+            <ul className="text-sm text-alpine-800 space-y-1">
               <li>• Select text to see the floating toolbar for quick formatting</li>
               <li>• Paste Markdown text and it will be automatically converted</li>
               <li>• Drag and drop images to insert them (if supported)</li>
-              <li>• Use the slash command <code className="px-1 py-0.5 bg-blue-100 rounded">/</code> for quick access to all features</li>
+              <li>• Use the slash command <code className="px-1 py-0.5 bg-alpine-100 rounded">/</code> for quick access to all features</li>
             </ul>
           </div>
         </div>
@@ -99,7 +99,7 @@ export default function KeyboardShortcutsHelp({ isOpen, onClose }: KeyboardShort
         <div className="border-t p-4 bg-gray-50">
           <button
             onClick={onClose}
-            className="w-full px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors"
+            className="w-full px-4 py-2 bg-alpine-600 text-white rounded-md hover:bg-alpine-700 transition-colors"
           >
             Got it!
           </button>

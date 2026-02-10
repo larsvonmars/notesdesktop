@@ -120,7 +120,7 @@ export default function FixedToolbar({
                   disabled={disabled}
                   className={`inline-flex h-8 w-8 items-center justify-center rounded-lg transition-all duration-150 ${
                     isActive
-                      ? 'bg-blue-100 text-blue-700 ring-1 ring-blue-300'
+                      ? 'bg-alpine-100 text-alpine-700 ring-1 ring-alpine-300'
                       : 'text-gray-600 hover:bg-gray-100 hover:text-gray-900'
                   } ${
                     disabled ? 'opacity-40 cursor-not-allowed' : 'cursor-pointer'

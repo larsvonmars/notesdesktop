@@ -5,8 +5,12 @@ import { WebViewPolyfillsInitializer } from '@/components/WebViewPolyfillsInitia
 import ToastProvider from '@/components/ToastProvider'
 
 export const metadata: Metadata = {
-  title: 'Notes Desktop',
-  description: 'A desktop notes app with Supabase authentication',
+  title: 'Saentis Notes',
+  description: 'A beautifully crafted Alpine-themed desktop notes app',
+  icons: {
+    icon: '/favicon.ico',
+    apple: '/apple-touch-icon.png',
+  },
 }
 
 export default function RootLayout({

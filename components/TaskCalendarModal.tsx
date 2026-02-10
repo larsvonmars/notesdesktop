@@ -546,14 +546,14 @@ export default function TaskCalendarModal({
 
   const priorityColors = {
     low: 'bg-gray-100 text-gray-700 border-gray-300',
-    medium: 'bg-blue-100 text-blue-700 border-blue-300',
+    medium: 'bg-alpine-100 text-alpine-700 border-alpine-300',
     high: 'bg-orange-100 text-orange-700 border-orange-300',
     urgent: 'bg-red-100 text-red-700 border-red-300',
   }
 
   const priorityIcons = {
     low: <Flag size={14} className="text-gray-500" />,
-    medium: <Flag size={14} className="text-blue-500" />,
+    medium: <Flag size={14} className="text-alpine-500" />,
     high: <Flag size={14} className="text-orange-500" />,
     urgent: <Flag size={14} className="text-red-500" />,
   }
@@ -564,10 +564,10 @@ export default function TaskCalendarModal({
     <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/60 p-4">
       <div className="flex w-full max-w-7xl max-h-[90vh] flex-col overflow-hidden rounded-2xl border border-gray-200 bg-white shadow-2xl">
         {/* Header */}
-        <div className="flex items-center justify-between border-b border-gray-200 bg-blue-50 px-6 py-4">
+        <div className="flex items-center justify-between border-b border-gray-200 bg-alpine-50 px-6 py-4">
           <div className="flex items-center gap-4">
             <div className="flex items-center gap-2">
-              <CheckSquare size={24} className="text-blue-600" />
+              <CheckSquare size={24} className="text-alpine-600" />
               <h2 className="text-2xl font-bold text-gray-900">Tasks & Calendar</h2>
             </div>
 
@@ -576,7 +576,7 @@ export default function TaskCalendarModal({
               <button
                 onClick={() => setViewMode('tasks')}
                 className={`px-3 py-1.5 rounded-md text-sm font-medium transition-colors flex items-center gap-2 ${
-                  viewMode === 'tasks' ? 'bg-blue-600 text-white' : 'text-gray-600 hover:bg-gray-100'
+                  viewMode === 'tasks' ? 'bg-alpine-600 text-white' : 'text-gray-600 hover:bg-gray-100'
                 }`}
               >
                 <List size={16} />
@@ -585,7 +585,7 @@ export default function TaskCalendarModal({
               <button
                 onClick={() => setViewMode('kanban')}
                 className={`px-3 py-1.5 rounded-md text-sm font-medium transition-colors flex items-center gap-2 ${
-                  viewMode === 'kanban' ? 'bg-blue-600 text-white' : 'text-gray-600 hover:bg-gray-100'
+                  viewMode === 'kanban' ? 'bg-alpine-600 text-white' : 'text-gray-600 hover:bg-gray-100'
                 }`}
               >
                 <LayoutDashboard size={16} />
@@ -594,7 +594,7 @@ export default function TaskCalendarModal({
               <button
                 onClick={() => setViewMode('calendar')}
                 className={`px-3 py-1.5 rounded-md text-sm font-medium transition-colors flex items-center gap-2 ${
-                  viewMode === 'calendar' ? 'bg-blue-600 text-white' : 'text-gray-600 hover:bg-gray-100'
+                  viewMode === 'calendar' ? 'bg-alpine-600 text-white' : 'text-gray-600 hover:bg-gray-100'
                 }`}
               >
                 <Calendar size={16} />
@@ -603,7 +603,7 @@ export default function TaskCalendarModal({
               <button
                 onClick={() => setViewMode('timeline')}
                 className={`px-3 py-1.5 rounded-md text-sm font-medium transition-colors flex items-center gap-2 ${
-                  viewMode === 'timeline' ? 'bg-blue-600 text-white' : 'text-gray-600 hover:bg-gray-100'
+                  viewMode === 'timeline' ? 'bg-alpine-600 text-white' : 'text-gray-600 hover:bg-gray-100'
                 }`}
               >
                 <Clock size={16} />
@@ -628,7 +628,7 @@ export default function TaskCalendarModal({
               <div className="text-xs text-gray-500">Total</div>
             </div>
             <div className="text-center">
-              <div className="text-2xl font-bold text-blue-600">{stats.todo}</div>
+              <div className="text-2xl font-bold text-alpine-600">{stats.todo}</div>
               <div className="text-xs text-gray-500">To Do</div>
             </div>
             <div className="text-center">
@@ -663,7 +663,7 @@ export default function TaskCalendarModal({
               <div className="space-y-2">
                 <button
                   onClick={() => setShowTaskModal(true)}
-                  className="w-full px-4 py-2.5 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors flex items-center justify-center gap-2 font-medium shadow-sm"
+                  className="w-full px-4 py-2.5 bg-alpine-600 text-white rounded-lg hover:bg-alpine-700 transition-colors flex items-center justify-center gap-2 font-medium shadow-sm"
                 >
                   <Plus size={18} />
                   New Task
@@ -694,7 +694,7 @@ export default function TaskCalendarModal({
                       onClick={() => setTaskFilter(filter.value as TaskFilter)}
                       className={`w-full px-3 py-2 rounded-lg text-sm font-medium transition-colors flex items-center gap-2 ${
                         taskFilter === filter.value
-                          ? 'bg-blue-100 text-blue-700'
+                          ? 'bg-alpine-100 text-alpine-700'
                           : 'text-gray-600 hover:bg-gray-100'
                       }`}
                     >
@@ -748,7 +748,7 @@ export default function TaskCalendarModal({
             {isLoading ? (
               <div className="flex items-center justify-center h-full">
                 <div className="text-center">
-                  <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto mb-4" />
+                  <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-alpine-600 mx-auto mb-4" />
                   <p className="text-gray-500">Loading...</p>
                 </div>
               </div>
@@ -761,7 +761,7 @@ export default function TaskCalendarModal({
                     <p className="text-gray-500">No tasks found</p>
                     <button
                       onClick={() => setShowTaskModal(true)}
-                      className="mt-4 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
+                      className="mt-4 px-4 py-2 bg-alpine-600 text-white rounded-lg hover:bg-alpine-700 transition-colors"
                     >
                       Create your first task
                     </button>
@@ -784,7 +784,7 @@ export default function TaskCalendarModal({
                           {task.status === 'completed' ? (
                             <CheckCircle2 size={20} className="text-green-600" />
                           ) : (
-                            <Circle size={20} className="text-gray-400 hover:text-blue-600" />
+                            <Circle size={20} className="text-gray-400 hover:text-alpine-600" />
                           )}
                         </button>
 
@@ -907,10 +907,10 @@ export default function TaskCalendarModal({
                       <div
                         key={day.toISOString()}
                         className={`aspect-square border rounded-lg p-2 hover:bg-gray-50 transition-colors ${
-                          isToday ? 'border-blue-500 bg-blue-50' : 'border-gray-200'
+                          isToday ? 'border-alpine-500 bg-alpine-50' : 'border-gray-200'
                         }`}
                       >
-                        <div className={`text-sm font-medium mb-1 ${isToday ? 'text-blue-600' : 'text-gray-900'}`}>
+                        <div className={`text-sm font-medium mb-1 ${isToday ? 'text-alpine-600' : 'text-gray-900'}`}>
                           {day.getDate()}
                         </div>
                         <div className="space-y-1">
@@ -925,7 +925,7 @@ export default function TaskCalendarModal({
                           {dayTasks.slice(0, 2).map(task => (
                             <div
                               key={task.id}
-                              className="text-xs truncate px-1 py-0.5 rounded bg-blue-100 text-blue-700"
+                              className="text-xs truncate px-1 py-0.5 rounded bg-alpine-100 text-alpine-700"
                             >
                               {task.title}
                             </div>
@@ -957,7 +957,7 @@ export default function TaskCalendarModal({
               ) : (
                 <div className="flex items-center justify-center h-full">
                   <div className="text-center">
-                    <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto mb-4" />
+                    <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-alpine-600 mx-auto mb-4" />
                     <p className="text-gray-500">Loading Kanban board...</p>
                   </div>
                 </div>
@@ -1009,7 +1009,7 @@ export default function TaskCalendarModal({
                                 href={event.meeting_url}
                                 target="_blank"
                                 rel="noopener noreferrer"
-                                className="inline-flex items-center gap-1 text-blue-600 hover:underline"
+                                className="inline-flex items-center gap-1 text-alpine-600 hover:underline"
                               >
                                 <Link2 size={12} />
                                 Join Meeting
@@ -1037,7 +1037,7 @@ export default function TaskCalendarModal({
                   value={taskTitle}
                   onChange={e => setTaskTitle(e.target.value)}
                   placeholder="Task title"
-                  className="w-full px-4 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  className="w-full px-4 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-alpine-500 focus:border-transparent"
                   autoFocus
                 />
                 <textarea
@@ -1045,7 +1045,7 @@ export default function TaskCalendarModal({
                   onChange={e => setTaskDescription(e.target.value)}
                   placeholder="Description (optional)"
                   rows={3}
-                  className="w-full px-4 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent resize-none"
+                  className="w-full px-4 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-alpine-500 focus:border-transparent resize-none"
                 />
                 <div className="grid grid-cols-2 gap-4">
                   <div>
@@ -1053,7 +1053,7 @@ export default function TaskCalendarModal({
                     <select
                       value={taskStatus}
                       onChange={e => setTaskStatus(e.target.value as TaskStatus)}
-                      className="w-full px-4 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                      className="w-full px-4 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-alpine-500 focus:border-transparent"
                     >
                       <option value="todo">To Do</option>
                       <option value="in_progress">In Progress</option>
@@ -1065,7 +1065,7 @@ export default function TaskCalendarModal({
                     <select
                       value={taskPriority}
                       onChange={e => setTaskPriority(e.target.value as TaskPriority)}
-                      className="w-full px-4 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                      className="w-full px-4 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-alpine-500 focus:border-transparent"
                     >
                       <option value="low">Low</option>
                       <option value="medium">Medium</option>
@@ -1079,12 +1079,12 @@ export default function TaskCalendarModal({
                   value={taskDueDate}
                   onChange={e => setTaskDueDate(e.target.value)}
                   placeholder="Due date"
-                  className="w-full px-4 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  className="w-full px-4 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-alpine-500 focus:border-transparent"
                 />
                 <select
                   value={selectedTaskList}
                   onChange={e => setSelectedTaskList(e.target.value)}
-                  className="w-full px-4 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  className="w-full px-4 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-alpine-500 focus:border-transparent"
                 >
                   <option value="">No List</option>
                   {taskLists.map(list => (
@@ -1106,7 +1106,7 @@ export default function TaskCalendarModal({
                   <button
                     onClick={handleCreateTask}
                     disabled={isSaving || !taskTitle.trim()}
-                    className="flex-1 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50"
+                    className="flex-1 px-4 py-2 bg-alpine-600 text-white rounded-lg hover:bg-alpine-700 disabled:opacity-50"
                   >
                     {isSaving ? 'Creating...' : 'Create Task'}
                   </button>
@@ -1214,7 +1214,7 @@ export default function TaskCalendarModal({
                   type="text"
                   value={taskTitle}
                   onChange={e => setTaskTitle(e.target.value)}
-                  className="w-full px-4 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  className="w-full px-4 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-alpine-500 focus:border-transparent"
                 />
               </div>
 
@@ -1225,7 +1225,7 @@ export default function TaskCalendarModal({
                   value={taskDescription}
                   onChange={e => setTaskDescription(e.target.value)}
                   rows={4}
-                  className="w-full px-4 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent resize-none"
+                  className="w-full px-4 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-alpine-500 focus:border-transparent resize-none"
                   placeholder="Add a description..."
                 />
               </div>
@@ -1237,7 +1237,7 @@ export default function TaskCalendarModal({
                   <select
                     value={taskStatus}
                     onChange={e => setTaskStatus(e.target.value as TaskStatus)}
-                    className="w-full px-4 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                    className="w-full px-4 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-alpine-500 focus:border-transparent"
                   >
                     <option value="todo">To Do</option>
                     <option value="in_progress">In Progress</option>
@@ -1251,7 +1251,7 @@ export default function TaskCalendarModal({
                   <select
                     value={taskPriority}
                     onChange={e => setTaskPriority(e.target.value as TaskPriority)}
-                    className="w-full px-4 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                    className="w-full px-4 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-alpine-500 focus:border-transparent"
                   >
                     <option value="low">Low</option>
                     <option value="medium">Medium</option>
@@ -1269,7 +1269,7 @@ export default function TaskCalendarModal({
                     type="datetime-local"
                     value={taskStartDate}
                     onChange={e => setTaskStartDate(e.target.value)}
-                    className="w-full px-4 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                    className="w-full px-4 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-alpine-500 focus:border-transparent"
                   />
                 </div>
                 <div>
@@ -1278,7 +1278,7 @@ export default function TaskCalendarModal({
                     type="datetime-local"
                     value={taskDueDate}
                     onChange={e => setTaskDueDate(e.target.value)}
-                    className="w-full px-4 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                    className="w-full px-4 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-alpine-500 focus:border-transparent"
                   />
                 </div>
               </div>
@@ -1292,7 +1292,7 @@ export default function TaskCalendarModal({
                   onChange={e => setTaskEstimatedMinutes(e.target.value)}
                   min="0"
                   placeholder="e.g., 60"
-                  className="w-full px-4 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  className="w-full px-4 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-alpine-500 focus:border-transparent"
                 />
               </div>
 
@@ -1302,7 +1302,7 @@ export default function TaskCalendarModal({
                 <select
                   value={selectedTaskList}
                   onChange={e => setSelectedTaskList(e.target.value)}
-                  className="w-full px-4 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  className="w-full px-4 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-alpine-500 focus:border-transparent"
                 >
                   <option value="">No List</option>
                   {taskLists.map(list => (
@@ -1344,7 +1344,7 @@ export default function TaskCalendarModal({
                       setSelectedTags([...selectedTags, e.target.value])
                     }
                   }}
-                  className="w-full px-4 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  className="w-full px-4 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-alpine-500 focus:border-transparent"
                 >
                   <option value="">Add a tag...</option>
                   {tags
@@ -1374,7 +1374,7 @@ export default function TaskCalendarModal({
                           {subtask.is_completed ? (
                             <CheckCircle2 size={18} className="text-green-600" />
                           ) : (
-                            <Circle size={18} className="text-gray-400 hover:text-blue-600" />
+                            <Circle size={18} className="text-gray-400 hover:text-alpine-600" />
                           )}
                         </button>
                         <span
@@ -1402,7 +1402,7 @@ export default function TaskCalendarModal({
                     </div>
                     <div className="w-full bg-gray-200 rounded-full h-2">
                       <div
-                        className="bg-blue-600 h-2 rounded-full transition-all"
+                        className="bg-alpine-600 h-2 rounded-full transition-all"
                         style={{ width: `${editingTask.completion_percentage}%` }}
                       />
                     </div>
@@ -1415,12 +1415,12 @@ export default function TaskCalendarModal({
                     onChange={e => setNewSubtaskTitle(e.target.value)}
                     onKeyPress={e => e.key === 'Enter' && handleAddSubtask()}
                     placeholder="Add a subtask..."
-                    className="flex-1 px-4 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                    className="flex-1 px-4 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-alpine-500 focus:border-transparent"
                   />
                   <button
                     onClick={handleAddSubtask}
                     disabled={!newSubtaskTitle.trim()}
-                    className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 flex items-center gap-2"
+                    className="px-4 py-2 bg-alpine-600 text-white rounded-lg hover:bg-alpine-700 disabled:opacity-50 flex items-center gap-2"
                   >
                     <Plus size={18} />
                   </button>
@@ -1468,7 +1468,7 @@ export default function TaskCalendarModal({
                 <button
                   onClick={handleUpdateTask}
                   disabled={isSaving || !taskTitle.trim()}
-                  className="flex-1 px-4 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 font-medium"
+                  className="flex-1 px-4 py-3 bg-alpine-600 text-white rounded-lg hover:bg-alpine-700 disabled:opacity-50 font-medium"
                 >
                   {isSaving ? 'Saving...' : 'Save Changes'}
                 </button>
