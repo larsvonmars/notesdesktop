@@ -1,0 +1,14 @@
+/Users/larsschell/Documents/vscode/notesdesktop/src-tauri/target/release/deps/serde-3c0b79289c659a20.d: /Users/larsschell/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/serde-1.0.228/src/lib.rs /Users/larsschell/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/serde-1.0.228/src/integer128.rs /Users/larsschell/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/serde-1.0.228/src/private/mod.rs /Users/larsschell/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/serde-1.0.228/src/private/de.rs /Users/larsschell/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/serde-1.0.228/src/private/ser.rs /Users/larsschell/Documents/vscode/notesdesktop/src-tauri/target/release/build/serde-a2ea9f8e38fdb50a/out/private.rs
+
+/Users/larsschell/Documents/vscode/notesdesktop/src-tauri/target/release/deps/libserde-3c0b79289c659a20.rlib: /Users/larsschell/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/serde-1.0.228/src/lib.rs /Users/larsschell/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/serde-1.0.228/src/integer128.rs /Users/larsschell/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/serde-1.0.228/src/private/mod.rs /Users/larsschell/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/serde-1.0.228/src/private/de.rs /Users/larsschell/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/serde-1.0.228/src/private/ser.rs /Users/larsschell/Documents/vscode/notesdesktop/src-tauri/target/release/build/serde-a2ea9f8e38fdb50a/out/private.rs
+
+/Users/larsschell/Documents/vscode/notesdesktop/src-tauri/target/release/deps/libserde-3c0b79289c659a20.rmeta: /Users/larsschell/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/serde-1.0.228/src/lib.rs /Users/larsschell/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/serde-1.0.228/src/integer128.rs /Users/larsschell/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/serde-1.0.228/src/private/mod.rs /Users/larsschell/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/serde-1.0.228/src/private/de.rs /Users/larsschell/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/serde-1.0.228/src/private/ser.rs /Users/larsschell/Documents/vscode/notesdesktop/src-tauri/target/release/build/serde-a2ea9f8e38fdb50a/out/private.rs
+
+/Users/larsschell/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/serde-1.0.228/src/lib.rs:
+/Users/larsschell/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/serde-1.0.228/src/integer128.rs:
+/Users/larsschell/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/serde-1.0.228/src/private/mod.rs:
+/Users/larsschell/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/serde-1.0.228/src/private/de.rs:
+/Users/larsschell/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/serde-1.0.228/src/private/ser.rs:
+/Users/larsschell/Documents/vscode/notesdesktop/src-tauri/target/release/build/serde-a2ea9f8e38fdb50a/out/private.rs:
+
+# env-dep:OUT_DIR=/Users/larsschell/Documents/vscode/notesdesktop/src-tauri/target/release/build/serde-a2ea9f8e38fdb50a/out

@@ -5,6 +5,14 @@
   "permissions": [
     "core:default",
     "shell:allow-open",
-    "opener:default"
+    "opener:default",
+    "notification:default",
+    {
+      "identifier": "fs:default",
+      "allow": [
+        { "path": "$APPDATA/**" },
+        { "path": "$APPDATA/images/**" }
+      ]
+    }
   ]
 }
