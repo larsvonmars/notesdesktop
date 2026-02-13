@@ -34,8 +34,8 @@ export default function Login() {
   }
 
   return (
-    <div className="flex items-center justify-center min-h-screen">
-      <div className="w-full max-w-md p-8 bg-white/80 backdrop-blur-sm rounded-2xl shadow-lg border border-alpine-100">
+    <div className="flex items-center justify-center min-h-screen px-4 safe-bottom">
+      <div className="w-full max-w-md p-6 sm:p-8 bg-white/80 backdrop-blur-sm rounded-2xl shadow-lg border border-alpine-100">
         <h1 className="text-2xl font-bold mb-1 text-center text-gray-900">
           Saentis Notes
         </h1>
@@ -58,7 +58,7 @@ export default function Login() {
               value={email}
               onChange={(e) => setEmail(e.target.value)}
               required
-              className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-alpine-500"
+              className="w-full px-4 py-3 text-base border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-alpine-500"
               placeholder="you@example.com"
             />
           </div>
@@ -73,7 +73,7 @@ export default function Login() {
               value={password}
               onChange={(e) => setPassword(e.target.value)}
               required
-              className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-alpine-500"
+              className="w-full px-4 py-3 text-base border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-alpine-500"
               placeholder="••••••••"
             />
           </div>
@@ -81,7 +81,7 @@ export default function Login() {
           <button
             type="submit"
             disabled={loading}
-            className="w-full bg-alpine-600 text-white py-2 px-4 rounded-md hover:bg-alpine-700 focus:outline-none focus:ring-2 focus:ring-alpine-500 focus:ring-offset-2 disabled:opacity-50 disabled:cursor-not-allowed"
+            className="w-full bg-alpine-600 text-white py-3 px-4 rounded-lg text-base font-medium hover:bg-alpine-700 focus:outline-none focus:ring-2 focus:ring-alpine-500 focus:ring-offset-2 disabled:opacity-50 disabled:cursor-not-allowed touch-target"
           >
             {loading ? 'Signing in...' : 'Sign In'}
           </button>

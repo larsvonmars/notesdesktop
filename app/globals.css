@@ -7,16 +7,43 @@
   :root {
     --alpine-gradient-from: #EFF8FF;
     --alpine-gradient-to:   #F0FDFA;
+    /* Safe area insets – filled by the OS on mobile devices with notches */
+    --sat: env(safe-area-inset-top, 0px);
+    --sar: env(safe-area-inset-right, 0px);
+    --sab: env(safe-area-inset-bottom, 0px);
+    --sal: env(safe-area-inset-left, 0px);
   }
 
   body {
     @apply bg-gradient-to-br from-[var(--alpine-gradient-from)] to-[var(--alpine-gradient-to)] min-h-screen;
+    /* Prevent pull-to-refresh and rubber-banding on mobile */
+    overscroll-behavior: none;
+    /* Prevent iOS text-size adjust on rotation */
+    -webkit-text-size-adjust: 100%;
   }
 
   /* Subtle frosted-glass card surfaces */
   .alpine-surface {
     @apply bg-white/80 backdrop-blur-sm;
   }
+}
+
+/* ─── Mobile-first responsive utilities ─── */
+@layer utilities {
+  /* Minimum touch-target helper – 44×44 per Apple HIG / Material 48dp */
+  .touch-target {
+    min-width: 44px;
+    min-height: 44px;
+  }
+
+  /* Safe-area padding helpers */
+  .safe-top    { padding-top:    var(--sat); }
+  .safe-right  { padding-right:  var(--sar); }
+  .safe-bottom { padding-bottom: var(--sab); }
+  .safe-left   { padding-left:   var(--sal); }
+  .safe-x      { padding-left: var(--sal); padding-right: var(--sar); }
+  .safe-y      { padding-top: var(--sat); padding-bottom: var(--sab); }
+  .safe-all    { padding: var(--sat) var(--sar) var(--sab) var(--sal); }
 }
 
 /* RichTextEditor Styles */
@@ -554,5 +581,26 @@
     display: block;
     height: 0;
     width: 0;
+  }
+}
+
+/* ─── Mobile-specific overrides ─── */
+@media (max-width: 767px) {
+  /* Always show image controls on touch devices (no hover) */
+  .image-block-container .image-delete-btn,
+  .image-block-container .image-resize-handle {
+    opacity: 1 !important;
+  }
+
+  /* Prevent horizontal overflow from toolbars */
+  body {
+    overflow-x: hidden;
+  }
+
+  /* Larger checkboxes for touch */
+  [contenteditable='true'] input[type='checkbox'] {
+    width: 20px;
+    height: 20px;
+    margin-right: 8px;
   }
 }

@@ -7,6 +7,7 @@ import NoteEditor, { Note } from '@/components/NoteEditor'
 import TaskCalendarModal from '@/components/TaskCalendarModal'
 import WelcomeBackModal from '@/components/WelcomeBackModal'
 import { Loader2, FileEdit, Sparkles, FileText, PenTool, Network, BookOpen, Table2, X } from 'lucide-react'
+import { useIsMobile } from '@/lib/useIsMobile'
 import type { NoteType } from '@/lib/notes'
 import { ToastContainer } from '@/components/NotificationCenter'
 import { initNotifications, destroyNotifications, type AppNotification } from '@/lib/notifications'
@@ -42,6 +43,7 @@ function WorkspaceContent() {
   const router = useRouter()
   const searchParams = useSearchParams()
   const toast = useToast()
+  const isMobile = useIsMobile()
   const [notes, setNotes] = useState<Note[]>([])
   const [allNotes, setAllNotes] = useState<Note[]>([])  // All notes for AI tool calling
   const [folders, setFolders] = useState<Folder[]>([])
@@ -746,16 +748,16 @@ function WorkspaceContent() {
             <div className="text-center p-8 max-w-md">
               <div className="relative mb-8">
                 <div className="absolute inset-0 bg-alpine-100 rounded-full blur-3xl opacity-40"></div>
-                <FileEdit className="relative w-24 h-24 text-alpine-500 mx-auto" strokeWidth={1.5} />
+                <FileEdit className={`relative text-alpine-500 mx-auto ${isMobile ? 'w-16 h-16' : 'w-24 h-24'}`} strokeWidth={1.5} />
               </div>
-              <h1 className="text-3xl font-bold text-gray-900 mb-3">Welcome to Saentis Notes</h1>
-              <p className="text-lg text-gray-600 mb-8">
+              <h1 className={`font-bold text-gray-900 mb-3 ${isMobile ? 'text-2xl' : 'text-3xl'}`}>Welcome to Saentis Notes</h1>
+              <p className={`text-gray-600 mb-8 ${isMobile ? 'text-base' : 'text-lg'}`}>
                 A distraction-free writing space, inspired by the Alps
               </p>
               <div className="space-y-3">
                 <button
                   onClick={() => handleNewNote()}
-                  className="w-full inline-flex items-center justify-center gap-3 px-6 py-3 bg-alpine-600 text-white font-medium rounded-lg hover:bg-alpine-700 transition-all duration-150 shadow-sm hover:shadow active:scale-95"
+                  className="w-full inline-flex items-center justify-center gap-3 px-6 py-3 bg-alpine-600 text-white font-medium rounded-lg hover:bg-alpine-700 transition-all duration-150 shadow-sm hover:shadow active:scale-95 touch-target"
                 >
                   <Sparkles size={20} />
                   Start Writing
@@ -777,7 +779,11 @@ function WorkspaceContent() {
           }}
         >
           <div
-            className="w-full max-w-3xl rounded-2xl border border-gray-200 bg-white p-6 shadow-2xl"
+            className={`bg-white p-6 ${
+              isMobile
+                ? 'fixed inset-0 overflow-y-auto safe-top safe-bottom'
+                : 'w-full max-w-3xl rounded-2xl border border-gray-200 shadow-2xl'
+            }`}
             onClick={(event) => event.stopPropagation()}
           >
             <div className="flex items-start justify-between gap-4">
@@ -793,12 +799,12 @@ function WorkspaceContent() {
                 <X size={18} />
               </button>
             </div>
-            <div className="mt-6 grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
+            <div className={`mt-6 grid gap-3 ${isMobile ? 'grid-cols-2' : 'sm:grid-cols-2 lg:grid-cols-5'}`}>
               {noteTypeOptions.map(({ type, label, description, icon: Icon, iconBg }) => (
                 <button
                   key={type}
                   onClick={() => handleSelectNoteType(type)}
-                  className="flex h-full flex-col gap-4 rounded-xl border border-gray-200 bg-white p-4 text-left transition hover:border-alpine-300 hover:shadow"
+                  className="flex h-full flex-col gap-4 rounded-xl border border-gray-200 bg-white p-4 text-left transition hover:border-alpine-300 hover:shadow active:scale-[0.98] touch-target"
                 >
                   <span className={`inline-flex h-10 w-10 items-center justify-center rounded-full ${iconBg}`}>
                     <Icon size={18} />

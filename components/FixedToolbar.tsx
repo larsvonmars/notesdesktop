@@ -23,6 +23,7 @@ import {
   EyeOff
 } from 'lucide-react'
 import { type RichTextCommand } from './RichTextEditor'
+import { useIsMobile } from '@/lib/useIsMobile'
 
 interface FixedToolbarProps {
   onCommand: (command: RichTextCommand) => void
@@ -62,10 +63,14 @@ export default function FixedToolbar({
   showBlockOutlines,
   onToggleBlockOutlines
 }: FixedToolbarProps) {
+  const isMobile = useIsMobile()
   const handleCommand = (command: RichTextCommand) => {
     if (disabled) return
     onCommand(command)
   }
+
+  const btnSize = isMobile ? 'h-10 w-10' : 'h-8 w-8'
+  const iconSize = isMobile ? 18 : 16
 
   const toolbarSections = [
     {
@@ -106,7 +111,7 @@ export default function FixedToolbar({
 
   return (
     <div className="sticky top-0 z-40 bg-white border-b border-gray-200 shadow-sm">
-      <div className="flex items-center gap-1 px-4 py-2 overflow-x-auto">
+      <div className="flex items-center gap-1 px-4 py-2 overflow-x-auto scrollbar-none">
         {/* Toolbar Sections */}
         {toolbarSections.map((section, sectionIndex) => (
           <div key={section.name} className="flex items-center gap-1">
@@ -118,7 +123,7 @@ export default function FixedToolbar({
                   type="button"
                   onClick={() => handleCommand(command)}
                   disabled={disabled}
-                  className={`inline-flex h-8 w-8 items-center justify-center rounded-lg transition-all duration-150 ${
+                  className={`inline-flex ${btnSize} items-center justify-center rounded-lg transition-all duration-150 flex-shrink-0 ${
                     isActive
                       ? 'bg-alpine-100 text-alpine-700 ring-1 ring-alpine-300'
                       : 'text-gray-600 hover:bg-gray-100 hover:text-gray-900'
@@ -128,7 +133,7 @@ export default function FixedToolbar({
                   title={`${label} (${commandShortcuts[command]})`}
                   aria-label={label}
                 >
-                  <Icon size={16} />
+                  <Icon size={iconSize} />
                 </button>
               )
             })}
@@ -148,13 +153,13 @@ export default function FixedToolbar({
             type="button"
             onClick={onShowTable}
             disabled={disabled}
-            className={`inline-flex h-8 w-8 items-center justify-center rounded-lg text-gray-600 transition-all duration-150 hover:bg-gray-100 hover:text-gray-900 ${
+            className={`inline-flex ${btnSize} items-center justify-center rounded-lg text-gray-600 transition-all duration-150 hover:bg-gray-100 hover:text-gray-900 flex-shrink-0 ${
               disabled ? 'opacity-40 cursor-not-allowed' : 'cursor-pointer'
             }`}
             title="Insert Table"
             aria-label="Insert Table"
           >
-            <TableIcon size={16} />
+            <TableIcon size={iconSize} />
           </button>
         )}
 
@@ -164,13 +169,13 @@ export default function FixedToolbar({
             type="button"
             onClick={onShowNoteLink}
             disabled={disabled}
-            className={`inline-flex h-8 w-8 items-center justify-center rounded-lg text-gray-600 transition-all duration-150 hover:bg-gray-100 hover:text-gray-900 ${
+            className={`inline-flex ${btnSize} items-center justify-center rounded-lg text-gray-600 transition-all duration-150 hover:bg-gray-100 hover:text-gray-900 flex-shrink-0 ${
               disabled ? 'opacity-40 cursor-not-allowed' : 'cursor-pointer'
             }`}
             title="Link to Note"
             aria-label="Link to Note"
           >
-            <FileText size={16} />
+            <FileText size={iconSize} />
           </button>
         )}
 
@@ -182,25 +187,25 @@ export default function FixedToolbar({
           type="button"
           onClick={() => handleCommand('undo')}
           disabled={disabled}
-          className={`inline-flex h-8 w-8 items-center justify-center rounded-lg text-gray-600 transition-all duration-150 hover:bg-gray-100 hover:text-gray-900 ${
+          className={`inline-flex ${btnSize} items-center justify-center rounded-lg text-gray-600 transition-all duration-150 hover:bg-gray-100 hover:text-gray-900 flex-shrink-0 ${
             disabled ? 'opacity-40 cursor-not-allowed' : 'cursor-pointer'
           }`}
           title={`Undo (${commandShortcuts.undo})`}
           aria-label="Undo"
         >
-          <Undo size={16} />
+          <Undo size={iconSize} />
         </button>
         <button
           type="button"
           onClick={() => handleCommand('redo')}
           disabled={disabled}
-          className={`inline-flex h-8 w-8 items-center justify-center rounded-lg text-gray-600 transition-all duration-150 hover:bg-gray-100 hover:text-gray-900 ${
+          className={`inline-flex ${btnSize} items-center justify-center rounded-lg text-gray-600 transition-all duration-150 hover:bg-gray-100 hover:text-gray-900 flex-shrink-0 ${
             disabled ? 'opacity-40 cursor-not-allowed' : 'cursor-pointer'
           }`}
           title={`Redo (${commandShortcuts.redo})`}
           aria-label="Redo"
         >
-          <Redo size={16} />
+          <Redo size={iconSize} />
         </button>
 
         {/* Divider */}
@@ -211,7 +216,7 @@ export default function FixedToolbar({
           type="button"
           onClick={onToggleBlockOutlines}
           disabled={disabled}
-          className={`inline-flex items-center gap-1.5 h-8 px-3 rounded-lg transition-all duration-150 text-sm font-medium ${
+          className={`inline-flex items-center gap-1.5 ${isMobile ? 'h-10 px-3' : 'h-8 px-3'} rounded-lg transition-all duration-150 text-sm font-medium flex-shrink-0 ${
             showBlockOutlines
               ? 'bg-purple-100 text-purple-700 ring-1 ring-purple-300'
               : 'text-gray-600 hover:bg-gray-100 hover:text-gray-900'

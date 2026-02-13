@@ -2,6 +2,7 @@
 
 import { useEffect, useState, useCallback, useRef } from 'react'
 import { Bold, Italic, Underline, Strikethrough, Code, Link as LinkIcon } from 'lucide-react'
+import { useIsMobile } from '@/lib/useIsMobile'
 
 interface SelectionToolbarProps {
   onCommand: (command: string) => void
@@ -23,6 +24,7 @@ export default function SelectionToolbar({
   const [position, setPosition] = useState<Position>({ top: 0, left: 0 })
   const toolbarRef = useRef<HTMLDivElement>(null)
   const [activeCommands, setActiveCommands] = useState<Set<string>>(new Set())
+  const isMobile = useIsMobile()
 
   const updatePosition = useCallback(() => {
     const selection = window.getSelection()
@@ -132,12 +134,12 @@ export default function SelectionToolbar({
           onMouseDown={(e) => e.preventDefault()}
           title={label}
           disabled={isDisabled}
-          className={`p-2 rounded hover:bg-gray-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed ${
+          className={`${isMobile ? 'p-3' : 'p-2'} rounded hover:bg-gray-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed ${
             activeCommands.has(command) ? 'bg-gray-700' : ''
           }`}
           aria-label={label}
         >
-          <Icon size={16} />
+          <Icon size={isMobile ? 20 : 16} />
         </button>
       ))}
     </div>

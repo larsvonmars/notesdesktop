@@ -66,6 +66,7 @@ import { getProjects, Project } from '../lib/projects'
 import NoteLinkDialog from './NoteLinkDialog'
 import DataSheetPickerDialog from './DataSheetPickerDialog'
 import KnowledgeGraphModal from './KnowledgeGraphModal'
+import { useIsMobile } from '@/lib/useIsMobile'
 import { noteLinkBlock } from '../lib/editor/noteLinkBlock'
 import { imageBlock } from '../lib/editor/imageBlock'
 import { dataSheetTableBlock, type DataSheetTablePayload } from '../lib/editor/dataSheetTableBlock'
@@ -159,6 +160,7 @@ export default function NoteEditor({
   onNotificationAction,
 }: NoteEditorWithPanelProps) {
   const toast = useToast()
+  const isMobile = useIsMobile()
   const [title, setTitle] = useState('')
   const [content, setContent] = useState('')
   const [drawingData, setDrawingData] = useState<DrawingData | null>(null)
@@ -1641,7 +1643,9 @@ export default function NoteEditor({
                 type="button"
                 onMouseDown={(event) => event.preventDefault()}
                 onClick={() => handleCommand(command)}
-                className={`inline-flex h-9 w-9 items-center justify-center rounded-full border text-gray-600 transition-colors focus:outline-none focus:ring-2 focus:ring-alpine-500 ${
+                className={`inline-flex items-center justify-center rounded-full border text-gray-600 transition-colors focus:outline-none focus:ring-2 focus:ring-alpine-500 ${
+                  isMobile ? 'h-11 w-11' : 'h-9 w-9'
+                } ${
                   isActive
                     ? 'border-alpine-300 bg-alpine-100 text-alpine-700'
                     : 'border-transparent hover:border-gray-300 hover:text-gray-900'
@@ -1669,7 +1673,9 @@ export default function NoteEditor({
                   handleCommand(command)
                 }
               }}
-              className="inline-flex h-9 w-9 items-center justify-center rounded-full border border-transparent text-gray-500 transition-colors hover:border-gray-300 hover:text-gray-800 focus:outline-none focus:ring-2 focus:ring-alpine-500"
+              className={`inline-flex items-center justify-center rounded-full border border-transparent text-gray-500 transition-colors hover:border-gray-300 hover:text-gray-800 focus:outline-none focus:ring-2 focus:ring-alpine-500 ${
+                isMobile ? 'h-11 w-11' : 'h-9 w-9'
+              }`}
               title={command ? `${label} (${commandShortcuts[command]})` : label}
             >
               {icon}
@@ -1679,8 +1685,8 @@ export default function NoteEditor({
       )}
 
       {/* Status Bar */}
-      <div className="fixed bottom-0 left-0 right-0 z-30 bg-gradient-to-r from-gray-50 to-gray-100 border-t border-gray-200 px-4 py-2">
-        <div className="flex items-center justify-between text-xs text-gray-600">
+      <div className="fixed bottom-0 left-0 right-0 z-30 bg-gradient-to-r from-gray-50 to-gray-100 border-t border-gray-200 px-4 py-2 safe-bottom">
+        <div className={`flex items-center justify-between text-xs text-gray-600 ${isMobile ? 'gap-2' : ''}`}>
           <div className="flex items-center gap-4">
             {/* Save Status */}
             <div className="flex items-center gap-1.5">
@@ -1702,16 +1708,16 @@ export default function NoteEditor({
               ) : null}
             </div>
 
-            {/* Folder Path */}
-            {note && (
+            {/* Folder Path - hidden on mobile */}
+            {note && !isMobile && (
               <div className="flex items-center gap-1.5 text-gray-500">
                 <FolderOpen size={12} />
                 <span>{folderPath}</span>
               </div>
             )}
 
-            {/* Project Badge */}
-            {note && projectInfo && (
+            {/* Project Badge - hidden on mobile */}
+            {note && projectInfo && !isMobile && (
               <div 
                 className="flex items-center gap-1.5 px-2 py-0.5 rounded-full text-xs font-medium"
                 style={{ 
@@ -1725,8 +1731,8 @@ export default function NoteEditor({
               </div>
             )}
 
-            {/* Note Type */}
-            {note && (
+            {/* Note Type - hidden on mobile */}
+            {note && !isMobile && (
               <div className="flex items-center gap-1.5 text-gray-500">
                 <span className="px-1.5 py-0.5 bg-gray-200 rounded text-[10px] font-medium uppercase">
                   {noteType === 'rich-text' ? 'Text' : noteType === 'drawing' ? 'Drawing' : noteType === 'mindmap' ? 'Mindmap' : noteType === 'data-sheet' ? 'Data Sheet' : 'Journal'}
@@ -1734,7 +1740,8 @@ export default function NoteEditor({
               </div>
             )}
 
-            {/* Project Manager Button */}
+            {/* Project Manager Button - hidden on mobile */}
+            {!isMobile && (
             <button
               onClick={() => setShowProjectsModal(true)}
               className="flex items-center gap-1.5 px-2 py-1 text-gray-600 hover:text-alpine-600 hover:bg-alpine-50 rounded transition-colors font-medium"
@@ -1743,6 +1750,7 @@ export default function NoteEditor({
               <Target size={14} className="text-alpine-500" />
               <span>Projects</span>
             </button>
+            )}
           </div>
 
           {/* Stats - Only for rich text notes */}
@@ -1913,7 +1921,9 @@ export default function NoteEditor({
       {noteType === 'rich-text' && !showContentBlocksMenu && (
         <button
           onClick={openContentBlocksMenu}
-          className="fixed right-6 bottom-24 z-40 w-14 h-14 rounded-full bg-alpine-600 hover:bg-alpine-700 text-white shadow-lg hover:shadow-xl transition-all duration-200 flex items-center justify-center group"
+          className={`fixed z-40 rounded-full bg-alpine-600 hover:bg-alpine-700 text-white shadow-lg hover:shadow-xl transition-all duration-200 flex items-center justify-center group ${
+            isMobile ? 'right-4 bottom-20 w-14 h-14 touch-target safe-bottom' : 'right-6 bottom-24 w-14 h-14'
+          }`}
           title="Insert content block"
         >
           <Plus size={24} className="transition-transform group-hover:rotate-90" />
@@ -1927,7 +1937,11 @@ export default function NoteEditor({
           onClick={() => hideContentBlocksMenu()}
         >
           <div 
-            className="bg-white rounded-xl shadow-2xl border border-gray-200 w-96 max-h-[80vh] overflow-hidden flex flex-col"
+            className={`bg-white shadow-2xl border border-gray-200 overflow-hidden flex flex-col ${
+              isMobile
+                ? 'fixed inset-x-0 bottom-0 rounded-t-2xl max-h-[70vh] safe-bottom'
+                : 'rounded-xl w-96 max-h-[80vh]'
+            }`}
             onClick={(e) => e.stopPropagation()}
           >
             {/* Header with search */}

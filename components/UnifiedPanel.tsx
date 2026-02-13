@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useRef, useEffect, useCallback, useMemo } from 'react'
+import { useIsMobile } from '@/lib/useIsMobile'
 import {
   Menu,
   X,
@@ -173,6 +174,7 @@ export default function UnifiedPanel({
   allNotes: allNotesForAI,
   onNotificationAction,
 }: UnifiedPanelProps) {
+  const isMobile = useIsMobile()
   const [isOpen, setIsOpen] = useState(false)
   const [activeTab, setActiveTab] = useState<'browse' | 'toc' | 'tasks' | 'ai'>('browse')
   const [showNotificationSettings, setShowNotificationSettings] = useState(false)
@@ -1270,18 +1272,32 @@ export default function UnifiedPanel({
       {/* Floating Menu Button — sits below the formatting toolbar */}
       <button
         onClick={() => setIsOpen(!isOpen)}
-        className="fixed top-14 right-6 z-50 p-3 bg-white border border-gray-200 rounded-2xl shadow-lg hover:shadow-xl hover:scale-105 transition-all duration-200 group"
+        className={`fixed z-50 bg-white border border-gray-200 rounded-2xl shadow-lg hover:shadow-xl hover:scale-105 transition-all duration-200 group ${
+          isMobile ? 'top-3 right-3 p-3 touch-target' : 'top-14 right-6 p-3'
+        }`}
         aria-label={isOpen ? 'Close menu' : 'Open menu (⌘\\)'}
         title={isOpen ? 'Close menu' : 'Open menu (⌘\\)'}
       >
-        {isOpen ? <X size={22} className="text-gray-700" /> : <Menu size={22} className="text-gray-700 group-hover:text-alpine-600 transition-colors" />}
+        {isOpen ? <X size={isMobile ? 24 : 22} className="text-gray-700" /> : <Menu size={isMobile ? 24 : 22} className="text-gray-700 group-hover:text-alpine-600 transition-colors" />}
       </button>
 
       {/* Unified Panel - Redesigned */}
       {isOpen && (
+        <>
+        {/* Mobile backdrop overlay */}
+        {isMobile && (
+          <div
+            className="fixed inset-0 z-30 bg-black/40"
+            onClick={() => setIsOpen(false)}
+          />
+        )}
         <div
           ref={panelRef}
-          className="fixed top-28 right-6 z-40 w-[440px] max-h-[calc(100vh-8rem)] bg-white rounded-2xl shadow-2xl border border-gray-100 flex flex-col overflow-hidden animate-in slide-in-from-right duration-200"
+          className={`fixed z-40 bg-white flex flex-col overflow-hidden animate-in slide-in-from-right duration-200 ${
+            isMobile
+              ? 'inset-0 safe-top safe-bottom'
+              : 'top-28 right-6 w-[440px] max-h-[calc(100vh-8rem)] rounded-2xl shadow-2xl border border-gray-100'
+          }`}
         >
           {/* Header Section - User & Note Title */}
           <div className="bg-gradient-to-br from-slate-50 via-white to-alpine-50 border-b border-gray-100">
@@ -1377,7 +1393,9 @@ export default function UnifiedPanel({
             <div className="flex bg-gray-100 rounded-xl p-1 gap-0.5">
               <button
                 onClick={() => setActiveTab('browse')}
-                className={`flex-1 px-2 py-2 text-xs font-medium transition-all rounded-lg flex items-center justify-center gap-1.5 min-w-0 ${
+                className={`flex-1 px-2 text-xs font-medium transition-all rounded-lg flex items-center justify-center gap-1.5 min-w-0 ${
+                  isMobile ? 'py-3' : 'py-2'
+                } ${
                   activeTab === 'browse'
                     ? 'bg-white text-alpine-600 shadow-sm'
                     : 'text-gray-600 hover:text-gray-800 hover:bg-gray-50'
@@ -1388,7 +1406,9 @@ export default function UnifiedPanel({
               </button>
               <button
                 onClick={() => setActiveTab('toc')}
-                className={`flex-1 px-2 py-2 text-xs font-medium transition-all rounded-lg flex items-center justify-center gap-1.5 min-w-0 ${
+                className={`flex-1 px-2 text-xs font-medium transition-all rounded-lg flex items-center justify-center gap-1.5 min-w-0 ${
+                  isMobile ? 'py-3' : 'py-2'
+                } ${
                   activeTab === 'toc'
                     ? 'bg-white text-alpine-600 shadow-sm'
                     : 'text-gray-600 hover:text-gray-800 hover:bg-gray-50'
@@ -1405,7 +1425,9 @@ export default function UnifiedPanel({
               </button>
               <button
                 onClick={() => setActiveTab('tasks')}
-                className={`flex-1 px-2 py-2 text-xs font-medium transition-all rounded-lg flex items-center justify-center gap-1.5 min-w-0 ${
+                className={`flex-1 px-2 text-xs font-medium transition-all rounded-lg flex items-center justify-center gap-1.5 min-w-0 ${
+                  isMobile ? 'py-3' : 'py-2'
+                } ${
                   activeTab === 'tasks'
                     ? 'bg-white text-alpine-600 shadow-sm'
                     : 'text-gray-600 hover:text-gray-800 hover:bg-gray-50'
@@ -1421,7 +1443,9 @@ export default function UnifiedPanel({
               </button>
               <button
                 onClick={() => setActiveTab('ai')}
-                className={`flex-1 px-2 py-2 text-xs font-medium transition-all rounded-lg flex items-center justify-center gap-1.5 min-w-0 ${
+                className={`flex-1 px-2 text-xs font-medium transition-all rounded-lg flex items-center justify-center gap-1.5 min-w-0 ${
+                  isMobile ? 'py-3' : 'py-2'
+                } ${
                   activeTab === 'ai'
                     ? 'bg-white text-purple-600 shadow-sm'
                     : 'text-gray-600 hover:text-gray-800 hover:bg-gray-50'
@@ -2115,6 +2139,7 @@ export default function UnifiedPanel({
             </div>
           )}
         </div>
+        </>
       )}
 
       {/* Context Menu */}

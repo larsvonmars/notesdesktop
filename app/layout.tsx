@@ -1,4 +1,4 @@
-import type { Metadata } from 'next'
+import type { Metadata, Viewport } from 'next'
 import './globals.css'
 import { AuthProvider } from '@/lib/auth-context'
 import { WebViewPolyfillsInitializer } from '@/components/WebViewPolyfillsInitializer'
@@ -11,6 +11,19 @@ export const metadata: Metadata = {
     icon: '/favicon.ico',
     apple: '/apple-touch-icon.png',
   },
+  appleWebApp: {
+    capable: true,
+    statusBarStyle: 'default',
+    title: 'Saentis Notes',
+  },
+}
+
+export const viewport: Viewport = {
+  width: 'device-width',
+  initialScale: 1,
+  maximumScale: 1,
+  userScalable: false,
+  viewportFit: 'cover', // enables safe-area-inset env() on iOS
 }
 
 export default function RootLayout({
@@ -20,7 +33,7 @@ export default function RootLayout({
 }) {
   return (
     <html lang="en">
-      <body>
+      <body className="safe-top">
         <WebViewPolyfillsInitializer />
         <AuthProvider>
           <ToastProvider>{children}</ToastProvider>

@@ -1,6 +1,7 @@
 'use client'
 
 import React from 'react'
+import { useIsMobile } from '@/lib/useIsMobile'
 import {
   Bold,
   Italic,
@@ -71,11 +72,15 @@ const EditorToolbar: React.FC<EditorToolbarProps> = ({
   activeFormats = new Set(),
   disabled = false
 }) => {
+  const isMobile = useIsMobile()
+  const btnSizeClass = isMobile ? 'h-11 w-11' : 'h-9 w-9'
+  const iconSize = isMobile ? 20 : 16
+
   const toolbarButtonClass =
-    'inline-flex h-9 w-9 items-center justify-center rounded-lg border border-transparent bg-white text-slate-600 shadow-sm hover:bg-slate-100 hover:text-slate-900 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-alpine-500 disabled:opacity-40 disabled:cursor-not-allowed transition-colors'
+    `inline-flex ${btnSizeClass} items-center justify-center rounded-lg border border-transparent bg-white text-slate-600 shadow-sm hover:bg-slate-100 hover:text-slate-900 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-alpine-500 disabled:opacity-40 disabled:cursor-not-allowed transition-colors flex-shrink-0`
 
   const activeButtonClass =
-    'inline-flex h-9 w-9 items-center justify-center rounded-lg border border-transparent bg-alpine-50 text-alpine-700 shadow-sm hover:bg-alpine-100 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-alpine-500 disabled:opacity-40 disabled:cursor-not-allowed transition-colors'
+    `inline-flex ${btnSizeClass} items-center justify-center rounded-lg border border-transparent bg-alpine-50 text-alpine-700 shadow-sm hover:bg-alpine-100 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-alpine-500 disabled:opacity-40 disabled:cursor-not-allowed transition-colors flex-shrink-0`
 
   // Determine the current block type based on active formats
   // Memoize with useMemo since activeFormats is a Set and would change reference
@@ -89,7 +94,7 @@ const EditorToolbar: React.FC<EditorToolbarProps> = ({
 
   return (
     <div className="sticky top-0 z-40 flex-shrink-0 border-b border-slate-200 bg-white/90 backdrop-blur supports-[backdrop-filter]:bg-white/70">
-      <div className="flex flex-wrap items-center gap-3 px-4 py-3">
+      <div className="flex flex-nowrap items-center gap-3 px-4 py-3 overflow-x-auto scrollbar-none">
         {/* Text Formatting Group */}
         <div className="flex items-center gap-1 rounded-2xl border border-slate-200 bg-white/80 px-2 py-1 shadow-sm">
           <button
@@ -100,7 +105,7 @@ const EditorToolbar: React.FC<EditorToolbarProps> = ({
             aria-label="Bold (Cmd+B)"
             title="Bold (Cmd+B)"
           >
-            <Bold size={16} />
+            <Bold size={iconSize} />
           </button>
           <button
             className={activeFormats.has('italic') ? activeButtonClass : toolbarButtonClass}
@@ -110,7 +115,7 @@ const EditorToolbar: React.FC<EditorToolbarProps> = ({
             aria-label="Italic (Cmd+I)"
             title="Italic (Cmd+I)"
           >
-            <Italic size={16} />
+            <Italic size={iconSize} />
           </button>
           <button
             className={activeFormats.has('underline') ? activeButtonClass : toolbarButtonClass}
@@ -120,7 +125,7 @@ const EditorToolbar: React.FC<EditorToolbarProps> = ({
             aria-label="Underline (Cmd+U)"
             title="Underline (Cmd+U)"
           >
-            <Underline size={16} />
+            <Underline size={iconSize} />
           </button>
           <button
             className={activeFormats.has('strike') ? activeButtonClass : toolbarButtonClass}
@@ -130,7 +135,7 @@ const EditorToolbar: React.FC<EditorToolbarProps> = ({
             aria-label="Strikethrough (Cmd+Shift+X)"
             title="Strikethrough (Cmd+Shift+X)"
           >
-            <Strikethrough size={16} />
+            <Strikethrough size={iconSize} />
           </button>
           <button
             className={activeFormats.has('code') ? activeButtonClass : toolbarButtonClass}
@@ -140,7 +145,7 @@ const EditorToolbar: React.FC<EditorToolbarProps> = ({
             aria-label="Inline code (Cmd+`)"
             title="Inline code (Cmd+`)"
           >
-            <Code size={16} />
+            <Code size={iconSize} />
           </button>
           <button
             className={toolbarButtonClass}
@@ -150,7 +155,7 @@ const EditorToolbar: React.FC<EditorToolbarProps> = ({
             aria-label="Insert link (Cmd+K)"
             title="Insert link (Cmd+K)"
           >
-            <LinkIcon size={16} />
+            <LinkIcon size={iconSize} />
           </button>
         </div>
 
@@ -185,7 +190,7 @@ const EditorToolbar: React.FC<EditorToolbarProps> = ({
             aria-label="Bulleted list (Cmd+Shift+L)"
             title="Bulleted list (Cmd+Shift+L)"
           >
-            <List size={16} />
+            <List size={iconSize} />
           </button>
           <button
             className={activeFormats.has('ordered-list') ? activeButtonClass : toolbarButtonClass}
@@ -195,7 +200,7 @@ const EditorToolbar: React.FC<EditorToolbarProps> = ({
             aria-label="Numbered list (Cmd+Shift+O)"
             title="Numbered list (Cmd+Shift+O)"
           >
-            <ListOrdered size={16} />
+            <ListOrdered size={iconSize} />
           </button>
           <button
             className={toolbarButtonClass}
@@ -205,7 +210,7 @@ const EditorToolbar: React.FC<EditorToolbarProps> = ({
             aria-label="Checklist (Cmd+Shift+C)"
             title="Checklist (Cmd+Shift+C)"
           >
-            <CheckSquare size={16} />
+            <CheckSquare size={iconSize} />
           </button>
           <button
             className={toolbarButtonClass}
@@ -215,7 +220,7 @@ const EditorToolbar: React.FC<EditorToolbarProps> = ({
             aria-label="Horizontal divider"
             title="Horizontal divider"
           >
-            <Minus size={16} />
+            <Minus size={iconSize} />
           </button>
         </div>
 
@@ -229,7 +234,7 @@ const EditorToolbar: React.FC<EditorToolbarProps> = ({
             aria-label="Undo (Cmd+Z)"
             title="Undo (Cmd+Z)"
           >
-            <RotateCcw size={16} />
+            <RotateCcw size={iconSize} />
           </button>
           <button
             className={toolbarButtonClass}
@@ -239,11 +244,12 @@ const EditorToolbar: React.FC<EditorToolbarProps> = ({
             aria-label="Redo (Cmd+Shift+Z)"
             title="Redo (Cmd+Shift+Z)"
           >
-            <RotateCw size={16} />
+            <RotateCw size={iconSize} />
           </button>
         </div>
 
-        {/* Active Block Info */}
+        {/* Active Block Info - hidden on mobile */}
+        {!isMobile && (
         <div className="ml-auto flex flex-col gap-1 text-right text-xs text-slate-500">
           <span className="font-semibold text-slate-600">
             {activeBlockId ? `Block: ${activeBlockId}` : 'No block selected'}
@@ -254,6 +260,7 @@ const EditorToolbar: React.FC<EditorToolbarProps> = ({
             </span>
           )}
         </div>
+        )}
 
         {/* Block Controls Group */}
         <div className="flex flex-wrap items-center gap-2">
@@ -265,17 +272,17 @@ const EditorToolbar: React.FC<EditorToolbarProps> = ({
             aria-label="New block (Ctrl+Enter)"
             title="New block (Ctrl+Enter)"
           >
-            <Plus size={16} /> New block
+            <Plus size={iconSize} /> {!isMobile && 'New block'}
           </button>
           <button
-            className="inline-flex items-center gap-2 rounded-xl bg-red-500 px-3 py-2 text-sm font-medium text-white shadow hover:bg-red-600 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-red-500 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+            className="inline-flex items-center gap-2 rounded-xl bg-red-500 px-3 py-2 text-sm font-medium text-white shadow hover:bg-red-600 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-red-500 disabled:opacity-40 disabled:cursor-not-allowed transition-colors flex-shrink-0"
             onMouseDown={(e) => e.preventDefault()}
             onClick={onDeleteBlock}
             disabled={disabled || !activeBlockId}
             aria-label="Delete block"
             title="Delete block"
           >
-            <Trash2 size={16} /> Delete block
+            <Trash2 size={iconSize} /> {!isMobile && 'Delete block'}
           </button>
           <button
             className={blockPanelOpen ? activeButtonClass : toolbarButtonClass}
@@ -285,7 +292,7 @@ const EditorToolbar: React.FC<EditorToolbarProps> = ({
             aria-label="Toggle block navigator"
             title="Toggle block navigator"
           >
-            <LayoutGrid size={16} />
+            <LayoutGrid size={iconSize} />
           </button>
           <button
             className={showBlockOutlines ? activeButtonClass : toolbarButtonClass}
@@ -295,7 +302,7 @@ const EditorToolbar: React.FC<EditorToolbarProps> = ({
             aria-label="Toggle block outlines"
             title="Toggle block outlines"
           >
-            {showBlockOutlines ? <EyeOff size={16} /> : <Eye size={16} />}
+            {showBlockOutlines ? <EyeOff size={iconSize} /> : <Eye size={iconSize} />}
           </button>
         </div>
       </div>
