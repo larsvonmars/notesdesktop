@@ -61,7 +61,7 @@ export interface AIContext {
     id: string
     title: string
     content: string
-    type: 'rich-text' | 'drawing' | 'mindmap'
+    type: 'rich-text' | 'drawing' | 'mindmap' | 'bullet-journal'
   }
   // Selected text from the editor - for context-aware AI interactions
   selectedText?: string

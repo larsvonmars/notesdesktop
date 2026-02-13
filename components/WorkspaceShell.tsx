@@ -6,7 +6,7 @@ import { useEffect, useState, useRef, useCallback, Suspense } from 'react'
 import NoteEditor, { Note } from '@/components/NoteEditor'
 import TaskCalendarModal from '@/components/TaskCalendarModal'
 import WelcomeBackModal from '@/components/WelcomeBackModal'
-import { Loader2, FileEdit, Sparkles, FileText, PenTool, Network, X } from 'lucide-react'
+import { Loader2, FileEdit, Sparkles, FileText, PenTool, Network, BookOpen, X } from 'lucide-react'
 import type { NoteType } from '@/lib/notes'
 import { ToastContainer } from '@/components/NotificationCenter'
 import { initNotifications, destroyNotifications, type AppNotification } from '@/lib/notifications'
@@ -52,7 +52,7 @@ function WorkspaceContent() {
   const [isLoadingNotes, setIsLoadingNotes] = useState(true)
   const [isLoadingFolders, setIsLoadingFolders] = useState(true)
   const [isCreatingNew, setIsCreatingNew] = useState(false)
-  const [newNoteType, setNewNoteType] = useState<'rich-text' | 'drawing' | 'mindmap'>('rich-text')
+  const [newNoteType, setNewNoteType] = useState<'rich-text' | 'drawing' | 'mindmap' | 'bullet-journal'>('rich-text')
   const [pendingNoteContext, setPendingNoteContext] = useState<NoteCreationContext | null>(null)
   // Create-folder modal state (replace window.prompt for Tauri compatibility)
   const suppressRealtimeRef = useRef(false)
@@ -303,7 +303,7 @@ function WorkspaceContent() {
   }, [user])
 
   const handleSaveNote = async (
-    noteData: { title: string; content: string; note_type?: 'rich-text' | 'drawing' | 'mindmap' },
+    noteData: { title: string; content: string; note_type?: 'rich-text' | 'drawing' | 'mindmap' | 'bullet-journal' },
     isAuto = false
   ) => {
     try {
@@ -690,6 +690,13 @@ function WorkspaceContent() {
       icon: Network,
       iconBg: 'bg-green-100 text-green-600',
     },
+    {
+      type: 'bullet-journal' as NoteType,
+      label: 'Bullet Journal',
+      description: 'Rapid-log tasks, events, and notes with signifiers.',
+      icon: BookOpen,
+      iconBg: 'bg-amber-100 text-amber-600',
+    },
   ]
 
   return (
@@ -779,7 +786,7 @@ function WorkspaceContent() {
                 <X size={18} />
               </button>
             </div>
-            <div className="mt-6 grid gap-3 sm:grid-cols-3">
+            <div className="mt-6 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
               {noteTypeOptions.map(({ type, label, description, icon: Icon, iconBg }) => (
                 <button
                   key={type}

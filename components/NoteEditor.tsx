@@ -49,6 +49,10 @@ import MindmapEditor, {
   type MindmapEditorHandle,
   type MindmapData
 } from './MindmapEditor'
+import BulletJournalEditor, {
+  type BulletJournalEditorHandle,
+  type BulletJournalData
+} from './BulletJournalEditor'
 import UnifiedPanel from './UnifiedPanel'
 import ProjectsWorkspaceModal from './ProjectsWorkspaceModal'
 import { useToast } from './ToastProvider'
@@ -68,12 +72,12 @@ interface NoteEditorProps {
   note?: LibNote | null
   // `isAuto` will be passed when the editor triggers an autosave so parents can handle it differently
   onSave: (
-    note: { title: string; content: string; note_type?: 'rich-text' | 'drawing' | 'mindmap' },
+    note: { title: string; content: string; note_type?: 'rich-text' | 'drawing' | 'mindmap' | 'bullet-journal' },
     isAuto?: boolean
   ) => Promise<void>
   onCancel?: () => void
   onDelete?: (id: string) => Promise<void>
-  initialNoteType?: 'rich-text' | 'drawing' | 'mindmap'
+  initialNoteType?: 'rich-text' | 'drawing' | 'mindmap' | 'bullet-journal'
 }
 
 const stripHtml = (html: string) => html.replace(/<[^>]*>/g, ' ').replace(/&nbsp;/g, ' ').trim()
@@ -108,7 +112,7 @@ interface NoteEditorWithPanelProps extends NoteEditorProps {
   notes?: LibNote[]
   allNotes?: LibNote[]  // All notes for AI tool calling
   onSelectNote?: (note: LibNote) => void
-  onNewNote?: (noteType?: 'rich-text' | 'drawing' | 'mindmap', folderId?: string | null, projectId?: string | null) => void
+  onNewNote?: (noteType?: 'rich-text' | 'drawing' | 'mindmap' | 'bullet-journal', folderId?: string | null, projectId?: string | null) => void
   onDuplicateNote?: (note: LibNote) => void
   onMoveNote?: (noteId: string, newFolderId: string | null) => Promise<void>
   isLoadingNotes?: boolean
@@ -152,7 +156,8 @@ export default function NoteEditor({
   const [content, setContent] = useState('')
   const [drawingData, setDrawingData] = useState<DrawingData | null>(null)
   const [mindmapData, setMindmapData] = useState<MindmapData | null>(null)
-  const [noteType, setNoteType] = useState<'rich-text' | 'drawing' | 'mindmap'>('rich-text')
+  const [bulletJournalData, setBulletJournalData] = useState<BulletJournalData | null>(null)
+  const [noteType, setNoteType] = useState<'rich-text' | 'drawing' | 'mindmap' | 'bullet-journal'>('rich-text')
   const [isSaving, setIsSaving] = useState(false)
   const [isDeleting, setIsDeleting] = useState(false)
   const [hasChanges, setHasChanges] = useState(false)
@@ -162,6 +167,7 @@ export default function NoteEditor({
   const editorRef = useRef<RichTextEditorHandle | null>(null)
   const drawingEditorRef = useRef<DrawingEditorHandle | null>(null)
   const mindmapEditorRef = useRef<MindmapEditorHandle | null>(null)
+  const bulletJournalRef = useRef<BulletJournalEditorHandle | null>(null)
   const headingUpdateTimeoutRef = useRef<number | null>(null)
   const autosaveTimeoutRef = useRef<number | null>(null)
   const isAutosavingRef = useRef(false)
@@ -341,10 +347,22 @@ export default function NoteEditor({
           setContent('')
           setDrawingData(null)
         }
+      } else if (note.note_type === 'bullet-journal') {
+        // Parse bullet journal data from content
+        try {
+          const data = JSON.parse(note.content || '{}')
+          setBulletJournalData(data)
+        } catch {
+          setBulletJournalData(null)
+        }
+        setContent('')
+        setDrawingData(null)
+        setMindmapData(null)
       } else {
         setContent(note.content || '')
         setDrawingData(null)
         setMindmapData(null)
+        setBulletJournalData(null)
       }
       
       setHasChanges(false)
@@ -376,6 +394,7 @@ export default function NoteEditor({
           },
         },
       } : null)
+      setBulletJournalData(initialNoteType === 'bullet-journal' ? { entries: [], activeDate: new Date().toISOString().slice(0, 10), view: 'daily' as const } : null)
       setNoteType(initialNoteType)
       setHasChanges(false)
       setHeadings([])
@@ -394,6 +413,10 @@ export default function NoteEditor({
         const currentMindmapStr = JSON.stringify(mindmapData)
         const noteMindmapStr = note.content || '{}'
         setHasChanges(title !== note.title || currentMindmapStr !== noteMindmapStr)
+      } else if (noteType === 'bullet-journal') {
+        const currentBJStr = JSON.stringify(bulletJournalData)
+        const noteBJStr = note.content || '{}'
+        setHasChanges(title !== note.title || currentBJStr !== noteBJStr)
       } else {
         setHasChanges(title !== note.title || content !== (note.content || ''))
       }
@@ -404,11 +427,14 @@ export default function NoteEditor({
       } else if (noteType === 'mindmap') {
         const nodeCount = mindmapData ? Object.keys(mindmapData.nodes).length : 0
         setHasChanges(title.trim() !== '' || nodeCount > 1)
+      } else if (noteType === 'bullet-journal') {
+        const entryCount = bulletJournalData?.entries.filter(e => e.content.trim() !== '').length ?? 0
+        setHasChanges(title.trim() !== '' || entryCount > 0)
       } else {
         setHasChanges(title.trim() !== '' || plainContent !== '')
       }
     }
-  }, [title, content, drawingData, mindmapData, note, plainContent, noteType])
+  }, [title, content, drawingData, mindmapData, bulletJournalData, note, plainContent, noteType])
 
   useEffect(() => {
     return () => {
@@ -886,6 +912,15 @@ export default function NoteEditor({
           title: title.trim(),
           content: mindmapContent,
           note_type: 'mindmap',
+        }, isAuto)
+      } else if (noteType === 'bullet-journal') {
+        // Also persist entries to Supabase
+        try { await bulletJournalRef.current?.saveToDb() } catch (e) { console.error('BJ saveToDb error', e) }
+        const bjContent = JSON.stringify(bulletJournalData)
+        await onSave({
+          title: title.trim(),
+          content: bjContent,
+          note_type: 'bullet-journal',
         }, isAuto)
       } else {
         await onSave({
@@ -1444,6 +1479,14 @@ export default function NoteEditor({
                   onSelectedNodeChange={(nodeId, _node) => setSelectedMindmapNodeId(nodeId)}
                   readOnly={isSaving || isDeleting}
                 />
+              ) : noteType === 'bullet-journal' ? (
+                <BulletJournalEditor
+                  ref={bulletJournalRef}
+                  noteId={note?.id ?? null}
+                  initialData={bulletJournalData}
+                  onChange={setBulletJournalData}
+                  disabled={isSaving || isDeleting}
+                />
               ) : (
                 <RichTextEditor
                     ref={editorRef}
@@ -1602,7 +1645,7 @@ export default function NoteEditor({
             {note && (
               <div className="flex items-center gap-1.5 text-gray-500">
                 <span className="px-1.5 py-0.5 bg-gray-200 rounded text-[10px] font-medium uppercase">
-                  {noteType === 'rich-text' ? 'Text' : noteType === 'drawing' ? 'Drawing' : 'Mindmap'}
+                  {noteType === 'rich-text' ? 'Text' : noteType === 'drawing' ? 'Drawing' : noteType === 'mindmap' ? 'Mindmap' : 'Journal'}
                 </span>
               </div>
             )}
