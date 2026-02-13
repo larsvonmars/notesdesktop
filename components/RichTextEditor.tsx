@@ -64,10 +64,23 @@ import {
   htmlToMarkdown
 } from '@/lib/editor/markdownHelpers'
 import {
+  getSelectionContext,
+  getClosestFromSelection,
+  isSelectionInsideRoot,
+  saveSelectionRange,
+  restoreSelectionRange,
+} from '@/lib/editor/selectionUtils'
+import {
   applyAutoformat,
   shouldApplyAutoformat,
   checkListPrefixPattern
 } from '@/lib/editor/autoformat'
+import {
+  useLinkDialogState,
+  useSearchDialogState,
+  useTableDialogState,
+  type SearchMatch,
+} from '@/lib/editor/useEditorDialogState'
 
 
 // Re-export RichTextCommand type for external use
@@ -195,12 +208,6 @@ export interface CustomBlockDescriptor {
   parse?: (el: HTMLElement) => any
 }
 
-interface SearchMatch {
-  index: number
-  length: number
-  text: string
-}
-
 interface BlockMetadata {
   id: string
   type: string
@@ -246,27 +253,52 @@ const RichTextEditor = forwardRef<RichTextEditorHandle, RichTextEditorProps>(
     const mutationObserverRef = useRef<MutationObserver | null>(null)
     const checklistNormalizationTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
     const isProcessingCommandRef = useRef<boolean>(false)
-    const [showLinkDialog, setShowLinkDialog] = useState(false)
-    const [linkUrl, setLinkUrl] = useState('')
-    const [linkText, setLinkText] = useState('')
-    const [linkUrlError, setLinkUrlError] = useState('')
-    const [recentLinks, setRecentLinks] = useState<Array<{url: string, text: string, timestamp: number}>>([])
+    const {
+      showLinkDialog,
+      setShowLinkDialog,
+      linkUrl,
+      setLinkUrl,
+      linkText,
+      setLinkText,
+      linkUrlError,
+      setLinkUrlError,
+      recentLinks,
+      addToRecentLinks,
+      resetLinkDialog,
+    } = useLinkDialogState()
     const [showLinkPopover, setShowLinkPopover] = useState(false)
     const [linkPopoverPos, setLinkPopoverPos] = useState({ top: 0, left: 0 })
     const [hoveredLinkElement, setHoveredLinkElement] = useState<HTMLAnchorElement | null>(null)
     const linkPopoverTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
     const [copiedLink, setCopiedLink] = useState(false)
-    const [showSearchDialog, setShowSearchDialog] = useState(false)
-    const [searchQuery, setSearchQuery] = useState('')
-    const [replaceQuery, setReplaceQuery] = useState('')
-    const [searchMatches, setSearchMatches] = useState<SearchMatch[]>([])
-    const [currentMatchIndex, setCurrentMatchIndex] = useState(0)
-    const [caseSensitive, setCaseSensitive] = useState(false)
-  const [showTableDialog, setShowTableDialog] = useState(false)
-  const [tableRows, setTableRows] = useState(3)
-  const [tableCols, setTableCols] = useState(3)
-  const [hoverRows, setHoverRows] = useState<number | null>(null)
-  const [hoverCols, setHoverCols] = useState<number | null>(null)
+    const {
+      showSearchDialog,
+      setShowSearchDialog,
+      searchQuery,
+      setSearchQuery,
+      replaceQuery,
+      setReplaceQuery,
+      searchMatches,
+      setSearchMatches,
+      currentMatchIndex,
+      setCurrentMatchIndex,
+      caseSensitive,
+      setCaseSensitive,
+      resetSearchDialog,
+    } = useSearchDialogState()
+    const {
+      showTableDialog,
+      tableRows,
+      setTableRows,
+      tableCols,
+      setTableCols,
+      hoverRows,
+      setHoverRows,
+      hoverCols,
+      setHoverCols,
+      openTableDialog,
+      closeTableDialog,
+    } = useTableDialogState()
     const savedSelectionRef = useRef<Range | null>(null)
     const [autoformatEnabled, setAutoformatEnabled] = useState(true)
     const [blockMetadata, setBlockMetadata] = useState<BlockMetadata[]>([])
@@ -276,6 +308,10 @@ const RichTextEditor = forwardRef<RichTextEditorHandle, RichTextEditorProps>(
     const [activeFormats, setActiveFormats] = useState<Set<string>>(new Set())
     const blockIdCounterRef = useRef(0)
     const activeFormatsFrameRef = useRef<number | null>(null)
+
+    const isSelectionInsideEditor = useCallback(() => {
+      return isSelectionInsideRoot(editorRef.current)
+    }, [])
 
     const createEmptyBlock = useCallback(() => {
       const block = document.createElement('div')
@@ -431,15 +467,7 @@ const RichTextEditor = forwardRef<RichTextEditorHandle, RichTextEditorProps>(
       if (!editorRef.current || !editorRef.current.isConnected) return null
 
       const editor = editorRef.current
-      const selection = window.getSelection()
-      let block: HTMLElement | null = null
-
-      if (selection && selection.rangeCount > 0) {
-        const anchor = selection.getRangeAt(0).startContainer
-        block = (anchor instanceof HTMLElement ? anchor : anchor.parentElement)?.closest(
-          '[data-block-id]'
-        ) as HTMLElement | null
-      }
+      const block = getClosestFromSelection('[data-block-id]', editor)
 
       if (block && block.isConnected) {
         ensureBlockId(block)
@@ -482,22 +510,13 @@ const RichTextEditor = forwardRef<RichTextEditorHandle, RichTextEditorProps>(
 
     const refreshActiveBlock = useCallback(() => {
       try {
-        if (!editorRef.current) {
+        const editor = editorRef.current
+        if (!editor) {
           setActiveBlockId(null)
           return
         }
-        const selection = window.getSelection()
-        if (!selection || selection.rangeCount === 0) {
-          setActiveBlockId(null)
-          return
-        }
-        const anchorNode = selection.getRangeAt(0).startContainer
-        const element = anchorNode instanceof HTMLElement ? anchorNode : anchorNode.parentElement
-        if (!element) {
-          setActiveBlockId(null)
-          return
-        }
-        const blockElement = element.closest('[data-block-id]') || element.closest('[data-block="true"]')
+
+        const blockElement = getClosestFromSelection('[data-block-id], [data-block="true"]', editor)
         if (blockElement instanceof HTMLElement) {
           const id = ensureBlockId(blockElement)
           setActiveBlockId(id)
@@ -512,21 +531,15 @@ const RichTextEditor = forwardRef<RichTextEditorHandle, RichTextEditorProps>(
 
     const updateActiveFormats = useCallback(() => {
       try {
-        if (!editorRef.current) {
+        const editor = editorRef.current
+        if (!editor) {
           setActiveFormats(new Set())
           return
         }
-        
-        const selection = window.getSelection()
-        if (!selection || selection.rangeCount === 0) {
-          setActiveFormats(new Set())
-          return
-        }
-        
-        const range = selection.getRangeAt(0)
-        const node = range.commonAncestorContainer
-        const element = node.nodeType === Node.TEXT_NODE ? node.parentElement : (node as Element)
-        
+
+        const context = getSelectionContext(editor)
+        const element = context?.element
+
         if (!element) {
           setActiveFormats(new Set())
           return
@@ -714,16 +727,20 @@ const RichTextEditor = forwardRef<RichTextEditorHandle, RichTextEditorProps>(
     }, [updateBlockMetadata])
 
     useEffect(() => {
-      const handleSelection = () => refreshActiveBlock()
-      document.addEventListener('selectionchange', handleSelection)
-      return () => document.removeEventListener('selectionchange', handleSelection)
-    }, [refreshActiveBlock])
+      const handleSelection = () => {
+        if (!isSelectionInsideEditor()) {
+          setActiveBlockId(null)
+          setActiveFormats(new Set())
+          return
+        }
 
-    useEffect(() => {
-      const handleSelection = () => scheduleActiveFormatsUpdate()
+        refreshActiveBlock()
+        scheduleActiveFormatsUpdate()
+      }
+
       document.addEventListener('selectionchange', handleSelection)
       return () => document.removeEventListener('selectionchange', handleSelection)
-    }, [scheduleActiveFormatsUpdate])
+    }, [isSelectionInsideEditor, refreshActiveBlock, scheduleActiveFormatsUpdate])
 
     useEffect(() => {
       if (!editorRef.current) return
@@ -1574,19 +1591,12 @@ const RichTextEditor = forwardRef<RichTextEditorHandle, RichTextEditorProps>(
 
     // Save current selection
     const saveSelection = useCallback(() => {
-      const selection = window.getSelection()
-      if (selection && selection.rangeCount > 0) {
-        savedSelectionRef.current = selection.getRangeAt(0).cloneRange()
-      }
+      savedSelectionRef.current = saveSelectionRange(editorRef.current)
     }, [])
 
     // Restore saved selection
     const restoreSelection = useCallback(() => {
-      if (savedSelectionRef.current) {
-        const selection = window.getSelection()
-        selection?.removeAllRanges()
-        selection?.addRange(savedSelectionRef.current)
-      }
+      restoreSelectionRange(savedSelectionRef.current, editorRef.current)
     }, [])
 
     // Validate URL
@@ -1654,47 +1664,15 @@ const RichTextEditor = forwardRef<RichTextEditorHandle, RichTextEditorProps>(
       return trimmed
     }, [])
 
-    // Add to recent links
-    const addToRecentLinks = useCallback((url: string, text: string) => {
-      setRecentLinks(prev => {
-        const filtered = prev.filter(link => link.url !== url)
-        const updated = [{ url, text, timestamp: Date.now() }, ...filtered].slice(0, 5)
-        
-        // Save to localStorage
-        try {
-          localStorage.setItem('editor-recent-links', JSON.stringify(updated))
-        } catch {}
-        
-        return updated
-      })
-    }, [])
-
-    // Load recent links from localStorage
-    useEffect(() => {
-      try {
-        const stored = localStorage.getItem('editor-recent-links')
-        if (stored) {
-          const links = JSON.parse(stored)
-          setRecentLinks(links)
-        }
-      } catch {}
-    }, [])
-
     // Link functionality
     const insertLink = useCallback(() => {
       if (disabled) return
-      
-      const selection = window.getSelection()
-      if (!selection || selection.rangeCount === 0) return
 
-      const range = selection.getRangeAt(0)
-      const selectedText = range.toString()
+      const context = getSelectionContext(editorRef.current)
+      if (!context) return
 
-      let node = range.commonAncestorContainer
-      if (node.nodeType === Node.TEXT_NODE) {
-        node = node.parentNode!
-      }
-      const existingLink = (node as Element).closest('a')
+      const selectedText = context.range.toString()
+      const existingLink = context.element.closest('a')
 
       if (existingLink) {
         setLinkUrl(existingLink.getAttribute('href') || '')
@@ -1735,22 +1713,29 @@ const RichTextEditor = forwardRef<RichTextEditorHandle, RichTextEditorProps>(
         }
 
         const range = selection.getRangeAt(0)
+        const existingLink = getClosestFromSelection('a', editorRef.current)
         
-        let node = range.commonAncestorContainer
-        if (node.nodeType === Node.TEXT_NODE) {
-          node = node.parentNode!
-        }
-        const existingLink = (node as Element).closest('a')
-        
+        const parsedUrl = new URL(normalizedUrl)
+        const shouldOpenInNewTab = parsedUrl.protocol === 'http:' || parsedUrl.protocol === 'https:'
+
         if (existingLink) {
           existingLink.setAttribute('href', normalizedUrl)
           existingLink.textContent = linkText || normalizedUrl
+          if (shouldOpenInNewTab) {
+            existingLink.setAttribute('target', '_blank')
+            existingLink.setAttribute('rel', 'noopener noreferrer')
+          } else {
+            existingLink.removeAttribute('target')
+            existingLink.removeAttribute('rel')
+          }
           existingLink.className = 'text-alpine-600 hover:text-alpine-800 underline decoration-alpine-400 decoration-2 underline-offset-2 transition-colors cursor-pointer inline-flex items-center gap-1'
         } else {
           const link = document.createElement('a')
           link.href = normalizedUrl
-          link.target = '_blank'
-          link.rel = 'noopener noreferrer'
+          if (shouldOpenInNewTab) {
+            link.target = '_blank'
+            link.rel = 'noopener noreferrer'
+          }
           link.className = 'text-alpine-600 hover:text-alpine-800 underline decoration-alpine-400 decoration-2 underline-offset-2 transition-colors cursor-pointer inline-flex items-center gap-1'
           link.textContent = linkText || normalizedUrl
 
@@ -1778,10 +1763,7 @@ const RichTextEditor = forwardRef<RichTextEditorHandle, RichTextEditorProps>(
         // Add to recent links
         addToRecentLinks(normalizedUrl, linkText || normalizedUrl)
 
-        setShowLinkDialog(false)
-        setLinkUrl('')
-        setLinkText('')
-        setLinkUrlError('')
+        resetLinkDialog()
         emitChange()
         
         // Ensure focus returns to editor
@@ -1792,7 +1774,7 @@ const RichTextEditor = forwardRef<RichTextEditorHandle, RichTextEditorProps>(
         console.error('Error applying link:', error)
         setLinkUrlError('Failed to create link')
       }
-    }, [linkUrl, linkText, restoreSelection, emitChange, validateUrl, normalizeUrl, addToRecentLinks])
+    }, [linkUrl, linkText, restoreSelection, emitChange, validateUrl, normalizeUrl, addToRecentLinks, resetLinkDialog])
 
     // Show link popover on hover
     const showLinkPopoverForElement = useCallback((linkElement: HTMLAnchorElement) => {
@@ -1815,6 +1797,14 @@ const RichTextEditor = forwardRef<RichTextEditorHandle, RichTextEditorProps>(
         setShowLinkPopover(false)
         setHoveredLinkElement(null)
       }, 200)
+    }, [])
+
+    useEffect(() => {
+      return () => {
+        if (linkPopoverTimeoutRef.current) {
+          clearTimeout(linkPopoverTimeoutRef.current)
+        }
+      }
     }, [])
 
     // Keep popover open when hovering over it
@@ -2044,33 +2034,50 @@ const RichTextEditor = forwardRef<RichTextEditorHandle, RichTextEditorProps>(
       if (!editorRef.current || !searchQuery) return
       
       try {
-        const content = editorRef.current.innerHTML
+        const contentRoot = editorRef.current
         const flags = caseSensitive ? 'g' : 'gi'
         
         // Escape special regex characters
         const escapedQuery = searchQuery.replace(REGEX_ESCAPE_PATTERN, '\\$&')
+        const regex = new RegExp(escapedQuery, flags)
         
-        // Count matches efficiently without creating array
-        const searchIn = caseSensitive ? content : content.toLowerCase()
-        const queryLower = caseSensitive ? escapedQuery : escapedQuery.toLowerCase()
-        let matchCount = 0
-        let pos = searchIn.indexOf(queryLower)
-        
-        while (pos !== -1 && matchCount < MAX_REPLACE_MATCHES) {
-          matchCount++
-          pos = searchIn.indexOf(queryLower, pos + 1)
+        const textNodes: Text[] = []
+        const walker = document.createTreeWalker(contentRoot, NodeFilter.SHOW_TEXT, null)
+        let node = walker.nextNode()
+
+        while (node) {
+          if (node.nodeType === Node.TEXT_NODE) {
+            textNodes.push(node as Text)
+          }
+          node = walker.nextNode()
         }
+
+        let matchCount = 0
+        textNodes.forEach((textNode) => {
+          const value = textNode.textContent || ''
+          if (!value) return
+          const matches = value.match(regex)
+          if (matches) {
+            matchCount += matches.length
+          }
+        })
         
         if (matchCount >= MAX_REPLACE_MATCHES) {
           console.warn(`Too many matches (${matchCount}+) for replace all operation, limit is ${MAX_REPLACE_MATCHES}`)
           return
         }
+
+        if (matchCount === 0) {
+          return
+        }
         
-        // Perform the replacement
-        const regex = new RegExp(escapedQuery, flags)
-        const newContent = content.replace(regex, replaceQuery)
-        
-        editorRef.current.innerHTML = newContent
+        // Replace text-only nodes to avoid corrupting HTML structure/attributes
+        textNodes.forEach((textNode) => {
+          const value = textNode.textContent || ''
+          if (!value) return
+          textNode.textContent = value.replace(regex, replaceQuery)
+        })
+
         normalizeEditorContent(editorRef.current)
         mergeAdjacentLists(editorRef.current)
         scheduleChecklistNormalization()
@@ -2349,12 +2356,9 @@ const RichTextEditor = forwardRef<RichTextEditorHandle, RichTextEditorProps>(
         scrollToHeading,
         queryCommandState: (command: string) => {
           try {
-            const selection = window.getSelection()
-            if (!selection || selection.rangeCount === 0) return false
-            
-            const range = selection.getRangeAt(0)
-            const node = range.commonAncestorContainer
-            const element = node.nodeType === Node.TEXT_NODE ? node.parentElement : (node as Element)
+            const context = getSelectionContext(editorRef.current)
+            const element = context?.element
+            if (!element) return false
             
             switch (command) {
               case 'bold':
@@ -2398,9 +2402,7 @@ const RichTextEditor = forwardRef<RichTextEditorHandle, RichTextEditorProps>(
         },
         showTableDialog: () => {
           saveSelection()
-          setTableRows(3)
-          setTableCols(3)
-          setShowTableDialog(true)
+          openTableDialog(3, 3)
         },
         requestNoteLink: () => {
           saveSelection()
@@ -2428,7 +2430,7 @@ const RichTextEditor = forwardRef<RichTextEditorHandle, RichTextEditorProps>(
           executeRichTextCommand(command)
         }
       }),
-      [sanitize, getHeadings, scrollToHeading, executeRichTextCommand, insertCustomBlock, saveSelection, onCustomCommand, insertLink]
+      [sanitize, getHeadings, scrollToHeading, executeRichTextCommand, insertCustomBlock, saveSelection, onCustomCommand, insertLink, openTableDialog]
     )
 
     // Initialize history manager
@@ -3025,12 +3027,7 @@ const RichTextEditor = forwardRef<RichTextEditorHandle, RichTextEditorProps>(
                   <h3 className="text-xl font-semibold text-slate-900">Insert Link</h3>
                 </div>
                 <button
-                  onClick={() => {
-                    setShowLinkDialog(false)
-                    setLinkUrl('')
-                    setLinkText('')
-                    setLinkUrlError('')
-                  }}
+                  onClick={resetLinkDialog}
                   className="text-slate-400 hover:text-slate-600 transition-colors p-1 rounded-lg hover:bg-slate-100"
                   aria-label="Close dialog"
                 >
@@ -3143,12 +3140,7 @@ const RichTextEditor = forwardRef<RichTextEditorHandle, RichTextEditorProps>(
                 {/* Action Buttons */}
                 <div className="flex gap-3 justify-end pt-2">
                   <button
-                    onClick={() => {
-                      setShowLinkDialog(false)
-                      setLinkUrl('')
-                      setLinkText('')
-                      setLinkUrlError('')
-                    }}
+                    onClick={resetLinkDialog}
                     className="px-5 py-2.5 text-slate-700 hover:bg-slate-100 rounded-xl transition-colors font-medium"
                   >
                     Cancel
@@ -3253,12 +3245,7 @@ const RichTextEditor = forwardRef<RichTextEditorHandle, RichTextEditorProps>(
                   Find & Replace
                 </h3>
                 <button
-                  onClick={() => {
-                    setShowSearchDialog(false)
-                    setSearchQuery('')
-                    setReplaceQuery('')
-                    setSearchMatches([])
-                  }}
+                  onClick={resetSearchDialog}
                   className="text-gray-400 hover:text-gray-600"
                 >
                   <X size={20} />
@@ -3351,7 +3338,7 @@ const RichTextEditor = forwardRef<RichTextEditorHandle, RichTextEditorProps>(
         {/* Table configuration dialog */}
         {showTableDialog && (
           <div className="fixed inset-0 z-50 flex items-center justify-center">
-            <div className="absolute inset-0 bg-black/30" onMouseDown={() => setShowTableDialog(false)} />
+            <div className="absolute inset-0 bg-black/30" onMouseDown={closeTableDialog} />
             <div className="relative z-10 w-80 rounded bg-white p-4 shadow-lg">
               <h3 className="text-sm font-medium mb-2">Insert table</h3>
               <div className="mb-3">
@@ -3381,7 +3368,7 @@ const RichTextEditor = forwardRef<RichTextEditorHandle, RichTextEditorProps>(
               <div className="flex justify-end gap-2">
                 <button
                   type="button"
-                  onClick={() => setShowTableDialog(false)}
+                  onClick={closeTableDialog}
                   className="px-3 py-1 rounded border text-sm"
                 >
                   Cancel
@@ -3389,7 +3376,7 @@ const RichTextEditor = forwardRef<RichTextEditorHandle, RichTextEditorProps>(
                 <button
                   type="button"
                   onClick={() => {
-                    setShowTableDialog(false)
+                    closeTableDialog()
                     insertCustomBlock('table', { rows: tableRows, cols: tableCols })
                     forceWebViewFocus()
                   }}

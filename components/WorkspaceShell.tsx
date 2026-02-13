@@ -6,7 +6,7 @@ import { useEffect, useState, useRef, useCallback, Suspense } from 'react'
 import NoteEditor, { Note } from '@/components/NoteEditor'
 import TaskCalendarModal from '@/components/TaskCalendarModal'
 import WelcomeBackModal from '@/components/WelcomeBackModal'
-import { Loader2, FileEdit, Sparkles, FileText, PenTool, Network, BookOpen, X } from 'lucide-react'
+import { Loader2, FileEdit, Sparkles, FileText, PenTool, Network, BookOpen, Table2, X } from 'lucide-react'
 import type { NoteType } from '@/lib/notes'
 import { ToastContainer } from '@/components/NotificationCenter'
 import { initNotifications, destroyNotifications, type AppNotification } from '@/lib/notifications'
@@ -52,7 +52,7 @@ function WorkspaceContent() {
   const [isLoadingNotes, setIsLoadingNotes] = useState(true)
   const [isLoadingFolders, setIsLoadingFolders] = useState(true)
   const [isCreatingNew, setIsCreatingNew] = useState(false)
-  const [newNoteType, setNewNoteType] = useState<'rich-text' | 'drawing' | 'mindmap' | 'bullet-journal'>('rich-text')
+  const [newNoteType, setNewNoteType] = useState<NoteType>('rich-text')
   const [pendingNoteContext, setPendingNoteContext] = useState<NoteCreationContext | null>(null)
   // Create-folder modal state (replace window.prompt for Tauri compatibility)
   const suppressRealtimeRef = useRef(false)
@@ -303,7 +303,7 @@ function WorkspaceContent() {
   }, [user])
 
   const handleSaveNote = async (
-    noteData: { title: string; content: string; note_type?: 'rich-text' | 'drawing' | 'mindmap' | 'bullet-journal' },
+    noteData: { title: string; content: string; note_type?: 'rich-text' | 'drawing' | 'mindmap' | 'bullet-journal' | 'data-sheet' },
     isAuto = false
   ) => {
     try {
@@ -697,6 +697,13 @@ function WorkspaceContent() {
       icon: BookOpen,
       iconBg: 'bg-amber-100 text-amber-600',
     },
+    {
+      type: 'data-sheet' as NoteType,
+      label: 'Data Sheet',
+      description: 'Create and edit spreadsheet data with formulas and CSV import/export.',
+      icon: Table2,
+      iconBg: 'bg-cyan-100 text-cyan-600',
+    },
   ]
 
   return (
@@ -786,7 +793,7 @@ function WorkspaceContent() {
                 <X size={18} />
               </button>
             </div>
-            <div className="mt-6 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+            <div className="mt-6 grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
               {noteTypeOptions.map(({ type, label, description, icon: Icon, iconBg }) => (
                 <button
                   key={type}

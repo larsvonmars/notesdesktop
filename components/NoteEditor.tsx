@@ -31,6 +31,7 @@ import {
   Edit2,
   Network,
   Table as TableIcon,
+  Table2 as Table2Icon,
   FileText,
   Plus,
   Minus as HorizontalRule,
@@ -53,15 +54,21 @@ import BulletJournalEditor, {
   type BulletJournalEditorHandle,
   type BulletJournalData
 } from './BulletJournalEditor'
+import DataSheetEditor, {
+  type DataSheetEditorHandle,
+  type DataSheetData
+} from './DataSheetEditor'
 import UnifiedPanel from './UnifiedPanel'
 import ProjectsWorkspaceModal from './ProjectsWorkspaceModal'
 import { useToast } from './ToastProvider'
 import { Note as LibNote } from '../lib/notes'
 import { getProjects, Project } from '../lib/projects'
 import NoteLinkDialog from './NoteLinkDialog'
+import DataSheetPickerDialog from './DataSheetPickerDialog'
 import KnowledgeGraphModal from './KnowledgeGraphModal'
 import { noteLinkBlock } from '../lib/editor/noteLinkBlock'
 import { imageBlock } from '../lib/editor/imageBlock'
+import { dataSheetTableBlock, type DataSheetTablePayload } from '../lib/editor/dataSheetTableBlock'
 
 export type { Note } from '../lib/notes'
 
@@ -72,12 +79,12 @@ interface NoteEditorProps {
   note?: LibNote | null
   // `isAuto` will be passed when the editor triggers an autosave so parents can handle it differently
   onSave: (
-    note: { title: string; content: string; note_type?: 'rich-text' | 'drawing' | 'mindmap' | 'bullet-journal' },
+    note: { title: string; content: string; note_type?: 'rich-text' | 'drawing' | 'mindmap' | 'bullet-journal' | 'data-sheet' },
     isAuto?: boolean
   ) => Promise<void>
   onCancel?: () => void
   onDelete?: (id: string) => Promise<void>
-  initialNoteType?: 'rich-text' | 'drawing' | 'mindmap' | 'bullet-journal'
+  initialNoteType?: 'rich-text' | 'drawing' | 'mindmap' | 'bullet-journal' | 'data-sheet'
 }
 
 const stripHtml = (html: string) => html.replace(/<[^>]*>/g, ' ').replace(/&nbsp;/g, ' ').trim()
@@ -112,7 +119,7 @@ interface NoteEditorWithPanelProps extends NoteEditorProps {
   notes?: LibNote[]
   allNotes?: LibNote[]  // All notes for AI tool calling
   onSelectNote?: (note: LibNote) => void
-  onNewNote?: (noteType?: 'rich-text' | 'drawing' | 'mindmap' | 'bullet-journal', folderId?: string | null, projectId?: string | null) => void
+  onNewNote?: (noteType?: 'rich-text' | 'drawing' | 'mindmap' | 'bullet-journal' | 'data-sheet', folderId?: string | null, projectId?: string | null) => void
   onDuplicateNote?: (note: LibNote) => void
   onMoveNote?: (noteId: string, newFolderId: string | null) => Promise<void>
   isLoadingNotes?: boolean
@@ -157,7 +164,9 @@ export default function NoteEditor({
   const [drawingData, setDrawingData] = useState<DrawingData | null>(null)
   const [mindmapData, setMindmapData] = useState<MindmapData | null>(null)
   const [bulletJournalData, setBulletJournalData] = useState<BulletJournalData | null>(null)
-  const [noteType, setNoteType] = useState<'rich-text' | 'drawing' | 'mindmap' | 'bullet-journal'>('rich-text')
+  const [dataSheetData, setDataSheetData] = useState<DataSheetData | null>(null)
+  const [dataSheetKey, setDataSheetKey] = useState(0)
+  const [noteType, setNoteType] = useState<'rich-text' | 'drawing' | 'mindmap' | 'bullet-journal' | 'data-sheet'>('rich-text')
   const [isSaving, setIsSaving] = useState(false)
   const [isDeleting, setIsDeleting] = useState(false)
   const [hasChanges, setHasChanges] = useState(false)
@@ -168,6 +177,7 @@ export default function NoteEditor({
   const drawingEditorRef = useRef<DrawingEditorHandle | null>(null)
   const mindmapEditorRef = useRef<MindmapEditorHandle | null>(null)
   const bulletJournalRef = useRef<BulletJournalEditorHandle | null>(null)
+  const dataSheetRef = useRef<DataSheetEditorHandle | null>(null)
   const headingUpdateTimeoutRef = useRef<number | null>(null)
   const autosaveTimeoutRef = useRef<number | null>(null)
   const isAutosavingRef = useRef(false)
@@ -182,6 +192,7 @@ export default function NoteEditor({
   const [showWordGoalInput, setShowWordGoalInput] = useState(false)
   const wordGoalInputRef = useRef<HTMLInputElement>(null)
   const [showNoteLinkDialog, setShowNoteLinkDialog] = useState(false)
+  const [showDataSheetPicker, setShowDataSheetPicker] = useState(false)
   const savedNoteLinkSelection = useRef<Range | null>(null)
   const savedContentBlockSelectionRef = useRef<Range | null>(null)
   const [showContentBlocksMenu, setShowContentBlocksMenu] = useState(false)
@@ -230,6 +241,7 @@ export default function NoteEditor({
     { id: 'hyperlink', label: 'Hyperlink', description: 'Insert a web link', icon: LinkIcon, color: 'blue', category: 'Content', command: 'link' as RichTextCommand },
     { id: 'table', label: 'Table', description: 'Insert a customizable table', icon: TableIcon, color: 'blue', category: 'Content', command: null },
     { id: 'note-link', label: 'Note Link', description: 'Link to another note', icon: FileText, color: 'purple', category: 'Content', command: null },
+    { id: 'data-sheet-table', label: 'Data Sheet Table', description: 'Insert table from a data sheet', icon: Table2Icon, color: 'emerald', category: 'Content', command: null },
     { id: 'image', label: 'Image', description: 'Insert an image', icon: ImageIcon, color: 'pink', category: 'Media', command: null },
   ], [])
 
@@ -358,11 +370,25 @@ export default function NoteEditor({
         setContent('')
         setDrawingData(null)
         setMindmapData(null)
+        setDataSheetData(null)
+      } else if (note.note_type === 'data-sheet') {
+        // Parse data sheet data from content
+        try {
+          const data = JSON.parse(note.content || '{}')
+          setDataSheetData(data)
+        } catch {
+          setDataSheetData(null)
+        }
+        setContent('')
+        setDrawingData(null)
+        setMindmapData(null)
+        setBulletJournalData(null)
       } else {
         setContent(note.content || '')
         setDrawingData(null)
         setMindmapData(null)
         setBulletJournalData(null)
+        setDataSheetData(null)
       }
       
       setHasChanges(false)
@@ -395,6 +421,8 @@ export default function NoteEditor({
         },
       } : null)
       setBulletJournalData(initialNoteType === 'bullet-journal' ? { entries: [], activeDate: new Date().toISOString().slice(0, 10), view: 'daily' as const } : null)
+      setDataSheetData(null) // null triggers the size picker in DataSheetEditor
+      setDataSheetKey(k => k + 1) // force remount of DataSheetEditor
       setNoteType(initialNoteType)
       setHasChanges(false)
       setHeadings([])
@@ -417,6 +445,10 @@ export default function NoteEditor({
         const currentBJStr = JSON.stringify(bulletJournalData)
         const noteBJStr = note.content || '{}'
         setHasChanges(title !== note.title || currentBJStr !== noteBJStr)
+      } else if (noteType === 'data-sheet') {
+        const currentDSStr = JSON.stringify(dataSheetData)
+        const noteDSStr = note.content || '{}'
+        setHasChanges(title !== note.title || currentDSStr !== noteDSStr)
       } else {
         setHasChanges(title !== note.title || content !== (note.content || ''))
       }
@@ -430,11 +462,14 @@ export default function NoteEditor({
       } else if (noteType === 'bullet-journal') {
         const entryCount = bulletJournalData?.entries.filter(e => e.content.trim() !== '').length ?? 0
         setHasChanges(title.trim() !== '' || entryCount > 0)
+      } else if (noteType === 'data-sheet') {
+        const cellCount = dataSheetData?.rows.reduce((sum, r) => sum + r.filter(c => c.trim() !== '').length, 0) ?? 0
+        setHasChanges(title.trim() !== '' || cellCount > 0)
       } else {
         setHasChanges(title.trim() !== '' || plainContent !== '')
       }
     }
-  }, [title, content, drawingData, mindmapData, bulletJournalData, note, plainContent, noteType])
+  }, [title, content, drawingData, mindmapData, bulletJournalData, dataSheetData, note, plainContent, noteType])
 
   useEffect(() => {
     return () => {
@@ -716,6 +751,37 @@ export default function NoteEditor({
     })
   }, [hideContentBlocksMenu])
 
+  const handleInsertDataSheetTable = useCallback(() => {
+    hideContentBlocksMenu(() => {
+      saveNoteLinkSelection()
+      setShowDataSheetPicker(true)
+    })
+  }, [hideContentBlocksMenu, saveNoteLinkSelection])
+
+  const handleDataSheetTableSelect = useCallback(
+    (payload: DataSheetTablePayload) => {
+      // Restore the saved selection first
+      if (savedNoteLinkSelection.current) {
+        const selection = window.getSelection()
+        if (selection) {
+          selection.removeAllRanges()
+          selection.addRange(savedNoteLinkSelection.current)
+        }
+      }
+
+      editorRef.current?.focus()
+
+      setTimeout(() => {
+        if (editorRef.current && editorRef.current.insertCustomBlock) {
+          editorRef.current.insertCustomBlock('data-sheet-table', payload)
+          setHasChanges(true)
+        }
+        savedNoteLinkSelection.current = null
+      }, 10)
+    },
+    []
+  )
+
   const handleInsertImage = useCallback(async () => {
     hideContentBlocksMenu(async () => {
       try {
@@ -799,12 +865,14 @@ export default function NoteEditor({
       handleInsertTable()
     } else if (blockId === 'note-link') {
       handleInsertNoteLink()
+    } else if (blockId === 'data-sheet-table') {
+      handleInsertDataSheetTable()
     } else if (blockId === 'image') {
       handleInsertImage()
     } else if (block.command) {
       handleInsertContentBlock(block.command)
     }
-  }, [contentBlocks, handleInsertContentBlock, handleInsertNoteLink, handleInsertTable, handleInsertImage])
+  }, [contentBlocks, handleInsertContentBlock, handleInsertNoteLink, handleInsertTable, handleInsertImage, handleInsertDataSheetTable])
 
   // Keyboard navigation for content blocks menu
   const handleBlockMenuKeyDown = useCallback((e: KeyboardEvent | React.KeyboardEvent) => {
@@ -921,6 +989,13 @@ export default function NoteEditor({
           title: title.trim(),
           content: bjContent,
           note_type: 'bullet-journal',
+        }, isAuto)
+      } else if (noteType === 'data-sheet') {
+        const dsContent = JSON.stringify(dataSheetData)
+        await onSave({
+          title: title.trim(),
+          content: dsContent,
+          note_type: 'data-sheet',
         }, isAuto)
       } else {
         await onSave({
@@ -1487,6 +1562,14 @@ export default function NoteEditor({
                   onChange={setBulletJournalData}
                   disabled={isSaving || isDeleting}
                 />
+              ) : noteType === 'data-sheet' ? (
+                <DataSheetEditor
+                  key={note?.id ?? `new-${dataSheetKey}`}
+                  ref={dataSheetRef}
+                  initialData={dataSheetData}
+                  onChange={setDataSheetData}
+                  disabled={isSaving || isDeleting}
+                />
               ) : (
                 <RichTextEditor
                     ref={editorRef}
@@ -1503,6 +1586,7 @@ export default function NoteEditor({
                     customBlocks={[
                       noteLinkBlock,
                       imageBlock,
+                      dataSheetTableBlock,
                       {
                         type: 'table',
                         render: (payload?: any) => {
@@ -1645,7 +1729,7 @@ export default function NoteEditor({
             {note && (
               <div className="flex items-center gap-1.5 text-gray-500">
                 <span className="px-1.5 py-0.5 bg-gray-200 rounded text-[10px] font-medium uppercase">
-                  {noteType === 'rich-text' ? 'Text' : noteType === 'drawing' ? 'Drawing' : noteType === 'mindmap' ? 'Mindmap' : 'Journal'}
+                  {noteType === 'rich-text' ? 'Text' : noteType === 'drawing' ? 'Drawing' : noteType === 'mindmap' ? 'Mindmap' : noteType === 'data-sheet' ? 'Data Sheet' : 'Journal'}
                 </span>
               </div>
             )}
@@ -1794,6 +1878,14 @@ export default function NoteEditor({
         isOpen={showNoteLinkDialog}
         onClose={() => setShowNoteLinkDialog(false)}
         onSelect={handleNoteLinkSelect}
+        currentNoteId={note?.id}
+      />
+
+      {/* Data Sheet Picker Dialog */}
+      <DataSheetPickerDialog
+        isOpen={showDataSheetPicker}
+        onClose={() => setShowDataSheetPicker(false)}
+        onSelect={handleDataSheetTableSelect}
         currentNoteId={note?.id}
       />
 

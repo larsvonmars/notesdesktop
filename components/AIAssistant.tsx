@@ -415,7 +415,7 @@ export default function AIAssistant({
         id: note.id,
         title: note.title || 'Untitled',
         content: plainContent,
-        type: note.note_type || 'rich-text',
+        type: (note.note_type || 'rich-text') as 'rich-text' | 'drawing' | 'mindmap' | 'bullet-journal',
       }
     }
     

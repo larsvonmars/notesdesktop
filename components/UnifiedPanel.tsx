@@ -33,6 +33,7 @@ import {
   ChevronDown,
   Download,
   FileDown,
+  Table2,
 } from 'lucide-react'
 import jsPDF from 'jspdf'
 import html2canvas from 'html2canvas'
@@ -752,6 +753,8 @@ export default function UnifiedPanel({
                           <Network size={12} className="text-green-500 flex-shrink-0" aria-hidden="true" />
                         ) : n.note_type === 'bullet-journal' ? (
                           <BookOpen size={12} className="text-amber-500 flex-shrink-0" aria-hidden="true" />
+                        ) : n.note_type === 'data-sheet' ? (
+                          <Table2 size={12} className="text-cyan-500 flex-shrink-0" aria-hidden="true" />
                         ) : (
                           <FileText size={12} className="text-alpine-500 flex-shrink-0" aria-hidden="true" />
                         )}
@@ -1019,6 +1022,13 @@ export default function UnifiedPanel({
         infoEl.style.color = textColor
         infoEl.style.opacity = '0.6'
         container.appendChild(infoEl)
+      } else if (note.note_type === 'data-sheet') {
+        const infoEl = document.createElement('p')
+        infoEl.textContent = '[Data sheet content - export as CSV from the editor toolbar]'
+        infoEl.style.fontStyle = 'italic'
+        infoEl.style.color = textColor
+        infoEl.style.opacity = '0.6'
+        container.appendChild(infoEl)
       }
       
       document.body.appendChild(container)
@@ -1126,6 +1136,8 @@ export default function UnifiedPanel({
       markdownContent += '*[Mindmap content - not available in Markdown export]*'
     } else if (note.note_type === 'bullet-journal') {
       markdownContent += '*[Bullet journal content - not available in Markdown export]*'
+    } else if (note.note_type === 'data-sheet') {
+      markdownContent += '*[Data sheet content - export as CSV from the editor toolbar]*'
     }
     
     // Create blob and download
@@ -1177,6 +1189,8 @@ export default function UnifiedPanel({
       htmlContent += '<p><em>[Mindmap content - not available in HTML export]</em></p>'
     } else if (note.note_type === 'bullet-journal') {
       htmlContent += '<p><em>[Bullet journal content - not available in HTML export]</em></p>'
+    } else if (note.note_type === 'data-sheet') {
+      htmlContent += '<p><em>[Data sheet content - export as CSV from the editor toolbar]</em></p>'
     }
     
     htmlContent += '\n</body>\n</html>'
@@ -1222,6 +1236,8 @@ export default function UnifiedPanel({
       textContent += '[Mindmap content - not available in plain text export]'
     } else if (note.note_type === 'bullet-journal') {
       textContent += '[Bullet journal content - not available in plain text export]'
+    } else if (note.note_type === 'data-sheet') {
+      textContent += '[Data sheet content - export as CSV from the editor toolbar]'
     }
     
     // Create blob and download
@@ -1740,7 +1756,8 @@ export default function UnifiedPanel({
                         <div className={`w-10 h-10 rounded-xl flex items-center justify-center ${
                           note.note_type === 'drawing' ? 'bg-purple-100' :
                           note.note_type === 'mindmap' ? 'bg-green-100' :
-                          note.note_type === 'bullet-journal' ? 'bg-amber-100' : 'bg-alpine-100'
+                          note.note_type === 'bullet-journal' ? 'bg-amber-100' :
+                          note.note_type === 'data-sheet' ? 'bg-cyan-100' : 'bg-alpine-100'
                         }`}>
                           {note.note_type === 'drawing' ? (
                             <PenTool size={20} className="text-purple-600" />
@@ -1748,6 +1765,8 @@ export default function UnifiedPanel({
                             <Network size={20} className="text-green-600" />
                           ) : note.note_type === 'bullet-journal' ? (
                             <BookOpen size={20} className="text-amber-600" />
+                          ) : note.note_type === 'data-sheet' ? (
+                            <Table2 size={20} className="text-cyan-600" />
                           ) : (
                             <FileText size={20} className="text-alpine-600" />
                           )}
