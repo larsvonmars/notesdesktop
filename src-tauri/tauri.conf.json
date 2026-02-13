@@ -38,6 +38,9 @@
     ],
     "category": "Productivity",
     "shortDescription": "An Alpine-themed desktop notes application",
+    "iOS": {
+      "minimumSystemVersion": "15.0"
+    },
     "linux": {
       "deb": {
         "depends": [

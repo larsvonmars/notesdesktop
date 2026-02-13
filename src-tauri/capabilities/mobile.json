@@ -1,11 +1,9 @@
 {
-  "identifier": "default",
-  "description": "Default capabilities for the main window",
-  "windows": ["main"],
-  "platforms": ["linux", "macOS", "windows", "iOS", "android"],
+  "identifier": "mobile",
+  "description": "Additional capabilities for mobile platforms",
+  "platforms": ["iOS", "android"],
   "permissions": [
     "core:default",
-    "shell:allow-open",
     "opener:default",
     "notification:default",
     {
