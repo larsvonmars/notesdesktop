@@ -19,7 +19,8 @@ import {
   Plus,
   LayoutGrid,
   Eye,
-  EyeOff
+  EyeOff,
+  Trash2
 } from 'lucide-react'
 
 export type RichTextCommand =
@@ -43,6 +44,7 @@ export interface EditorToolbarProps {
   onUndo: () => void
   onRedo: () => void
   onNewBlock: () => void
+  onDeleteBlock: () => void
   onToggleBlockPanel: () => void
   onToggleBlockOutlines: () => void
   blockPanelOpen: boolean
@@ -59,6 +61,7 @@ const EditorToolbar: React.FC<EditorToolbarProps> = ({
   onUndo,
   onRedo,
   onNewBlock,
+  onDeleteBlock,
   onToggleBlockPanel,
   onToggleBlockOutlines,
   blockPanelOpen,
@@ -263,6 +266,16 @@ const EditorToolbar: React.FC<EditorToolbarProps> = ({
             title="New block (Ctrl+Enter)"
           >
             <Plus size={16} /> New block
+          </button>
+          <button
+            className="inline-flex items-center gap-2 rounded-xl bg-red-500 px-3 py-2 text-sm font-medium text-white shadow hover:bg-red-600 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-red-500 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+            onMouseDown={(e) => e.preventDefault()}
+            onClick={onDeleteBlock}
+            disabled={disabled || !activeBlockId}
+            aria-label="Delete block"
+            title="Delete block"
+          >
+            <Trash2 size={16} /> Delete block
           </button>
           <button
             className={blockPanelOpen ? activeButtonClass : toolbarButtonClass}

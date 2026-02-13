@@ -15,21 +15,14 @@ import type {
 import DOMPurify from 'dompurify'
 import type { Config } from 'dompurify'
 import {
-  X,
-  Search,
-  Plus,
-  Trash2,
-  Minus,
-  ExternalLink,
-  Link2,
-  Copy,
-  Edit2,
-  Check,
-  AlertCircle,
-  Clock,
-  Globe
+  X
 } from 'lucide-react'
 import EditorToolbar from './EditorToolbar'
+import LinkDialog from './editor/LinkDialog'
+import LinkPopover from './editor/LinkPopover'
+import SearchReplaceDialog from './editor/SearchReplaceDialog'
+import TableInsertDialog from './editor/TableInsertDialog'
+import TableToolbar from './editor/TableToolbar'
 import {
   applyInlineStyle,
   applyBlockFormat,
@@ -55,7 +48,15 @@ import {
   addCheckboxToListItem,
   removeCheckboxFromListItem,
   getClosestListItem,
-  mergeAdjacentLists
+  mergeAdjacentLists,
+  indentListItems,
+  outdentListItems,
+  handleListEnter,
+  handleListBackspace,
+  normalizeAllLists,
+  updateChecklistProgress,
+  getClosestList,
+  initListDragReorder,
 } from '@/lib/editor/listHandler'
 import { HistoryManager, createDebouncedCapture } from '@/lib/editor/historyManager'
 import {
@@ -70,6 +71,8 @@ import {
   saveSelectionRange,
   restoreSelectionRange,
 } from '@/lib/editor/selectionUtils'
+import { useLinkPopover } from '@/lib/editor/useLinkPopover'
+import { useTableToolbar } from '@/lib/editor/useTableToolbar'
 import {
   applyAutoformat,
   shouldApplyAutoformat,
@@ -266,11 +269,19 @@ const RichTextEditor = forwardRef<RichTextEditorHandle, RichTextEditorProps>(
       addToRecentLinks,
       resetLinkDialog,
     } = useLinkDialogState()
-    const [showLinkPopover, setShowLinkPopover] = useState(false)
-    const [linkPopoverPos, setLinkPopoverPos] = useState({ top: 0, left: 0 })
-    const [hoveredLinkElement, setHoveredLinkElement] = useState<HTMLAnchorElement | null>(null)
-    const linkPopoverTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
-    const [copiedLink, setCopiedLink] = useState(false)
+    const {
+      showLinkPopover,
+      linkPopoverPos,
+      hoveredLinkElement,
+      copiedLink,
+      hideLinkPopover,
+      hideLinkPopoverNow,
+      keepPopoverOpen,
+      copyLinkUrl,
+    } = useLinkPopover({
+      editorRef,
+      ignoreSelector: '[data-block-type="note-link"]',
+    })
     const {
       showSearchDialog,
       setShowSearchDialog,
@@ -777,44 +788,7 @@ const RichTextEditor = forwardRef<RichTextEditorHandle, RichTextEditorProps>(
     const normalizeChecklistItemsInline = useCallback(() => {
       if (!editorRef.current) return
 
-      const listItems = editorRef.current.querySelectorAll('li')
-      listItems.forEach((item) => {
-        const li = item as HTMLLIElement
-        const checkbox = li.querySelector('input[type="checkbox"]') as HTMLInputElement | null
-
-        if (checkbox) {
-          if (!checkbox.classList.contains('checklist-checkbox')) {
-            checkbox.classList.add('checklist-checkbox', 'align-middle', 'mr-2')
-          }
-          if (!checkbox.hasAttribute('data-checked')) {
-            checkbox.setAttribute('data-checked', checkbox.checked ? 'true' : 'false')
-          }
-          li.classList.add('checklist-item')
-          li.setAttribute('data-checklist', 'true')
-          const existingTextNode = Array.from(li.childNodes).find(
-            (node): node is Text => node.nodeType === Node.TEXT_NODE
-          )
-          if (!existingTextNode) {
-            const textNode = document.createTextNode('')
-            li.appendChild(textNode)
-          }
-        } else if (li.classList.contains('checklist-item') || li.getAttribute('data-checklist') === 'true') {
-          li.classList.remove('checklist-item')
-          li.removeAttribute('data-checklist')
-        }
-      })
-
-      const lists = editorRef.current.querySelectorAll('ul, ol')
-      lists.forEach((list) => {
-        const hasCheckbox = !!list.querySelector('input[type="checkbox"]')
-        if (hasCheckbox) {
-          list.classList.add('checklist-list')
-          list.setAttribute('data-checklist', 'true')
-        } else {
-          list.classList.remove('checklist-list')
-          list.removeAttribute('data-checklist')
-        }
-      })
+      normalizeAllLists(editorRef.current)
     }, [])
 
     const scheduleChecklistNormalization = useCallback(() => {
@@ -838,9 +812,10 @@ const RichTextEditor = forwardRef<RichTextEditorHandle, RichTextEditorProps>(
         }
         
         const sanitized = sanitize(editorRef.current.innerHTML)
-        lastSyncedValueRef.current = sanitized
         
-        if (sanitized !== value) {
+        // Compare against what we last synced, not the (potentially stale) value prop
+        if (sanitized !== lastSyncedValueRef.current) {
+          lastSyncedValueRef.current = sanitized
           onChange(sanitized)
           if (debouncedCaptureRef.current) {
             debouncedCaptureRef.current()
@@ -852,7 +827,7 @@ const RichTextEditor = forwardRef<RichTextEditorHandle, RichTextEditorProps>(
       } catch (error) {
         console.error('Error emitting change:', error)
       }
-    }, [onChange, sanitize, updateBlockMetadata, value, scheduleActiveFormatsUpdate])
+    }, [onChange, sanitize, updateBlockMetadata, scheduleActiveFormatsUpdate])
 
     // Public API: insert a custom block by type and optional payload
     const insertCustomBlock = useCallback(
@@ -965,141 +940,18 @@ const RichTextEditor = forwardRef<RichTextEditorHandle, RichTextEditorProps>(
       })
     }, [])
 
-    // Table manipulation helpers (defined after emitChange so it's available)
-    const [tableToolbarVisible, setTableToolbarVisible] = useState(false)
-    const [tableToolbarPos, setTableToolbarPos] = useState({ top: 0, left: 0 })
-    const tableNodeRef = useRef<HTMLElement | null>(null)
+    const {
+      tableToolbarVisible,
+      tableToolbarPos,
+      addTableRow,
+      deleteTableRow,
+      addTableCol,
+      deleteTableCol,
+      deleteTable,
+      getTableDimensionsLabel,
+    } = useTableToolbar({ editorRef, onEmitChange: emitChange })
 
-    const findClosestTableBlock = useCallback((el: Node | null) => {
-      if (!el || !editorRef.current) return null
-      let node: Node | null = el
-      while (node && node !== editorRef.current) {
-        if (node instanceof HTMLElement) {
-          const isBlock = node.getAttribute('data-block') === 'true' || node.hasAttribute('data-block')
-          const type = node.getAttribute('data-block-type')
-          if (isBlock && type === 'table') return node as HTMLElement
-          const table = node.closest('table')
-          if (table) return table as HTMLElement
-        }
-        node = node.parentNode
-      }
-      return null
-    }, [])
-
-    const showTableToolbarForNode = useCallback((node: HTMLElement | null) => {
-      if (!node) {
-        setTableToolbarVisible(false)
-        tableNodeRef.current = null
-        return
-      }
-      tableNodeRef.current = node
-      const rect = node.getBoundingClientRect()
-
-      // Prefer showing toolbar above the table; if not enough space, show below
-      const TOOLBAR_HEIGHT = 40
-      const MARGIN = 8
-      let top = rect.top - TOOLBAR_HEIGHT - MARGIN
-      if (top < MARGIN) {
-        top = rect.bottom + MARGIN
-      }
-
-      // Align left to table left, but clamp to viewport
-      let left = rect.left
-      const toolbarWidthEstimate = 360
-      const maxLeft = window.innerWidth - toolbarWidthEstimate - MARGIN
-      if (left > maxLeft) left = Math.max(MARGIN, maxLeft)
-      if (left < MARGIN) left = MARGIN
-
-      setTableToolbarPos({ top, left })
-      setTableToolbarVisible(true)
-    }, [])
-
-    const updateTablePayload = useCallback(() => {
-      const table = tableNodeRef.current as HTMLTableElement | null
-      if (!table) return
-      // find ancestor block element that has data-block attribute, otherwise use table
-      let block: HTMLElement | null = table
-      let p: HTMLElement | null = table
-      while (p && p !== editorRef.current) {
-        if (p.getAttribute && (p.getAttribute('data-block') === 'true' || p.hasAttribute('data-block'))) {
-          block = p
-          break
-        }
-        p = p.parentElement
-      }
-      const rows = table.querySelectorAll('tr').length
-      const cols = table.querySelectorAll('tr')[0]?.querySelectorAll('td,th').length || 0
-      try {
-        block.setAttribute('data-block-payload', encodeURIComponent(JSON.stringify({ rows, cols })))
-      } catch {}
-    }, [])
-
-    const addTableRow = useCallback(() => {
-      const table = tableNodeRef.current as HTMLTableElement | null
-      if (!table) return
-      const cols = table.querySelectorAll('tr')[0]?.querySelectorAll('td,th').length || 1
-      const tr = document.createElement('tr')
-      for (let i = 0; i < cols; i++) {
-        const td = document.createElement('td')
-        td.className = 'border px-2 py-1 align-top'
-        td.innerHTML = '&nbsp;'
-        tr.appendChild(td)
-      }
-      table.appendChild(tr)
-      // update payload on the containing block element
-      updateTablePayload()
-      emitChange()
-    }, [emitChange, updateTablePayload])
-
-    const deleteTableRow = useCallback(() => {
-      const table = tableNodeRef.current as HTMLTableElement | null
-      if (!table) return
-      const rows = table.querySelectorAll('tr')
-      if (rows.length <= 1) return
-      const last = rows[rows.length - 1]
-      last.remove()
-      updateTablePayload()
-      emitChange()
-    }, [emitChange, updateTablePayload])
-
-    const addTableCol = useCallback(() => {
-      const table = tableNodeRef.current as HTMLTableElement | null
-      if (!table) return
-      const rows = table.querySelectorAll('tr')
-      rows.forEach((row) => {
-        const td = document.createElement('td')
-        td.className = 'border px-2 py-1 align-top'
-        td.innerHTML = '&nbsp;'
-        row.appendChild(td)
-      })
-      updateTablePayload()
-      emitChange()
-    }, [emitChange, updateTablePayload])
-
-    const deleteTableCol = useCallback(() => {
-      const table = tableNodeRef.current as HTMLTableElement | null
-      if (!table) return
-      const rows = table.querySelectorAll('tr')
-      rows.forEach((row) => {
-        const cells = row.querySelectorAll('td,th')
-        if (cells.length > 1) {
-          cells[cells.length - 1].remove()
-        }
-      })
-      updateTablePayload()
-      emitChange()
-    }, [emitChange, updateTablePayload])
-
-    const deleteTable = useCallback(() => {
-      const table = tableNodeRef.current as HTMLElement | null
-      if (!table) return
-      table.remove()
-      tableNodeRef.current = null
-      setTableToolbarVisible(false)
-      emitChange()
-    }, [emitChange])
-
-    // Editor click handler to detect table clicks and note link clicks
+    // Editor click handler to detect note link clicks
     useEffect(() => {
       const handleClick = (event: MouseEvent) => {
         const target = event.target as HTMLElement | null
@@ -1119,14 +971,6 @@ const RichTextEditor = forwardRef<RichTextEditorHandle, RichTextEditorProps>(
             return
           }
         }
-        
-        // Check for table clicks
-        const tableNode = findClosestTableBlock(target)
-        if (tableNode) {
-          showTableToolbarForNode(tableNode as HTMLElement)
-        } else {
-          setTableToolbarVisible(false)
-        }
       }
       
       document.addEventListener('click', handleClick)
@@ -1134,7 +978,7 @@ const RichTextEditor = forwardRef<RichTextEditorHandle, RichTextEditorProps>(
       return () => {
         document.removeEventListener('click', handleClick)
       }
-    }, [findClosestTableBlock, showTableToolbarForNode])
+    }, [])
 
     const createChecklistCheckbox = useCallback(() => {
       const checkbox = document.createElement('input')
@@ -1259,32 +1103,8 @@ const RichTextEditor = forwardRef<RichTextEditorHandle, RichTextEditorProps>(
 
     const normalizeChecklistItems = useCallback(() => {
       if (!editorRef.current) return
-
-      const listItems = editorRef.current.querySelectorAll('li')
-      listItems.forEach((item) => {
-        const li = item as HTMLLIElement
-        const checkbox = li.querySelector('input[type="checkbox"]') as HTMLInputElement | null
-
-        if (checkbox) {
-          if (!checkbox.classList.contains('checklist-checkbox')) {
-            checkbox.classList.add('checklist-checkbox', 'align-middle', 'mr-2')
-          }
-          if (!checkbox.hasAttribute('data-checked')) {
-            checkbox.setAttribute('data-checked', checkbox.checked ? 'true' : 'false')
-          }
-          markChecklistItem(li, true)
-          ensureTextNode(li)
-        } else if (li.classList.contains('checklist-item') || li.getAttribute('data-checklist') === 'true') {
-          markChecklistItem(li, false)
-        }
-      })
-
-      const lists = editorRef.current.querySelectorAll('ul, ol')
-      lists.forEach((list) => {
-        const hasCheckbox = !!list.querySelector('input[type="checkbox"]')
-        markChecklistList(list as HTMLUListElement | HTMLOListElement, hasCheckbox)
-      })
-    }, [ensureTextNode, markChecklistItem, markChecklistList])
+      normalizeAllLists(editorRef.current)
+    }, [])
 
     // Setup mutation observer for checklist normalization
     useEffect(() => {
@@ -1776,61 +1596,12 @@ const RichTextEditor = forwardRef<RichTextEditorHandle, RichTextEditorProps>(
       }
     }, [linkUrl, linkText, restoreSelection, emitChange, validateUrl, normalizeUrl, addToRecentLinks, resetLinkDialog])
 
-    // Show link popover on hover
-    const showLinkPopoverForElement = useCallback((linkElement: HTMLAnchorElement) => {
-      if (linkPopoverTimeoutRef.current) {
-        clearTimeout(linkPopoverTimeoutRef.current)
-      }
-
-      const rect = linkElement.getBoundingClientRect()
-      const top = rect.bottom + window.scrollY + 8
-      const left = rect.left + window.scrollX
-
-      setLinkPopoverPos({ top, left })
-      setHoveredLinkElement(linkElement)
-      setShowLinkPopover(true)
-    }, [])
-
-    // Hide link popover
-    const hideLinkPopover = useCallback(() => {
-      linkPopoverTimeoutRef.current = setTimeout(() => {
-        setShowLinkPopover(false)
-        setHoveredLinkElement(null)
-      }, 200)
-    }, [])
-
-    useEffect(() => {
-      return () => {
-        if (linkPopoverTimeoutRef.current) {
-          clearTimeout(linkPopoverTimeoutRef.current)
-        }
-      }
-    }, [])
-
-    // Keep popover open when hovering over it
-    const keepPopoverOpen = useCallback(() => {
-      if (linkPopoverTimeoutRef.current) {
-        clearTimeout(linkPopoverTimeoutRef.current)
-      }
-    }, [])
-
-    // Copy link to clipboard
-    const copyLinkUrl = useCallback(async (url: string) => {
-      try {
-        await navigator.clipboard.writeText(url)
-        setCopiedLink(true)
-        setTimeout(() => setCopiedLink(false), 2000)
-      } catch (err) {
-        console.error('Failed to copy link:', err)
-      }
-    }, [])
-
     // Edit link
     const editLink = useCallback((linkElement: HTMLAnchorElement) => {
       setLinkUrl(linkElement.getAttribute('href') || '')
       setLinkText(linkElement.textContent || '')
       setLinkUrlError('')
-      setShowLinkPopover(false)
+      hideLinkPopoverNow()
       
       // Select the link element
       const range = document.createRange()
@@ -1841,54 +1612,21 @@ const RichTextEditor = forwardRef<RichTextEditorHandle, RichTextEditorProps>(
       
       saveSelection()
       setShowLinkDialog(true)
-    }, [saveSelection])
+    }, [saveSelection, hideLinkPopoverNow])
 
     // Remove link
     const removeLink = useCallback((linkElement: HTMLAnchorElement) => {
       const text = linkElement.textContent || ''
       const textNode = document.createTextNode(text)
       linkElement.parentNode?.replaceChild(textNode, linkElement)
-      setShowLinkPopover(false)
+      hideLinkPopoverNow()
       emitChange()
-    }, [emitChange])
+    }, [emitChange, hideLinkPopoverNow])
 
     // Open link in new tab
     const openLink = useCallback((url: string) => {
       window.open(url, '_blank', 'noopener,noreferrer')
     }, [])
-
-    // Link hover detection
-    useEffect(() => {
-      if (!editorRef.current) return
-
-      const handleMouseOver = (event: MouseEvent) => {
-        const target = event.target as HTMLElement | null
-        if (target) {
-          const linkElement = target.closest('a[href]') as HTMLAnchorElement | null
-          if (linkElement && !linkElement.closest('[data-block-type="note-link"]')) {
-            showLinkPopoverForElement(linkElement)
-          }
-        }
-      }
-
-      const handleMouseOut = (event: MouseEvent) => {
-        const target = event.target as HTMLElement | null
-        const relatedTarget = event.relatedTarget as HTMLElement | null
-        
-        if (target && target.closest('a[href]') && !relatedTarget?.closest('a[href]') && !relatedTarget?.closest('.link-popover')) {
-          hideLinkPopover()
-        }
-      }
-
-      const editor = editorRef.current
-      editor.addEventListener('mouseover', handleMouseOver)
-      editor.addEventListener('mouseout', handleMouseOut)
-      
-      return () => {
-        editor.removeEventListener('mouseover', handleMouseOver)
-        editor.removeEventListener('mouseout', handleMouseOut)
-      }
-    }, [showLinkPopoverForElement, hideLinkPopover])
 
     // Search functionality
     const highlightMatch = useCallback((matchIndex: number) => {
@@ -2215,6 +1953,47 @@ const RichTextEditor = forwardRef<RichTextEditorHandle, RichTextEditorProps>(
       }
     }, [emitChange, ensureBlockId, updateBlockMetadata])
 
+    const deleteActiveBlock = useCallback(() => {
+      if (!editorRef.current || !editorRef.current.isConnected || !activeBlockId) return
+
+      try {
+        const editor = editorRef.current
+        const escapeSelector = (value: string) =>
+          value.replace(/[\\"]/g, '\\$&')
+        const block = editor.querySelector(
+          `[data-block-id="${escapeSelector(activeBlockId)}"]`
+        ) as HTMLElement | null
+        if (!block) return
+
+        // Determine the sibling to focus after deletion
+        const nextSibling = block.nextElementSibling as HTMLElement | null
+        const prevSibling = block.previousElementSibling as HTMLElement | null
+        const targetSibling = nextSibling || prevSibling
+
+        block.remove()
+
+        // Ensure there is always at least one block left
+        if (!editor.querySelector('[data-block]')) {
+          const newBlock = createEmptyBlock()
+          editor.appendChild(newBlock)
+          ensureBlockId(newBlock)
+          const focusTarget = (newBlock.querySelector('p, div, span') as HTMLElement | null) ?? newBlock
+          positionCursorInElement(focusTarget, 'start', editor)
+          setActiveBlockId(newBlock.getAttribute('data-block-id'))
+        } else if (targetSibling) {
+          ensureBlockId(targetSibling)
+          const focusTarget = (targetSibling.querySelector('p, div, span, li, blockquote') as HTMLElement | null) ?? targetSibling
+          positionCursorInElement(focusTarget, 'start', editor)
+          setActiveBlockId(targetSibling.getAttribute('data-block-id'))
+        }
+
+        emitChange()
+        updateBlockMetadata()
+      } catch (error) {
+        console.error('Error deleting active block:', error)
+      }
+    }, [activeBlockId, createEmptyBlock, emitChange, ensureBlockId, updateBlockMetadata])
+
     /**
      * Ensure the editor always has at least one block for writing
      * Creates a default block if the editor is empty
@@ -2459,6 +2238,19 @@ const RichTextEditor = forwardRef<RichTextEditorHandle, RichTextEditorProps>(
 
         // Only update if value has actually changed to prevent unnecessary renders
         if (lastSyncedValueRef.current !== sanitizedValue) {
+          // Skip DOM clobbering when the editor is focused – the user is
+          // actively typing and the DOM is the source of truth.  The only
+          // time we need to force-write innerHTML is when an *external*
+          // source changed the value (e.g. loading a different note, undo
+          // from the parent, or a collaborative update).
+          const editorHasFocus = editorEl === document.activeElement || editorEl.contains(document.activeElement)
+          if (editorHasFocus) {
+            // The parent state will catch up on the next emitChange – just
+            // update our tracking ref so we don't keep re-entering.
+            lastSyncedValueRef.current = sanitizedValue
+            return
+          }
+
           // Store cursor position before update
           const savedCursorPos = saveCursorPosition()
           
@@ -2481,15 +2273,15 @@ const RichTextEditor = forwardRef<RichTextEditorHandle, RichTextEditorProps>(
               console.error('Error capturing history:', error)
             }
           }
+
+          // Only run post-sync maintenance when we actually wrote innerHTML
+          scheduleChecklistNormalization()
+          rehydrateExistingBlocks()
+          updateBlockMetadata()
         }
 
         // Ensure editor always has a default block when empty
         ensureDefaultBlock()
-
-        scheduleChecklistNormalization()
-        // attempt to rehydrate any custom blocks that came from loaded HTML
-        rehydrateExistingBlocks()
-        updateBlockMetadata()
       } catch (error) {
         console.error('Error synchronizing editor value:', error)
       }
@@ -2506,6 +2298,11 @@ const RichTextEditor = forwardRef<RichTextEditorHandle, RichTextEditorProps>(
           target.setAttribute('checked', 'true')
         } else {
           target.removeAttribute('checked')
+        }
+        // Update progress on the parent checklist
+        const parentList = getClosestList(target)
+        if (parentList) {
+          updateChecklistProgress(parentList)
         }
         emitChange()
       }
@@ -2540,6 +2337,18 @@ const RichTextEditor = forwardRef<RichTextEditorHandle, RichTextEditorProps>(
           cleanupFn()
         }
       }
+    }, [emitChange])
+
+    // Initialize list drag-to-reorder
+    useEffect(() => {
+      if (!editorRef.current) return
+      const cleanup = initListDragReorder(editorRef.current, () => {
+        if (editorRef.current) {
+          normalizeAllLists(editorRef.current)
+        }
+        emitChange()
+      })
+      return cleanup
     }, [emitChange])
 
     const handleInput = () => {
@@ -2655,7 +2464,46 @@ const RichTextEditor = forwardRef<RichTextEditorHandle, RichTextEditorProps>(
         }
       }
 
-      // Handle Enter key for checklist items
+      // Handle Tab/Shift+Tab for list indent/outdent
+      if (event.key === 'Tab' && !event.metaKey && !event.ctrlKey && !event.altKey) {
+        try {
+          const selection = window.getSelection()
+          if (selection && selection.anchorNode) {
+            const li = getClosestListItem(selection.anchorNode)
+            if (li) {
+              event.preventDefault()
+              const editor = editorRef.current
+              if (event.shiftKey) {
+                outdentListItems(editor)
+              } else {
+                indentListItems(editor)
+              }
+              normalizeAllLists(editor)
+              emitChange()
+              return
+            }
+          }
+        } catch (error) {
+          console.error('Error handling Tab indent/outdent:', error)
+        }
+      }
+
+      // Handle Backspace at start of list item
+      if (event.key === 'Backspace' && !event.metaKey && !event.ctrlKey && !event.shiftKey && !event.altKey) {
+        try {
+          const editor = editorRef.current
+          if (handleListBackspace(editor)) {
+            event.preventDefault()
+            normalizeAllLists(editor)
+            emitChange()
+            return
+          }
+        } catch (error) {
+          console.error('Error handling list Backspace:', error)
+        }
+      }
+
+      // Handle Enter key for list items (bullet, ordered, checklist)
       if (event.key === 'Enter' && !event.shiftKey) {
         try {
           const selection = window.getSelection()
@@ -2665,77 +2513,16 @@ const RichTextEditor = forwardRef<RichTextEditorHandle, RichTextEditorProps>(
           
           const currentListItem = getClosestListItem(selection.anchorNode)
           if (currentListItem && currentListItem.isConnected) {
-            const hasCheckbox = !!currentListItem.querySelector('input[type="checkbox"]')
-            const isChecklist =
-              hasCheckbox ||
-              currentListItem.classList.contains('checklist-item') ||
-              currentListItem.getAttribute('data-checklist') === 'true'
-
-            if (isChecklist) {
-              const list = currentListItem.parentElement
-              if (list && list.isConnected) {
-                const textContent = getChecklistItemText(currentListItem)
-
-                if (textContent.length === 0) {
-                  event.preventDefault()
-
-                  const parent = list.parentElement
-                  const paragraph = document.createElement('p')
-                  paragraph.appendChild(document.createElement('br'))
-
-                  try {
-                    list.removeChild(currentListItem)
-                    if (list.childElementCount === 0) {
-                      list.remove()
-                    }
-
-                    if (parent && parent.isConnected) {
-                      parent.insertBefore(paragraph, list.nextSibling)
-                    } else if (editorRef.current && editorRef.current.isConnected) {
-                      editorRef.current.appendChild(paragraph)
-                    }
-
-                    // Use improved cursor positioning with validation
-                    if (paragraph.isConnected && editorRef.current) {
-                      positionCursorInElement(paragraph, 'start', editorRef.current)
-                    }
-
-                    emitChange()
-                  } catch (err) {
-                    console.error('Error removing empty checklist item:', err)
-                  }
-                  return
-                }
-
-                // Use applyCursorOperation for consistent timing
-                applyCursorOperation(() => {
-                  try {
-                    const postSelection = window.getSelection()
-                    if (!postSelection || !postSelection.anchorNode) {
-                      return
-                    }
-                    
-                    const newListItem = getClosestListItem(postSelection.anchorNode)
-                    if (!newListItem || newListItem === currentListItem || !newListItem.isConnected) {
-                      return
-                    }
-
-                    if (!newListItem.querySelector('input[type="checkbox"]')) {
-                      addCheckboxToListItem(newListItem)
-                    } else {
-                      markChecklistItem(newListItem, true)
-                    }
-
-                    emitChange()
-                  } catch (err) {
-                    console.error('Error in checklist Enter post-processing:', err)
-                  }
-                }, CURSOR_TIMING.SHORT)
-              }
+            const editor = editorRef.current
+            if (handleListEnter(editor)) {
+              event.preventDefault()
+              normalizeAllLists(editor)
+              emitChange()
+              return
             }
           }
         } catch (error) {
-          console.error('Error handling checklist Enter key:', error)
+          console.error('Error handling list Enter key:', error)
         }
       }
 
@@ -2946,6 +2733,7 @@ const RichTextEditor = forwardRef<RichTextEditorHandle, RichTextEditorProps>(
           onUndo={() => applyHistoryAction('undo')}
           onRedo={() => applyHistoryAction('redo')}
           onNewBlock={createRootLevelBlock}
+          onDeleteBlock={deleteActiveBlock}
           onToggleBlockPanel={() => setBlockPanelOpen((prev) => !prev)}
           onToggleBlockOutlines={() => setShowBlockOutlines((prev) => !prev)}
           blockPanelOpen={blockPanelOpen}
@@ -3015,411 +2803,93 @@ const RichTextEditor = forwardRef<RichTextEditorHandle, RichTextEditorProps>(
           )}
         </div>
 
-        {/* Link Dialog - Enhanced */}
-        {showLinkDialog && (
-          <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 p-4">
-            <div className="bg-white rounded-2xl shadow-2xl p-6 w-full max-w-lg border border-slate-200">
-              <div className="flex items-center justify-between mb-6">
-                <div className="flex items-center gap-2">
-                  <div className="p-2 bg-alpine-100 rounded-lg">
-                    <Link2 size={20} className="text-alpine-600" />
-                  </div>
-                  <h3 className="text-xl font-semibold text-slate-900">Insert Link</h3>
-                </div>
-                <button
-                  onClick={resetLinkDialog}
-                  className="text-slate-400 hover:text-slate-600 transition-colors p-1 rounded-lg hover:bg-slate-100"
-                  aria-label="Close dialog"
-                >
-                  <X size={20} />
-                </button>
-              </div>
+        <LinkDialog
+          isOpen={showLinkDialog}
+          linkUrl={linkUrl}
+          linkText={linkText}
+          linkUrlError={linkUrlError}
+          recentLinks={recentLinks}
+          onClose={resetLinkDialog}
+          onApply={applyLink}
+          onUrlChange={(value) => {
+            setLinkUrl(value)
+            setLinkUrlError('')
+          }}
+          onTextChange={setLinkText}
+          onUseRecent={(recent) => {
+            setLinkUrl(recent.url)
+            setLinkText(recent.text)
+            setLinkUrlError('')
+          }}
+        />
 
-              <div className="space-y-5">
-                {/* URL Input */}
-                <div>
-                  <label className="flex items-center gap-2 text-sm font-semibold text-slate-700 mb-2">
-                    <Globe size={16} />
-                    URL
-                  </label>
-                  <div className="relative">
-                    <input
-                      type="url"
-                      value={linkUrl}
-                      onChange={(e) => {
-                        setLinkUrl(e.target.value)
-                        setLinkUrlError('')
-                      }}
-                      onKeyDown={(e) => {
-                        if (e.key === 'Enter' && !e.shiftKey) {
-                          e.preventDefault()
-                          applyLink()
-                        }
-                      }}
-                      placeholder="https://example.com or example.com"
-                      className={`w-full px-4 py-3 pr-10 border-2 ${
-                        linkUrlError 
-                          ? 'border-red-300 focus:border-red-500 focus:ring-red-500' 
-                          : 'border-slate-200 focus:border-alpine-500 focus:ring-alpine-500'
-                      } rounded-xl focus:ring-2 focus:ring-offset-0 transition-all text-slate-900 placeholder-slate-400`}
-                      autoFocus
-                    />
-                    {linkUrlError && (
-                      <div className="absolute right-3 top-1/2 -translate-y-1/2">
-                        <AlertCircle size={20} className="text-red-500" />
-                      </div>
-                    )}
-                  </div>
-                  {linkUrlError && (
-                    <p className="mt-2 text-sm text-red-600 flex items-center gap-1">
-                      <AlertCircle size={14} />
-                      {linkUrlError}
-                    </p>
-                  )}
-                </div>
+        <LinkPopover
+          isOpen={showLinkPopover}
+          top={linkPopoverPos.top}
+          left={linkPopoverPos.left}
+          linkElement={hoveredLinkElement}
+          copiedLink={copiedLink}
+          onMouseEnter={keepPopoverOpen}
+          onMouseLeave={hideLinkPopover}
+          onOpen={openLink}
+          onEdit={editLink}
+          onCopy={copyLinkUrl}
+          onRemove={removeLink}
+        />
 
-                {/* Text Input */}
-                <div>
-                  <label className="flex items-center gap-2 text-sm font-semibold text-slate-700 mb-2">
-                    <Edit2 size={16} />
-                    Link Text (optional)
-                  </label>
-                  <input
-                    type="text"
-                    value={linkText}
-                    onChange={(e) => setLinkText(e.target.value)}
-                    onKeyDown={(e) => {
-                      if (e.key === 'Enter' && !e.shiftKey) {
-                        e.preventDefault()
-                        applyLink()
-                      }
-                    }}
-                    placeholder="Custom display text"
-                    className="w-full px-4 py-3 border-2 border-slate-200 rounded-xl focus:border-alpine-500 focus:ring-2 focus:ring-alpine-500 focus:ring-offset-0 transition-all text-slate-900 placeholder-slate-400"
-                  />
-                  <p className="mt-2 text-xs text-slate-500">
-                    Leave empty to use the URL as display text
-                  </p>
-                </div>
-
-                {/* Recent Links */}
-                {recentLinks.length > 0 && (
-                  <div className="border-t border-slate-200 pt-4">
-                    <label className="flex items-center gap-2 text-sm font-semibold text-slate-700 mb-3">
-                      <Clock size={16} />
-                      Recent Links
-                    </label>
-                    <div className="space-y-2 max-h-32 overflow-y-auto">
-                      {recentLinks.map((recent, index) => (
-                        <button
-                          key={index}
-                          onClick={() => {
-                            setLinkUrl(recent.url)
-                            setLinkText(recent.text)
-                            setLinkUrlError('')
-                          }}
-                          className="w-full px-3 py-2 text-left rounded-lg border border-slate-200 hover:border-alpine-300 hover:bg-alpine-50 transition-all group"
-                        >
-                          <div className="flex items-center gap-2">
-                            <ExternalLink size={14} className="text-slate-400 group-hover:text-alpine-600" />
-                            <div className="flex-1 min-w-0">
-                              <p className="text-sm font-medium text-slate-700 truncate">
-                                {recent.text}
-                              </p>
-                              <p className="text-xs text-slate-500 truncate">
-                                {recent.url}
-                              </p>
-                            </div>
-                          </div>
-                        </button>
-                      ))}
-                    </div>
-                  </div>
-                )}
-
-                {/* Action Buttons */}
-                <div className="flex gap-3 justify-end pt-2">
-                  <button
-                    onClick={resetLinkDialog}
-                    className="px-5 py-2.5 text-slate-700 hover:bg-slate-100 rounded-xl transition-colors font-medium"
-                  >
-                    Cancel
-                  </button>
-                  <button
-                    onClick={applyLink}
-                    disabled={!linkUrl.trim()}
-                    className="px-5 py-2.5 bg-gradient-to-r from-alpine-600 to-alpine-700 text-white rounded-xl hover:from-alpine-700 hover:to-alpine-800 disabled:opacity-50 disabled:cursor-not-allowed transition-all font-medium shadow-lg shadow-alpine-500/30 disabled:shadow-none flex items-center gap-2"
-                  >
-                    <Check size={18} />
-                    Insert Link
-                  </button>
-                </div>
-              </div>
-            </div>
-          </div>
-        )}
-
-        {/* Link Popover - Shows on hover */}
-        {showLinkPopover && hoveredLinkElement && (
-          <div
-            className="link-popover fixed z-50 bg-white rounded-xl shadow-2xl border border-slate-200 p-3 min-w-[320px] max-w-[400px]"
-            style={{
-              top: `${linkPopoverPos.top}px`,
-              left: `${linkPopoverPos.left}px`,
-            }}
-            onMouseEnter={keepPopoverOpen}
-            onMouseLeave={hideLinkPopover}
-          >
-            <div className="flex items-start gap-3">
-              <div className="p-2 bg-alpine-100 rounded-lg flex-shrink-0">
-                <ExternalLink size={16} className="text-alpine-600" />
-              </div>
-              <div className="flex-1 min-w-0">
-                <p className="text-sm font-semibold text-slate-900 truncate mb-1">
-                  {hoveredLinkElement.textContent}
-                </p>
-                <a
-                  href={hoveredLinkElement.href}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="text-xs text-alpine-600 hover:text-alpine-800 truncate block mb-2"
-                  onClick={(e) => e.stopPropagation()}
-                >
-                  {hoveredLinkElement.href}
-                </a>
-                <div className="flex items-center gap-2">
-                  <button
-                    onClick={() => openLink(hoveredLinkElement.href)}
-                    className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-alpine-600 bg-alpine-50 hover:bg-alpine-100 rounded-lg transition-colors"
-                    title="Open link in new tab"
-                  >
-                    <ExternalLink size={14} />
-                    Open
-                  </button>
-                  <button
-                    onClick={() => editLink(hoveredLinkElement)}
-                    className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-slate-600 bg-slate-100 hover:bg-slate-200 rounded-lg transition-colors"
-                    title="Edit link"
-                  >
-                    <Edit2 size={14} />
-                    Edit
-                  </button>
-                  <button
-                    onClick={() => copyLinkUrl(hoveredLinkElement.href)}
-                    className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-slate-600 bg-slate-100 hover:bg-slate-200 rounded-lg transition-colors"
-                    title="Copy link"
-                  >
-                    {copiedLink ? (
-                      <>
-                        <Check size={14} className="text-green-600" />
-                        <span className="text-green-600">Copied!</span>
-                      </>
-                    ) : (
-                      <>
-                        <Copy size={14} />
-                        Copy
-                      </>
-                    )}
-                  </button>
-                  <button
-                    onClick={() => removeLink(hoveredLinkElement)}
-                    className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-red-600 bg-red-50 hover:bg-red-100 rounded-lg transition-colors ml-auto"
-                    title="Remove link"
-                  >
-                    <Trash2 size={14} />
-                    Remove
-                  </button>
-                </div>
-              </div>
-            </div>
-          </div>
-        )}
-
-        {/* Search & Replace Dialog */}
-        {showSearchDialog && (
-          <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-            <div className="bg-white rounded-lg shadow-xl p-6 w-full max-w-lg">
-              <div className="flex items-center justify-between mb-4">
-                <h3 className="text-lg font-semibold text-gray-900 flex items-center gap-2">
-                  <Search size={20} />
-                  Find & Replace
-                </h3>
-                <button
-                  onClick={resetSearchDialog}
-                  className="text-gray-400 hover:text-gray-600"
-                >
-                  <X size={20} />
-                </button>
-              </div>
-              <div className="space-y-4">
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Find
-                  </label>
-                  <div className="flex gap-2">
-                    <input
-                      type="text"
-                      value={searchQuery}
-                      onChange={(e) => setSearchQuery(e.target.value)}
-                      placeholder="Search text..."
-                      className="flex-1 px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-alpine-500 focus:border-transparent"
-                      autoFocus
-                    />
-                    <button
-                      onClick={performSearch}
-                      className="px-4 py-2 bg-alpine-600 text-white rounded-md hover:bg-alpine-700 transition-colors"
-                    >
-                      Find
-                    </button>
-                  </div>
-                  {searchMatches.length > 0 && (
-                    <div className="mt-2 flex items-center gap-2">
-                      <span className="text-sm text-gray-600">
-                        {currentMatchIndex + 1} of {searchMatches.length}
-                      </span>
-                      <button
-                        onClick={previousMatch}
-                        className="px-2 py-1 text-sm bg-gray-100 hover:bg-gray-200 rounded transition-colors"
-                      >
-                        Previous
-                      </button>
-                      <button
-                        onClick={nextMatch}
-                        className="px-2 py-1 text-sm bg-gray-100 hover:bg-gray-200 rounded transition-colors"
-                      >
-                        Next
-                      </button>
-                    </div>
-                  )}
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Replace with
-                  </label>
-                  <input
-                    type="text"
-                    value={replaceQuery}
-                    onChange={(e) => setReplaceQuery(e.target.value)}
-                    placeholder="Replacement text..."
-                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-alpine-500 focus:border-transparent"
-                  />
-                </div>
-                <div className="flex items-center gap-2">
-                  <label className="flex items-center gap-2 text-sm text-gray-700">
-                    <input
-                      type="checkbox"
-                      checked={caseSensitive}
-                      onChange={(e) => setCaseSensitive(e.target.checked)}
-                      className="rounded border-gray-300"
-                    />
-                    Case sensitive
-                  </label>
-                </div>
-                <div className="flex gap-2 justify-end">
-                  <button
-                    onClick={replaceCurrentMatch}
-                    disabled={searchMatches.length === 0}
-                    className="px-4 py-2 bg-gray-100 text-gray-700 rounded-md hover:bg-gray-200 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-                  >
-                    Replace
-                  </button>
-                  <button
-                    onClick={replaceAllMatches}
-                    disabled={searchMatches.length === 0}
-                    className="px-4 py-2 bg-alpine-600 text-white rounded-md hover:bg-alpine-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-                  >
-                    Replace All
-                  </button>
-                </div>
-              </div>
-            </div>
-          </div>
-        )}
-        {/* Table configuration dialog */}
-        {showTableDialog && (
-          <div className="fixed inset-0 z-50 flex items-center justify-center">
-            <div className="absolute inset-0 bg-black/30" onMouseDown={closeTableDialog} />
-            <div className="relative z-10 w-80 rounded bg-white p-4 shadow-lg">
-              <h3 className="text-sm font-medium mb-2">Insert table</h3>
-              <div className="mb-3">
-                <div className="text-xs mb-2">Pick table size</div>
-                <div className="grid grid-cols-6 gap-1">
-                  {Array.from({ length: 36 }).map((_, idx) => {
-                    const r = Math.floor(idx / 6)
-                    const c = idx % 6
-                    const rowsSelected = hoverRows ?? tableRows
-                    const colsSelected = hoverCols ?? tableCols
-                    const isActive = rowsSelected > r && colsSelected > c
-                    return (
-                      <button
-                        key={`cell-${r}-${c}`}
-                        type="button"
-                        onMouseEnter={() => { setHoverRows(r + 1); setHoverCols(c + 1) }}
-                        onMouseLeave={() => { setHoverRows(null); setHoverCols(null) }}
-                        onClick={() => { setTableRows(r + 1); setTableCols(c + 1) }}
-                        aria-label={`${r + 1} by ${c + 1}`}
-                        className={`w-6 h-6 rounded-sm border ${isActive ? 'bg-alpine-500 border-alpine-500' : 'bg-white border-gray-200'} focus:outline-none`}
-                      />
-                    )
-                  })}
-                </div>
-                <div className="mt-2 text-xs text-gray-600">{(hoverRows ?? tableRows)} x {(hoverCols ?? tableCols)}</div>
-              </div>
-              <div className="flex justify-end gap-2">
-                <button
-                  type="button"
-                  onClick={closeTableDialog}
-                  className="px-3 py-1 rounded border text-sm"
-                >
-                  Cancel
-                </button>
-                <button
-                  type="button"
-                  onClick={() => {
-                    closeTableDialog()
-                    insertCustomBlock('table', { rows: tableRows, cols: tableCols })
-                    forceWebViewFocus()
-                  }}
-                  className="px-3 py-1 rounded bg-alpine-600 text-white text-sm"
-                >
-                  Insert
-                </button>
-              </div>
-            </div>
-          </div>
-        )}
-        {/* Table toolbar for manipulating existing tables */}
-        {tableToolbarVisible && (
-          <div
-            className="fixed z-50 flex items-center gap-2 rounded-md bg-white border px-2 py-1 shadow max-w-[92vw] overflow-auto"
-            style={{ top: tableToolbarPos.top, left: tableToolbarPos.left }}
-          >
-            <div className="px-2 py-0.5 rounded bg-gray-100 text-xs text-gray-700 font-medium">
-              {(() => {
-                const table = tableNodeRef.current as HTMLTableElement | null
-                if (!table) return '0 x 0'
-                const rows = table.querySelectorAll('tr').length
-                const cols = table.querySelectorAll('tr')[0]?.querySelectorAll('td,th').length || 0
-                return `${rows} x ${cols}`
-              })()}
-            </div>
-            <button onClick={addTableRow} className="inline-flex items-center gap-1 px-2 py-1 text-sm rounded hover:bg-gray-100">
-              <Plus size={14} /> Row
-            </button>
-            <button onClick={deleteTableRow} className="inline-flex items-center gap-1 px-2 py-1 text-sm rounded hover:bg-gray-100">
-              <Minus size={14} /> Row
-            </button>
-            <button onClick={addTableCol} className="inline-flex items-center gap-1 px-2 py-1 text-sm rounded hover:bg-gray-100">
-              <Plus size={14} /> Col
-            </button>
-            <button onClick={deleteTableCol} className="inline-flex items-center gap-1 px-2 py-1 text-sm rounded hover:bg-gray-100">
-              <Minus size={14} /> Col
-            </button>
-            <button onClick={deleteTable} className="inline-flex items-center gap-1 px-2 py-1 text-sm rounded text-red-600 hover:bg-red-50">
-              <Trash2 size={14} /> Delete
-            </button>
-          </div>
-        )}
+        <SearchReplaceDialog
+          isOpen={showSearchDialog}
+          searchQuery={searchQuery}
+          replaceQuery={replaceQuery}
+          caseSensitive={caseSensitive}
+          searchMatchesCount={searchMatches.length}
+          currentMatchIndex={currentMatchIndex}
+          onClose={resetSearchDialog}
+          onSearchQueryChange={setSearchQuery}
+          onReplaceQueryChange={setReplaceQuery}
+          onCaseSensitiveChange={setCaseSensitive}
+          onFind={performSearch}
+          onPrevious={previousMatch}
+          onNext={nextMatch}
+          onReplace={replaceCurrentMatch}
+          onReplaceAll={replaceAllMatches}
+        />
+        <TableInsertDialog
+          isOpen={showTableDialog}
+          tableRows={tableRows}
+          tableCols={tableCols}
+          hoverRows={hoverRows}
+          hoverCols={hoverCols}
+          onClose={closeTableDialog}
+          onHoverCell={(rows, cols) => {
+            setHoverRows(rows)
+            setHoverCols(cols)
+          }}
+          onHoverLeave={() => {
+            setHoverRows(null)
+            setHoverCols(null)
+          }}
+          onSelectSize={(rows, cols) => {
+            setTableRows(rows)
+            setTableCols(cols)
+          }}
+          onInsert={() => {
+            closeTableDialog()
+            insertCustomBlock('table', { rows: tableRows, cols: tableCols })
+            forceWebViewFocus()
+          }}
+        />
+        <TableToolbar
+          isVisible={tableToolbarVisible}
+          top={tableToolbarPos.top}
+          left={tableToolbarPos.left}
+          dimensionsLabel={getTableDimensionsLabel()}
+          onAddRow={addTableRow}
+          onDeleteRow={deleteTableRow}
+          onAddCol={addTableCol}
+          onDeleteCol={deleteTableCol}
+          onDeleteTable={deleteTable}
+        />
         <style jsx global>{`
           [data-block-outline='true'] {
             outline: 2px dashed rgba(59, 130, 246, 0.75);
