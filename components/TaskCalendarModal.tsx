@@ -29,6 +29,8 @@ import {
   Link2,
   Users,
   LayoutDashboard,
+  FileText,
+  FolderKanban,
 } from 'lucide-react'
 import {
   getTasks,
@@ -84,6 +86,7 @@ import {
   type TimetableEntry,
 } from '@/lib/events'
 import { getProjects, type Project } from '@/lib/projects'
+import { createNote } from '@/lib/notes'
 import KanbanBoard from './KanbanBoard'
 import { initializeDefaultBoard, addTaskToBoard, moveTask, type BoardWithColumns, type KanbanColumn } from '@/lib/kanban'
 
@@ -143,6 +146,7 @@ export default function TaskCalendarModal({
   const [taskStartDate, setTaskStartDate] = useState('')
   const [taskEstimatedMinutes, setTaskEstimatedMinutes] = useState('')
   const [selectedTaskList, setSelectedTaskList] = useState<string>('')
+  const [selectedProjectId, setSelectedProjectId] = useState<string>('')
   const [selectedTags, setSelectedTags] = useState<string[]>([])
   const [newSubtaskTitle, setNewSubtaskTitle] = useState('')
 
@@ -195,6 +199,7 @@ export default function TaskCalendarModal({
         setTaskStartDate(taskDetails.start_date ? taskDetails.start_date.substring(0, 16) : '')
         setTaskEstimatedMinutes(taskDetails.estimated_minutes?.toString() || '')
         setSelectedTaskList(taskDetails.task_list_id || '')
+        setSelectedProjectId(taskDetails.project_id || '')
         setSelectedTags(taskDetails.tags?.map(t => t.id) || [])
         setShowTaskDetail(true)
       }
@@ -341,7 +346,7 @@ export default function TaskCalendarModal({
         estimatedMinutes: taskEstimatedMinutes ? parseInt(taskEstimatedMinutes) : undefined,
         taskListId: selectedTaskList || undefined,
         noteId: linkedNoteId,
-        projectId: linkedProjectId,
+        projectId: selectedProjectId || linkedProjectId,
       })
 
       // If we have a kanban board, add the task to the first column (To Do)
@@ -385,6 +390,7 @@ export default function TaskCalendarModal({
         start_date: taskStartDate ? new Date(taskStartDate).toISOString() : null,
         estimated_minutes: taskEstimatedMinutes ? parseInt(taskEstimatedMinutes) : null,
         task_list_id: selectedTaskList || null,
+        project_id: selectedProjectId || null,
       })
 
       // Update tags
@@ -448,6 +454,7 @@ export default function TaskCalendarModal({
     setTaskStartDate('')
     setTaskEstimatedMinutes('')
     setSelectedTaskList('')
+    setSelectedProjectId('')
     setSelectedTags([])
   }
 
@@ -1478,6 +1485,21 @@ export default function TaskCalendarModal({
                     </option>
                   ))}
                 </select>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Project</label>
+                  <select
+                    value={selectedProjectId}
+                    onChange={e => setSelectedProjectId(e.target.value)}
+                    className="w-full px-4 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-alpine-500 focus:border-transparent"
+                  >
+                    <option value="">No Project</option>
+                    {projects.map(project => (
+                      <option key={project.id} value={project.id}>
+                        {project.name}
+                      </option>
+                    ))}
+                  </select>
+                </div>
                 <div className="flex gap-2">
                   <button
                     onClick={() => {
@@ -1863,6 +1885,62 @@ export default function TaskCalendarModal({
                   ))}
                 </select>
               </div>
+
+              {/* Project */}
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">Project</label>
+                <select
+                  value={selectedProjectId}
+                  onChange={e => setSelectedProjectId(e.target.value)}
+                  className="w-full px-4 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-alpine-500 focus:border-transparent"
+                >
+                  <option value="">No Project</option>
+                  {projects.map(project => (
+                    <option key={project.id} value={project.id}>
+                      {project.name}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              {/* Linked Note */}
+              {selectedProjectId && (
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">Task Note</label>
+                  {editingTask.note_id ? (
+                    <div className="flex items-center gap-2 p-3 bg-green-50 border border-green-200 rounded-lg">
+                      <FileText size={18} className="text-green-600" />
+                      <span className="text-sm text-green-800 font-medium">Note linked to this task</span>
+                    </div>
+                  ) : (
+                    <button
+                      onClick={async () => {
+                        if (!editingTask) return
+                        try {
+                          setIsSaving(true)
+                          const note = await createNote({
+                            title: editingTask.title,
+                            content: '',
+                            project_id: selectedProjectId,
+                          })
+                          await updateTask(editingTask.id, { note_id: note.id })
+                          await loadTaskDetails(editingTask.id)
+                          await loadData()
+                        } catch (error) {
+                          console.error('Failed to create note for task:', error)
+                        } finally {
+                          setIsSaving(false)
+                        }
+                      }}
+                      disabled={isSaving}
+                      className="w-full flex items-center justify-center gap-2 px-4 py-3 border-2 border-dashed border-alpine-300 rounded-lg text-alpine-700 hover:bg-alpine-50 hover:border-alpine-400 transition-colors disabled:opacity-50"
+                    >
+                      <FileText size={18} />
+                      <span className="font-medium">Create Note for This Task</span>
+                    </button>
+                  )}
+                </div>
+              )}
 
               {/* Tags */}
               <div>
