@@ -65,6 +65,7 @@ function WorkspaceContent() {
   
   // Task Calendar modal state
   const [showTaskCalendar, setShowTaskCalendar] = useState(false)
+  const [taskCalendarInitialView, setTaskCalendarInitialView] = useState<'tasks' | 'calendar' | 'timeline' | 'kanban' | 'timetable'>('tasks')
   
   // Welcome Back modal state
   const [showWelcomeBack, setShowWelcomeBack] = useState(false)
@@ -867,7 +868,11 @@ function WorkspaceContent() {
       {/* Task & Calendar Modal */}
       <TaskCalendarModal
         isOpen={showTaskCalendar}
-        onClose={() => setShowTaskCalendar(false)}
+        onClose={() => {
+          setShowTaskCalendar(false)
+          setTaskCalendarInitialView('tasks')
+        }}
+        initialView={taskCalendarInitialView}
         linkedNoteId={selectedNote?.id}
         linkedProjectId={selectedProjectId || undefined}
       />
@@ -884,6 +889,11 @@ function WorkspaceContent() {
         onSelectTask={() => {
           // Open task calendar when a task is selected
           setShowWelcomeBack(false)
+          setShowTaskCalendar(true)
+        }}
+        onOpenTimetable={() => {
+          setShowWelcomeBack(false)
+          setTaskCalendarInitialView('timetable')
           setShowTaskCalendar(true)
         }}
       />

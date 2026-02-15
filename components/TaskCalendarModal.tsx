@@ -67,21 +67,35 @@ import {
   startTimeTracking,
   stopTimeTracking,
   formatDuration,
+  getTimetableEntries,
+  createTimetableEntry,
+  updateTimetableEntry,
+  deleteTimetableEntry,
+  generateTimetableInstances,
+  getTimetableInstancesForWeek,
+  extractTime,
+  getWeekStart,
+  WEEKDAY_LABELS,
+  WEEKDAY_FULL_LABELS,
+  mondayIndexToJsDay,
+  jsDayToMondayIndex,
   type CalendarEvent,
   type TimeEntry,
+  type TimetableEntry,
 } from '@/lib/events'
+import { getProjects, type Project } from '@/lib/projects'
 import KanbanBoard from './KanbanBoard'
 import { initializeDefaultBoard, addTaskToBoard, moveTask, type BoardWithColumns, type KanbanColumn } from '@/lib/kanban'
 
 interface TaskCalendarModalProps {
   isOpen: boolean
   onClose: () => void
-  initialView?: 'tasks' | 'calendar' | 'timeline' | 'kanban'
+  initialView?: 'tasks' | 'calendar' | 'timeline' | 'kanban' | 'timetable'
   linkedNoteId?: string
   linkedProjectId?: string
 }
 
-type ViewMode = 'tasks' | 'calendar' | 'timeline' | 'kanban'
+type ViewMode = 'tasks' | 'calendar' | 'timeline' | 'kanban' | 'timetable'
 type CalendarView = 'month' | 'week' | 'day'
 type TaskFilter = 'all' | 'today' | 'week' | 'overdue' | 'starred' | 'completed'
 
@@ -139,6 +153,21 @@ export default function TaskCalendarModal({
   const [eventLocation, setEventLocation] = useState('')
   const [eventMeetingUrl, setEventMeetingUrl] = useState('')
 
+  // Timetable state
+  const [timetableEntries, setTimetableEntries] = useState<TimetableEntry[]>([])
+  const [timetableWeekStart, setTimetableWeekStart] = useState(() => getWeekStart(new Date()))
+  const [showTimetableModal, setShowTimetableModal] = useState(false)
+  const [editingTimetableEntry, setEditingTimetableEntry] = useState<TimetableEntry | null>(null)
+  const [ttTitle, setTtTitle] = useState('')
+  const [ttStartTime, setTtStartTime] = useState('09:00')
+  const [ttEndTime, setTtEndTime] = useState('10:00')
+  const [ttDays, setTtDays] = useState<number[]>([])
+  const [ttDescription, setTtDescription] = useState('')
+  const [ttLocation, setTtLocation] = useState('')
+  const [ttProjectId, setTtProjectId] = useState('')
+  const [ttColor, setTtColor] = useState('#8B5CF6')
+  const [projects, setProjects] = useState<Project[]>([])
+
   // Load data
   useEffect(() => {
     if (isOpen) {
@@ -184,13 +213,15 @@ export default function TaskCalendarModal({
   const loadData = async () => {
     setIsLoading(true)
     try {
-      const [tasksData, taskListsData, eventsData, tagsData, statsData, activeTime] = await Promise.all([
+      const [tasksData, taskListsData, eventsData, tagsData, statsData, activeTime, timetableData, projectsData] = await Promise.all([
         getTasks({ includeCompleted: taskFilter === 'completed' }),
         getTaskLists(),
         getEvents(),
         getTags(),
         getTaskStats(),
         getActiveTimeEntry(),
+        getTimetableEntries(),
+        getProjects(),
       ])
 
       setTasks(tasksData)
@@ -199,6 +230,8 @@ export default function TaskCalendarModal({
       setTags(tagsData)
       setStats(statsData)
       setActiveTimeEntry(activeTime)
+      setTimetableEntries(timetableData)
+      setProjects(projectsData)
 
       // Initialize Kanban board if in kanban mode
       if (viewMode === 'kanban' && !kanbanBoard) {
@@ -510,6 +543,121 @@ export default function TaskCalendarModal({
     }
   }
 
+  // Timetable helpers
+  const timetableInstances = useMemo(() => {
+    return getTimetableInstancesForWeek(timetableEntries, timetableWeekStart)
+  }, [timetableEntries, timetableWeekStart])
+
+  // Generate timetable instances for the current calendar month view
+  const timetableCalendarInstances = useMemo(() => {
+    const year = selectedDate.getFullYear()
+    const month = selectedDate.getMonth()
+    const monthStart = new Date(year, month, 1)
+    const monthEnd = new Date(year, month + 1, 0, 23, 59, 59)
+    return generateTimetableInstances(timetableEntries, monthStart, monthEnd)
+  }, [timetableEntries, selectedDate])
+
+  const TIMETABLE_HOURS = Array.from({ length: 16 }, (_, i) => i + 7) // 7:00 to 22:00
+
+  const getProjectById = (projectId: string | null): Project | undefined => {
+    if (!projectId) return undefined
+    return projects.find(p => p.id === projectId)
+  }
+
+  const resetTimetableForm = () => {
+    setTtTitle('')
+    setTtStartTime('09:00')
+    setTtEndTime('10:00')
+    setTtDays([])
+    setTtDescription('')
+    setTtLocation('')
+    setTtProjectId('')
+    setTtColor('#8B5CF6')
+    setEditingTimetableEntry(null)
+  }
+
+  const openTimetableForm = (entry?: TimetableEntry, preselectedDay?: number) => {
+    if (entry) {
+      setEditingTimetableEntry(entry)
+      setTtTitle(entry.title)
+      setTtStartTime(extractTime(entry.start_time))
+      setTtEndTime(extractTime(entry.end_time))
+      setTtDays(entry.recurrence_pattern?.days_of_week || [])
+      setTtDescription(entry.description || '')
+      setTtLocation(entry.location || '')
+      setTtProjectId(entry.project_id || '')
+      setTtColor(entry.color || '#8B5CF6')
+    } else {
+      resetTimetableForm()
+      if (preselectedDay !== undefined) {
+        setTtDays([preselectedDay])
+      }
+    }
+    setShowTimetableModal(true)
+  }
+
+  const handleCreateTimetableEntry = async () => {
+    if (!ttTitle.trim() || ttDays.length === 0) return
+    setIsSaving(true)
+    try {
+      await createTimetableEntry(ttTitle, ttStartTime, ttEndTime, ttDays, {
+        description: ttDescription || undefined,
+        location: ttLocation || undefined,
+        projectId: ttProjectId || undefined,
+        color: ttColor,
+      })
+      resetTimetableForm()
+      setShowTimetableModal(false)
+      await loadData()
+    } catch (error) {
+      console.error('Failed to create timetable entry:', error)
+    } finally {
+      setIsSaving(false)
+    }
+  }
+
+  const handleUpdateTimetableEntry = async () => {
+    if (!editingTimetableEntry || !ttTitle.trim() || ttDays.length === 0) return
+    setIsSaving(true)
+    try {
+      await updateTimetableEntry(editingTimetableEntry.id, {
+        title: ttTitle,
+        startTime: ttStartTime,
+        endTime: ttEndTime,
+        daysOfWeek: ttDays,
+        description: ttDescription,
+        location: ttLocation,
+        projectId: ttProjectId || null,
+        color: ttColor,
+      })
+      resetTimetableForm()
+      setShowTimetableModal(false)
+      await loadData()
+    } catch (error) {
+      console.error('Failed to update timetable entry:', error)
+    } finally {
+      setIsSaving(false)
+    }
+  }
+
+  const handleDeleteTimetableEntry = async (id: string) => {
+    if (!confirm('Delete this timetable entry? It will be removed from all weeks.')) return
+    try {
+      await deleteTimetableEntry(id)
+      setShowTimetableModal(false)
+      resetTimetableForm()
+      await loadData()
+    } catch (error) {
+      console.error('Failed to delete timetable entry:', error)
+    }
+  }
+
+  const navigateTimetableWeek = (direction: number) => {
+    const newStart = new Date(timetableWeekStart)
+    newStart.setDate(newStart.getDate() + direction * 7)
+    setTimetableWeekStart(newStart)
+  }
+
   // Event handlers
   const handleCreateEvent = async () => {
     if (!eventTitle.trim() || !eventStartTime || !eventEndTime) return
@@ -609,6 +757,15 @@ export default function TaskCalendarModal({
                 <Clock size={16} />
                 Timeline
               </button>
+              <button
+                onClick={() => setViewMode('timetable')}
+                className={`px-3 py-1.5 rounded-md text-sm font-medium transition-colors flex items-center gap-2 ${
+                  viewMode === 'timetable' ? 'bg-alpine-600 text-white' : 'text-gray-600 hover:bg-gray-100'
+                }`}
+              >
+                <Grid3x3 size={16} />
+                Timetable
+              </button>
             </div>
           </div>
 
@@ -675,6 +832,15 @@ export default function TaskCalendarModal({
                   <Calendar size={18} />
                   New Event
                 </button>
+                {viewMode === 'timetable' && (
+                  <button
+                    onClick={() => openTimetableForm()}
+                    className="w-full px-4 py-2.5 bg-violet-600 text-white rounded-lg hover:bg-violet-700 transition-colors flex items-center justify-center gap-2 font-medium shadow-sm"
+                  >
+                    <Grid3x3 size={18} />
+                    New Class
+                  </button>
+                )}
               </div>
 
               {/* Filters */}
@@ -901,6 +1067,12 @@ export default function TaskCalendarModal({
 
                     const dayEvents = getEventsForDate(day)
                     const dayTasks = getTasksForDate(day)
+                    const dayTimetable = timetableCalendarInstances.filter(inst => {
+                      const instDate = new Date(inst.start_time)
+                      return instDate.getFullYear() === day.getFullYear() &&
+                        instDate.getMonth() === day.getMonth() &&
+                        instDate.getDate() === day.getDate()
+                    })
                     const isToday = day.toDateString() === new Date().toDateString()
 
                     return (
@@ -914,10 +1086,23 @@ export default function TaskCalendarModal({
                           {day.getDate()}
                         </div>
                         <div className="space-y-1">
+                          {dayTimetable.slice(0, 1).map(inst => {
+                            const proj = getProjectById(inst.project_id)
+                            return (
+                              <div
+                                key={inst.id}
+                                className="text-xs truncate px-1 py-0.5 rounded bg-violet-100 text-violet-700"
+                                style={proj ? { borderLeft: `3px solid ${proj.color}` } : undefined}
+                              >
+                                {inst.title}
+                              </div>
+                            )
+                          })}
                           {dayEvents.slice(0, 2).map(event => (
                             <div
                               key={event.id}
                               className="text-xs truncate px-1 py-0.5 rounded bg-purple-100 text-purple-700"
+                              style={event.project_id ? { borderLeft: `3px solid ${getProjectById(event.project_id)?.color || '#8B5CF6'}` } : undefined}
                             >
                               {event.title}
                             </div>
@@ -930,9 +1115,9 @@ export default function TaskCalendarModal({
                               {task.title}
                             </div>
                           ))}
-                          {dayEvents.length + dayTasks.length > 2 && (
+                          {dayEvents.length + dayTasks.length + dayTimetable.length > 2 && (
                             <div className="text-xs text-gray-500">
-                              +{dayEvents.length + dayTasks.length - 2} more
+                              +{dayEvents.length + dayTasks.length + dayTimetable.length - 2} more
                             </div>
                           )}
                         </div>
@@ -962,6 +1147,206 @@ export default function TaskCalendarModal({
                   </div>
                 </div>
               )
+            ) : viewMode === 'timetable' ? (
+              /* Timetable Weekly Grid View */
+              <div>
+                {/* Timetable Header */}
+                <div className="flex items-center justify-between mb-4">
+                  <h3 className="text-xl font-semibold text-gray-900">
+                    Weekly Timetable
+                  </h3>
+                  <div className="flex items-center gap-2">
+                    <button
+                      onClick={() => navigateTimetableWeek(-1)}
+                      className="p-2 rounded-lg hover:bg-gray-100"
+                    >
+                      <ChevronLeft size={20} />
+                    </button>
+                    <button
+                      onClick={() => setTimetableWeekStart(getWeekStart(new Date()))}
+                      className="px-3 py-1.5 rounded-lg hover:bg-gray-100 text-sm font-medium"
+                    >
+                      This Week
+                    </button>
+                    <button
+                      onClick={() => navigateTimetableWeek(1)}
+                      className="p-2 rounded-lg hover:bg-gray-100"
+                    >
+                      <ChevronRight size={20} />
+                    </button>
+                  </div>
+                </div>
+
+                {/* Week date range label */}
+                <div className="text-sm text-gray-500 mb-4">
+                  {timetableWeekStart.toLocaleDateString('default', { month: 'short', day: 'numeric' })}
+                  {' – '}
+                  {new Date(timetableWeekStart.getTime() + 6 * 86400000).toLocaleDateString('default', { month: 'short', day: 'numeric', year: 'numeric' })}
+                </div>
+
+                {/* Weekly Grid */}
+                <div className="border border-gray-200 rounded-lg overflow-hidden">
+                  {/* Day headers */}
+                  <div className="grid grid-cols-[60px_repeat(7,1fr)] bg-gray-50 border-b border-gray-200">
+                    <div className="p-2 text-xs font-medium text-gray-500 border-r border-gray-200"></div>
+                    {WEEKDAY_LABELS.map((day, i) => {
+                      const dayDate = new Date(timetableWeekStart)
+                      dayDate.setDate(dayDate.getDate() + i)
+                      const isToday = dayDate.toDateString() === new Date().toDateString()
+                      return (
+                        <div key={day} className={`p-2 text-center border-r border-gray-200 last:border-r-0 ${isToday ? 'bg-alpine-50' : ''}`}>
+                          <div className={`text-xs font-semibold ${isToday ? 'text-alpine-600' : 'text-gray-600'}`}>{day}</div>
+                          <div className={`text-sm ${isToday ? 'text-alpine-700 font-bold' : 'text-gray-900'}`}>{dayDate.getDate()}</div>
+                        </div>
+                      )
+                    })}
+                  </div>
+
+                  {/* Time rows */}
+                  <div className="max-h-[calc(90vh-320px)] overflow-y-auto">
+                    {TIMETABLE_HOURS.map(hour => (
+                      <div key={hour} className="grid grid-cols-[60px_repeat(7,1fr)] border-b border-gray-100 last:border-b-0 min-h-[48px]">
+                        <div className="p-1 text-xs text-gray-400 text-right pr-2 border-r border-gray-200 pt-1">
+                          {hour.toString().padStart(2, '0')}:00
+                        </div>
+                        {WEEKDAY_LABELS.map((_, dayIndex) => {
+                          const jsDay = mondayIndexToJsDay(dayIndex)
+                          // Find instances for this day & hour
+                          const cellInstances = timetableInstances.filter(inst => {
+                            const instDate = new Date(inst.start_time)
+                            const endDate = new Date(inst.end_time)
+                            return instDate.getDay() === jsDay &&
+                              instDate.getHours() <= hour && endDate.getHours() > hour
+                          })
+                          // Only render the block on the starting hour
+                          const startingHere = cellInstances.filter(inst => {
+                            return new Date(inst.start_time).getHours() === hour
+                          })
+                          // Check if occupied by a block that started earlier
+                          const continuedHere = cellInstances.filter(inst => {
+                            return new Date(inst.start_time).getHours() < hour
+                          })
+
+                          return (
+                            <div
+                              key={dayIndex}
+                              className="border-r border-gray-100 last:border-r-0 relative min-h-[48px] cursor-pointer hover:bg-gray-50 transition-colors"
+                              onClick={() => {
+                                if (startingHere.length === 0 && continuedHere.length === 0) {
+                                  openTimetableForm(undefined, jsDay)
+                                }
+                              }}
+                            >
+                              {startingHere.map(inst => {
+                                const instStart = new Date(inst.start_time)
+                                const instEnd = new Date(inst.end_time)
+                                const durationHours = (instEnd.getTime() - instStart.getTime()) / 3600000
+                                const project = getProjectById(inst.project_id)
+                                return (
+                                  <div
+                                    key={inst.id}
+                                    className="absolute inset-x-0.5 rounded-md px-1.5 py-1 text-xs overflow-hidden shadow-sm cursor-pointer z-10 border border-transparent hover:border-gray-300"
+                                    style={{
+                                      top: '1px',
+                                      height: `${Math.max(durationHours * 48 - 2, 22)}px`,
+                                      backgroundColor: `${inst.color}18`,
+                                      borderLeft: project ? `3px solid ${project.color}` : `3px solid ${inst.color}`,
+                                    }}
+                                    onClick={(e) => {
+                                      e.stopPropagation()
+                                      // Find the parent entry for editing
+                                      const parent = timetableEntries.find(te => te.id === inst.parentEntryId)
+                                      if (parent) openTimetableForm(parent)
+                                    }}
+                                  >
+                                    <div className="font-semibold truncate" style={{ color: inst.color }}>
+                                      {inst.title}
+                                    </div>
+                                    <div className="text-gray-500 truncate">
+                                      {extractTime(inst.start_time)} – {extractTime(inst.end_time)}
+                                    </div>
+                                    {project && (
+                                      <div className="flex items-center gap-1 mt-0.5">
+                                        <div className="w-2 h-2 rounded-full flex-shrink-0" style={{ backgroundColor: project.color }} />
+                                        <span className="truncate text-gray-600">{project.name}</span>
+                                      </div>
+                                    )}
+                                    {inst.location && (
+                                      <div className="flex items-center gap-1 mt-0.5 text-gray-500">
+                                        <MapPin size={10} />
+                                        <span className="truncate">{inst.location}</span>
+                                      </div>
+                                    )}
+                                  </div>
+                                )
+                              })}
+                            </div>
+                          )
+                        })}
+                      </div>
+                    ))}
+                  </div>
+                </div>
+
+                {/* Timetable entry list summary */}
+                {timetableEntries.length > 0 && (
+                  <div className="mt-6">
+                    <h4 className="text-sm font-semibold text-gray-700 mb-3">All Timetable Entries</h4>
+                    <div className="grid gap-2 sm:grid-cols-2">
+                      {timetableEntries.map(entry => {
+                        const project = getProjectById(entry.project_id)
+                        const days = entry.recurrence_pattern?.days_of_week || []
+                        return (
+                          <div
+                            key={entry.id}
+                            className="flex items-center gap-3 p-3 bg-white border border-gray-200 rounded-lg hover:shadow-sm cursor-pointer transition-shadow"
+                            style={{ borderLeft: `3px solid ${entry.color}` }}
+                            onClick={() => openTimetableForm(entry)}
+                          >
+                            <div className="flex-1 min-w-0">
+                              <div className="font-medium text-gray-900 truncate">{entry.title}</div>
+                              <div className="text-xs text-gray-500">
+                                {extractTime(entry.start_time)} – {extractTime(entry.end_time)}
+                                {' · '}
+                                {days.map(d => WEEKDAY_LABELS[jsDayToMondayIndex(d)]).join(', ')}
+                              </div>
+                              {project && (
+                                <div className="flex items-center gap-1 mt-1">
+                                  <div className="w-2 h-2 rounded-full" style={{ backgroundColor: project.color }} />
+                                  <span className="text-xs text-gray-600">{project.name}</span>
+                                </div>
+                              )}
+                            </div>
+                            <button
+                              onClick={(e) => {
+                                e.stopPropagation()
+                                handleDeleteTimetableEntry(entry.id)
+                              }}
+                              className="p-1.5 rounded text-gray-400 hover:text-red-600 hover:bg-red-50 transition-colors"
+                            >
+                              <Trash2 size={14} />
+                            </button>
+                          </div>
+                        )
+                      })}
+                    </div>
+                  </div>
+                )}
+
+                {timetableEntries.length === 0 && (
+                  <div className="text-center py-12">
+                    <Grid3x3 size={48} className="mx-auto text-gray-300 mb-4" />
+                    <p className="text-gray-500 mb-2">No timetable entries yet</p>
+                    <p className="text-sm text-gray-400 mb-4">Create a weekly schedule for classes, meetings, or recurring activities</p>
+                    <button
+                      onClick={() => openTimetableForm()}
+                      className="px-4 py-2 bg-violet-600 text-white rounded-lg hover:bg-violet-700 transition-colors"
+                    >
+                      Add First Entry
+                    </button>
+                  </div>
+                )}
+              </div>
             ) : (
               /* Timeline View */
               <div className="space-y-4">
@@ -1184,6 +1569,172 @@ export default function TaskCalendarModal({
                     className="flex-1 px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 disabled:opacity-50"
                   >
                     {isSaving ? 'Creating...' : 'Create Event'}
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Timetable Entry Modal */}
+        {showTimetableModal && (
+          <div className="fixed inset-0 z-[110] flex items-center justify-center bg-black/60 p-4">
+            <div className="bg-white rounded-xl shadow-2xl max-w-lg w-full p-6 max-h-[90vh] overflow-y-auto">
+              <h3 className="text-xl font-bold text-gray-900 mb-4">
+                {editingTimetableEntry ? 'Edit Timetable Entry' : 'New Timetable Entry'}
+              </h3>
+              <div className="space-y-4">
+                {/* Title */}
+                <input
+                  type="text"
+                  value={ttTitle}
+                  onChange={e => setTtTitle(e.target.value)}
+                  placeholder="Class or activity name"
+                  className="w-full px-4 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-violet-500 focus:border-transparent"
+                  autoFocus
+                />
+
+                {/* Time */}
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Start Time</label>
+                    <input
+                      type="time"
+                      value={ttStartTime}
+                      onChange={e => setTtStartTime(e.target.value)}
+                      className="w-full px-4 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-violet-500 focus:border-transparent"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">End Time</label>
+                    <input
+                      type="time"
+                      value={ttEndTime}
+                      onChange={e => setTtEndTime(e.target.value)}
+                      className="w-full px-4 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-violet-500 focus:border-transparent"
+                    />
+                  </div>
+                </div>
+
+                {/* Days of Week */}
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">Repeat on</label>
+                  <div className="flex gap-2">
+                    {WEEKDAY_LABELS.map((day, i) => {
+                      const jsDay = mondayIndexToJsDay(i)
+                      const selected = ttDays.includes(jsDay)
+                      return (
+                        <button
+                          key={day}
+                          type="button"
+                          onClick={() => {
+                            if (selected) {
+                              setTtDays(ttDays.filter(d => d !== jsDay))
+                            } else {
+                              setTtDays([...ttDays, jsDay])
+                            }
+                          }}
+                          className={`flex-1 py-2 rounded-lg text-sm font-medium transition-colors border ${
+                            selected
+                              ? 'bg-violet-600 text-white border-violet-600'
+                              : 'bg-white text-gray-600 border-gray-200 hover:border-violet-300'
+                          }`}
+                        >
+                          {day}
+                        </button>
+                      )
+                    })}
+                  </div>
+                </div>
+
+                {/* Description */}
+                <textarea
+                  value={ttDescription}
+                  onChange={e => setTtDescription(e.target.value)}
+                  placeholder="Description (optional)"
+                  rows={2}
+                  className="w-full px-4 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-violet-500 focus:border-transparent resize-none"
+                />
+
+                {/* Location */}
+                <div className="flex items-center gap-2">
+                  <MapPin size={16} className="text-gray-400 flex-shrink-0" />
+                  <input
+                    type="text"
+                    value={ttLocation}
+                    onChange={e => setTtLocation(e.target.value)}
+                    placeholder="Location (optional)"
+                    className="w-full px-4 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-violet-500 focus:border-transparent"
+                  />
+                </div>
+
+                {/* Project */}
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Link to Project</label>
+                  <select
+                    value={ttProjectId}
+                    onChange={e => setTtProjectId(e.target.value)}
+                    className="w-full px-4 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-violet-500 focus:border-transparent"
+                  >
+                    <option value="">No Project</option>
+                    {projects.map(p => (
+                      <option key={p.id} value={p.id}>
+                        {p.name}
+                      </option>
+                    ))}
+                  </select>
+                  {ttProjectId && (() => {
+                    const proj = getProjectById(ttProjectId)
+                    return proj ? (
+                      <div className="flex items-center gap-2 mt-2 px-3 py-1.5 bg-gray-50 rounded-lg">
+                        <div className="w-3 h-3 rounded-full" style={{ backgroundColor: proj.color }} />
+                        <span className="text-sm text-gray-700">{proj.name}</span>
+                      </div>
+                    ) : null
+                  })()}
+                </div>
+
+                {/* Color */}
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Color</label>
+                  <div className="flex gap-2">
+                    {['#8B5CF6', '#3B82F6', '#10B981', '#F59E0B', '#EF4444', '#EC4899', '#6366F1', '#14B8A6'].map(color => (
+                      <button
+                        key={color}
+                        type="button"
+                        onClick={() => setTtColor(color)}
+                        className={`w-8 h-8 rounded-full transition-transform ${ttColor === color ? 'ring-2 ring-offset-2 ring-gray-400 scale-110' : 'hover:scale-105'}`}
+                        style={{ backgroundColor: color }}
+                      />
+                    ))}
+                  </div>
+                </div>
+
+                {/* Actions */}
+                <div className="flex gap-2 pt-2">
+                  <button
+                    onClick={() => {
+                      setShowTimetableModal(false)
+                      resetTimetableForm()
+                    }}
+                    className="flex-1 px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-50"
+                  >
+                    Cancel
+                  </button>
+                  {editingTimetableEntry && (
+                    <button
+                      onClick={() => handleDeleteTimetableEntry(editingTimetableEntry.id)}
+                      className="px-4 py-2 border border-red-300 text-red-600 rounded-lg hover:bg-red-50"
+                    >
+                      <Trash2 size={16} />
+                    </button>
+                  )}
+                  <button
+                    onClick={editingTimetableEntry ? handleUpdateTimetableEntry : handleCreateTimetableEntry}
+                    disabled={isSaving || !ttTitle.trim() || ttDays.length === 0}
+                    className="flex-1 px-4 py-2 bg-violet-600 text-white rounded-lg hover:bg-violet-700 disabled:opacity-50"
+                  >
+                    {isSaving ? 'Saving...' : editingTimetableEntry ? 'Update Entry' : 'Create Entry'}
                   </button>
                 </div>
               </div>

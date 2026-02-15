@@ -13,15 +13,26 @@ import {
   Calendar,
   PenTool,
   Network,
+  MapPin,
+  Grid3x3,
 } from 'lucide-react'
 import { getTasks, type Task } from '@/lib/tasks'
 import { getNotes, type Note } from '@/lib/notes'
+import {
+  getUpcomingTimetableEntries,
+  extractTime,
+  WEEKDAY_LABELS,
+  jsDayToMondayIndex,
+  type CalendarEvent,
+} from '@/lib/events'
+import { getProjects, type Project } from '@/lib/projects'
 
 interface WelcomeBackModalProps {
   isOpen: boolean
   onClose: () => void
   onSelectNote?: (note: Note) => void
   onSelectTask?: (task: Task) => void
+  onOpenTimetable?: () => void
 }
 
 const noteTypeIcon = (type: string) => {
@@ -73,9 +84,12 @@ export default function WelcomeBackModal({
   onClose,
   onSelectNote,
   onSelectTask,
+  onOpenTimetable,
 }: WelcomeBackModalProps) {
   const [openTasks, setOpenTasks] = useState<Task[]>([])
   const [recentNotes, setRecentNotes] = useState<Note[]>([])
+  const [upcomingClasses, setUpcomingClasses] = useState<(CalendarEvent & { parentEntryId: string })[]>([])
+  const [projects, setProjects] = useState<Project[]>([])
   const [isLoading, setIsLoading] = useState(true)
 
   useEffect(() => {
@@ -118,6 +132,18 @@ export default function WelcomeBackModal({
         .slice(0, 5) // Show top 5 recent notes
 
       setRecentNotes(sortedNotes)
+
+      // Get upcoming timetable entries
+      try {
+        const [timetableData, projectsData] = await Promise.all([
+          getUpcomingTimetableEntries(5),
+          getProjects(),
+        ])
+        setUpcomingClasses(timetableData)
+        setProjects(projectsData)
+      } catch (err) {
+        console.error('Error loading timetable data:', err)
+      }
     } catch (error) {
       console.error('Error loading welcome back data:', error)
     } finally {
@@ -157,6 +183,65 @@ export default function WelcomeBackModal({
             </div>
           ) : (
             <div className="grid gap-6 lg:grid-cols-2">
+              {/* Upcoming Classes Section */}
+              {upcomingClasses.length > 0 && (
+                <section className="flex flex-col rounded-2xl border border-violet-100 bg-violet-50/50 lg:col-span-2">
+                  <div className="flex items-center justify-between border-b border-violet-100 px-4 py-3">
+                    <div className="flex items-center gap-2">
+                      <Grid3x3 size={18} className="text-violet-600" />
+                      <h3 className="text-sm font-semibold text-gray-900">Upcoming Classes</h3>
+                    </div>
+                    <button
+                      onClick={onOpenTimetable}
+                      className="rounded-full bg-violet-100 px-2.5 py-0.5 text-xs font-medium text-violet-700 hover:bg-violet-200 transition-colors"
+                    >
+                      View Timetable
+                    </button>
+                  </div>
+                  <div className="flex-1 overflow-x-auto">
+                    <div className="flex gap-3 p-4">
+                      {upcomingClasses.map((entry) => {
+                        const entryDate = new Date(entry.start_time)
+                        const project = entry.project_id ? projects.find(p => p.id === entry.project_id) : undefined
+                        const isToday = entryDate.toDateString() === new Date().toDateString()
+                        const isTomorrow = entryDate.toDateString() === new Date(Date.now() + 86400000).toDateString()
+                        const dayLabel = isToday ? 'Today' : isTomorrow ? 'Tomorrow' : WEEKDAY_LABELS[jsDayToMondayIndex(entryDate.getDay())]
+                        return (
+                          <div
+                            key={entry.id}
+                            className="flex-shrink-0 w-48 rounded-xl border bg-white p-3 hover:shadow-sm transition-shadow cursor-pointer"
+                            style={{ borderLeft: `3px solid ${project?.color || entry.color || '#8B5CF6'}` }}
+                            onClick={onOpenTimetable}
+                          >
+                            <div className="text-xs font-medium text-violet-600 mb-1">
+                              {dayLabel} · {entryDate.toLocaleDateString('default', { month: 'short', day: 'numeric' })}
+                            </div>
+                            <div className="text-sm font-semibold text-gray-900 truncate mb-1">
+                              {entry.title}
+                            </div>
+                            <div className="text-xs text-gray-500 mb-1">
+                              {extractTime(entry.start_time)} – {extractTime(entry.end_time)}
+                            </div>
+                            {project && (
+                              <div className="flex items-center gap-1.5 mt-1">
+                                <div className="w-2 h-2 rounded-full flex-shrink-0" style={{ backgroundColor: project.color }} />
+                                <span className="text-xs text-gray-600 truncate">{project.name}</span>
+                              </div>
+                            )}
+                            {entry.location && (
+                              <div className="flex items-center gap-1 mt-1 text-xs text-gray-500">
+                                <MapPin size={10} />
+                                <span className="truncate">{entry.location}</span>
+                              </div>
+                            )}
+                          </div>
+                        )
+                      })}
+                    </div>
+                  </div>
+                </section>
+              )}
+
               {/* Open Tasks Section */}
               <section className="flex flex-col rounded-2xl border border-alpine-100 bg-alpine-50/50">
                 <div className="flex items-center justify-between border-b border-gray-200 px-4 py-3">
