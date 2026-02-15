@@ -1400,9 +1400,10 @@ export default function UnifiedPanel({
                     ? 'bg-white text-alpine-600 shadow-sm'
                     : 'text-gray-600 hover:text-gray-800 hover:bg-gray-50'
                 }`}
+                aria-label="Browse notes and folders"
               >
                 <FileText size={isMobile ? 13 : 14} className="flex-shrink-0" />
-                <span className="truncate">{isMobile ? '' : 'Browse'}</span>
+                <span className={`truncate ${isMobile ? 'sr-only' : ''}`}>Browse</span>
               </button>
               <button
                 onClick={() => setActiveTab('toc')}
@@ -1414,9 +1415,10 @@ export default function UnifiedPanel({
                     : 'text-gray-600 hover:text-gray-800 hover:bg-gray-50'
                 }`}
                 disabled={headings.length === 0}
+                aria-label="Table of contents"
               >
                 <ListTree size={isMobile ? 13 : 14} className="flex-shrink-0" />
-                <span className="truncate">{isMobile ? '' : 'Contents'}</span>
+                <span className={`truncate ${isMobile ? 'sr-only' : ''}`}>Contents</span>
                 {headings.length > 0 && !isMobile && (
                   <span className="px-1 py-0.5 text-[10px] bg-alpine-100 text-alpine-600 rounded-full font-semibold flex-shrink-0">
                     {headings.length}
@@ -1432,9 +1434,10 @@ export default function UnifiedPanel({
                     ? 'bg-white text-alpine-600 shadow-sm'
                     : 'text-gray-600 hover:text-gray-800 hover:bg-gray-50'
                 }`}
+                aria-label="Tasks"
               >
                 <CheckSquare size={isMobile ? 13 : 14} className="flex-shrink-0" />
-                <span className="truncate">{isMobile ? '' : 'Tasks'}</span>
+                <span className={`truncate ${isMobile ? 'sr-only' : ''}`}>Tasks</span>
                 {taskStats && taskStats.todo > 0 && !isMobile && (
                   <span className="px-1 py-0.5 text-[10px] bg-orange-100 text-orange-600 rounded-full font-semibold flex-shrink-0">
                     {taskStats.todo}
@@ -1450,9 +1453,10 @@ export default function UnifiedPanel({
                     ? 'bg-white text-purple-600 shadow-sm'
                     : 'text-gray-600 hover:text-gray-800 hover:bg-gray-50'
                 }`}
+                aria-label="AI Assistant"
               >
                 <Sparkles size={isMobile ? 13 : 14} className="flex-shrink-0" />
-                <span className="truncate">{isMobile ? '' : 'AI'}</span>
+                <span className={`truncate ${isMobile ? 'sr-only' : ''}`}>AI</span>
               </button>
             </div>
           </div>
