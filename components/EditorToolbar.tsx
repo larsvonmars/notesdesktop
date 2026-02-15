@@ -267,7 +267,7 @@ const EditorToolbar: React.FC<EditorToolbarProps> = ({
         )}
 
         {/* Block Controls Group */}
-        <div className="flex items-center gap-2 flex-shrink-0">
+        <div className={`flex items-center ${isMobile ? 'gap-1.5' : 'gap-2'} flex-shrink-0`}>
           <button
             className={`inline-flex items-center ${isMobile ? 'gap-1.5' : 'gap-2'} rounded-xl bg-alpine-600 ${isMobile ? 'px-2.5 py-1.5 text-xs' : 'px-3 py-2 text-sm'} font-medium text-white shadow hover:bg-alpine-700 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-alpine-500 disabled:opacity-40 disabled:cursor-not-allowed transition-colors touch-target`}
             onMouseDown={(e) => e.preventDefault()}

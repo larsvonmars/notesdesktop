@@ -113,7 +113,7 @@ export default function FixedToolbar({
 
   return (
     <div className="sticky top-0 z-40 bg-white border-b border-gray-200 shadow-sm">
-      <div className={`flex items-center ${gapClass} ${paddingClass} overflow-x-auto scrollbar-none scrollbar-hide`}>
+      <div className={`flex items-center ${gapClass} ${paddingClass} overflow-x-auto scrollbar-hide`}>
         {/* Toolbar Sections */}
         {toolbarSections.map((section, sectionIndex) => (
           <div key={section.name} className={`flex items-center ${gapClass} flex-shrink-0`}>

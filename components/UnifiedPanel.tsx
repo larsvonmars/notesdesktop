@@ -1273,7 +1273,7 @@ export default function UnifiedPanel({
       <button
         onClick={() => setIsOpen(!isOpen)}
         className={`fixed z-50 bg-white border border-gray-200 rounded-2xl shadow-lg hover:shadow-xl hover:scale-105 transition-all duration-200 group touch-target ${
-          isMobile ? 'top-3 right-3 p-2.5 min-w-[44px] min-h-[44px]' : 'top-14 right-6 p-3'
+          isMobile ? 'top-3 right-3 p-2.5' : 'top-14 right-6 p-3'
         }`}
         aria-label={isOpen ? 'Close menu' : 'Open menu (⌘\\)'}
         title={isOpen ? 'Close menu' : 'Open menu (⌘\\)'}
@@ -1400,9 +1400,8 @@ export default function UnifiedPanel({
                     ? 'bg-white text-alpine-600 shadow-sm'
                     : 'text-gray-600 hover:text-gray-800 hover:bg-gray-50'
                 }`}
-                aria-label="Browse notes and folders"
               >
-                <FileText size={isMobile ? 13 : 14} className="flex-shrink-0" />
+                <FileText size={isMobile ? 13 : 14} className="flex-shrink-0" aria-hidden={!isMobile} />
                 <span className={`truncate ${isMobile ? 'sr-only' : ''}`}>Browse</span>
               </button>
               <button
@@ -1415,9 +1414,8 @@ export default function UnifiedPanel({
                     : 'text-gray-600 hover:text-gray-800 hover:bg-gray-50'
                 }`}
                 disabled={headings.length === 0}
-                aria-label="Table of contents"
               >
-                <ListTree size={isMobile ? 13 : 14} className="flex-shrink-0" />
+                <ListTree size={isMobile ? 13 : 14} className="flex-shrink-0" aria-hidden={!isMobile} />
                 <span className={`truncate ${isMobile ? 'sr-only' : ''}`}>Contents</span>
                 {headings.length > 0 && !isMobile && (
                   <span className="px-1 py-0.5 text-[10px] bg-alpine-100 text-alpine-600 rounded-full font-semibold flex-shrink-0">
@@ -1434,9 +1432,8 @@ export default function UnifiedPanel({
                     ? 'bg-white text-alpine-600 shadow-sm'
                     : 'text-gray-600 hover:text-gray-800 hover:bg-gray-50'
                 }`}
-                aria-label="Tasks"
               >
-                <CheckSquare size={isMobile ? 13 : 14} className="flex-shrink-0" />
+                <CheckSquare size={isMobile ? 13 : 14} className="flex-shrink-0" aria-hidden={!isMobile} />
                 <span className={`truncate ${isMobile ? 'sr-only' : ''}`}>Tasks</span>
                 {taskStats && taskStats.todo > 0 && !isMobile && (
                   <span className="px-1 py-0.5 text-[10px] bg-orange-100 text-orange-600 rounded-full font-semibold flex-shrink-0">
@@ -1453,9 +1450,8 @@ export default function UnifiedPanel({
                     ? 'bg-white text-purple-600 shadow-sm'
                     : 'text-gray-600 hover:text-gray-800 hover:bg-gray-50'
                 }`}
-                aria-label="AI Assistant"
               >
-                <Sparkles size={isMobile ? 13 : 14} className="flex-shrink-0" />
+                <Sparkles size={isMobile ? 13 : 14} className="flex-shrink-0" aria-hidden={!isMobile} />
                 <span className={`truncate ${isMobile ? 'sr-only' : ''}`}>AI</span>
               </button>
             </div>
