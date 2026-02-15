@@ -69,8 +69,10 @@ export default function FixedToolbar({
     onCommand(command)
   }
 
-  const btnSize = isMobile ? 'h-10 w-10' : 'h-8 w-8'
+  const btnSize = isMobile ? 'h-9 w-9 min-w-[36px]' : 'h-8 w-8 min-w-[32px]'
   const iconSize = isMobile ? 18 : 16
+  const paddingClass = isMobile ? 'px-3 py-1.5' : 'px-4 py-2'
+  const gapClass = isMobile ? 'gap-0.5' : 'gap-1'
 
   const toolbarSections = [
     {
@@ -111,10 +113,10 @@ export default function FixedToolbar({
 
   return (
     <div className="sticky top-0 z-40 bg-white border-b border-gray-200 shadow-sm">
-      <div className="flex items-center gap-1 px-4 py-2 overflow-x-auto scrollbar-none">
+      <div className={`flex items-center ${gapClass} ${paddingClass} overflow-x-auto scrollbar-none scrollbar-hide`}>
         {/* Toolbar Sections */}
         {toolbarSections.map((section, sectionIndex) => (
-          <div key={section.name} className="flex items-center gap-1">
+          <div key={section.name} className={`flex items-center ${gapClass} flex-shrink-0`}>
             {section.buttons.map(({ command, icon: Icon, label }) => {
               const isActive = activeFormats.has(command)
               return (
@@ -123,7 +125,7 @@ export default function FixedToolbar({
                   type="button"
                   onClick={() => handleCommand(command)}
                   disabled={disabled}
-                  className={`inline-flex ${btnSize} items-center justify-center rounded-lg transition-all duration-150 flex-shrink-0 ${
+                  className={`inline-flex ${btnSize} items-center justify-center rounded-lg transition-all duration-150 flex-shrink-0 touch-target ${
                     isActive
                       ? 'bg-alpine-100 text-alpine-700 ring-1 ring-alpine-300'
                       : 'text-gray-600 hover:bg-gray-100 hover:text-gray-900'
@@ -139,13 +141,13 @@ export default function FixedToolbar({
             })}
             {/* Divider between sections */}
             {sectionIndex < toolbarSections.length - 1 && (
-              <div className="w-px h-6 bg-gray-300 mx-1" />
+              <div className={`${isMobile ? 'w-px h-5' : 'w-px h-6'} bg-gray-300 ${isMobile ? 'mx-0.5' : 'mx-1'}`} />
             )}
           </div>
         ))}
 
         {/* Special Actions */}
-        <div className="w-px h-6 bg-gray-300 mx-1" />
+        <div className={`${isMobile ? 'w-px h-5' : 'w-px h-6'} bg-gray-300 ${isMobile ? 'mx-0.5' : 'mx-1'}`} />
         
         {/* Table Button */}
         {onShowTable && (
@@ -153,7 +155,7 @@ export default function FixedToolbar({
             type="button"
             onClick={onShowTable}
             disabled={disabled}
-            className={`inline-flex ${btnSize} items-center justify-center rounded-lg text-gray-600 transition-all duration-150 hover:bg-gray-100 hover:text-gray-900 flex-shrink-0 ${
+            className={`inline-flex ${btnSize} items-center justify-center rounded-lg text-gray-600 transition-all duration-150 hover:bg-gray-100 hover:text-gray-900 flex-shrink-0 touch-target ${
               disabled ? 'opacity-40 cursor-not-allowed' : 'cursor-pointer'
             }`}
             title="Insert Table"
@@ -169,7 +171,7 @@ export default function FixedToolbar({
             type="button"
             onClick={onShowNoteLink}
             disabled={disabled}
-            className={`inline-flex ${btnSize} items-center justify-center rounded-lg text-gray-600 transition-all duration-150 hover:bg-gray-100 hover:text-gray-900 flex-shrink-0 ${
+            className={`inline-flex ${btnSize} items-center justify-center rounded-lg text-gray-600 transition-all duration-150 hover:bg-gray-100 hover:text-gray-900 flex-shrink-0 touch-target ${
               disabled ? 'opacity-40 cursor-not-allowed' : 'cursor-pointer'
             }`}
             title="Link to Note"
@@ -180,14 +182,14 @@ export default function FixedToolbar({
         )}
 
         {/* Divider */}
-        <div className="w-px h-6 bg-gray-300 mx-1" />
+        <div className={`${isMobile ? 'w-px h-5' : 'w-px h-6'} bg-gray-300 ${isMobile ? 'mx-0.5' : 'mx-1'}`} />
 
         {/* Undo/Redo */}
         <button
           type="button"
           onClick={() => handleCommand('undo')}
           disabled={disabled}
-          className={`inline-flex ${btnSize} items-center justify-center rounded-lg text-gray-600 transition-all duration-150 hover:bg-gray-100 hover:text-gray-900 flex-shrink-0 ${
+          className={`inline-flex ${btnSize} items-center justify-center rounded-lg text-gray-600 transition-all duration-150 hover:bg-gray-100 hover:text-gray-900 flex-shrink-0 touch-target ${
             disabled ? 'opacity-40 cursor-not-allowed' : 'cursor-pointer'
           }`}
           title={`Undo (${commandShortcuts.undo})`}
@@ -199,7 +201,7 @@ export default function FixedToolbar({
           type="button"
           onClick={() => handleCommand('redo')}
           disabled={disabled}
-          className={`inline-flex ${btnSize} items-center justify-center rounded-lg text-gray-600 transition-all duration-150 hover:bg-gray-100 hover:text-gray-900 flex-shrink-0 ${
+          className={`inline-flex ${btnSize} items-center justify-center rounded-lg text-gray-600 transition-all duration-150 hover:bg-gray-100 hover:text-gray-900 flex-shrink-0 touch-target ${
             disabled ? 'opacity-40 cursor-not-allowed' : 'cursor-pointer'
           }`}
           title={`Redo (${commandShortcuts.redo})`}
@@ -209,14 +211,14 @@ export default function FixedToolbar({
         </button>
 
         {/* Divider */}
-        <div className="w-px h-6 bg-gray-300 mx-1" />
+        <div className={`${isMobile ? 'w-px h-5' : 'w-px h-6'} bg-gray-300 ${isMobile ? 'mx-0.5' : 'mx-1'}`} />
 
         {/* Block Outlines Toggle */}
         <button
           type="button"
           onClick={onToggleBlockOutlines}
           disabled={disabled}
-          className={`inline-flex items-center gap-1.5 ${isMobile ? 'h-10 px-3' : 'h-8 px-3'} rounded-lg transition-all duration-150 text-sm font-medium flex-shrink-0 ${
+          className={`inline-flex items-center ${isMobile ? 'gap-1 h-9 px-2.5' : 'gap-1.5 h-8 px-3'} rounded-lg transition-all duration-150 ${isMobile ? 'text-xs' : 'text-sm'} font-medium flex-shrink-0 touch-target ${
             showBlockOutlines
               ? 'bg-purple-100 text-purple-700 ring-1 ring-purple-300'
               : 'text-gray-600 hover:bg-gray-100 hover:text-gray-900'

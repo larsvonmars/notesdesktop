@@ -73,14 +73,16 @@ const EditorToolbar: React.FC<EditorToolbarProps> = ({
   disabled = false
 }) => {
   const isMobile = useIsMobile()
-  const btnSizeClass = isMobile ? 'h-11 w-11' : 'h-9 w-9'
-  const iconSize = isMobile ? 20 : 16
+  const btnSizeClass = isMobile ? 'h-10 w-10 min-w-[40px]' : 'h-9 w-9 min-w-[36px]'
+  const iconSize = isMobile ? 18 : 16
+  const gapClass = isMobile ? 'gap-2' : 'gap-3'
+  const paddingClass = isMobile ? 'px-3 py-2' : 'px-4 py-3'
 
   const toolbarButtonClass =
-    `inline-flex ${btnSizeClass} items-center justify-center rounded-lg border border-transparent bg-white text-slate-600 shadow-sm hover:bg-slate-100 hover:text-slate-900 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-alpine-500 disabled:opacity-40 disabled:cursor-not-allowed transition-colors flex-shrink-0`
+    `inline-flex ${btnSizeClass} items-center justify-center rounded-lg border border-transparent bg-white text-slate-600 shadow-sm hover:bg-slate-100 hover:text-slate-900 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-alpine-500 disabled:opacity-40 disabled:cursor-not-allowed transition-colors flex-shrink-0 touch-target`
 
   const activeButtonClass =
-    `inline-flex ${btnSizeClass} items-center justify-center rounded-lg border border-transparent bg-alpine-50 text-alpine-700 shadow-sm hover:bg-alpine-100 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-alpine-500 disabled:opacity-40 disabled:cursor-not-allowed transition-colors flex-shrink-0`
+    `inline-flex ${btnSizeClass} items-center justify-center rounded-lg border border-transparent bg-alpine-50 text-alpine-700 shadow-sm hover:bg-alpine-100 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-alpine-500 disabled:opacity-40 disabled:cursor-not-allowed transition-colors flex-shrink-0 touch-target`
 
   // Determine the current block type based on active formats
   // Memoize with useMemo since activeFormats is a Set and would change reference
@@ -94,9 +96,9 @@ const EditorToolbar: React.FC<EditorToolbarProps> = ({
 
   return (
     <div className="sticky top-0 z-40 flex-shrink-0 border-b border-slate-200 bg-white/90 backdrop-blur supports-[backdrop-filter]:bg-white/70">
-      <div className="flex flex-nowrap items-center gap-3 px-4 py-3 overflow-x-auto scrollbar-none">
+      <div className={`flex flex-nowrap items-center ${gapClass} ${paddingClass} overflow-x-auto scrollbar-none`}>
         {/* Text Formatting Group */}
-        <div className="flex items-center gap-1 rounded-2xl border border-slate-200 bg-white/80 px-2 py-1 shadow-sm">
+        <div className={`flex items-center gap-1 rounded-2xl border border-slate-200 bg-white/80 ${isMobile ? 'px-1.5 py-0.5' : 'px-2 py-1'} shadow-sm flex-shrink-0`}>
           <button
             className={activeFormats.has('bold') ? activeButtonClass : toolbarButtonClass}
             onMouseDown={(e) => e.preventDefault()}
@@ -160,13 +162,15 @@ const EditorToolbar: React.FC<EditorToolbarProps> = ({
         </div>
 
         {/* Block Type Selector */}
-        <div className="flex items-center gap-2 rounded-2xl border border-slate-200 bg-white/80 px-3 py-1 shadow-sm">
-          <div className="flex items-center gap-1 text-xs font-medium uppercase tracking-wide text-slate-500">
-            <Type size={14} />
-            <span>Block</span>
-          </div>
+        <div className={`flex items-center ${isMobile ? 'gap-1' : 'gap-2'} rounded-2xl border border-slate-200 bg-white/80 ${isMobile ? 'px-2 py-0.5' : 'px-3 py-1'} shadow-sm flex-shrink-0`}>
+          {!isMobile && (
+            <div className="flex items-center gap-1 text-xs font-medium uppercase tracking-wide text-slate-500">
+              <Type size={14} />
+              <span>Block</span>
+            </div>
+          )}
           <select
-            className="h-9 rounded-lg border border-slate-200 bg-white px-3 text-sm text-slate-700 focus:border-alpine-500 focus:outline-none focus:ring-2 focus:ring-alpine-500 disabled:opacity-40 disabled:cursor-not-allowed"
+            className={`${isMobile ? 'h-8' : 'h-9'} rounded-lg border border-slate-200 bg-white ${isMobile ? 'px-2 text-xs' : 'px-3 text-sm'} text-slate-700 focus:border-alpine-500 focus:outline-none focus:ring-2 focus:ring-alpine-500 disabled:opacity-40 disabled:cursor-not-allowed min-w-[90px]`}
             value={currentBlockType}
             onChange={(event) => onBlockTypeChange(event.target.value)}
             disabled={disabled}
@@ -181,7 +185,7 @@ const EditorToolbar: React.FC<EditorToolbarProps> = ({
         </div>
 
         {/* Lists & Structure Group */}
-        <div className="flex items-center gap-1 rounded-2xl border border-slate-200 bg-white/80 px-2 py-1 shadow-sm">
+        <div className={`flex items-center gap-1 rounded-2xl border border-slate-200 bg-white/80 ${isMobile ? 'px-1.5 py-0.5' : 'px-2 py-1'} shadow-sm flex-shrink-0`}>
           <button
             className={activeFormats.has('unordered-list') ? activeButtonClass : toolbarButtonClass}
             onMouseDown={(e) => e.preventDefault()}
@@ -225,7 +229,7 @@ const EditorToolbar: React.FC<EditorToolbarProps> = ({
         </div>
 
         {/* History Group */}
-        <div className="flex items-center gap-1 rounded-2xl border border-slate-200 bg-white/80 px-2 py-1 shadow-sm">
+        <div className={`flex items-center gap-1 rounded-2xl border border-slate-200 bg-white/80 ${isMobile ? 'px-1.5 py-0.5' : 'px-2 py-1'} shadow-sm flex-shrink-0`}>
           <button
             className={toolbarButtonClass}
             onMouseDown={(e) => e.preventDefault()}
@@ -263,9 +267,9 @@ const EditorToolbar: React.FC<EditorToolbarProps> = ({
         )}
 
         {/* Block Controls Group */}
-        <div className="flex flex-wrap items-center gap-2">
+        <div className="flex items-center gap-2 flex-shrink-0">
           <button
-            className="inline-flex items-center gap-2 rounded-xl bg-alpine-600 px-3 py-2 text-sm font-medium text-white shadow hover:bg-alpine-700 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-alpine-500 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+            className={`inline-flex items-center ${isMobile ? 'gap-1.5' : 'gap-2'} rounded-xl bg-alpine-600 ${isMobile ? 'px-2.5 py-1.5 text-xs' : 'px-3 py-2 text-sm'} font-medium text-white shadow hover:bg-alpine-700 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-alpine-500 disabled:opacity-40 disabled:cursor-not-allowed transition-colors touch-target`}
             onMouseDown={(e) => e.preventDefault()}
             onClick={onNewBlock}
             disabled={disabled}
@@ -275,7 +279,7 @@ const EditorToolbar: React.FC<EditorToolbarProps> = ({
             <Plus size={iconSize} /> {!isMobile && 'New block'}
           </button>
           <button
-            className="inline-flex items-center gap-2 rounded-xl bg-red-500 px-3 py-2 text-sm font-medium text-white shadow hover:bg-red-600 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-red-500 disabled:opacity-40 disabled:cursor-not-allowed transition-colors flex-shrink-0"
+            className={`inline-flex items-center ${isMobile ? 'gap-1.5' : 'gap-2'} rounded-xl bg-red-500 ${isMobile ? 'px-2.5 py-1.5 text-xs' : 'px-3 py-2 text-sm'} font-medium text-white shadow hover:bg-red-600 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-red-500 disabled:opacity-40 disabled:cursor-not-allowed transition-colors flex-shrink-0 touch-target`}
             onMouseDown={(e) => e.preventDefault()}
             onClick={onDeleteBlock}
             disabled={disabled || !activeBlockId}
