@@ -1272,8 +1272,8 @@ export default function UnifiedPanel({
       {/* Floating Menu Button — sits below the formatting toolbar */}
       <button
         onClick={() => setIsOpen(!isOpen)}
-        className={`fixed z-50 bg-white border border-gray-200 rounded-2xl shadow-lg hover:shadow-xl hover:scale-105 transition-all duration-200 group ${
-          isMobile ? 'top-3 right-3 p-3 touch-target' : 'top-14 right-6 p-3'
+        className={`fixed z-50 bg-white border border-gray-200 rounded-2xl shadow-lg hover:shadow-xl hover:scale-105 transition-all duration-200 group touch-target ${
+          isMobile ? 'top-3 right-3 p-2.5' : 'top-14 right-6 p-3'
         }`}
         aria-label={isOpen ? 'Close menu' : 'Open menu (⌘\\)'}
         title={isOpen ? 'Close menu' : 'Open menu (⌘\\)'}
@@ -1303,33 +1303,33 @@ export default function UnifiedPanel({
           <div className="bg-gradient-to-br from-slate-50 via-white to-alpine-50 border-b border-gray-100">
             {/* User Info Bar */}
             {userEmail && onSignOut && (
-              <div className="px-5 py-3 flex items-center justify-between border-b border-gray-100">
-                <div className="flex items-center gap-3">
-                  <div className="w-8 h-8 rounded-full bg-alpine-600 flex items-center justify-center text-white text-sm font-medium">
+              <div className={`flex items-center justify-between border-b border-gray-100 ${isMobile ? 'px-4 py-2.5' : 'px-5 py-3'}`}>
+                <div className="flex items-center gap-3 min-w-0 flex-1">
+                  <div className={`rounded-full bg-alpine-600 flex items-center justify-center text-white font-medium flex-shrink-0 ${isMobile ? 'w-7 h-7 text-xs' : 'w-8 h-8 text-sm'}`}>
                     {userEmail.charAt(0).toUpperCase()}
                   </div>
-                  <span className="text-sm text-gray-700 font-medium truncate max-w-[200px]">{userEmail}</span>
+                  <span className={`text-gray-700 font-medium truncate ${isMobile ? 'text-xs' : 'text-sm'}`}>{userEmail}</span>
                 </div>
-                <div className="flex items-center gap-1">
+                <div className="flex items-center gap-1 flex-shrink-0">
                   <NotificationCenter
                     onAction={onNotificationAction}
                     onOpenSettings={() => setShowNotificationSettings(true)}
                   />
                   <button
                     onClick={onSignOut}
-                    className="flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium text-gray-500 hover:text-red-600 hover:bg-red-50 rounded-lg transition-all"
+                    className={`flex items-center gap-1.5 font-medium text-gray-500 hover:text-red-600 hover:bg-red-50 rounded-lg transition-all touch-target ${isMobile ? 'px-2 py-1 text-xs' : 'px-3 py-1.5 text-sm'}`}
                     title="Sign Out"
                   >
-                    <LogOut size={15} />
+                    <LogOut size={isMobile ? 14 : 15} />
                   </button>
                 </div>
               </div>
             )}
 
             {/* Note Title & Actions */}
-            <div className="p-5">
-              <div className="mb-4">
-                <label className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2 block">
+            <div className={isMobile ? 'p-4' : 'p-5'}>
+              <div className={isMobile ? 'mb-3' : 'mb-4'}>
+                <label className={`font-semibold text-gray-500 uppercase tracking-wider mb-2 block ${isMobile ? 'text-[10px]' : 'text-xs'}`}>
                   Note Title
                 </label>
                 <input
@@ -1337,23 +1337,23 @@ export default function UnifiedPanel({
                   value={title}
                   onChange={(e) => onTitleChange(e.target.value)}
                   placeholder="Untitled note..."
-                  className="w-full px-4 py-3 text-lg font-semibold border border-gray-200 rounded-xl focus:ring-2 focus:ring-alpine-500 focus:border-transparent bg-white transition-all placeholder:text-gray-300"
+                  className={`w-full border border-gray-200 rounded-xl focus:ring-2 focus:ring-alpine-500 focus:border-transparent bg-white transition-all placeholder:text-gray-300 ${isMobile ? 'px-3 py-2.5 text-base font-semibold' : 'px-4 py-3 text-lg font-semibold'}`}
                   disabled={isSaving || isDeleting}
                 />
               </div>
               
               {/* Action Buttons */}
-              <div className="flex items-center gap-2">
+              <div className={`flex items-center ${isMobile ? 'gap-1.5' : 'gap-2'}`}>
                 <button
                   onClick={onSave}
                   disabled={isSaving || isDeleting || !hasChanges}
-                  className="flex-1 inline-flex items-center justify-center gap-2 px-4 py-2.5 bg-gradient-to-r from-alpine-600 to-alpine-700 text-white text-sm font-semibold rounded-xl hover:from-alpine-700 hover:to-alpine-800 disabled:opacity-50 disabled:cursor-not-allowed transition-all shadow-sm hover:shadow-md"
+                  className={`flex-1 inline-flex items-center justify-center gap-2 bg-gradient-to-r from-alpine-600 to-alpine-700 text-white font-semibold rounded-xl hover:from-alpine-700 hover:to-alpine-800 disabled:opacity-50 disabled:cursor-not-allowed transition-all shadow-sm hover:shadow-md touch-target ${isMobile ? 'px-3 py-2 text-xs' : 'px-4 py-2.5 text-sm'}`}
                   title="Save note (⌘S)"
                 >
                   {isSaving ? (
-                    <Loader2 size={16} className="animate-spin" />
+                    <Loader2 size={isMobile ? 14 : 16} className="animate-spin" />
                   ) : (
-                    <Save size={16} />
+                    <Save size={isMobile ? 14 : 16} />
                   )}
                   {isSaving ? 'Saving...' : 'Save'}
                 </button>
@@ -1362,52 +1362,52 @@ export default function UnifiedPanel({
                   <button
                     onClick={() => onDelete(note.id)}
                     disabled={isDeleting}
-                    className="p-2.5 border border-red-200 text-red-600 rounded-xl hover:bg-red-50 disabled:opacity-50 transition-all"
+                    className={`border border-red-200 text-red-600 rounded-xl hover:bg-red-50 disabled:opacity-50 transition-all touch-target ${isMobile ? 'p-2' : 'p-2.5'}`}
                     title="Delete note"
                   >
-                    <Trash2 size={16} />
+                    <Trash2 size={isMobile ? 14 : 16} />
                   </button>
                 )}
                 
                 <button
                   onClick={onCancel}
                   disabled={isSaving || isDeleting}
-                  className="p-2.5 border border-gray-200 text-gray-600 rounded-xl hover:bg-gray-50 disabled:opacity-50 transition-all"
+                  className={`border border-gray-200 text-gray-600 rounded-xl hover:bg-gray-50 disabled:opacity-50 transition-all touch-target ${isMobile ? 'p-2' : 'p-2.5'}`}
                   title="Cancel"
                 >
-                  <X size={16} />
+                  <X size={isMobile ? 14 : 16} />
                 </button>
               </div>
 
               {hasChanges && (
-                <div className="mt-3 flex items-center gap-2 text-amber-600 bg-amber-50 px-3 py-2 rounded-lg">
+                <div className={`flex items-center gap-2 text-amber-600 bg-amber-50 rounded-lg ${isMobile ? 'mt-2.5 px-2.5 py-1.5' : 'mt-3 px-3 py-2'}`}>
                   <span className="w-2 h-2 bg-amber-500 rounded-full animate-pulse" />
-                  <span className="text-sm font-medium">Unsaved changes</span>
+                  <span className={`font-medium ${isMobile ? 'text-xs' : 'text-sm'}`}>Unsaved changes</span>
                 </div>
               )}
             </div>
           </div>
 
           {/* Tabs - Modern Pill Style */}
-          <div className="px-3 py-3 bg-gray-50/50 border-b border-gray-100">
-            <div className="flex bg-gray-100 rounded-xl p-1 gap-0.5">
+          <div className={`bg-gray-50/50 border-b border-gray-100 ${isMobile ? 'px-2 py-2' : 'px-3 py-3'}`}>
+            <div className={`flex bg-gray-100 rounded-xl gap-0.5 ${isMobile ? 'p-0.5' : 'p-1'}`}>
               <button
                 onClick={() => setActiveTab('browse')}
-                className={`flex-1 px-2 text-xs font-medium transition-all rounded-lg flex items-center justify-center gap-1.5 min-w-0 ${
-                  isMobile ? 'py-3' : 'py-2'
+                className={`flex-1 text-xs font-medium transition-all rounded-lg flex items-center justify-center gap-1.5 min-w-0 touch-target ${
+                  isMobile ? 'px-1.5 py-2.5' : 'px-2 py-2'
                 } ${
                   activeTab === 'browse'
                     ? 'bg-white text-alpine-600 shadow-sm'
                     : 'text-gray-600 hover:text-gray-800 hover:bg-gray-50'
                 }`}
               >
-                <FileText size={14} className="flex-shrink-0" />
-                <span className="truncate">Browse</span>
+                <FileText size={isMobile ? 13 : 14} className="flex-shrink-0" aria-hidden={!isMobile} />
+                <span className={`truncate ${isMobile ? 'sr-only' : ''}`}>Browse</span>
               </button>
               <button
                 onClick={() => setActiveTab('toc')}
-                className={`flex-1 px-2 text-xs font-medium transition-all rounded-lg flex items-center justify-center gap-1.5 min-w-0 ${
-                  isMobile ? 'py-3' : 'py-2'
+                className={`flex-1 text-xs font-medium transition-all rounded-lg flex items-center justify-center gap-1.5 min-w-0 touch-target ${
+                  isMobile ? 'px-1.5 py-2.5' : 'px-2 py-2'
                 } ${
                   activeTab === 'toc'
                     ? 'bg-white text-alpine-600 shadow-sm'
@@ -1415,9 +1415,9 @@ export default function UnifiedPanel({
                 }`}
                 disabled={headings.length === 0}
               >
-                <ListTree size={14} className="flex-shrink-0" />
-                <span className="truncate">Contents</span>
-                {headings.length > 0 && (
+                <ListTree size={isMobile ? 13 : 14} className="flex-shrink-0" aria-hidden={!isMobile} />
+                <span className={`truncate ${isMobile ? 'sr-only' : ''}`}>Contents</span>
+                {headings.length > 0 && !isMobile && (
                   <span className="px-1 py-0.5 text-[10px] bg-alpine-100 text-alpine-600 rounded-full font-semibold flex-shrink-0">
                     {headings.length}
                   </span>
@@ -1425,17 +1425,17 @@ export default function UnifiedPanel({
               </button>
               <button
                 onClick={() => setActiveTab('tasks')}
-                className={`flex-1 px-2 text-xs font-medium transition-all rounded-lg flex items-center justify-center gap-1.5 min-w-0 ${
-                  isMobile ? 'py-3' : 'py-2'
+                className={`flex-1 text-xs font-medium transition-all rounded-lg flex items-center justify-center gap-1.5 min-w-0 touch-target ${
+                  isMobile ? 'px-1.5 py-2.5' : 'px-2 py-2'
                 } ${
                   activeTab === 'tasks'
                     ? 'bg-white text-alpine-600 shadow-sm'
                     : 'text-gray-600 hover:text-gray-800 hover:bg-gray-50'
                 }`}
               >
-                <CheckSquare size={14} className="flex-shrink-0" />
-                <span className="truncate">Tasks</span>
-                {taskStats && taskStats.todo > 0 && (
+                <CheckSquare size={isMobile ? 13 : 14} className="flex-shrink-0" aria-hidden={!isMobile} />
+                <span className={`truncate ${isMobile ? 'sr-only' : ''}`}>Tasks</span>
+                {taskStats && taskStats.todo > 0 && !isMobile && (
                   <span className="px-1 py-0.5 text-[10px] bg-orange-100 text-orange-600 rounded-full font-semibold flex-shrink-0">
                     {taskStats.todo}
                   </span>
@@ -1443,16 +1443,16 @@ export default function UnifiedPanel({
               </button>
               <button
                 onClick={() => setActiveTab('ai')}
-                className={`flex-1 px-2 text-xs font-medium transition-all rounded-lg flex items-center justify-center gap-1.5 min-w-0 ${
-                  isMobile ? 'py-3' : 'py-2'
+                className={`flex-1 text-xs font-medium transition-all rounded-lg flex items-center justify-center gap-1.5 min-w-0 touch-target ${
+                  isMobile ? 'px-1.5 py-2.5' : 'px-2 py-2'
                 } ${
                   activeTab === 'ai'
                     ? 'bg-white text-purple-600 shadow-sm'
                     : 'text-gray-600 hover:text-gray-800 hover:bg-gray-50'
                 }`}
               >
-                <Sparkles size={14} className="flex-shrink-0" />
-                <span className="truncate">AI</span>
+                <Sparkles size={isMobile ? 13 : 14} className="flex-shrink-0" aria-hidden={!isMobile} />
+                <span className={`truncate ${isMobile ? 'sr-only' : ''}`}>AI</span>
               </button>
             </div>
           </div>
@@ -1460,19 +1460,19 @@ export default function UnifiedPanel({
           {/* Content Area */}
           <div className="flex-1 overflow-y-auto">
             {activeTab === 'browse' && (
-              <div className="p-5 space-y-5">
+              <div className={`space-y-5 ${isMobile ? 'p-4' : 'p-5'}`}>
                 {/* Quick Actions Row */}
-                <div className="grid grid-cols-2 gap-3">
+                <div className={`grid gap-3 ${isMobile ? 'grid-cols-1' : 'grid-cols-2'}`}>
                   {onOpenKnowledgeGraph && (
                     <button
                       onClick={() => {
                         onOpenKnowledgeGraph()
                         setIsOpen(false)
                       }}
-                      className="px-4 py-3.5 bg-alpine-600 text-white text-sm font-semibold rounded-xl hover:bg-alpine-700 transition-all shadow-sm hover:shadow-md flex items-center justify-center gap-2"
+                      className={`bg-alpine-600 text-white font-semibold rounded-xl hover:bg-alpine-700 transition-all shadow-sm hover:shadow-md flex items-center justify-center gap-2 touch-target ${isMobile ? 'px-3 py-3 text-xs' : 'px-4 py-3.5 text-sm'}`}
                       title="Open Knowledge Graph - Visualize note connections"
                     >
-                      <Network size={18} />
+                      <Network size={isMobile ? 16 : 18} />
                       <span>Knowledge Graph</span>
                     </button>
                   )}
@@ -1481,21 +1481,21 @@ export default function UnifiedPanel({
                       onSearch()
                       setIsOpen(false)
                     }}
-                    className="px-4 py-3.5 bg-white border border-gray-200 text-gray-700 text-sm font-semibold rounded-xl hover:bg-gray-50 transition-all flex items-center justify-center gap-2 shadow-sm"
+                    className={`bg-white border border-gray-200 text-gray-700 font-semibold rounded-xl hover:bg-gray-50 transition-all flex items-center justify-center gap-2 shadow-sm touch-target ${isMobile ? 'px-3 py-3 text-xs' : 'px-4 py-3.5 text-sm'}`}
                   >
-                    <Search size={18} />
+                    <Search size={isMobile ? 16 : 18} />
                     <span>Find & Replace</span>
                   </button>
                   {note && (
-                    <div className="relative col-span-2">
+                    <div className={`relative ${isMobile ? '' : 'col-span-2'}`}>
                       <button
                         onClick={() => setShowExportMenu(!showExportMenu)}
-                        className="w-full px-4 py-3.5 bg-gradient-to-br from-emerald-500 to-teal-600 text-white text-sm font-semibold rounded-xl hover:from-emerald-600 hover:to-teal-700 transition-all shadow-sm hover:shadow-md flex items-center justify-center gap-2"
+                        className={`w-full bg-gradient-to-br from-emerald-500 to-teal-600 text-white font-semibold rounded-xl hover:from-emerald-600 hover:to-teal-700 transition-all shadow-sm hover:shadow-md flex items-center justify-center gap-2 touch-target ${isMobile ? 'px-3 py-3 text-xs' : 'px-4 py-3.5 text-sm'}`}
                         title="Export note to different formats"
                       >
-                        <Download size={18} />
+                        <Download size={isMobile ? 16 : 18} />
                         <span>Export Note</span>
-                        <ChevronDown size={16} className={`transition-transform ${showExportMenu ? 'rotate-180' : ''}`} />
+                        <ChevronDown size={isMobile ? 14 : 16} className={`transition-transform ${showExportMenu ? 'rotate-180' : ''}`} />
                       </button>
                       
                       {/* Export Menu Dropdown */}

@@ -49,8 +49,8 @@ export default function SelectionToolbar({
       return
     }
 
-    const toolbarHeight = 40
-    const toolbarWidth = 300
+    const toolbarHeight = isMobile ? 48 : 40
+    const toolbarWidth = isMobile ? 280 : 300
     const margin = 8
 
     // Position above selection if possible, otherwise below
@@ -78,7 +78,7 @@ export default function SelectionToolbar({
     if (queryCommandState('strikeThrough')) active.add('strike')
     if (queryCommandState('code')) active.add('code')
     setActiveCommands(active)
-  }, [queryCommandState])
+  }, [queryCommandState, isMobile])
 
   useEffect(() => {
     const handleSelectionChange = () => {
@@ -120,7 +120,7 @@ export default function SelectionToolbar({
   return (
     <div
       ref={toolbarRef}
-      className="fixed z-50 flex items-center gap-1 rounded-lg bg-gray-900 text-white shadow-lg px-2 py-1.5 animate-in fade-in duration-150"
+      className={`fixed z-50 flex items-center ${isMobile ? 'gap-0.5' : 'gap-1'} rounded-lg bg-gray-900 text-white shadow-lg ${isMobile ? 'px-1.5 py-1.5' : 'px-2 py-1.5'} animate-in fade-in duration-150`}
       style={{ top: position.top, left: position.left }}
       onMouseDown={(e) => {
         // Prevent toolbar from taking focus away from editor
@@ -134,7 +134,7 @@ export default function SelectionToolbar({
           onMouseDown={(e) => e.preventDefault()}
           title={label}
           disabled={isDisabled}
-          className={`${isMobile ? 'p-3' : 'p-2'} rounded hover:bg-gray-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed ${
+          className={`${isMobile ? 'p-2.5 min-w-[40px] min-h-[40px]' : 'p-2 min-w-[36px] min-h-[36px]'} rounded hover:bg-gray-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed touch-target ${
             activeCommands.has(command) ? 'bg-gray-700' : ''
           }`}
           aria-label={label}
