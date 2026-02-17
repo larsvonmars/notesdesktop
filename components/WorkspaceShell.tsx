@@ -6,6 +6,7 @@ import { useEffect, useState, useRef, useCallback, Suspense } from 'react'
 import NoteEditor, { Note } from '@/components/NoteEditor'
 import TaskCalendarModal from '@/components/TaskCalendarModal'
 import WelcomeBackModal from '@/components/WelcomeBackModal'
+import FileExplorerModal from '@/components/FileExplorerModal'
 import { Loader2, FileEdit, Sparkles, FileText, PenTool, Network, BookOpen, Table2, X } from 'lucide-react'
 import { useIsMobile } from '@/lib/useIsMobile'
 import type { NoteType } from '@/lib/notes'
@@ -66,6 +67,9 @@ function WorkspaceContent() {
   // Task Calendar modal state
   const [showTaskCalendar, setShowTaskCalendar] = useState(false)
   const [taskCalendarInitialView, setTaskCalendarInitialView] = useState<'tasks' | 'calendar' | 'timeline' | 'kanban' | 'timetable'>('tasks')
+  
+  // File Explorer modal state
+  const [showFileExplorer, setShowFileExplorer] = useState(false)
   
   // Welcome Back modal state
   const [showWelcomeBack, setShowWelcomeBack] = useState(false)
@@ -742,6 +746,7 @@ function WorkspaceContent() {
             userEmail={user.email}
             autoOpenPanelKey={autoOpenPanelKey}
             onOpenTaskCalendar={() => setShowTaskCalendar(true)}
+            onOpenFileExplorer={() => setShowFileExplorer(true)}
             onNotificationAction={handleNotificationAction}
           />
         ) : (
@@ -864,6 +869,12 @@ function WorkspaceContent() {
           </div>
         </div>
       )}
+      
+      {/* File Explorer Modal */}
+      <FileExplorerModal
+        isOpen={showFileExplorer}
+        onClose={() => setShowFileExplorer(false)}
+      />
       
       {/* Task & Calendar Modal */}
       <TaskCalendarModal

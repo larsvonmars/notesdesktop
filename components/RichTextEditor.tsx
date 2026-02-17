@@ -179,6 +179,8 @@ const SANITIZE_CONFIG: Config = {
     'data-note-id',
     'data-note-title',
     'data-folder-id',
+    'data-file-path',
+    'data-file-name',
     'src',
     'alt',
     'width',
@@ -884,7 +886,7 @@ const RichTextEditor = forwardRef<RichTextEditorHandle, RichTextEditorProps>(
                 // We check the block type directly rather than getComputedStyle for better performance
                 if (blockElement && blockElement.getAttribute('data-block-type') === type) {
                   // Known block-level custom block types
-                  const blockLevelTypes = ['image', 'table']
+                  const blockLevelTypes = ['image', 'table', 'file']
                   const isBlockLevel = blockLevelTypes.includes(type)
                   const hasNextSibling = blockElement.nextElementSibling
                   
@@ -966,6 +968,20 @@ const RichTextEditor = forwardRef<RichTextEditorHandle, RichTextEditorProps>(
               // Dispatch custom event that parent can listen to
               window.dispatchEvent(new CustomEvent('note-link-click', { 
                 detail: { noteId } 
+              }))
+            }
+            return
+          }
+
+          // Check for inline file-ref clicks
+          const fileRefElement = target.closest('[data-block-type="file-ref"]') as HTMLElement | null
+          if (fileRefElement) {
+            event.preventDefault()
+            const filePath = fileRefElement.getAttribute('data-file-path')
+            const fileName = fileRefElement.getAttribute('data-file-name')
+            if (filePath) {
+              window.dispatchEvent(new CustomEvent('file-ref-click', {
+                detail: { path: filePath, name: fileName || filePath }
               }))
             }
             return

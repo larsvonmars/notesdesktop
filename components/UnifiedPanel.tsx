@@ -35,6 +35,7 @@ import {
   Download,
   FileDown,
   Table2,
+  FolderOpen,
 } from 'lucide-react'
 import jsPDF from 'jspdf'
 import html2canvas from 'html2canvas'
@@ -106,6 +107,9 @@ interface UnifiedPanelProps {
   // Tasks & Calendar
   onOpenTaskCalendar?: () => void
   
+  // File Explorer
+  onOpenFileExplorer?: () => void
+  
   // AI Assistant
   noteContent?: string
   mindmapData?: MindmapData | null
@@ -161,6 +165,7 @@ export default function UnifiedPanel({
   onSignOut,
   autoOpenKey,
   onOpenTaskCalendar,
+  onOpenFileExplorer,
   noteContent,
   mindmapData,
   selectedMindmapNodeId,
@@ -1486,6 +1491,19 @@ export default function UnifiedPanel({
                     <Search size={isMobile ? 16 : 18} />
                     <span>Find & Replace</span>
                   </button>
+                  {onOpenFileExplorer && (
+                    <button
+                      onClick={() => {
+                        onOpenFileExplorer()
+                        setIsOpen(false)
+                      }}
+                      className={`bg-white border border-gray-200 text-gray-700 font-semibold rounded-xl hover:bg-gray-50 transition-all flex items-center justify-center gap-2 shadow-sm touch-target ${isMobile ? 'px-3 py-3 text-xs' : 'px-4 py-3.5 text-sm'}`}
+                      title="Open File Explorer - Manage uploaded files"
+                    >
+                      <FolderOpen size={isMobile ? 16 : 18} />
+                      <span>Files</span>
+                    </button>
+                  )}
                   {note && (
                     <div className={`relative ${isMobile ? '' : 'col-span-2'}`}>
                       <button
