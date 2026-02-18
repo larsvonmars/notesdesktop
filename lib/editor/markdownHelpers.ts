@@ -8,7 +8,7 @@ import { marked } from 'marked'
 // Configure marked once on module load
 marked.setOptions({
   gfm: true, // GitHub Flavored Markdown
-  breaks: true, // Convert \n to <br>
+  breaks: false, // Keep standard markdown paragraph/linebreak behavior
 })
 
 /**

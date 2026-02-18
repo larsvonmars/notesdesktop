@@ -533,6 +533,7 @@ export function handleListEnter(
   if (!list) return false
 
   const itemText = getItemTextContent(li)
+  const cursorAtItemStart = isCursorAtStartOfItem(li, range)
 
   // ── empty item → exit / outdent ──
   if (itemText.length === 0) {
@@ -541,13 +542,8 @@ export function handleListEnter(
       // Outdent one level
       outdentListItems(editorEl)
     } else {
-      // Top level: remove from list, insert paragraph after
-      const p = document.createElement('p')
-      p.appendChild(document.createElement('br'))
-      list.parentNode?.insertBefore(p, list.nextSibling)
-      li.remove()
-      if (list.children.length === 0) list.remove()
-      positionCursorIn(p)
+      // Top level: exit list while preserving item order by splitting at this LI
+      unwrapListItem(li)
     }
     return true
   }
@@ -581,9 +577,11 @@ export function handleListEnter(
 
   const afterContents = afterRange.extractContents()
 
-  // Move any nested sub-list from the old li to the new one
+  // Move nested sub-lists only when splitting from item start.
+  // This preserves expected behavior for Enter at end/middle of a parent item
+  // that already has children: child lists stay with the original item.
   const subList = li.querySelector(':scope > ul, :scope > ol')
-  if (subList) newLi.appendChild(subList)
+  if (subList && cursorAtItemStart) newLi.appendChild(subList)
 
   if (afterContents.textContent?.trim() || afterContents.querySelector('*')) {
     newLi.appendChild(afterContents)
@@ -647,30 +645,52 @@ export function handleListBackspace(editorEl: HTMLElement): boolean {
 }
 
 function isCursorAtStartOfItem(li: HTMLLIElement, range: Range): boolean {
-  // Walk the LI's child nodes (skipping checkboxes / drag handles) to find
-  // the first text-bearing node.
-  for (const child of Array.from(li.childNodes)) {
-    if (child instanceof HTMLInputElement && child.type === 'checkbox') continue
-    if (child instanceof HTMLElement && child.classList.contains(CLS.dragHandle)) continue
-    if (child.nodeType === Node.TEXT_NODE && !child.textContent) continue
-    if (child instanceof HTMLUListElement || child instanceof HTMLOListElement) continue
+  const children = Array.from(li.childNodes)
+  const firstContentIndex = children.findIndex((child) => {
+    if (child instanceof HTMLInputElement && child.type === 'checkbox') return false
+    if (child instanceof HTMLElement && child.classList.contains(CLS.dragHandle)) return false
+    if (child instanceof HTMLUListElement || child instanceof HTMLOListElement) return false
+    if (child.nodeType === Node.TEXT_NODE && !(child.textContent || '').length) return false
+    return true
+  })
 
-    if (child.nodeType === Node.TEXT_NODE) {
-      return range.startContainer === child && range.startOffset === 0
-    }
-    if (child instanceof HTMLElement) {
-      if (child.contains(range.startContainer)) {
-        if (range.startContainer === child && range.startOffset === 0) return true
-        if (range.startContainer.nodeType === Node.TEXT_NODE && range.startOffset === 0) {
-          const walker = document.createTreeWalker(child, NodeFilter.SHOW_TEXT)
-          const first = walker.firstChild()
-          return first === range.startContainer
-        }
-      }
-      return false
-    }
+  if (firstContentIndex === -1) {
+    return true // empty item
   }
-  return true // empty item
+
+  const firstContentNode = children[firstContentIndex]
+
+  // Safari/WebView can place cursor on the LI element itself (e.g. offset 1 after checkbox)
+  if (range.startContainer === li) {
+    return range.startOffset <= firstContentIndex
+  }
+
+  const probe = document.createRange()
+  try {
+    probe.setStart(
+      firstContentNode,
+      firstContentNode.nodeType === Node.TEXT_NODE ? 0 : 0,
+    )
+    probe.setEnd(range.startContainer, range.startOffset)
+
+    // If there is meaningful text between first-content start and cursor,
+    // we are no longer at start-of-item.
+    return probe.toString().replace(/\u00A0/g, ' ').length === 0
+  } catch {
+    // If range boundaries cannot be compared, fall back to strict containment checks.
+    if (firstContentNode === range.startContainer) {
+      return range.startOffset === 0
+    }
+    if (firstContentNode instanceof HTMLElement && firstContentNode.contains(range.startContainer)) {
+      if (range.startContainer.nodeType === Node.TEXT_NODE) {
+        const walker = document.createTreeWalker(firstContentNode, NodeFilter.SHOW_TEXT)
+        const first = walker.firstChild()
+        return first === range.startContainer && range.startOffset === 0
+      }
+      return range.startContainer === firstContentNode && range.startOffset === 0
+    }
+    return false
+  }
 }
 
 // ─── checklist progress ─────────────────────────────────────────────────────

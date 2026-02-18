@@ -226,6 +226,12 @@ const MAX_REPLACE_MATCHES = 1000
 
 // Regex patterns
 const REGEX_ESCAPE_PATTERN = /[.*+?^${}()|[\]\\]/g
+const EXTRA_BLANK_LINES_PATTERN = /\n{3,}/g
+const ZERO_WIDTH_CHARS_PATTERN = /[\u200B-\u200D\uFEFF]/g
+
+const BASIC_PASTE_WRAPPER_TAGS = new Set(['DIV', 'P', 'SPAN', 'BR'])
+const SEMANTIC_PASTE_SELECTOR =
+  'a,ul,ol,li,pre,code,blockquote,table,thead,tbody,tr,td,th,h1,h2,h3,h4,h5,h6,img,hr,strong,b,em,i,u,s,mark,[data-block],[data-block-type]'
 
 const BLOCK_ROOT_CLASS =
   'block-root rounded-xl border border-slate-200 bg-white/80 px-3 py-2 my-3 shadow-sm'
@@ -247,6 +253,97 @@ const splitLinesToFragment = (text: string): DocumentFragment => {
   return fragment
 }
 
+const normalizePastedText = (text: string): string => {
+  const normalizedLineEndings = text.replace(/\r\n?|\u2028|\u2029/g, '\n')
+  const withoutInvisible = normalizedLineEndings
+    .replace(/\u00A0/g, ' ')
+    .replace(ZERO_WIDTH_CHARS_PATTERN, '')
+
+  const lines = withoutInvisible
+    .split('\n')
+    .map((line) => line.replace(/[ \t]+$/g, ''))
+
+  while (lines.length > 0 && lines[0].trim() === '') {
+    lines.shift()
+  }
+
+  while (lines.length > 0 && lines[lines.length - 1].trim() === '') {
+    lines.pop()
+  }
+
+  return lines.join('\n').replace(EXTRA_BLANK_LINES_PATTERN, '\n\n')
+}
+
+const STRUCTURED_LINE_PATTERN = /^(\s*([-*+]\s|\d+\.\s|>\s|#{1,6}\s|```|~~~|\|))/
+
+const collapseSoftWrappedLines = (text: string): string => {
+  if (!text.includes('\n')) {
+    return text
+  }
+
+  const paragraphs = text.split(/\n{2,}/)
+
+  const normalizedParagraphs = paragraphs.map((paragraph) => {
+    const lines = paragraph.split('\n')
+    if (lines.length <= 1) {
+      return paragraph
+    }
+
+    const hasStructuredLines = lines.some((line) => STRUCTURED_LINE_PATTERN.test(line.trimStart()))
+    const hasIndentedCode = lines.some((line) => /^\s{4,}\S/.test(line))
+    if (hasStructuredLines || hasIndentedCode) {
+      return paragraph
+    }
+
+    const nonEmptyLines = lines.filter((line) => line.trim().length > 0)
+    if (nonEmptyLines.length <= 1) {
+      return paragraph
+    }
+
+    const shortLineCount = nonEmptyLines.filter((line) => line.trim().length <= 35).length
+    const mostlyShortLines = shortLineCount / nonEmptyLines.length >= 0.7
+    if (mostlyShortLines) {
+      return paragraph
+    }
+
+    return nonEmptyLines.map((line) => line.trim()).join(' ')
+  })
+
+  return normalizedParagraphs.join('\n\n')
+}
+
+const shouldPreferPlainTextOverHtml = (html: string, plainText: string): boolean => {
+  if (!plainText.trim()) return false
+
+  try {
+    const template = document.createElement('template')
+    template.innerHTML = html
+
+    if (template.content.querySelector(SEMANTIC_PASTE_SELECTOR)) {
+      return false
+    }
+
+    const elements = Array.from(template.content.querySelectorAll('*'))
+    const hasOnlyBasicWrappers =
+      elements.length > 0 && elements.every((el) => BASIC_PASTE_WRAPPER_TAGS.has(el.tagName))
+
+    const htmlText = normalizePastedText(template.content.textContent || '')
+    if (!htmlText) {
+      return true
+    }
+
+    const compact = (value: string) => value.replace(/\s+/g, ' ').trim()
+    if (compact(htmlText) === compact(plainText)) {
+      return true
+    }
+
+    return hasOnlyBasicWrappers
+  } catch (error) {
+    console.warn('Unable to inspect pasted HTML, defaulting to plain text heuristic:', error)
+    return false
+  }
+}
+
 const RichTextEditor = forwardRef<RichTextEditorHandle, RichTextEditorProps>(
   ({ value, onChange, disabled, placeholder, customBlocks, onCustomCommand }, ref) => {
     // local ref to hold passed customBlocks (avoid re-creating callbacks when prop changes)
@@ -255,6 +352,7 @@ const RichTextEditor = forwardRef<RichTextEditorHandle, RichTextEditorProps>(
     const historyManagerRef = useRef<HistoryManager | null>(null)
     const debouncedCaptureRef = useRef<(() => void) | null>(null)
   const lastSyncedValueRef = useRef<string>('')
+    const pendingExternalValueRef = useRef<string | null>(null)
     const mutationObserverRef = useRef<MutationObserver | null>(null)
     const checklistNormalizationTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
     const isProcessingCommandRef = useRef<boolean>(false)
@@ -570,6 +668,9 @@ const RichTextEditor = forwardRef<RichTextEditorHandle, RichTextEditorProps>(
         // Check lists
         if (element.closest('ul')) formats.add('unordered-list')
         if (element.closest('ol')) formats.add('ordered-list')
+        if (element.closest('ul[data-checklist="true"], ol[data-checklist="true"]')) {
+          formats.add('checklist')
+        }
         
         // Check block-level formatting
         if (element.closest('h1')) formats.add('heading1')
@@ -955,44 +1056,48 @@ const RichTextEditor = forwardRef<RichTextEditorHandle, RichTextEditorProps>(
 
     // Editor click handler to detect note link clicks
     useEffect(() => {
+      const editorElement = editorRef.current
+      if (!editorElement) return
+
       const handleClick = (event: MouseEvent) => {
         const target = event.target as HTMLElement | null
+        if (!target || !editorElement.contains(target)) {
+          return
+        }
         
         // Check for note link clicks
-        if (target) {
-          const noteLinkElement = target.closest('[data-block-type="note-link"]') as HTMLElement | null
-          if (noteLinkElement) {
-            event.preventDefault()
-            const noteId = noteLinkElement.getAttribute('data-note-id')
-            if (noteId) {
-              // Dispatch custom event that parent can listen to
-              window.dispatchEvent(new CustomEvent('note-link-click', { 
-                detail: { noteId } 
-              }))
-            }
-            return
+        const noteLinkElement = target.closest('[data-block-type="note-link"]') as HTMLElement | null
+        if (noteLinkElement) {
+          event.preventDefault()
+          const noteId = noteLinkElement.getAttribute('data-note-id')
+          if (noteId) {
+            // Dispatch custom event that parent can listen to
+            window.dispatchEvent(new CustomEvent('note-link-click', { 
+              detail: { noteId } 
+            }))
           }
+          return
+        }
 
-          // Check for inline file-ref clicks
-          const fileRefElement = target.closest('[data-block-type="file-ref"]') as HTMLElement | null
-          if (fileRefElement) {
-            event.preventDefault()
-            const filePath = fileRefElement.getAttribute('data-file-path')
-            const fileName = fileRefElement.getAttribute('data-file-name')
-            if (filePath) {
-              window.dispatchEvent(new CustomEvent('file-ref-click', {
-                detail: { path: filePath, name: fileName || filePath }
-              }))
-            }
-            return
+        // Check for inline file-ref clicks
+        const fileRefElement = target.closest('[data-block-type="file-ref"]') as HTMLElement | null
+        if (fileRefElement) {
+          event.preventDefault()
+          const filePath = fileRefElement.getAttribute('data-file-path')
+          const fileName = fileRefElement.getAttribute('data-file-name')
+          if (filePath) {
+            window.dispatchEvent(new CustomEvent('file-ref-click', {
+              detail: { path: filePath, name: fileName || filePath }
+            }))
           }
+          return
         }
       }
       
-      document.addEventListener('click', handleClick)
+      editorElement.addEventListener('click', handleClick)
       
       return () => {
-        document.removeEventListener('click', handleClick)
+        editorElement.removeEventListener('click', handleClick)
       }
     }, [])
 
@@ -2170,6 +2275,8 @@ const RichTextEditor = forwardRef<RichTextEditorHandle, RichTextEditorProps>(
                 return !!element?.closest('ul')
               case 'insertOrderedList':
                 return !!element?.closest('ol')
+              case 'checklist':
+                return !!element?.closest('ul[data-checklist="true"], ol[data-checklist="true"]')
               case 'heading1':
                 return !!element?.closest('h1')
               case 'heading2':
@@ -2261,9 +2368,9 @@ const RichTextEditor = forwardRef<RichTextEditorHandle, RichTextEditorProps>(
           // from the parent, or a collaborative update).
           const editorHasFocus = editorEl === document.activeElement || editorEl.contains(document.activeElement)
           if (editorHasFocus) {
-            // The parent state will catch up on the next emitChange – just
-            // update our tracking ref so we don't keep re-entering.
-            lastSyncedValueRef.current = sanitizedValue
+            // Defer external updates while the user is actively typing. We'll
+            // flush this on blur to avoid clobbering live composition/selection.
+            pendingExternalValueRef.current = sanitizedValue
             return
           }
 
@@ -2272,6 +2379,7 @@ const RichTextEditor = forwardRef<RichTextEditorHandle, RichTextEditorProps>(
           
           editorEl.innerHTML = sanitizedValue
           lastSyncedValueRef.current = sanitizedValue
+          pendingExternalValueRef.current = null
           
           // Restore cursor position after update if it was valid
           if (savedCursorPos) {
@@ -2302,6 +2410,46 @@ const RichTextEditor = forwardRef<RichTextEditorHandle, RichTextEditorProps>(
         console.error('Error synchronizing editor value:', error)
       }
     }, [sanitize, value, scheduleChecklistNormalization, rehydrateExistingBlocks, updateBlockMetadata, ensureDefaultBlock])
+
+    const flushPendingExternalValue = useCallback(() => {
+      const editorEl = editorRef.current
+      const pendingValue = pendingExternalValueRef.current
+      if (!editorEl || !editorEl.isConnected || !pendingValue) return
+
+      try {
+        const currentSanitized = sanitize(editorEl.innerHTML)
+        if (currentSanitized === pendingValue) {
+          lastSyncedValueRef.current = pendingValue
+          pendingExternalValueRef.current = null
+          return
+        }
+
+        editorEl.innerHTML = pendingValue
+        lastSyncedValueRef.current = pendingValue
+        pendingExternalValueRef.current = null
+
+        if (historyManagerRef.current) {
+          try {
+            historyManagerRef.current.capture()
+          } catch (error) {
+            console.error('Error capturing history after pending value flush:', error)
+          }
+        }
+
+        scheduleChecklistNormalization()
+        rehydrateExistingBlocks()
+        updateBlockMetadata()
+        ensureDefaultBlock()
+      } catch (error) {
+        console.error('Error flushing pending external value:', error)
+      }
+    }, [sanitize, scheduleChecklistNormalization, rehydrateExistingBlocks, updateBlockMetadata, ensureDefaultBlock])
+
+    const handleEditorBlur = useCallback(() => {
+      window.setTimeout(() => {
+        flushPendingExternalValue()
+      }, 0)
+    }, [flushPendingExternalValue])
 
     useEffect(() => {
       if (!editorRef.current) return
@@ -2374,7 +2522,7 @@ const RichTextEditor = forwardRef<RichTextEditorHandle, RichTextEditorProps>(
           console.warn('Editor disconnected during input')
           return
         }
-        enforceBlockStructure({ preserveSelection: true, forceCursorInside: true })
+        enforceBlockStructure({ preserveSelection: true, forceCursorInside: false })
         emitChange()
       } catch (error) {
         console.error('Error in handleInput:', error)
@@ -2625,29 +2773,11 @@ const RichTextEditor = forwardRef<RichTextEditorHandle, RichTextEditorProps>(
         }
 
         const html = event.clipboardData.getData('text/html')
-        const text = event.clipboardData.getData('text/plain')
+        const rawText = event.clipboardData.getData('text/plain')
+        const text = normalizePastedText(rawText)
+        const textForPlainPaste = collapseSoftWrappedLines(text)
 
-        if (html) {
-          try {
-            const sanitized = sanitize(html)
-            if (insertHTMLAtSelection(sanitized)) {
-              finalizeInsertion()
-            }
-          } catch (error) {
-            console.error('Error pasting HTML:', error);
-            // Fallback to plain text
-            if (text && insertPlainTextAtSelection(text)) {
-              finalizeInsertion()
-            }
-          }
-          return
-        }
-
-        if (!text) {
-          return
-        }
-
-        if (looksLikeMarkdown(text)) {
+        if (text && looksLikeMarkdown(text)) {
           const selectionSnapshot = saveSelectionUtil()
           markdownToHtml(text).then((convertedHtml) => {
             try {
@@ -2666,7 +2796,7 @@ const RichTextEditor = forwardRef<RichTextEditorHandle, RichTextEditorProps>(
             console.error('Error converting markdown:', error);
             // Fallback to plain text
             try {
-              if (insertPlainTextAtSelection(text)) {
+              if (textForPlainPaste && insertPlainTextAtSelection(textForPlainPaste)) {
                 finalizeInsertion()
               }
             } catch (e) {
@@ -2676,7 +2806,34 @@ const RichTextEditor = forwardRef<RichTextEditorHandle, RichTextEditorProps>(
           return
         }
 
-        const trimmed = text.trim()
+        if (html) {
+          if (textForPlainPaste && shouldPreferPlainTextOverHtml(html, textForPlainPaste)) {
+            if (insertPlainTextAtSelection(textForPlainPaste)) {
+              finalizeInsertion()
+            }
+            return
+          }
+
+          try {
+            const sanitized = sanitize(html)
+            if (insertHTMLAtSelection(sanitized)) {
+              finalizeInsertion()
+            }
+          } catch (error) {
+            console.error('Error pasting HTML:', error);
+            // Fallback to plain text
+            if (textForPlainPaste && insertPlainTextAtSelection(textForPlainPaste)) {
+              finalizeInsertion()
+            }
+          }
+          return
+        }
+
+        if (!textForPlainPaste) {
+          return
+        }
+
+        const trimmed = textForPlainPaste.trim()
         const urlPattern = /^https?:\/\/.+/i
 
         if (urlPattern.test(trimmed)) {
@@ -2723,14 +2880,14 @@ const RichTextEditor = forwardRef<RichTextEditorHandle, RichTextEditorProps>(
           } catch (error) {
             console.error('Error pasting URL:', error);
             // Fallback to plain text
-            if (insertPlainTextAtSelection(text)) {
+            if (insertPlainTextAtSelection(textForPlainPaste)) {
               finalizeInsertion()
             }
           }
           return
         }
 
-        if (insertPlainTextAtSelection(text)) {
+        if (insertPlainTextAtSelection(textForPlainPaste)) {
           finalizeInsertion()
         }
       } catch (error) {
@@ -2769,6 +2926,7 @@ const RichTextEditor = forwardRef<RichTextEditorHandle, RichTextEditorProps>(
             onInput={handleInput}
             onKeyDown={handleKeyDown}
             onPaste={handlePaste}
+            onBlur={handleEditorBlur}
             suppressContentEditableWarning
             spellCheck
             role="textbox"
