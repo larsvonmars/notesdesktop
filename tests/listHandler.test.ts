@@ -162,4 +162,44 @@ describe('listHandler enter/backspace edge cases', () => {
     expect(secondItem.textContent).toContain('Parent')
     expect(secondItem.textContent).toContain('Child')
   })
+
+  it('keeps nested child list on original item when Enter is pressed in middle of parent text', () => {
+    const list = document.createElement('ul')
+
+    const parent = document.createElement('li')
+    const parentText = document.createTextNode('ParentTask')
+    parent.appendChild(parentText)
+
+    const nested = document.createElement('ul')
+    const nestedItem = document.createElement('li')
+    nestedItem.textContent = 'Child'
+    nested.appendChild(nestedItem)
+    parent.appendChild(nested)
+
+    list.appendChild(parent)
+    editor.appendChild(list)
+
+    const selection = window.getSelection()
+    const range = document.createRange()
+    range.setStart(parentText, 6) // Parent|Task
+    range.collapse(true)
+    selection?.removeAllRanges()
+    selection?.addRange(range)
+
+    const handled = handleListEnter(editor)
+    expect(handled).toBe(true)
+
+    const rootItems = list.querySelectorAll(':scope > li')
+    expect(rootItems).toHaveLength(2)
+
+    const firstItem = rootItems[0] as HTMLLIElement
+    const secondItem = rootItems[1] as HTMLLIElement
+
+    expect(firstItem.textContent).toContain('Parent')
+    expect(firstItem.querySelector(':scope > ul')).toBeTruthy()
+    expect(firstItem.textContent).toContain('Child')
+
+    expect(secondItem.textContent).toContain('Task')
+    expect(secondItem.querySelector(':scope > ul')).toBeFalsy()
+  })
 })
