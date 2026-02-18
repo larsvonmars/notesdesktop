@@ -74,6 +74,8 @@ import { imageBlock } from '../lib/editor/imageBlock'
 import { dataSheetTableBlock, type DataSheetTablePayload } from '../lib/editor/dataSheetTableBlock'
 import { fileBlock, fileRefBlock, type FileBlockPayload, initializeFileBlockInteractions } from '../lib/editor/fileBlock'
 import FileExplorerModal from './FileExplorerModal'
+import SettingsModal from './SettingsModal'
+import { Settings } from 'lucide-react'
 
 export type { Note } from '../lib/notes'
 
@@ -211,6 +213,7 @@ export default function NoteEditor({
   const [showProjectsModal, setShowProjectsModal] = useState(false)
   const [showBlockOutlines, setShowBlockOutlines] = useState(false)
   const [filePickerMode, setFilePickerMode] = useState<'block' | 'ref' | null>(null)
+  const [showSettings, setShowSettings] = useState(false)
   const [projects, setProjects] = useState<Project[]>([])
   
   // Load projects for display
@@ -1790,8 +1793,8 @@ export default function NoteEditor({
       )}
 
       {/* Status Bar */}
-      <div className="fixed bottom-0 left-0 right-0 z-30 bg-gradient-to-r from-gray-50 to-gray-100 border-t border-gray-200 px-4 py-2 safe-bottom">
-        <div className={`flex items-center justify-between text-xs text-gray-600 ${isMobile ? 'gap-2' : ''}`}>
+      <div className="fixed bottom-0 left-0 right-0 z-30 bg-gradient-to-r from-gray-50 to-gray-100 border-t border-gray-200 px-4 py-2 safe-bottom dark:from-slate-900 dark:to-slate-800 dark:border-slate-700">
+        <div className={`flex items-center justify-between text-xs text-gray-600 dark:text-slate-300 ${isMobile ? 'gap-2' : ''}`}>
           <div className="flex items-center gap-4">
             {/* Save Status */}
             <div className="flex items-center gap-1.5">
@@ -1815,7 +1818,7 @@ export default function NoteEditor({
 
             {/* Folder Path - hidden on mobile */}
             {note && !isMobile && (
-              <div className="flex items-center gap-1.5 text-gray-500">
+              <div className="flex items-center gap-1.5 text-gray-500 dark:text-slate-400">
                 <FolderOpen size={12} />
                 <span>{folderPath}</span>
               </div>
@@ -1838,8 +1841,8 @@ export default function NoteEditor({
 
             {/* Note Type - hidden on mobile */}
             {note && !isMobile && (
-              <div className="flex items-center gap-1.5 text-gray-500">
-                <span className="px-1.5 py-0.5 bg-gray-200 rounded text-[10px] font-medium uppercase">
+              <div className="flex items-center gap-1.5 text-gray-500 dark:text-slate-400">
+                <span className="px-1.5 py-0.5 bg-gray-200 rounded text-[10px] font-medium uppercase dark:bg-slate-700 dark:text-slate-200">
                   {noteType === 'rich-text' ? 'Text' : noteType === 'drawing' ? 'Drawing' : noteType === 'mindmap' ? 'Mindmap' : noteType === 'data-sheet' ? 'Data Sheet' : 'Journal'}
                 </span>
               </div>
@@ -1849,28 +1852,38 @@ export default function NoteEditor({
             {!isMobile && (
             <button
               onClick={() => setShowProjectsModal(true)}
-              className="flex items-center gap-1.5 px-2 py-1 text-gray-600 hover:text-alpine-600 hover:bg-alpine-50 rounded transition-colors font-medium"
+              className="flex items-center gap-1.5 px-2 py-1 text-gray-600 hover:text-alpine-600 hover:bg-alpine-50 rounded transition-colors font-medium dark:text-slate-300 dark:hover:text-alpine-300 dark:hover:bg-slate-700"
               title="Open Project Manager"
             >
               <Target size={14} className="text-alpine-500" />
               <span>Projects</span>
             </button>
             )}
+
+            {/* Settings */}
+            <button
+              onClick={() => setShowSettings(true)}
+              className="flex items-center gap-1.5 px-2 py-1 text-gray-500 hover:text-gray-800 hover:bg-gray-100 rounded transition-colors dark:text-slate-300 dark:hover:text-slate-100 dark:hover:bg-slate-700"
+              title="Settings"
+            >
+              <Settings size={14} />
+              {!isMobile && <span className="text-xs font-medium">Settings</span>}
+            </button>
           </div>
 
           {/* Stats - Only for rich text notes */}
           {noteType === 'rich-text' && (
-            <div className="flex items-center gap-4 text-gray-500">
+            <div className="flex items-center gap-4 text-gray-500 dark:text-slate-400">
               {/* Word Goal Progress */}
               {wordGoal && wordGoalProgress ? (
                 <div className="flex items-center gap-2">
                   <div className="flex items-center gap-1.5">
                     <Target size={12} className={wordGoalProgress.isComplete ? 'text-green-500' : 'text-alpine-500'} />
-                    <span className={wordGoalProgress.isComplete ? 'text-green-600 font-medium' : 'text-gray-700'}>
+                    <span className={wordGoalProgress.isComplete ? 'text-green-600 dark:text-green-400 font-medium' : 'text-gray-700 dark:text-slate-200'}>
                       {stats.words}/{wordGoal} words
                     </span>
                   </div>
-                  <div className="relative w-24 h-2 bg-gray-200 rounded-full overflow-hidden">
+                  <div className="relative w-24 h-2 bg-gray-200 rounded-full overflow-hidden dark:bg-slate-700">
                     <div 
                       className={`absolute left-0 top-0 h-full transition-all duration-300 rounded-full ${
                         wordGoalProgress.isComplete 
@@ -1882,7 +1895,7 @@ export default function NoteEditor({
                   </div>
                   <button
                     onClick={() => setShowWordGoalInput(true)}
-                    className="text-gray-400 hover:text-gray-600 transition-colors"
+                    className="text-gray-400 hover:text-gray-600 transition-colors dark:text-slate-500 dark:hover:text-slate-300"
                     title="Edit goal"
                   >
                     <Edit2 size={10} />
@@ -2160,6 +2173,8 @@ export default function NoteEditor({
           </div>
         </div>
       )}
+      {/* Settings Modal */}
+      <SettingsModal isOpen={showSettings} onClose={() => setShowSettings(false)} />
     </>
   )
 }

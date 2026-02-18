@@ -4,6 +4,7 @@ import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { supabase } from '@/lib/supabase'
 import Link from 'next/link'
+import ThemeToggle from '@/components/ThemeToggle'
 
 export default function SignUp() {
   const [email, setEmail] = useState('')
@@ -47,6 +48,7 @@ export default function SignUp() {
 
   return (
     <div className="flex items-center justify-center min-h-screen px-4 safe-bottom">
+      <ThemeToggle />
       <div className="w-full max-w-md p-6 sm:p-8 bg-white/80 backdrop-blur-sm rounded-2xl shadow-lg border border-alpine-100">
         <h1 className="text-2xl font-bold mb-1 text-center text-gray-900">
           Saentis Notes

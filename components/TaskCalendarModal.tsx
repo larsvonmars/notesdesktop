@@ -89,6 +89,7 @@ import { getProjects, type Project } from '@/lib/projects'
 import { createNote } from '@/lib/notes'
 import KanbanBoard from './KanbanBoard'
 import { initializeDefaultBoard, addTaskToBoard, moveTask, type BoardWithColumns, type KanbanColumn } from '@/lib/kanban'
+import ModalCloseButton from './ModalCloseButton'
 
 interface TaskCalendarModalProps {
   isOpen: boolean
@@ -700,10 +701,10 @@ export default function TaskCalendarModal({
   }
 
   const priorityColors = {
-    low: 'bg-gray-100 text-gray-700 border-gray-300',
-    medium: 'bg-alpine-100 text-alpine-700 border-alpine-300',
-    high: 'bg-orange-100 text-orange-700 border-orange-300',
-    urgent: 'bg-red-100 text-red-700 border-red-300',
+    low: 'bg-gray-100 dark:bg-slate-700 text-gray-700 dark:text-slate-200 border-gray-300 dark:border-slate-600',
+    medium: 'bg-alpine-100 dark:bg-alpine-900/40 text-alpine-700 dark:text-alpine-200 border-alpine-300 dark:border-alpine-700',
+    high: 'bg-orange-100 dark:bg-orange-900/40 text-orange-700 dark:text-orange-200 border-orange-300 dark:border-orange-700',
+    urgent: 'bg-red-100 dark:bg-red-900/40 text-red-700 dark:text-red-200 border-red-300 dark:border-red-700',
   }
 
   const priorityIcons = {
@@ -716,22 +717,23 @@ export default function TaskCalendarModal({
   if (!isOpen) return null
 
   return (
-    <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/60 p-4">
-      <div className="flex w-full max-w-7xl max-h-[90vh] flex-col overflow-hidden rounded-2xl border border-gray-200 bg-white shadow-2xl">
+    <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/60 p-2 sm:p-4">
+      <div className="flex w-full max-w-7xl max-h-[95vh] sm:max-h-[90vh] flex-col overflow-hidden rounded-2xl border border-gray-200 dark:border-slate-700 bg-white dark:bg-slate-900 shadow-2xl">
         {/* Header */}
-        <div className="flex items-center justify-between border-b border-gray-200 bg-alpine-50 px-6 py-4">
-          <div className="flex items-center gap-4">
+        <div className="flex items-center justify-between gap-2 border-b border-gray-200 dark:border-slate-700 bg-alpine-50 dark:bg-slate-800 px-3 sm:px-6 py-3 sm:py-4">
+          <div className="flex flex-1 min-w-0 items-center gap-2 sm:gap-4">
             <div className="flex items-center gap-2">
-              <CheckSquare size={24} className="text-alpine-600" />
-              <h2 className="text-2xl font-bold text-gray-900">Tasks & Calendar</h2>
+              <CheckSquare size={22} className="text-alpine-600" />
+              <h2 className="text-lg sm:text-2xl font-bold text-gray-900 dark:text-slate-100">Tasks & Calendar</h2>
             </div>
 
             {/* View mode toggles */}
-            <div className="flex items-center gap-1 rounded-lg bg-white p-1 shadow-sm border border-gray-200">
+            <div className="flex-1 min-w-0 overflow-x-auto">
+              <div className="inline-flex items-center gap-1 rounded-lg bg-white dark:bg-slate-900 p-1 shadow-sm border border-gray-200 dark:border-slate-700">
               <button
                 onClick={() => setViewMode('tasks')}
-                className={`px-3 py-1.5 rounded-md text-sm font-medium transition-colors flex items-center gap-2 ${
-                  viewMode === 'tasks' ? 'bg-alpine-600 text-white' : 'text-gray-600 hover:bg-gray-100'
+                className={`px-2.5 sm:px-3 py-1.5 rounded-md text-sm font-medium transition-colors flex items-center gap-1.5 sm:gap-2 whitespace-nowrap ${
+                  viewMode === 'tasks' ? 'bg-alpine-600 text-white' : 'text-gray-600 dark:text-slate-300 hover:bg-gray-100 dark:hover:bg-slate-700'
                 }`}
               >
                 <List size={16} />
@@ -739,8 +741,8 @@ export default function TaskCalendarModal({
               </button>
               <button
                 onClick={() => setViewMode('kanban')}
-                className={`px-3 py-1.5 rounded-md text-sm font-medium transition-colors flex items-center gap-2 ${
-                  viewMode === 'kanban' ? 'bg-alpine-600 text-white' : 'text-gray-600 hover:bg-gray-100'
+                className={`px-2.5 sm:px-3 py-1.5 rounded-md text-sm font-medium transition-colors flex items-center gap-1.5 sm:gap-2 whitespace-nowrap ${
+                  viewMode === 'kanban' ? 'bg-alpine-600 text-white' : 'text-gray-600 dark:text-slate-300 hover:bg-gray-100 dark:hover:bg-slate-700'
                 }`}
               >
                 <LayoutDashboard size={16} />
@@ -748,8 +750,8 @@ export default function TaskCalendarModal({
               </button>
               <button
                 onClick={() => setViewMode('calendar')}
-                className={`px-3 py-1.5 rounded-md text-sm font-medium transition-colors flex items-center gap-2 ${
-                  viewMode === 'calendar' ? 'bg-alpine-600 text-white' : 'text-gray-600 hover:bg-gray-100'
+                className={`px-2.5 sm:px-3 py-1.5 rounded-md text-sm font-medium transition-colors flex items-center gap-1.5 sm:gap-2 whitespace-nowrap ${
+                  viewMode === 'calendar' ? 'bg-alpine-600 text-white' : 'text-gray-600 dark:text-slate-300 hover:bg-gray-100 dark:hover:bg-slate-700'
                 }`}
               >
                 <Calendar size={16} />
@@ -757,8 +759,8 @@ export default function TaskCalendarModal({
               </button>
               <button
                 onClick={() => setViewMode('timeline')}
-                className={`px-3 py-1.5 rounded-md text-sm font-medium transition-colors flex items-center gap-2 ${
-                  viewMode === 'timeline' ? 'bg-alpine-600 text-white' : 'text-gray-600 hover:bg-gray-100'
+                className={`px-2.5 sm:px-3 py-1.5 rounded-md text-sm font-medium transition-colors flex items-center gap-1.5 sm:gap-2 whitespace-nowrap ${
+                  viewMode === 'timeline' ? 'bg-alpine-600 text-white' : 'text-gray-600 dark:text-slate-300 hover:bg-gray-100 dark:hover:bg-slate-700'
                 }`}
               >
                 <Clock size={16} />
@@ -766,54 +768,55 @@ export default function TaskCalendarModal({
               </button>
               <button
                 onClick={() => setViewMode('timetable')}
-                className={`px-3 py-1.5 rounded-md text-sm font-medium transition-colors flex items-center gap-2 ${
-                  viewMode === 'timetable' ? 'bg-alpine-600 text-white' : 'text-gray-600 hover:bg-gray-100'
+                className={`px-2.5 sm:px-3 py-1.5 rounded-md text-sm font-medium transition-colors flex items-center gap-1.5 sm:gap-2 whitespace-nowrap ${
+                  viewMode === 'timetable' ? 'bg-alpine-600 text-white' : 'text-gray-600 dark:text-slate-300 hover:bg-gray-100 dark:hover:bg-slate-700'
                 }`}
               >
                 <Grid3x3 size={16} />
                 Timetable
               </button>
+              </div>
             </div>
           </div>
 
-          <button
+          <ModalCloseButton
             onClick={onClose}
-            className="rounded-full p-2 text-gray-500 hover:bg-gray-100 transition-colors"
-          >
-            <X size={20} />
-          </button>
+            ariaLabel="Close task and calendar modal"
+            className="flex-shrink-0"
+            size={20}
+          />
         </div>
 
         {/* Stats Bar */}
         {stats && (
-          <div className="grid grid-cols-7 gap-4 border-b border-gray-200 bg-gray-50 px-6 py-3">
+          <div className="grid grid-cols-3 md:grid-cols-7 gap-2 sm:gap-4 border-b border-gray-200 dark:border-slate-700 bg-gray-50 dark:bg-slate-800 px-3 sm:px-6 py-2.5 sm:py-3">
             <div className="text-center">
-              <div className="text-2xl font-bold text-gray-900">{stats.total}</div>
-              <div className="text-xs text-gray-500">Total</div>
+              <div className="text-lg sm:text-2xl font-bold text-gray-900 dark:text-slate-100">{stats.total}</div>
+              <div className="text-xs text-gray-500 dark:text-slate-400">Total</div>
             </div>
             <div className="text-center">
-              <div className="text-2xl font-bold text-alpine-600">{stats.todo}</div>
-              <div className="text-xs text-gray-500">To Do</div>
+              <div className="text-lg sm:text-2xl font-bold text-alpine-600">{stats.todo}</div>
+              <div className="text-xs text-gray-500 dark:text-slate-400">To Do</div>
             </div>
             <div className="text-center">
-              <div className="text-2xl font-bold text-purple-600">{stats.in_progress}</div>
-              <div className="text-xs text-gray-500">In Progress</div>
+              <div className="text-lg sm:text-2xl font-bold text-purple-600">{stats.in_progress}</div>
+              <div className="text-xs text-gray-500 dark:text-slate-400">In Progress</div>
             </div>
             <div className="text-center">
-              <div className="text-2xl font-bold text-green-600">{stats.completed}</div>
-              <div className="text-xs text-gray-500">Completed</div>
+              <div className="text-lg sm:text-2xl font-bold text-green-600">{stats.completed}</div>
+              <div className="text-xs text-gray-500 dark:text-slate-400">Completed</div>
             </div>
             <div className="text-center">
-              <div className="text-2xl font-bold text-red-600">{stats.overdue}</div>
-              <div className="text-xs text-gray-500">Overdue</div>
+              <div className="text-lg sm:text-2xl font-bold text-red-600">{stats.overdue}</div>
+              <div className="text-xs text-gray-500 dark:text-slate-400">Overdue</div>
             </div>
             <div className="text-center">
-              <div className="text-2xl font-bold text-orange-600">{stats.due_today}</div>
-              <div className="text-xs text-gray-500">Due Today</div>
+              <div className="text-lg sm:text-2xl font-bold text-orange-600">{stats.due_today}</div>
+              <div className="text-xs text-gray-500 dark:text-slate-400">Due Today</div>
             </div>
             <div className="text-center">
-              <div className="text-2xl font-bold text-yellow-600">{stats.starred}</div>
-              <div className="text-xs text-gray-500">Starred</div>
+              <div className="text-lg sm:text-2xl font-bold text-yellow-600">{stats.starred}</div>
+              <div className="text-xs text-gray-500 dark:text-slate-400">Starred</div>
             </div>
           </div>
         )}
@@ -821,7 +824,7 @@ export default function TaskCalendarModal({
         {/* Main Content */}
         <div className="flex flex-1 overflow-hidden">
           {/* Sidebar */}
-          <div className="w-64 border-r border-gray-200 bg-gray-50 overflow-y-auto">
+          <div className="w-64 border-r border-gray-200 dark:border-slate-700 bg-gray-50 dark:bg-slate-800 overflow-y-auto">
             <div className="p-4 space-y-4">
               {/* Quick Actions */}
               <div className="space-y-2">
@@ -853,7 +856,7 @@ export default function TaskCalendarModal({
               {/* Filters */}
               {viewMode === 'tasks' && (
                 <div className="space-y-2">
-                  <h3 className="text-xs font-semibold text-gray-500 uppercase tracking-wide px-2">Filters</h3>
+                  <h3 className="text-xs font-semibold text-gray-500 dark:text-slate-400 uppercase tracking-wide px-2">Filters</h3>
                   {[
                     { value: 'all', label: 'All Tasks', icon: List },
                     { value: 'today', label: 'Due Today', icon: Calendar },
@@ -867,8 +870,8 @@ export default function TaskCalendarModal({
                       onClick={() => setTaskFilter(filter.value as TaskFilter)}
                       className={`w-full px-3 py-2 rounded-lg text-sm font-medium transition-colors flex items-center gap-2 ${
                         taskFilter === filter.value
-                          ? 'bg-alpine-100 text-alpine-700'
-                          : 'text-gray-600 hover:bg-gray-100'
+                          ? 'bg-alpine-100 dark:bg-alpine-900/40 text-alpine-700 dark:text-alpine-200'
+                          : 'text-gray-600 dark:text-slate-300 hover:bg-gray-100 dark:hover:bg-slate-700'
                       }`}
                     >
                       <filter.icon size={16} />
@@ -881,11 +884,11 @@ export default function TaskCalendarModal({
               {/* Task Lists */}
               {viewMode === 'tasks' && taskLists.length > 0 && (
                 <div className="space-y-2">
-                  <h3 className="text-xs font-semibold text-gray-500 uppercase tracking-wide px-2">Lists</h3>
+                  <h3 className="text-xs font-semibold text-gray-500 dark:text-slate-400 uppercase tracking-wide px-2">Lists</h3>
                   {taskLists.map(list => (
                     <button
                       key={list.id}
-                      className="w-full px-3 py-2 rounded-lg text-sm font-medium text-gray-600 hover:bg-gray-100 transition-colors flex items-center gap-2"
+                      className="w-full px-3 py-2 rounded-lg text-sm font-medium text-gray-600 dark:text-slate-300 hover:bg-gray-100 dark:hover:bg-slate-700 transition-colors flex items-center gap-2"
                     >
                       <div
                         className="w-3 h-3 rounded-full"
@@ -899,14 +902,14 @@ export default function TaskCalendarModal({
 
               {/* Active Timer */}
               {activeTimeEntry && (
-                <div className="p-3 bg-green-50 border border-green-200 rounded-lg">
+                <div className="p-3 bg-green-50 dark:bg-green-950/30 border border-green-200 dark:border-green-800 rounded-lg">
                   <div className="flex items-center gap-2 mb-2">
                     <Timer size={16} className="text-green-600" />
-                    <span className="text-sm font-semibold text-green-700">Timer Running</span>
+                    <span className="text-sm font-semibold text-green-700 dark:text-green-300">Timer Running</span>
                   </div>
                   <button
                     onClick={handleStopTimer}
-                    className="w-full px-3 py-1.5 bg-green-600 text-white rounded-md hover:bg-green-700 transition-colors text-sm font-medium flex items-center justify-center gap-2"
+                    className="w-full px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors text-sm font-medium flex items-center justify-center gap-2"
                   >
                     <Square size={14} />
                     Stop Timer
@@ -1421,15 +1424,15 @@ export default function TaskCalendarModal({
         {/* Task Modal */}
         {showTaskModal && (
           <div className="fixed inset-0 z-[110] flex items-center justify-center bg-black/60 p-4">
-            <div className="bg-white rounded-xl shadow-2xl max-w-md w-full p-6">
-              <h3 className="text-xl font-bold text-gray-900 mb-4">Create New Task</h3>
+            <div className="bg-white dark:bg-slate-900 border border-gray-200 dark:border-slate-700 rounded-xl shadow-2xl max-w-md w-full max-h-[90vh] overflow-y-auto p-4 sm:p-6">
+              <h3 className="text-xl font-bold text-gray-900 dark:text-slate-100 mb-4">Create New Task</h3>
               <div className="space-y-4">
                 <input
                   type="text"
                   value={taskTitle}
                   onChange={e => setTaskTitle(e.target.value)}
                   placeholder="Task title"
-                  className="w-full px-4 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-alpine-500 focus:border-transparent"
+                  className="w-full px-4 py-2 border border-gray-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-gray-900 dark:text-slate-100 rounded-lg focus:ring-2 focus:ring-alpine-500 focus:border-transparent"
                   autoFocus
                 />
                 <textarea
@@ -1437,15 +1440,15 @@ export default function TaskCalendarModal({
                   onChange={e => setTaskDescription(e.target.value)}
                   placeholder="Description (optional)"
                   rows={3}
-                  className="w-full px-4 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-alpine-500 focus:border-transparent resize-none"
+                  className="w-full px-4 py-2 border border-gray-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-gray-900 dark:text-slate-100 rounded-lg focus:ring-2 focus:ring-alpine-500 focus:border-transparent resize-none"
                 />
                 <div className="grid grid-cols-2 gap-4">
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">Status</label>
+                    <label className="block text-sm font-medium text-gray-700 dark:text-slate-300 mb-1">Status</label>
                     <select
                       value={taskStatus}
                       onChange={e => setTaskStatus(e.target.value as TaskStatus)}
-                      className="w-full px-4 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-alpine-500 focus:border-transparent"
+                      className="w-full px-4 py-2 border border-gray-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-gray-900 dark:text-slate-100 rounded-lg focus:ring-2 focus:ring-alpine-500 focus:border-transparent"
                     >
                       <option value="todo">To Do</option>
                       <option value="in_progress">In Progress</option>
@@ -1453,11 +1456,11 @@ export default function TaskCalendarModal({
                     </select>
                   </div>
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">Priority</label>
+                    <label className="block text-sm font-medium text-gray-700 dark:text-slate-300 mb-1">Priority</label>
                     <select
                       value={taskPriority}
                       onChange={e => setTaskPriority(e.target.value as TaskPriority)}
-                      className="w-full px-4 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-alpine-500 focus:border-transparent"
+                      className="w-full px-4 py-2 border border-gray-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-gray-900 dark:text-slate-100 rounded-lg focus:ring-2 focus:ring-alpine-500 focus:border-transparent"
                     >
                       <option value="low">Low</option>
                       <option value="medium">Medium</option>
@@ -1471,12 +1474,12 @@ export default function TaskCalendarModal({
                   value={taskDueDate}
                   onChange={e => setTaskDueDate(e.target.value)}
                   placeholder="Due date"
-                  className="w-full px-4 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-alpine-500 focus:border-transparent"
+                  className="w-full px-4 py-2 border border-gray-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-gray-900 dark:text-slate-100 rounded-lg focus:ring-2 focus:ring-alpine-500 focus:border-transparent"
                 />
                 <select
                   value={selectedTaskList}
                   onChange={e => setSelectedTaskList(e.target.value)}
-                  className="w-full px-4 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-alpine-500 focus:border-transparent"
+                  className="w-full px-4 py-2 border border-gray-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-gray-900 dark:text-slate-100 rounded-lg focus:ring-2 focus:ring-alpine-500 focus:border-transparent"
                 >
                   <option value="">No List</option>
                   {taskLists.map(list => (
@@ -1486,11 +1489,11 @@ export default function TaskCalendarModal({
                   ))}
                 </select>
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Project</label>
+                  <label className="block text-sm font-medium text-gray-700 dark:text-slate-300 mb-1">Project</label>
                   <select
                     value={selectedProjectId}
                     onChange={e => setSelectedProjectId(e.target.value)}
-                    className="w-full px-4 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-alpine-500 focus:border-transparent"
+                    className="w-full px-4 py-2 border border-gray-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-gray-900 dark:text-slate-100 rounded-lg focus:ring-2 focus:ring-alpine-500 focus:border-transparent"
                   >
                     <option value="">No Project</option>
                     {projects.map(project => (
@@ -1506,7 +1509,7 @@ export default function TaskCalendarModal({
                       setShowTaskModal(false)
                       resetTaskForm()
                     }}
-                    className="flex-1 px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-50"
+                    className="flex-1 px-4 py-2 border border-gray-300 dark:border-slate-600 text-gray-700 dark:text-slate-200 rounded-lg hover:bg-gray-50 dark:hover:bg-slate-800"
                   >
                     Cancel
                   </button>
@@ -1526,15 +1529,15 @@ export default function TaskCalendarModal({
         {/* Event Modal */}
         {showEventModal && (
           <div className="fixed inset-0 z-[110] flex items-center justify-center bg-black/60 p-4">
-            <div className="bg-white rounded-xl shadow-2xl max-w-md w-full p-6">
-              <h3 className="text-xl font-bold text-gray-900 mb-4">Create New Event</h3>
+            <div className="bg-white dark:bg-slate-900 border border-gray-200 dark:border-slate-700 rounded-xl shadow-2xl max-w-md w-full max-h-[90vh] overflow-y-auto p-4 sm:p-6">
+              <h3 className="text-xl font-bold text-gray-900 dark:text-slate-100 mb-4">Create New Event</h3>
               <div className="space-y-4">
                 <input
                   type="text"
                   value={eventTitle}
                   onChange={e => setEventTitle(e.target.value)}
                   placeholder="Event title"
-                  className="w-full px-4 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent"
+                  className="w-full px-4 py-2 border border-gray-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-gray-900 dark:text-slate-100 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent"
                   autoFocus
                 />
                 <textarea
@@ -1542,25 +1545,25 @@ export default function TaskCalendarModal({
                   onChange={e => setEventDescription(e.target.value)}
                   placeholder="Description (optional)"
                   rows={2}
-                  className="w-full px-4 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent resize-none"
+                  className="w-full px-4 py-2 border border-gray-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-gray-900 dark:text-slate-100 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent resize-none"
                 />
                 <div className="grid grid-cols-2 gap-4">
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">Start</label>
+                    <label className="block text-sm font-medium text-gray-700 dark:text-slate-300 mb-1">Start</label>
                     <input
                       type="datetime-local"
                       value={eventStartTime}
                       onChange={e => setEventStartTime(e.target.value)}
-                      className="w-full px-4 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent"
+                      className="w-full px-4 py-2 border border-gray-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-gray-900 dark:text-slate-100 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent"
                     />
                   </div>
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">End</label>
+                    <label className="block text-sm font-medium text-gray-700 dark:text-slate-300 mb-1">End</label>
                     <input
                       type="datetime-local"
                       value={eventEndTime}
                       onChange={e => setEventEndTime(e.target.value)}
-                      className="w-full px-4 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent"
+                      className="w-full px-4 py-2 border border-gray-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-gray-900 dark:text-slate-100 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent"
                     />
                   </div>
                 </div>
@@ -1569,19 +1572,19 @@ export default function TaskCalendarModal({
                   value={eventLocation}
                   onChange={e => setEventLocation(e.target.value)}
                   placeholder="Location (optional)"
-                  className="w-full px-4 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent"
+                  className="w-full px-4 py-2 border border-gray-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-gray-900 dark:text-slate-100 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent"
                 />
                 <input
                   type="url"
                   value={eventMeetingUrl}
                   onChange={e => setEventMeetingUrl(e.target.value)}
                   placeholder="Meeting URL (optional)"
-                  className="w-full px-4 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent"
+                  className="w-full px-4 py-2 border border-gray-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-gray-900 dark:text-slate-100 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent"
                 />
                 <div className="flex gap-2">
                   <button
                     onClick={() => setShowEventModal(false)}
-                    className="flex-1 px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-50"
+                    className="flex-1 px-4 py-2 border border-gray-300 dark:border-slate-600 text-gray-700 dark:text-slate-200 rounded-lg hover:bg-gray-50 dark:hover:bg-slate-800"
                   >
                     Cancel
                   </button>
@@ -1601,8 +1604,8 @@ export default function TaskCalendarModal({
         {/* Timetable Entry Modal */}
         {showTimetableModal && (
           <div className="fixed inset-0 z-[110] flex items-center justify-center bg-black/60 p-4">
-            <div className="bg-white rounded-xl shadow-2xl max-w-lg w-full p-6 max-h-[90vh] overflow-y-auto">
-              <h3 className="text-xl font-bold text-gray-900 mb-4">
+            <div className="bg-white dark:bg-slate-900 border border-gray-200 dark:border-slate-700 rounded-xl shadow-2xl max-w-lg w-full p-4 sm:p-6 max-h-[90vh] overflow-y-auto">
+              <h3 className="text-xl font-bold text-gray-900 dark:text-slate-100 mb-4">
                 {editingTimetableEntry ? 'Edit Timetable Entry' : 'New Timetable Entry'}
               </h3>
               <div className="space-y-4">
@@ -1612,35 +1615,35 @@ export default function TaskCalendarModal({
                   value={ttTitle}
                   onChange={e => setTtTitle(e.target.value)}
                   placeholder="Class or activity name"
-                  className="w-full px-4 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-violet-500 focus:border-transparent"
+                  className="w-full px-4 py-2 border border-gray-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-gray-900 dark:text-slate-100 rounded-lg focus:ring-2 focus:ring-violet-500 focus:border-transparent"
                   autoFocus
                 />
 
                 {/* Time */}
                 <div className="grid grid-cols-2 gap-4">
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">Start Time</label>
+                    <label className="block text-sm font-medium text-gray-700 dark:text-slate-300 mb-1">Start Time</label>
                     <input
                       type="time"
                       value={ttStartTime}
                       onChange={e => setTtStartTime(e.target.value)}
-                      className="w-full px-4 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-violet-500 focus:border-transparent"
+                      className="w-full px-4 py-2 border border-gray-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-gray-900 dark:text-slate-100 rounded-lg focus:ring-2 focus:ring-violet-500 focus:border-transparent"
                     />
                   </div>
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">End Time</label>
+                    <label className="block text-sm font-medium text-gray-700 dark:text-slate-300 mb-1">End Time</label>
                     <input
                       type="time"
                       value={ttEndTime}
                       onChange={e => setTtEndTime(e.target.value)}
-                      className="w-full px-4 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-violet-500 focus:border-transparent"
+                      className="w-full px-4 py-2 border border-gray-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-gray-900 dark:text-slate-100 rounded-lg focus:ring-2 focus:ring-violet-500 focus:border-transparent"
                     />
                   </div>
                 </div>
 
                 {/* Days of Week */}
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">Repeat on</label>
+                  <label className="block text-sm font-medium text-gray-700 dark:text-slate-300 mb-2">Repeat on</label>
                   <div className="flex gap-2">
                     {WEEKDAY_LABELS.map((day, i) => {
                       const jsDay = mondayIndexToJsDay(i)
@@ -1659,7 +1662,7 @@ export default function TaskCalendarModal({
                           className={`flex-1 py-2 rounded-lg text-sm font-medium transition-colors border ${
                             selected
                               ? 'bg-violet-600 text-white border-violet-600'
-                              : 'bg-white text-gray-600 border-gray-200 hover:border-violet-300'
+                                : 'bg-white dark:bg-slate-800 text-gray-600 dark:text-slate-300 border-gray-200 dark:border-slate-700 hover:border-violet-300 dark:hover:border-violet-500'
                           }`}
                         >
                           {day}
@@ -1675,28 +1678,28 @@ export default function TaskCalendarModal({
                   onChange={e => setTtDescription(e.target.value)}
                   placeholder="Description (optional)"
                   rows={2}
-                  className="w-full px-4 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-violet-500 focus:border-transparent resize-none"
+                  className="w-full px-4 py-2 border border-gray-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-gray-900 dark:text-slate-100 rounded-lg focus:ring-2 focus:ring-violet-500 focus:border-transparent resize-none"
                 />
 
                 {/* Location */}
                 <div className="flex items-center gap-2">
-                  <MapPin size={16} className="text-gray-400 flex-shrink-0" />
+                  <MapPin size={16} className="text-gray-400 dark:text-slate-500 flex-shrink-0" />
                   <input
                     type="text"
                     value={ttLocation}
                     onChange={e => setTtLocation(e.target.value)}
                     placeholder="Location (optional)"
-                    className="w-full px-4 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-violet-500 focus:border-transparent"
+                    className="w-full px-4 py-2 border border-gray-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-gray-900 dark:text-slate-100 rounded-lg focus:ring-2 focus:ring-violet-500 focus:border-transparent"
                   />
                 </div>
 
                 {/* Project */}
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Link to Project</label>
+                  <label className="block text-sm font-medium text-gray-700 dark:text-slate-300 mb-1">Link to Project</label>
                   <select
                     value={ttProjectId}
                     onChange={e => setTtProjectId(e.target.value)}
-                    className="w-full px-4 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-violet-500 focus:border-transparent"
+                    className="w-full px-4 py-2 border border-gray-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-gray-900 dark:text-slate-100 rounded-lg focus:ring-2 focus:ring-violet-500 focus:border-transparent"
                   >
                     <option value="">No Project</option>
                     {projects.map(p => (
@@ -1708,9 +1711,9 @@ export default function TaskCalendarModal({
                   {ttProjectId && (() => {
                     const proj = getProjectById(ttProjectId)
                     return proj ? (
-                      <div className="flex items-center gap-2 mt-2 px-3 py-1.5 bg-gray-50 rounded-lg">
+                      <div className="flex items-center gap-2 mt-2 px-3 py-1.5 bg-gray-50 dark:bg-slate-800 rounded-lg">
                         <div className="w-3 h-3 rounded-full" style={{ backgroundColor: proj.color }} />
-                        <span className="text-sm text-gray-700">{proj.name}</span>
+                        <span className="text-sm text-gray-700 dark:text-slate-200">{proj.name}</span>
                       </div>
                     ) : null
                   })()}
@@ -1718,7 +1721,7 @@ export default function TaskCalendarModal({
 
                 {/* Color */}
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Color</label>
+                  <label className="block text-sm font-medium text-gray-700 dark:text-slate-300 mb-1">Color</label>
                   <div className="flex gap-2">
                     {['#8B5CF6', '#3B82F6', '#10B981', '#F59E0B', '#EF4444', '#EC4899', '#6366F1', '#14B8A6'].map(color => (
                       <button
@@ -1739,14 +1742,14 @@ export default function TaskCalendarModal({
                       setShowTimetableModal(false)
                       resetTimetableForm()
                     }}
-                    className="flex-1 px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-50"
+                    className="flex-1 px-4 py-2 border border-gray-300 dark:border-slate-600 text-gray-700 dark:text-slate-200 rounded-lg hover:bg-gray-50 dark:hover:bg-slate-800"
                   >
                     Cancel
                   </button>
                   {editingTimetableEntry && (
                     <button
                       onClick={() => handleDeleteTimetableEntry(editingTimetableEntry.id)}
-                      className="px-4 py-2 border border-red-300 text-red-600 rounded-lg hover:bg-red-50"
+                      className="px-4 py-2 border border-red-300 dark:border-red-700 text-red-600 dark:text-red-300 rounded-lg hover:bg-red-50 dark:hover:bg-red-950/40"
                     >
                       <Trash2 size={16} />
                     </button>
@@ -1766,39 +1769,39 @@ export default function TaskCalendarModal({
 
         {/* Task Detail Panel */}
         {showTaskDetail && editingTask && (
-          <div className="fixed inset-y-0 right-0 z-[110] w-full max-w-2xl bg-white shadow-2xl overflow-y-auto border-l border-gray-200">
-            <div className="sticky top-0 z-10 bg-white border-b border-gray-200 px-6 py-4">
+          <div className="fixed inset-y-0 right-0 z-[110] w-full max-w-2xl bg-white dark:bg-slate-900 shadow-2xl overflow-y-auto border-l border-gray-200 dark:border-slate-700">
+            <div className="sticky top-0 z-10 bg-white dark:bg-slate-900 border-b border-gray-200 dark:border-slate-700 px-6 py-4">
               <div className="flex items-center justify-between">
-                <h3 className="text-xl font-bold text-gray-900">Task Details</h3>
-                <button
+                <h3 className="text-xl font-bold text-gray-900 dark:text-slate-100">Task Details</h3>
+                <ModalCloseButton
                   onClick={handleCloseTaskDetail}
-                  className="p-2 rounded-lg hover:bg-gray-100 transition-colors"
-                >
-                  <X size={20} />
-                </button>
+                  ariaLabel="Close task details"
+                  className="dark:hover:bg-slate-800"
+                  size={20}
+                />
               </div>
             </div>
 
             <div className="p-6 space-y-6">
               {/* Task Title */}
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">Title</label>
+                <label className="block text-sm font-medium text-gray-700 dark:text-slate-300 mb-2">Title</label>
                 <input
                   type="text"
                   value={taskTitle}
                   onChange={e => setTaskTitle(e.target.value)}
-                  className="w-full px-4 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-alpine-500 focus:border-transparent"
+                  className="w-full px-4 py-2 border border-gray-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-gray-900 dark:text-slate-100 rounded-lg focus:ring-2 focus:ring-alpine-500 focus:border-transparent"
                 />
               </div>
 
               {/* Task Description */}
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">Description</label>
+                <label className="block text-sm font-medium text-gray-700 dark:text-slate-300 mb-2">Description</label>
                 <textarea
                   value={taskDescription}
                   onChange={e => setTaskDescription(e.target.value)}
                   rows={4}
-                  className="w-full px-4 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-alpine-500 focus:border-transparent resize-none"
+                  className="w-full px-4 py-2 border border-gray-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-gray-900 dark:text-slate-100 rounded-lg focus:ring-2 focus:ring-alpine-500 focus:border-transparent resize-none"
                   placeholder="Add a description..."
                 />
               </div>
@@ -1806,11 +1809,11 @@ export default function TaskCalendarModal({
               {/* Status & Priority */}
               <div className="grid grid-cols-2 gap-4">
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">Status</label>
+                  <label className="block text-sm font-medium text-gray-700 dark:text-slate-300 mb-2">Status</label>
                   <select
                     value={taskStatus}
                     onChange={e => setTaskStatus(e.target.value as TaskStatus)}
-                    className="w-full px-4 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-alpine-500 focus:border-transparent"
+                    className="w-full px-4 py-2 border border-gray-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-gray-900 dark:text-slate-100 rounded-lg focus:ring-2 focus:ring-alpine-500 focus:border-transparent"
                   >
                     <option value="todo">To Do</option>
                     <option value="in_progress">In Progress</option>
@@ -1820,11 +1823,11 @@ export default function TaskCalendarModal({
                   </select>
                 </div>
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">Priority</label>
+                  <label className="block text-sm font-medium text-gray-700 dark:text-slate-300 mb-2">Priority</label>
                   <select
                     value={taskPriority}
                     onChange={e => setTaskPriority(e.target.value as TaskPriority)}
-                    className="w-full px-4 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-alpine-500 focus:border-transparent"
+                    className="w-full px-4 py-2 border border-gray-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-gray-900 dark:text-slate-100 rounded-lg focus:ring-2 focus:ring-alpine-500 focus:border-transparent"
                   >
                     <option value="low">Low</option>
                     <option value="medium">Medium</option>
@@ -1837,45 +1840,45 @@ export default function TaskCalendarModal({
               {/* Dates */}
               <div className="grid grid-cols-2 gap-4">
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">Start Date</label>
+                  <label className="block text-sm font-medium text-gray-700 dark:text-slate-300 mb-2">Start Date</label>
                   <input
                     type="datetime-local"
                     value={taskStartDate}
                     onChange={e => setTaskStartDate(e.target.value)}
-                    className="w-full px-4 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-alpine-500 focus:border-transparent"
+                    className="w-full px-4 py-2 border border-gray-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-gray-900 dark:text-slate-100 rounded-lg focus:ring-2 focus:ring-alpine-500 focus:border-transparent"
                   />
                 </div>
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">Due Date</label>
+                  <label className="block text-sm font-medium text-gray-700 dark:text-slate-300 mb-2">Due Date</label>
                   <input
                     type="datetime-local"
                     value={taskDueDate}
                     onChange={e => setTaskDueDate(e.target.value)}
-                    className="w-full px-4 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-alpine-500 focus:border-transparent"
+                    className="w-full px-4 py-2 border border-gray-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-gray-900 dark:text-slate-100 rounded-lg focus:ring-2 focus:ring-alpine-500 focus:border-transparent"
                   />
                 </div>
               </div>
 
               {/* Estimated Time */}
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">Estimated Time (minutes)</label>
+                <label className="block text-sm font-medium text-gray-700 dark:text-slate-300 mb-2">Estimated Time (minutes)</label>
                 <input
                   type="number"
                   value={taskEstimatedMinutes}
                   onChange={e => setTaskEstimatedMinutes(e.target.value)}
                   min="0"
                   placeholder="e.g., 60"
-                  className="w-full px-4 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-alpine-500 focus:border-transparent"
+                  className="w-full px-4 py-2 border border-gray-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-gray-900 dark:text-slate-100 rounded-lg focus:ring-2 focus:ring-alpine-500 focus:border-transparent"
                 />
               </div>
 
               {/* Task List */}
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">Task List</label>
+                <label className="block text-sm font-medium text-gray-700 dark:text-slate-300 mb-2">Task List</label>
                 <select
                   value={selectedTaskList}
                   onChange={e => setSelectedTaskList(e.target.value)}
-                  className="w-full px-4 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-alpine-500 focus:border-transparent"
+                  className="w-full px-4 py-2 border border-gray-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-gray-900 dark:text-slate-100 rounded-lg focus:ring-2 focus:ring-alpine-500 focus:border-transparent"
                 >
                   <option value="">No List</option>
                   {taskLists.map(list => (
@@ -1888,11 +1891,11 @@ export default function TaskCalendarModal({
 
               {/* Project */}
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">Project</label>
+                <label className="block text-sm font-medium text-gray-700 dark:text-slate-300 mb-2">Project</label>
                 <select
                   value={selectedProjectId}
                   onChange={e => setSelectedProjectId(e.target.value)}
-                  className="w-full px-4 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-alpine-500 focus:border-transparent"
+                  className="w-full px-4 py-2 border border-gray-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-gray-900 dark:text-slate-100 rounded-lg focus:ring-2 focus:ring-alpine-500 focus:border-transparent"
                 >
                   <option value="">No Project</option>
                   {projects.map(project => (
@@ -1906,11 +1909,11 @@ export default function TaskCalendarModal({
               {/* Linked Note */}
               {selectedProjectId && (
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">Task Note</label>
+                  <label className="block text-sm font-medium text-gray-700 dark:text-slate-300 mb-2">Task Note</label>
                   {editingTask.note_id ? (
-                    <div className="flex items-center gap-2 p-3 bg-green-50 border border-green-200 rounded-lg">
+                    <div className="flex items-center gap-2 p-3 bg-green-50 dark:bg-green-950/30 border border-green-200 dark:border-green-800 rounded-lg">
                       <FileText size={18} className="text-green-600" />
-                      <span className="text-sm text-green-800 font-medium">Note linked to this task</span>
+                      <span className="text-sm text-green-800 dark:text-green-300 font-medium">Note linked to this task</span>
                     </div>
                   ) : (
                     <button
@@ -1933,7 +1936,7 @@ export default function TaskCalendarModal({
                         }
                       }}
                       disabled={isSaving}
-                      className="w-full flex items-center justify-center gap-2 px-4 py-3 border-2 border-dashed border-alpine-300 rounded-lg text-alpine-700 hover:bg-alpine-50 hover:border-alpine-400 transition-colors disabled:opacity-50"
+                      className="w-full flex items-center justify-center gap-2 px-4 py-3 border-2 border-dashed border-alpine-300 dark:border-alpine-700 rounded-lg text-alpine-700 dark:text-alpine-200 hover:bg-alpine-50 dark:hover:bg-alpine-900/20 hover:border-alpine-400 dark:hover:border-alpine-600 transition-colors disabled:opacity-50"
                     >
                       <FileText size={18} />
                       <span className="font-medium">Create Note for This Task</span>
@@ -1944,7 +1947,7 @@ export default function TaskCalendarModal({
 
               {/* Tags */}
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">Tags</label>
+                <label className="block text-sm font-medium text-gray-700 dark:text-slate-300 mb-2">Tags</label>
                 <div className="flex flex-wrap gap-2 mb-2">
                   {editingTask.tags?.map(tag => (
                     <span
@@ -1973,7 +1976,7 @@ export default function TaskCalendarModal({
                       setSelectedTags([...selectedTags, e.target.value])
                     }
                   }}
-                  className="w-full px-4 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-alpine-500 focus:border-transparent"
+                  className="w-full px-4 py-2 border border-gray-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-gray-900 dark:text-slate-100 rounded-lg focus:ring-2 focus:ring-alpine-500 focus:border-transparent"
                 >
                   <option value="">Add a tag...</option>
                   {tags
@@ -1988,13 +1991,13 @@ export default function TaskCalendarModal({
 
               {/* Subtasks */}
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">Subtasks</label>
+                <label className="block text-sm font-medium text-gray-700 dark:text-slate-300 mb-2">Subtasks</label>
                 {editingTask.subtasks && editingTask.subtasks.length > 0 && (
                   <div className="space-y-2 mb-3">
                     {editingTask.subtasks.map(subtask => (
                       <div
                         key={subtask.id}
-                        className="flex items-center gap-2 p-2 bg-gray-50 rounded-lg"
+                        className="flex items-center gap-2 p-2 bg-gray-50 dark:bg-slate-800 rounded-lg"
                       >
                         <button
                           onClick={() => handleToggleSubtask(subtask.id, subtask.is_completed)}
@@ -2003,19 +2006,19 @@ export default function TaskCalendarModal({
                           {subtask.is_completed ? (
                             <CheckCircle2 size={18} className="text-green-600" />
                           ) : (
-                            <Circle size={18} className="text-gray-400 hover:text-alpine-600" />
+                            <Circle size={18} className="text-gray-400 dark:text-slate-500 hover:text-alpine-600" />
                           )}
                         </button>
                         <span
                           className={`flex-1 text-sm ${
-                            subtask.is_completed ? 'line-through text-gray-500' : 'text-gray-900'
+                            subtask.is_completed ? 'line-through text-gray-500 dark:text-slate-400' : 'text-gray-900 dark:text-slate-100'
                           }`}
                         >
                           {subtask.title}
                         </span>
                         <button
                           onClick={() => handleDeleteSubtask(subtask.id)}
-                          className="p-1 rounded text-gray-400 hover:text-red-600"
+                          className="p-1 rounded text-gray-400 dark:text-slate-500 hover:text-red-600 dark:hover:text-red-300"
                         >
                           <Trash2 size={14} />
                         </button>
@@ -2025,11 +2028,11 @@ export default function TaskCalendarModal({
                 )}
                 {editingTask.completion_percentage !== undefined && editingTask.subtasks && editingTask.subtasks.length > 0 && (
                   <div className="mb-3">
-                    <div className="flex items-center justify-between text-sm text-gray-600 mb-1">
+                    <div className="flex items-center justify-between text-sm text-gray-600 dark:text-slate-300 mb-1">
                       <span>Progress</span>
                       <span className="font-medium">{editingTask.completion_percentage}%</span>
                     </div>
-                    <div className="w-full bg-gray-200 rounded-full h-2">
+                    <div className="w-full bg-gray-200 dark:bg-slate-700 rounded-full h-2">
                       <div
                         className="bg-alpine-600 h-2 rounded-full transition-all"
                         style={{ width: `${editingTask.completion_percentage}%` }}
@@ -2044,7 +2047,7 @@ export default function TaskCalendarModal({
                     onChange={e => setNewSubtaskTitle(e.target.value)}
                     onKeyPress={e => e.key === 'Enter' && handleAddSubtask()}
                     placeholder="Add a subtask..."
-                    className="flex-1 px-4 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-alpine-500 focus:border-transparent"
+                    className="flex-1 px-4 py-2 border border-gray-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-gray-900 dark:text-slate-100 rounded-lg focus:ring-2 focus:ring-alpine-500 focus:border-transparent"
                   />
                   <button
                     onClick={handleAddSubtask}
@@ -2058,16 +2061,16 @@ export default function TaskCalendarModal({
 
               {/* Time Tracking */}
               {editingTask.actual_minutes !== null && editingTask.actual_minutes > 0 && (
-                <div className="p-4 bg-purple-50 rounded-lg border border-purple-200">
+                <div className="p-4 bg-purple-50 dark:bg-purple-950/30 rounded-lg border border-purple-200 dark:border-purple-800">
                   <div className="flex items-center justify-between mb-2">
-                    <span className="text-sm font-medium text-purple-900">Time Tracked</span>
+                    <span className="text-sm font-medium text-purple-900 dark:text-purple-200">Time Tracked</span>
                     <Timer size={16} className="text-purple-600" />
                   </div>
-                  <div className="text-2xl font-bold text-purple-700">
+                  <div className="text-2xl font-bold text-purple-700 dark:text-purple-300">
                     {formatDuration(editingTask.actual_minutes)}
                   </div>
                   {editingTask.estimated_minutes && (
-                    <div className="text-sm text-purple-600 mt-1">
+                    <div className="text-sm text-purple-600 dark:text-purple-300 mt-1">
                       Estimated: {formatDuration(editingTask.estimated_minutes)}
                     </div>
                   )}
@@ -2075,7 +2078,7 @@ export default function TaskCalendarModal({
               )}
 
               {/* Metadata */}
-              <div className="pt-4 border-t border-gray-200 space-y-2 text-sm text-gray-600">
+              <div className="pt-4 border-t border-gray-200 dark:border-slate-700 space-y-2 text-sm text-gray-600 dark:text-slate-300">
                 <div className="flex items-center justify-between">
                   <span>Created</span>
                   <span>{new Date(editingTask.created_at).toLocaleString()}</span>
@@ -2103,7 +2106,7 @@ export default function TaskCalendarModal({
                 </button>
                 <button
                   onClick={handleCloseTaskDetail}
-                  className="px-4 py-3 border border-gray-300 rounded-lg hover:bg-gray-50 font-medium"
+                  className="px-4 py-3 border border-gray-300 dark:border-slate-600 text-gray-700 dark:text-slate-200 rounded-lg hover:bg-gray-50 dark:hover:bg-slate-800 font-medium"
                 >
                   Cancel
                 </button>

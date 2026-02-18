@@ -1298,22 +1298,22 @@ export default function UnifiedPanel({
         )}
         <div
           ref={panelRef}
-          className={`fixed z-40 bg-white flex flex-col overflow-hidden animate-in slide-in-from-right duration-200 ${
+          className={`fixed z-40 bg-white dark:bg-slate-900 flex flex-col overflow-hidden animate-in slide-in-from-right duration-200 ${
             isMobile
               ? 'inset-0 safe-top safe-bottom'
-              : 'top-28 right-6 w-[440px] max-h-[calc(100vh-8rem)] rounded-2xl shadow-2xl border border-gray-100'
+              : 'top-28 right-6 w-[440px] max-h-[calc(100vh-8rem)] rounded-2xl shadow-2xl border border-gray-100 dark:border-slate-700'
           }`}
         >
           {/* Header Section - User & Note Title */}
-          <div className="bg-gradient-to-br from-slate-50 via-white to-alpine-50 border-b border-gray-100">
+          <div className="bg-gradient-to-br from-slate-50 via-white to-alpine-50 border-b border-gray-100 dark:from-slate-900 dark:via-slate-800 dark:to-slate-800 dark:border-slate-700">
             {/* User Info Bar */}
             {userEmail && onSignOut && (
-              <div className={`flex items-center justify-between border-b border-gray-100 ${isMobile ? 'px-4 py-2.5' : 'px-5 py-3'}`}>
+              <div className={`flex items-center justify-between border-b border-gray-100 dark:border-slate-700 ${isMobile ? 'px-4 py-2.5' : 'px-5 py-3'}`}>
                 <div className="flex items-center gap-3 min-w-0 flex-1">
                   <div className={`rounded-full bg-alpine-600 flex items-center justify-center text-white font-medium flex-shrink-0 ${isMobile ? 'w-7 h-7 text-xs' : 'w-8 h-8 text-sm'}`}>
                     {userEmail.charAt(0).toUpperCase()}
                   </div>
-                  <span className={`text-gray-700 font-medium truncate ${isMobile ? 'text-xs' : 'text-sm'}`}>{userEmail}</span>
+                  <span className={`text-gray-700 dark:text-slate-200 font-medium truncate ${isMobile ? 'text-xs' : 'text-sm'}`}>{userEmail}</span>
                 </div>
                 <div className="flex items-center gap-1 flex-shrink-0">
                   <NotificationCenter
@@ -1322,7 +1322,7 @@ export default function UnifiedPanel({
                   />
                   <button
                     onClick={onSignOut}
-                    className={`flex items-center gap-1.5 font-medium text-gray-500 hover:text-red-600 hover:bg-red-50 rounded-lg transition-all touch-target ${isMobile ? 'px-2 py-1 text-xs' : 'px-3 py-1.5 text-sm'}`}
+                    className={`flex items-center gap-1.5 font-medium text-gray-500 dark:text-slate-400 hover:text-red-600 dark:hover:text-red-400 hover:bg-red-50 dark:hover:bg-red-950/40 rounded-lg transition-all touch-target ${isMobile ? 'px-2 py-1 text-xs' : 'px-3 py-1.5 text-sm'}`}
                     title="Sign Out"
                   >
                     <LogOut size={isMobile ? 14 : 15} />
@@ -1334,7 +1334,7 @@ export default function UnifiedPanel({
             {/* Note Title & Actions */}
             <div className={isMobile ? 'p-4' : 'p-5'}>
               <div className={isMobile ? 'mb-3' : 'mb-4'}>
-                <label className={`font-semibold text-gray-500 uppercase tracking-wider mb-2 block ${isMobile ? 'text-[10px]' : 'text-xs'}`}>
+                <label className={`font-semibold text-gray-500 dark:text-slate-400 uppercase tracking-wider mb-2 block ${isMobile ? 'text-[10px]' : 'text-xs'}`}>
                   Note Title
                 </label>
                 <input
@@ -1342,7 +1342,7 @@ export default function UnifiedPanel({
                   value={title}
                   onChange={(e) => onTitleChange(e.target.value)}
                   placeholder="Untitled note..."
-                  className={`w-full border border-gray-200 rounded-xl focus:ring-2 focus:ring-alpine-500 focus:border-transparent bg-white transition-all placeholder:text-gray-300 ${isMobile ? 'px-3 py-2.5 text-base font-semibold' : 'px-4 py-3 text-lg font-semibold'}`}
+                  className={`w-full border border-gray-200 dark:border-slate-600 rounded-xl focus:ring-2 focus:ring-alpine-500 focus:border-transparent bg-white dark:bg-slate-800 text-gray-900 dark:text-slate-100 transition-all placeholder:text-gray-300 dark:placeholder:text-slate-500 ${isMobile ? 'px-3 py-2.5 text-base font-semibold' : 'px-4 py-3 text-lg font-semibold'}`}
                   disabled={isSaving || isDeleting}
                 />
               </div>
@@ -1367,7 +1367,7 @@ export default function UnifiedPanel({
                   <button
                     onClick={() => onDelete(note.id)}
                     disabled={isDeleting}
-                    className={`border border-red-200 text-red-600 rounded-xl hover:bg-red-50 disabled:opacity-50 transition-all touch-target ${isMobile ? 'p-2' : 'p-2.5'}`}
+                    className={`border border-red-200 dark:border-red-800 text-red-600 dark:text-red-400 rounded-xl hover:bg-red-50 dark:hover:bg-red-950/40 disabled:opacity-50 transition-all touch-target ${isMobile ? 'p-2' : 'p-2.5'}`}
                     title="Delete note"
                   >
                     <Trash2 size={isMobile ? 14 : 16} />
@@ -1377,7 +1377,7 @@ export default function UnifiedPanel({
                 <button
                   onClick={onCancel}
                   disabled={isSaving || isDeleting}
-                  className={`border border-gray-200 text-gray-600 rounded-xl hover:bg-gray-50 disabled:opacity-50 transition-all touch-target ${isMobile ? 'p-2' : 'p-2.5'}`}
+                  className={`border border-gray-200 dark:border-slate-600 text-gray-600 dark:text-slate-300 rounded-xl hover:bg-gray-50 dark:hover:bg-slate-800 disabled:opacity-50 transition-all touch-target ${isMobile ? 'p-2' : 'p-2.5'}`}
                   title="Cancel"
                 >
                   <X size={isMobile ? 14 : 16} />
@@ -1385,7 +1385,7 @@ export default function UnifiedPanel({
               </div>
 
               {hasChanges && (
-                <div className={`flex items-center gap-2 text-amber-600 bg-amber-50 rounded-lg ${isMobile ? 'mt-2.5 px-2.5 py-1.5' : 'mt-3 px-3 py-2'}`}>
+                <div className={`flex items-center gap-2 text-amber-600 dark:text-amber-300 bg-amber-50 dark:bg-amber-950/40 rounded-lg ${isMobile ? 'mt-2.5 px-2.5 py-1.5' : 'mt-3 px-3 py-2'}`}>
                   <span className="w-2 h-2 bg-amber-500 rounded-full animate-pulse" />
                   <span className={`font-medium ${isMobile ? 'text-xs' : 'text-sm'}`}>Unsaved changes</span>
                 </div>
@@ -1394,16 +1394,16 @@ export default function UnifiedPanel({
           </div>
 
           {/* Tabs - Modern Pill Style */}
-          <div className={`bg-gray-50/50 border-b border-gray-100 ${isMobile ? 'px-2 py-2' : 'px-3 py-3'}`}>
-            <div className={`flex bg-gray-100 rounded-xl gap-0.5 ${isMobile ? 'p-0.5' : 'p-1'}`}>
+          <div className={`bg-gray-50/50 dark:bg-slate-800/70 border-b border-gray-100 dark:border-slate-700 ${isMobile ? 'px-2 py-2' : 'px-3 py-3'}`}>
+            <div className={`flex bg-gray-100 dark:bg-slate-700 rounded-xl gap-0.5 ${isMobile ? 'p-0.5' : 'p-1'}`}>
               <button
                 onClick={() => setActiveTab('browse')}
                 className={`flex-1 text-xs font-medium transition-all rounded-lg flex items-center justify-center gap-1.5 min-w-0 touch-target ${
                   isMobile ? 'px-1.5 py-2.5' : 'px-2 py-2'
                 } ${
                   activeTab === 'browse'
-                    ? 'bg-white text-alpine-600 shadow-sm'
-                    : 'text-gray-600 hover:text-gray-800 hover:bg-gray-50'
+                    ? 'bg-white dark:bg-slate-900 text-alpine-600 dark:text-alpine-300 shadow-sm'
+                    : 'text-gray-600 dark:text-slate-300 hover:text-gray-800 dark:hover:text-slate-100 hover:bg-gray-50 dark:hover:bg-slate-600'
                 }`}
               >
                 <FileText size={isMobile ? 13 : 14} className="flex-shrink-0" aria-hidden={!isMobile} />
@@ -1415,8 +1415,8 @@ export default function UnifiedPanel({
                   isMobile ? 'px-1.5 py-2.5' : 'px-2 py-2'
                 } ${
                   activeTab === 'toc'
-                    ? 'bg-white text-alpine-600 shadow-sm'
-                    : 'text-gray-600 hover:text-gray-800 hover:bg-gray-50'
+                    ? 'bg-white dark:bg-slate-900 text-alpine-600 dark:text-alpine-300 shadow-sm'
+                    : 'text-gray-600 dark:text-slate-300 hover:text-gray-800 dark:hover:text-slate-100 hover:bg-gray-50 dark:hover:bg-slate-600'
                 }`}
                 disabled={headings.length === 0}
               >
@@ -1434,8 +1434,8 @@ export default function UnifiedPanel({
                   isMobile ? 'px-1.5 py-2.5' : 'px-2 py-2'
                 } ${
                   activeTab === 'tasks'
-                    ? 'bg-white text-alpine-600 shadow-sm'
-                    : 'text-gray-600 hover:text-gray-800 hover:bg-gray-50'
+                    ? 'bg-white dark:bg-slate-900 text-alpine-600 dark:text-alpine-300 shadow-sm'
+                    : 'text-gray-600 dark:text-slate-300 hover:text-gray-800 dark:hover:text-slate-100 hover:bg-gray-50 dark:hover:bg-slate-600'
                 }`}
               >
                 <CheckSquare size={isMobile ? 13 : 14} className="flex-shrink-0" aria-hidden={!isMobile} />
@@ -1452,8 +1452,8 @@ export default function UnifiedPanel({
                   isMobile ? 'px-1.5 py-2.5' : 'px-2 py-2'
                 } ${
                   activeTab === 'ai'
-                    ? 'bg-white text-purple-600 shadow-sm'
-                    : 'text-gray-600 hover:text-gray-800 hover:bg-gray-50'
+                    ? 'bg-white dark:bg-slate-900 text-purple-600 dark:text-purple-300 shadow-sm'
+                    : 'text-gray-600 dark:text-slate-300 hover:text-gray-800 dark:hover:text-slate-100 hover:bg-gray-50 dark:hover:bg-slate-600'
                 }`}
               >
                 <Sparkles size={isMobile ? 13 : 14} className="flex-shrink-0" aria-hidden={!isMobile} />
@@ -1486,7 +1486,7 @@ export default function UnifiedPanel({
                       onSearch()
                       setIsOpen(false)
                     }}
-                    className={`bg-white border border-gray-200 text-gray-700 font-semibold rounded-xl hover:bg-gray-50 transition-all flex items-center justify-center gap-2 shadow-sm touch-target ${isMobile ? 'px-3 py-3 text-xs' : 'px-4 py-3.5 text-sm'}`}
+                    className={`bg-white dark:bg-slate-800 border border-gray-200 dark:border-slate-600 text-gray-700 dark:text-slate-100 font-semibold rounded-xl hover:bg-gray-50 dark:hover:bg-slate-700 transition-all flex items-center justify-center gap-2 shadow-sm touch-target ${isMobile ? 'px-3 py-3 text-xs' : 'px-4 py-3.5 text-sm'}`}
                   >
                     <Search size={isMobile ? 16 : 18} />
                     <span>Find & Replace</span>
@@ -1497,7 +1497,7 @@ export default function UnifiedPanel({
                         onOpenFileExplorer()
                         setIsOpen(false)
                       }}
-                      className={`bg-white border border-gray-200 text-gray-700 font-semibold rounded-xl hover:bg-gray-50 transition-all flex items-center justify-center gap-2 shadow-sm touch-target ${isMobile ? 'px-3 py-3 text-xs' : 'px-4 py-3.5 text-sm'}`}
+                      className={`bg-white dark:bg-slate-800 border border-gray-200 dark:border-slate-600 text-gray-700 dark:text-slate-100 font-semibold rounded-xl hover:bg-gray-50 dark:hover:bg-slate-700 transition-all flex items-center justify-center gap-2 shadow-sm touch-target ${isMobile ? 'px-3 py-3 text-xs' : 'px-4 py-3.5 text-sm'}`}
                       title="Open File Explorer - Manage uploaded files"
                     >
                       <FolderOpen size={isMobile ? 16 : 18} />
