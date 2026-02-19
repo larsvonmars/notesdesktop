@@ -71,22 +71,28 @@ function isWrappedInTag(node: Node, tagName: string): Element | null {
  */
 function getTextNodesInRange(range: Range): Text[] {
   const textNodes: Text[] = []
+  const common = range.commonAncestorContainer
+  const root = common.nodeType === Node.TEXT_NODE ? common.parentNode : common
+  if (!root) return textNodes
+
   const walker = document.createTreeWalker(
-    range.commonAncestorContainer,
+    root,
     NodeFilter.SHOW_TEXT,
     {
       acceptNode: (node) => {
-        const nodeRange = document.createRange()
-        nodeRange.selectNode(node)
-        
-        // Check if this text node intersects with our range
-        if (
-          range.compareBoundaryPoints(Range.END_TO_START, nodeRange) <= 0 &&
-          range.compareBoundaryPoints(Range.START_TO_END, nodeRange) >= 0
-        ) {
-          return NodeFilter.FILTER_ACCEPT
+        const textNode = node as Text
+        const text = textNode.textContent ?? ''
+        if (text.length === 0) {
+          return NodeFilter.FILTER_REJECT
         }
-        return NodeFilter.FILTER_REJECT
+
+        try {
+          return range.intersectsNode(textNode)
+            ? NodeFilter.FILTER_ACCEPT
+            : NodeFilter.FILTER_REJECT
+        } catch {
+          return NodeFilter.FILTER_REJECT
+        }
       }
     }
   )
@@ -97,6 +103,112 @@ function getTextNodesInRange(range: Range): Text[] {
   }
   
   return textNodes
+}
+
+function isNodeStyledWithTag(node: Node, tagName: string): boolean {
+  return isWrappedInTag(node, tagName) !== null
+}
+
+function isRangeFullyStyled(range: Range, tagName: string): boolean {
+  const textNodes = getTextNodesInRange(range)
+  if (textNodes.length === 0) {
+    return (
+      isNodeStyledWithTag(range.startContainer, tagName) &&
+      isNodeStyledWithTag(range.endContainer, tagName)
+    )
+  }
+
+  return textNodes.every((node) => isNodeStyledWithTag(node, tagName))
+}
+
+function unwrapTagInContainer(container: ParentNode, tagName: string): void {
+  const targetTag = tagName.toLowerCase()
+  const wrappers = Array.from(container.querySelectorAll(targetTag))
+  wrappers.forEach((wrapper) => {
+    unwrapElement(wrapper)
+  })
+}
+
+function splitElementAroundChild(element: Element, child: Node): void {
+  if (!element.parentNode || child.parentNode !== element) return
+
+  const parent = element.parentNode
+  const beforeClone = element.cloneNode(false) as Element
+  const afterClone = element.cloneNode(false) as Element
+
+  while (element.firstChild && element.firstChild !== child) {
+    beforeClone.appendChild(element.firstChild)
+  }
+
+  while (child.nextSibling) {
+    afterClone.appendChild(child.nextSibling)
+  }
+
+  const hasRenderableContent = (node: Node): boolean => {
+    if (node.nodeType === Node.ELEMENT_NODE) return true
+    if (node.nodeType === Node.TEXT_NODE) {
+      return (node.textContent ?? '').length > 0
+    }
+    return false
+  }
+
+  const cloneHasRenderableContent = (clone: Element): boolean =>
+    Array.from(clone.childNodes).some(hasRenderableContent)
+
+  if (cloneHasRenderableContent(beforeClone)) {
+    parent.insertBefore(beforeClone, element)
+  }
+
+  parent.insertBefore(child, element)
+
+  if (cloneHasRenderableContent(afterClone)) {
+    parent.insertBefore(afterClone, element)
+  }
+
+  element.remove()
+}
+
+function removeInlineStyleFromRange(range: Range, tagName: string): void {
+  const selection = window.getSelection()
+  if (!selection || range.collapsed) return
+
+  const extracted = range.extractContents()
+  const staging = document.createElement('div')
+  staging.appendChild(extracted)
+
+  unwrapTagInContainer(staging, tagName)
+
+  const marker = document.createElement('span')
+  marker.setAttribute('data-inline-remove-marker', 'true')
+  while (staging.firstChild) {
+    marker.appendChild(staging.firstChild)
+  }
+
+  range.insertNode(marker)
+
+  let parent = marker.parentElement
+  while (parent && parent.tagName.toLowerCase() === tagName.toLowerCase()) {
+    splitElementAroundChild(parent, marker)
+    parent = marker.parentElement
+  }
+
+  unwrapTagInContainer(marker, tagName)
+
+  const insertedNodes = Array.from(marker.childNodes)
+  if (insertedNodes.length === 0) {
+    marker.remove()
+    return
+  }
+
+  const replacement = document.createDocumentFragment()
+  insertedNodes.forEach((node) => replacement.appendChild(node))
+  marker.replaceWith(replacement)
+
+  const newRange = document.createRange()
+  newRange.setStartBefore(insertedNodes[0])
+  newRange.setEndAfter(insertedNodes[insertedNodes.length - 1])
+  selection.removeAllRanges()
+  selection.addRange(newRange)
 }
 
 /**
@@ -142,25 +254,9 @@ export function applyInlineStyle(tagName: 'strong' | 'em' | 'code' | 'u' | 's'):
       return
     }
     
-    if (wrapper && isRangeFullyWithinElement(range, wrapper)) {
-      // Selection fully within wrapper, unwrap it
-      const startOffset = range.startOffset
-      const endOffset = range.endOffset
-      const startContainer = range.startContainer
-      const endContainer = range.endContainer
-      
-      unwrapElement(wrapper)
-      
-      // Restore selection after unwrap
-      try {
-        const newRange = document.createRange()
-        newRange.setStart(startContainer, startOffset)
-        newRange.setEnd(endContainer, endOffset)
-        selection.removeAllRanges()
-        selection.addRange(newRange)
-      } catch (e) {
-        console.warn('Failed to restore selection after unwrap:', e)
-      }
+    if (!range.collapsed && isRangeFullyStyled(range, tagName)) {
+      // Remove style only from selected content; do not unwrap whole line/wrapper.
+      removeInlineStyleFromRange(range, tagName)
       return
     }
     
@@ -190,16 +286,6 @@ export function applyInlineStyle(tagName: 'strong' | 'em' | 'code' | 'u' | 's'):
   } catch (error) {
     console.error('Error in applyInlineStyle:', error)
   }
-}
-
-/**
- * Check if range is fully within an element
- */
-function isRangeFullyWithinElement(range: Range, element: Element): boolean {
-  const rangeStart = range.startContainer
-  const rangeEnd = range.endContainer
-  
-  return element.contains(rangeStart) && element.contains(rangeEnd)
 }
 
 /**

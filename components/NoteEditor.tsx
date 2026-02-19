@@ -513,6 +513,7 @@ export default function NoteEditor({
     if (editorRef.current.queryCommandState('code')) formats.add('code')
     if (editorRef.current.queryCommandState('insertUnorderedList')) formats.add('unordered-list')
     if (editorRef.current.queryCommandState('insertOrderedList')) formats.add('ordered-list')
+    if (editorRef.current.queryCommandState('checklist')) formats.add('checklist')
     
     // Check block-level formatting commands
     if (editorRef.current.queryCommandState('heading1')) formats.add('heading1')
@@ -564,6 +565,12 @@ export default function NoteEditor({
     }
 
     const range = selection.getRangeAt(0)
+    const selectedText = selection.toString()
+    if (!selectedText || selectedText.trim().length === 0) {
+      hideFloatingToolbar()
+      return
+    }
+
     const rect = range.getBoundingClientRect()
 
     if ((rect.width === 0 && rect.height === 0) || Number.isNaN(rect.top) || Number.isNaN(rect.left)) {
@@ -573,9 +580,9 @@ export default function NoteEditor({
 
     const MIN_MARGIN = 16
     const SELECTION_GAP = 12
-    const selectionTop = rect.top + window.scrollY
-    const selectionBottom = rect.bottom + window.scrollY
-    const selectionCenterX = rect.left + window.scrollX + rect.width / 2
+    const selectionTop = rect.top
+    const selectionBottom = rect.bottom
+    const selectionCenterX = rect.left + rect.width / 2
 
     const { width, height } = floatingToolbarSizeRef.current
     const availableWidth = Math.max(window.innerWidth - MIN_MARGIN * 2, 0)
@@ -585,17 +592,17 @@ export default function NoteEditor({
     const halfWidth = effectiveWidth / 2
 
     let left = selectionCenterX - halfWidth
-    const minLeft = window.scrollX + MIN_MARGIN
-    const maxLeft = window.scrollX + window.innerWidth - MIN_MARGIN - effectiveWidth
+    const minLeft = MIN_MARGIN
+    const maxLeft = window.innerWidth - MIN_MARGIN - effectiveWidth
     left = Math.min(Math.max(left, minLeft), Math.max(minLeft, maxLeft))
 
     const measuredHeight = height > 0 ? height : 44
     let top = selectionTop - measuredHeight - SELECTION_GAP
-    const minTop = window.scrollY + MIN_MARGIN
+    const minTop = MIN_MARGIN
 
     if (top < minTop) {
       top = selectionBottom + SELECTION_GAP
-      const maxTop = window.scrollY + window.innerHeight - MIN_MARGIN - measuredHeight
+      const maxTop = window.innerHeight - MIN_MARGIN - measuredHeight
       top = Math.min(Math.max(top, minTop), Math.max(minTop, maxTop))
     }
 
@@ -640,10 +647,11 @@ export default function NoteEditor({
 
   const handleCommand = useCallback(
     (command: RichTextCommand) => {
-      editorRef.current?.focus()
       editorRef.current?.exec(command)
-      scheduleActiveFormatsUpdate()
-      updateFloatingToolbar()
+      window.requestAnimationFrame(() => {
+        scheduleActiveFormatsUpdate()
+        updateFloatingToolbar()
+      })
     },
     [scheduleActiveFormatsUpdate, updateFloatingToolbar]
   )
