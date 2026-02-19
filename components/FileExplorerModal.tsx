@@ -60,6 +60,10 @@ export interface FileExplorerModalProps {
   onSelectFiles?: (files: Array<{ name: string; path: string; size: number; type: string }>) => void
   /** Title override */
   title?: string
+  /** Initial folder path shown when modal opens */
+  initialPath?: string
+  /** Optional folder path to always use as upload target */
+  uploadPath?: string
 }
 
 type ViewMode = 'grid' | 'list'
@@ -109,6 +113,8 @@ export default function FileExplorerModal({
   onClose,
   onSelectFiles,
   title = 'File Explorer',
+  initialPath = '',
+  uploadPath,
 }: FileExplorerModalProps) {
   const toast = useToast()
 
@@ -192,6 +198,16 @@ export default function FileExplorerModal({
 
   useEffect(() => {
     if (isOpen) {
+      setCurrentPath(initialPath)
+      setSelectedPaths(new Set())
+      setSearchQuery('')
+      setContextMenu(null)
+      setPreview(null)
+    }
+  }, [isOpen, initialPath])
+
+  useEffect(() => {
+    if (isOpen) {
       loadItems()
     }
   }, [isOpen, loadItems])
@@ -232,7 +248,8 @@ export default function FileExplorerModal({
       setIsUploading(true)
       setUploadProgress({ done: 0, total: fileArray.length })
       try {
-        await uploadFiles(fileArray, currentPath, (done, total) => {
+        const targetPath = uploadPath ?? currentPath
+        await uploadFiles(fileArray, targetPath, (done, total) => {
           setUploadProgress({ done, total })
         })
         toast.push({
@@ -248,7 +265,7 @@ export default function FileExplorerModal({
         setUploadProgress(null)
       }
     },
-    [currentPath, loadItems, toast]
+    [currentPath, loadItems, toast, uploadPath]
   )
 
   const handleFileInputChange = useCallback(

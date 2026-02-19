@@ -96,6 +96,18 @@ interface NoteEditorProps {
 
 const stripHtml = (html: string) => html.replace(/<[^>]*>/g, ' ').replace(/&nbsp;/g, ' ').trim()
 
+const sanitizePathSegment = (value: string, fallback: string): string => {
+  const normalized = value
+    .trim()
+    .replace(/[\\/]+/g, '-')
+    .replace(/[<>:"|?*\u0000-\u001F]/g, '')
+    .replace(/\s+/g, ' ')
+    .replace(/\.+$/, '')
+    .trim()
+
+  return normalized || fallback
+}
+
 const commandShortcuts: Record<RichTextCommand, string> = {
   bold: '⌘/Ctrl+B',
   italic: '⌘/Ctrl+I',
@@ -215,6 +227,21 @@ export default function NoteEditor({
   const [filePickerMode, setFilePickerMode] = useState<'block' | 'ref' | null>(null)
   const [showSettings, setShowSettings] = useState(false)
   const [projects, setProjects] = useState<Project[]>([])
+
+  const currentProjectName = useMemo(() => {
+    if (!note?.project_id) return 'inbox'
+    const project = projects.find((item) => item.id === note.project_id)
+    return project?.name || 'inbox'
+  }, [note?.project_id, projects])
+
+  const currentNoteStorageName = useMemo(() => {
+    return sanitizePathSegment(title || note?.title || '', 'untitled-note')
+  }, [title, note?.title])
+
+  const noteFileUploadPath = useMemo(() => {
+    const projectSegment = sanitizePathSegment(currentProjectName, 'inbox')
+    return `${projectSegment}/${currentNoteStorageName}/file`
+  }, [currentProjectName, currentNoteStorageName])
   
   // Load projects for display
   useEffect(() => {
@@ -2039,6 +2066,8 @@ export default function NoteEditor({
         onClose={() => setFilePickerMode(null)}
         onSelectFiles={handleFilePickerSelect}
         title={filePickerMode === 'ref' ? 'Insert File Reference' : 'Attach File'}
+        initialPath={noteFileUploadPath}
+        uploadPath={noteFileUploadPath}
       />
 
       {/* Project Manager Modal */}
