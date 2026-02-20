@@ -561,6 +561,7 @@ export default function FileExplorerModal({
 
   const isSelectMode = !!onSelectFiles
   const hasSelection = selectedPaths.size > 0
+  const uploadPathSegments = (uploadPath ?? '').split('/').filter(Boolean)
 
   return (
     <>
@@ -591,6 +592,25 @@ export default function FileExplorerModal({
               size={20}
             />
           </div>
+
+          {uploadPathSegments.length > 0 && (
+            <div className="border-b border-alpine-100 dark:border-slate-700 bg-alpine-50/60 dark:bg-slate-800/60 px-4 sm:px-5 py-2">
+              <div className="flex items-center gap-2 text-xs text-alpine-800 dark:text-alpine-200 overflow-x-auto">
+                <span className="font-medium whitespace-nowrap">Folder structure</span>
+                <span className="text-alpine-500 dark:text-alpine-300">/</span>
+                {uploadPathSegments.map((segment, index) => (
+                  <span key={`${segment}-${index}`} className="flex items-center gap-2 whitespace-nowrap">
+                    <span className="rounded-md bg-white/80 dark:bg-slate-700 px-2 py-0.5 text-alpine-900 dark:text-alpine-100 border border-alpine-200/70 dark:border-slate-600">
+                      {segment}
+                    </span>
+                    {index < uploadPathSegments.length - 1 && (
+                      <span className="text-alpine-500 dark:text-alpine-300">/</span>
+                    )}
+                  </span>
+                ))}
+              </div>
+            </div>
+          )}
 
           {/* ============ TOOLBAR ============ */}
           <div className="flex flex-wrap items-center gap-2 border-b border-gray-100 dark:border-slate-700 px-4 sm:px-5 py-2.5 bg-white dark:bg-slate-900">

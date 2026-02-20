@@ -1079,19 +1079,6 @@ const RichTextEditor = forwardRef<RichTextEditorHandle, RichTextEditorProps>(
           return
         }
 
-        // Check for inline file-ref clicks
-        const fileRefElement = target.closest('[data-block-type="file-ref"]') as HTMLElement | null
-        if (fileRefElement) {
-          event.preventDefault()
-          const filePath = fileRefElement.getAttribute('data-file-path')
-          const fileName = fileRefElement.getAttribute('data-file-name')
-          if (filePath) {
-            window.dispatchEvent(new CustomEvent('file-ref-click', {
-              detail: { path: filePath, name: fileName || filePath }
-            }))
-          }
-          return
-        }
       }
       
       editorElement.addEventListener('click', handleClick)

@@ -38,7 +38,6 @@ import {
   ListOrdered as OrderedListIcon,
   Image as ImageIcon,
   Paperclip,
-  Link2
 } from 'lucide-react'
 import RichTextEditor, {
   type RichTextCommand,
@@ -72,7 +71,7 @@ import { useIsMobile } from '@/lib/useIsMobile'
 import { noteLinkBlock } from '../lib/editor/noteLinkBlock'
 import { imageBlock } from '../lib/editor/imageBlock'
 import { dataSheetTableBlock, type DataSheetTablePayload } from '../lib/editor/dataSheetTableBlock'
-import { fileBlock, fileRefBlock, type FileBlockPayload, initializeFileBlockInteractions } from '../lib/editor/fileBlock'
+import { fileBlock, type FileBlockPayload, initializeFileBlockInteractions } from '../lib/editor/fileBlock'
 import FileExplorerModal from './FileExplorerModal'
 import SettingsModal from './SettingsModal'
 import { Settings } from 'lucide-react'
@@ -97,12 +96,25 @@ interface NoteEditorProps {
 const stripHtml = (html: string) => html.replace(/<[^>]*>/g, ' ').replace(/&nbsp;/g, ' ').trim()
 
 const sanitizePathSegment = (value: string, fallback: string): string => {
-  const normalized = value
+  const transliterated = value
+    .replace(/ß/g, 'ss')
+    .replace(/Ä/g, 'Ae')
+    .replace(/Ö/g, 'Oe')
+    .replace(/Ü/g, 'Ue')
+    .replace(/ä/g, 'ae')
+    .replace(/ö/g, 'oe')
+    .replace(/ü/g, 'ue')
+    .normalize('NFKD')
+    .replace(/[\u0300-\u036f]/g, '')
+
+  const normalized = transliterated
     .trim()
     .replace(/[\\/]+/g, '-')
-    .replace(/[<>:"|?*\u0000-\u001F]/g, '')
-    .replace(/\s+/g, ' ')
+    .replace(/[^a-zA-Z0-9._ -]/g, '')
+    .replace(/\s+/g, '-')
+    .replace(/-+/g, '-')
     .replace(/\.+$/, '')
+    .replace(/^[-._]+|[-._]+$/g, '')
     .trim()
 
   return normalized || fallback
@@ -224,7 +236,7 @@ export default function NoteEditor({
   const [showKnowledgeGraph, setShowKnowledgeGraph] = useState(false)
   const [showProjectsModal, setShowProjectsModal] = useState(false)
   const [showBlockOutlines, setShowBlockOutlines] = useState(false)
-  const [filePickerMode, setFilePickerMode] = useState<'block' | 'ref' | null>(null)
+  const [showFilePicker, setShowFilePicker] = useState(false)
   const [showSettings, setShowSettings] = useState(false)
   const [projects, setProjects] = useState<Project[]>([])
 
@@ -283,7 +295,6 @@ export default function NoteEditor({
     { id: 'data-sheet-table', label: 'Data Sheet Table', description: 'Insert table from a data sheet', icon: Table2Icon, color: 'emerald', category: 'Content', command: null },
     { id: 'image', label: 'Image', description: 'Insert an image', icon: ImageIcon, color: 'pink', category: 'Media', command: null },
     { id: 'file', label: 'File', description: 'Attach a file from your storage', icon: Paperclip, color: 'alpine', category: 'Media', command: null },
-    { id: 'file-ref', label: 'File Reference', description: 'Insert an inline link to a file', icon: Link2, color: 'cyan', category: 'Media', command: null },
   ], [])
 
   // Filter content blocks based on search query
@@ -919,20 +930,12 @@ export default function NoteEditor({
   const handleInsertFile = useCallback(() => {
     hideContentBlocksMenu(() => {
       saveNoteLinkSelection()
-      setFilePickerMode('block')
-    })
-  }, [hideContentBlocksMenu, saveNoteLinkSelection])
-
-  const handleInsertFileRef = useCallback(() => {
-    hideContentBlocksMenu(() => {
-      saveNoteLinkSelection()
-      setFilePickerMode('ref')
+      setShowFilePicker(true)
     })
   }, [hideContentBlocksMenu, saveNoteLinkSelection])
 
   const handleFilePickerSelect = useCallback((files: Array<{ name: string; path: string; size: number; type: string }>) => {
-    const mode = filePickerMode
-    setFilePickerMode(null)
+    setShowFilePicker(false)
     if (!editorRef.current) return
 
     // Restore the selection that was saved before the file picker modal opened
@@ -957,12 +960,11 @@ export default function NoteEditor({
           type: file.type,
           attached_at: new Date().toISOString(),
         }
-        const blockType = mode === 'ref' ? 'file-ref' : 'file'
-        editorRef.current.insertCustomBlock?.(blockType, payload)
+        editorRef.current.insertCustomBlock?.('file', payload)
       }
       setHasChanges(true)
     }, 10)
-  }, [filePickerMode])
+  }, [])
 
   const handleInsertContentBlock = useCallback((command: RichTextCommand) => {
     hideContentBlocksMenu(() => {
@@ -984,12 +986,10 @@ export default function NoteEditor({
       handleInsertImage()
     } else if (blockId === 'file') {
       handleInsertFile()
-    } else if (blockId === 'file-ref') {
-      handleInsertFileRef()
     } else if (block.command) {
       handleInsertContentBlock(block.command)
     }
-  }, [contentBlocks, handleInsertContentBlock, handleInsertNoteLink, handleInsertTable, handleInsertImage, handleInsertFile, handleInsertFileRef, handleInsertDataSheetTable])
+  }, [contentBlocks, handleInsertContentBlock, handleInsertNoteLink, handleInsertTable, handleInsertImage, handleInsertFile, handleInsertDataSheetTable])
 
   // Keyboard navigation for content blocks menu
   const handleBlockMenuKeyDown = useCallback((e: KeyboardEvent | React.KeyboardEvent) => {
@@ -1061,31 +1061,6 @@ export default function NoteEditor({
     window.addEventListener('note-link-click', handleNoteLinkClick)
     return () => window.removeEventListener('note-link-click', handleNoteLinkClick)
   }, [notes, onSelectNote, toast])
-
-  // Handle clicking on inline file references
-  useEffect(() => {
-    const handleFileRefClick = async (event: Event) => {
-      const { path, name } = (event as CustomEvent<{ path: string; name: string }>).detail || {}
-      if (!path) return
-
-      try {
-        const { getFileUrl } = await import('../lib/file-storage')
-        // path is already relative to user root; getFileUrl prepends userId internally
-        const url = await getFileUrl(path)
-        if (url) {
-          window.open(url, '_blank', 'noopener,noreferrer')
-        } else {
-          toast.push({ title: 'File not found', description: `Could not open "${name}".` })
-        }
-      } catch (error) {
-        console.error('Failed to open file reference:', error)
-        toast.push({ title: 'Error', description: 'Failed to open the file.' })
-      }
-    }
-
-    window.addEventListener('file-ref-click', handleFileRefClick)
-    return () => window.removeEventListener('file-ref-click', handleFileRefClick)
-  }, [toast])
 
   const handleSave = useCallback(async (opts?: { isAuto?: boolean }) => {
     const isAuto = !!opts?.isAuto
@@ -1731,7 +1706,6 @@ export default function NoteEditor({
                       imageBlock,
                       dataSheetTableBlock,
                       fileBlock,
-                      fileRefBlock,
                       {
                         type: 'table',
                         render: (payload?: any) => {
@@ -2062,10 +2036,10 @@ export default function NoteEditor({
 
       {/* File Picker for inserting file blocks / file references */}
       <FileExplorerModal
-        isOpen={filePickerMode !== null}
-        onClose={() => setFilePickerMode(null)}
+        isOpen={showFilePicker}
+        onClose={() => setShowFilePicker(false)}
         onSelectFiles={handleFilePickerSelect}
-        title={filePickerMode === 'ref' ? 'Insert File Reference' : 'Attach File'}
+        title="Attach File"
         initialPath={noteFileUploadPath}
         uploadPath={noteFileUploadPath}
       />
