@@ -12,6 +12,8 @@ import {
 } from 'react'
 import { getStroke } from 'perfect-freehand'
 
+type DrawingTool = 'pen' | 'highlighter' | 'eraser'
+
 export interface DrawingEditorHandle {
   focus: () => void
   getDrawingData: () => DrawingData
@@ -33,7 +35,7 @@ export interface Stroke {
   points: Point[]
   color: string
   size: number
-  tool: 'pen' | 'highlighter' | 'eraser'
+  tool: DrawingTool
 }
 
 export interface DrawingPage {
@@ -97,14 +99,13 @@ const COLORS = [
   { name: 'Pink', value: '#ec4899' }
 ]
 
-const SIZES = [
-  { name: 'Thin', value: 1 },
-  { name: 'Medium', value: 2 },
-  { name: 'Thick', value: 4 },
-  { name: 'Very Thick', value: 6 }
-]
-
 const MAX_CANVAS_DISPLAY_WIDTH = 1200
+const MIN_BRUSH_SIZE = 0.5
+const MAX_BRUSH_SIZE = 20
+const BRUSH_SIZE_STEP = 0.5
+const MIN_PRESSURE_SENSITIVITY = 0
+const MAX_PRESSURE_SENSITIVITY = 2
+const PRESSURE_SENSITIVITY_STEP = 0.1
 
 const DrawingEditor = forwardRef<DrawingEditorHandle, DrawingEditorProps>(
   ({ value, onChange, disabled = false }, ref) => {
@@ -120,13 +121,61 @@ const DrawingEditor = forwardRef<DrawingEditorHandle, DrawingEditorProps>(
     const [showExportMenu, setShowExportMenu] = useState(false)
     const [showDeleteModal, setShowDeleteModal] = useState(false)
     const [currentPageIndex, setCurrentPageIndex] = useState(value?.currentPage || 0)
+    const activePointerIdRef = useRef<number | null>(null)
+    const activePointerTypeRef = useRef<string | null>(null)
     
     // Tool settings
-    const [currentTool, setCurrentTool] = useState<'pen' | 'highlighter' | 'eraser'>('pen')
+    const [currentTool, setCurrentTool] = useState<DrawingTool>('pen')
     const [currentColor, setCurrentColor] = useState('#000000')
-    const [currentSize, setCurrentSize] = useState(2)
+    const [toolSizes, setToolSizes] = useState<Record<DrawingTool, number>>({
+      pen: TOOL_CONFIG.pen.size,
+      highlighter: TOOL_CONFIG.highlighter.size,
+      eraser: TOOL_CONFIG.eraser.size
+    })
+    const [currentSize, setCurrentSize] = useState(TOOL_CONFIG.pen.size)
+    const [pressureSensitivity, setPressureSensitivity] = useState(1)
     const [backgroundType, setBackgroundType] = useState<'none' | 'grid' | 'lines' | 'dots'>(
       value?.pages[value?.currentPage || 0]?.background || 'none'
+    )
+
+    const updateToolSize = useCallback(
+      (nextSize: number) => {
+        const clampedSize = Math.max(
+          MIN_BRUSH_SIZE,
+          Math.min(MAX_BRUSH_SIZE, nextSize)
+        )
+        setCurrentSize(clampedSize)
+        setToolSizes((prev) => ({
+          ...prev,
+          [currentTool]: clampedSize
+        }))
+      },
+      [currentTool]
+    )
+
+    const selectTool = useCallback(
+      (tool: DrawingTool) => {
+        setCurrentTool(tool)
+        setCurrentSize(toolSizes[tool])
+      },
+      [toolSizes]
+    )
+
+    const getStrokePointsWithSensitivity = useCallback(
+      (points: Point[], tool: DrawingTool): Point[] => {
+        if (tool !== 'pen' || pressureSensitivity === 1) return points
+
+        return points.map((point) => {
+          const basePressure = point.pressure ?? 0.5
+          const adjustedPressure = 0.5 + (basePressure - 0.5) * pressureSensitivity
+
+          return {
+            ...point,
+            pressure: Math.max(0.05, Math.min(1, adjustedPressure))
+          }
+        })
+      },
+      [pressureSensitivity]
     )
 
     // Draw background pattern
@@ -224,9 +273,12 @@ const DrawingEditor = forwardRef<DrawingEditorHandle, DrawingEditorProps>(
       // Draw all strokes from current page
       currentPage.strokes.forEach((stroke) => {
         const config = TOOL_CONFIG[stroke.tool]
-        const outlinePoints = getStroke(stroke.points, {
+        const outlinePoints = getStroke(getStrokePointsWithSensitivity(stroke.points, stroke.tool), {
           size: stroke.size * 8,
-          thinning: config.thinning,
+          thinning:
+            stroke.tool === 'pen'
+              ? Math.max(0, Math.min(1, config.thinning * pressureSensitivity))
+              : config.thinning,
           smoothing: config.smoothing,
           streamline: config.streamline,
           simulatePressure: config.simulatePressure
@@ -255,9 +307,12 @@ const DrawingEditor = forwardRef<DrawingEditorHandle, DrawingEditorProps>(
       // Draw current stroke if drawing
       if (isDrawing && currentStroke.length > 0) {
         const config = TOOL_CONFIG[currentTool]
-        const outlinePoints = getStroke(currentStroke, {
+        const outlinePoints = getStroke(getStrokePointsWithSensitivity(currentStroke, currentTool), {
           size: currentSize * 8,
-          thinning: config.thinning,
+          thinning:
+            currentTool === 'pen'
+              ? Math.max(0, Math.min(1, config.thinning * pressureSensitivity))
+              : config.thinning,
           smoothing: config.smoothing,
           streamline: config.streamline,
           simulatePressure: config.simulatePressure
@@ -278,7 +333,7 @@ const DrawingEditor = forwardRef<DrawingEditorHandle, DrawingEditorProps>(
         ctx.globalAlpha = 1
         ctx.globalCompositeOperation = 'source-over'
       }
-    }, [currentPage, currentStroke, isDrawing, currentTool, currentColor, currentSize, getSvgPathFromStroke])
+    }, [currentPage, currentStroke, isDrawing, currentTool, currentColor, currentSize, getSvgPathFromStroke, getStrokePointsWithSensitivity, pressureSensitivity])
 
     // Update canvas when data changes
     useEffect(() => {
@@ -301,18 +356,25 @@ const DrawingEditor = forwardRef<DrawingEditorHandle, DrawingEditorProps>(
     }, [value])
 
     // Get point from pointer event
-    const getPoint = useCallback((e: ReactPointerEvent<HTMLCanvasElement>): Point => {
+    const getPoint = useCallback((
+      clientX: number,
+      clientY: number,
+      pressure: number,
+      pointerType: string
+    ): Point => {
       const canvas = canvasRef.current
       if (!canvas) return { x: 0, y: 0, pressure: 0.5 }
 
       const rect = canvas.getBoundingClientRect()
       const scaleX = rect.width ? canvas.width / rect.width : 1
       const scaleY = rect.height ? canvas.height / rect.height : 1
+      const fallbackPressure = pointerType === 'pen' ? 0.1 : 0.5
+      const normalizedPressure = Math.max(0.05, Math.min(1, pressure || fallbackPressure))
 
       return {
-        x: (e.clientX - rect.left) * scaleX,
-        y: (e.clientY - rect.top) * scaleY,
-        pressure: e.pressure || 0.5
+        x: (clientX - rect.left) * scaleX,
+        y: (clientY - rect.top) * scaleY,
+        pressure: normalizedPressure
       }
     }, [])
 
@@ -320,18 +382,25 @@ const DrawingEditor = forwardRef<DrawingEditorHandle, DrawingEditorProps>(
     const handlePointerDown = useCallback(
       (e: ReactPointerEvent<HTMLCanvasElement>) => {
         if (disabled) return
+        if (activePointerIdRef.current !== null) return
+        if (e.pointerType === 'mouse' && e.button !== 0) return
 
         // Palm rejection: Ignore touch events if pointerType is not pen
         // This helps prevent accidental palm touches while using a stylus
-        if (e.pointerType === 'touch' && e.width > 10) {
+        if (
+          e.pointerType === 'touch' &&
+          (e.width > 18 || e.height > 18 || activePointerTypeRef.current === 'pen')
+        ) {
           // Likely a palm touch (large contact area)
           return
         }
 
         e.preventDefault()
-        const point = getPoint(e)
+        const point = getPoint(e.clientX, e.clientY, e.pressure, e.pointerType)
         setCurrentStroke([point])
         setIsDrawing(true)
+        activePointerIdRef.current = e.pointerId
+        activePointerTypeRef.current = e.pointerType
 
         // Capture pointer
         const canvas = canvasRef.current
@@ -346,9 +415,30 @@ const DrawingEditor = forwardRef<DrawingEditorHandle, DrawingEditorProps>(
     const handlePointerMove = useCallback(
       (e: ReactPointerEvent<HTMLCanvasElement>) => {
         if (!isDrawing || disabled) return
+        if (activePointerIdRef.current !== e.pointerId) return
 
         e.preventDefault()
-        const point = getPoint(e)
+
+        const coalescedEvents = e.nativeEvent.getCoalescedEvents?.()
+        if (coalescedEvents && coalescedEvents.length > 0) {
+          setCurrentStroke((prev) => {
+            const nextPoints = [...prev]
+            for (const event of coalescedEvents) {
+              nextPoints.push(
+                getPoint(
+                  event.clientX,
+                  event.clientY,
+                  event.pressure,
+                  e.pointerType
+                )
+              )
+            }
+            return nextPoints
+          })
+          return
+        }
+
+        const point = getPoint(e.clientX, e.clientY, e.pressure, e.pointerType)
         setCurrentStroke((prev) => [...prev, point])
       },
       [isDrawing, disabled, getPoint]
@@ -358,6 +448,7 @@ const DrawingEditor = forwardRef<DrawingEditorHandle, DrawingEditorProps>(
     const handlePointerUp = useCallback(
       (e: ReactPointerEvent<HTMLCanvasElement>) => {
         if (!isDrawing || disabled) return
+        if (activePointerIdRef.current !== e.pointerId) return
 
         e.preventDefault()
 
@@ -401,6 +492,8 @@ const DrawingEditor = forwardRef<DrawingEditorHandle, DrawingEditorProps>(
         if (canvas) {
           canvas.releasePointerCapture(e.pointerId)
         }
+        activePointerIdRef.current = null
+        activePointerTypeRef.current = null
       },
       [
         isDrawing,
@@ -412,9 +505,18 @@ const DrawingEditor = forwardRef<DrawingEditorHandle, DrawingEditorProps>(
         drawingData,
         onChange,
         history,
-        historyIndex
+        historyIndex,
+        currentPageIndex,
+        backgroundType
       ]
     )
+
+    const handleLostPointerCapture = useCallback(() => {
+      setIsDrawing(false)
+      setCurrentStroke([])
+      activePointerIdRef.current = null
+      activePointerTypeRef.current = null
+    }, [])
 
     // Undo
     const undo = useCallback(() => {
@@ -656,9 +758,12 @@ const DrawingEditor = forwardRef<DrawingEditorHandle, DrawingEditorProps>(
       // Add strokes from current page
       currentPage.strokes.forEach((stroke) => {
         const config = TOOL_CONFIG[stroke.tool]
-        const outlinePoints = getStroke(stroke.points, {
+        const outlinePoints = getStroke(getStrokePointsWithSensitivity(stroke.points, stroke.tool), {
           size: stroke.size * 8,
-          thinning: config.thinning,
+          thinning:
+            stroke.tool === 'pen'
+              ? Math.max(0, Math.min(1, config.thinning * pressureSensitivity))
+              : config.thinning,
           smoothing: config.smoothing,
           streamline: config.streamline,
           simulatePressure: config.simulatePressure
@@ -681,7 +786,7 @@ const DrawingEditor = forwardRef<DrawingEditorHandle, DrawingEditorProps>(
       URL.revokeObjectURL(url)
 
       setShowExportMenu(false)
-    }, [currentPage, backgroundType, getSvgPathFromStroke, currentPageIndex])
+    }, [currentPage, backgroundType, getSvgPathFromStroke, currentPageIndex, getStrokePointsWithSensitivity, pressureSensitivity])
 
     // Expose methods via ref
     useImperativeHandle(ref, () => ({
@@ -707,7 +812,7 @@ const DrawingEditor = forwardRef<DrawingEditorHandle, DrawingEditorProps>(
           {/* Tools */}
           <div className="flex items-center gap-0.5">
             <button
-              onClick={() => setCurrentTool('pen')}
+              onClick={() => selectTool('pen')}
               className={`p-1.5 rounded hover:bg-gray-200 transition-colors ${
                 currentTool === 'pen' ? 'bg-alpine-100 text-alpine-600' : 'text-gray-700'
               }`}
@@ -721,7 +826,7 @@ const DrawingEditor = forwardRef<DrawingEditorHandle, DrawingEditorProps>(
               </svg>
             </button>
             <button
-              onClick={() => setCurrentTool('highlighter')}
+              onClick={() => selectTool('highlighter')}
               className={`p-1.5 rounded hover:bg-gray-200 transition-colors ${
                 currentTool === 'highlighter' ? 'bg-alpine-100 text-alpine-600' : 'text-gray-700'
               }`}
@@ -734,7 +839,7 @@ const DrawingEditor = forwardRef<DrawingEditorHandle, DrawingEditorProps>(
               </svg>
             </button>
             <button
-              onClick={() => setCurrentTool('eraser')}
+              onClick={() => selectTool('eraser')}
               className={`p-1.5 rounded hover:bg-gray-200 transition-colors ${
                 currentTool === 'eraser' ? 'bg-alpine-100 text-alpine-600' : 'text-gray-700'
               }`}
@@ -773,26 +878,59 @@ const DrawingEditor = forwardRef<DrawingEditorHandle, DrawingEditorProps>(
 
           <div className="w-px h-5 bg-gray-300" />
 
-          {/* Size - Icons instead of text */}
-          <div className="flex items-center gap-0.5">
-            {SIZES.map((size, idx) => (
-              <button
-                key={size.value}
-                onClick={() => setCurrentSize(size.value)}
-                className={`p-1.5 rounded hover:bg-gray-200 transition-colors ${
-                  currentSize === size.value
-                    ? 'bg-alpine-100 text-alpine-600'
-                    : 'text-gray-700'
-                }`}
-                title={size.name}
-                disabled={disabled}
-              >
-                <div className={`rounded-full bg-currentColor`} style={{ 
-                  width: `${4 + idx * 2}px`, 
-                  height: `${4 + idx * 2}px` 
-                }} />
-              </button>
-            ))}
+          {/* Size */}
+          <div className="flex items-center gap-1">
+            <button
+              onClick={() => updateToolSize(currentSize - BRUSH_SIZE_STEP)}
+              className="px-1 py-0.5 rounded hover:bg-gray-200 transition-colors disabled:opacity-30 disabled:cursor-not-allowed text-gray-700 text-xs font-medium"
+              title="Decrease Size"
+              disabled={disabled || currentSize <= MIN_BRUSH_SIZE}
+            >
+              −
+            </button>
+            <input
+              type="range"
+              min={MIN_BRUSH_SIZE}
+              max={MAX_BRUSH_SIZE}
+              step={BRUSH_SIZE_STEP}
+              value={currentSize}
+              onChange={(e) => updateToolSize(parseFloat(e.target.value))}
+              className="w-20 h-1.5 accent-alpine-600"
+              title={`Size: ${currentSize.toFixed(1)}`}
+              disabled={disabled}
+            />
+            <button
+              onClick={() => updateToolSize(currentSize + BRUSH_SIZE_STEP)}
+              className="px-1 py-0.5 rounded hover:bg-gray-200 transition-colors disabled:opacity-30 disabled:cursor-not-allowed text-gray-700 text-xs font-medium"
+              title="Increase Size"
+              disabled={disabled || currentSize >= MAX_BRUSH_SIZE}
+            >
+              +
+            </button>
+            <span className="w-8 text-[11px] text-gray-700 text-right tabular-nums">
+              {currentSize.toFixed(1)}
+            </span>
+          </div>
+
+          <div className="w-px h-5 bg-gray-300" />
+
+          {/* Pressure Sensitivity */}
+          <div className="flex items-center gap-1">
+            <span className="text-[11px] text-gray-700 font-medium">Pressure</span>
+            <input
+              type="range"
+              min={MIN_PRESSURE_SENSITIVITY}
+              max={MAX_PRESSURE_SENSITIVITY}
+              step={PRESSURE_SENSITIVITY_STEP}
+              value={pressureSensitivity}
+              onChange={(e) => setPressureSensitivity(parseFloat(e.target.value))}
+              className="w-16 h-1.5 accent-alpine-600"
+              title={`Pressure Sensitivity: ${Math.round(pressureSensitivity * 100)}%`}
+              disabled={disabled || currentTool !== 'pen'}
+            />
+            <span className="w-10 text-[11px] text-gray-700 text-right tabular-nums">
+              {Math.round(pressureSensitivity * 100)}%
+            </span>
           </div>
 
           <div className="w-px h-5 bg-gray-300" />
@@ -1025,6 +1163,8 @@ const DrawingEditor = forwardRef<DrawingEditorHandle, DrawingEditorProps>(
                   onPointerMove={handlePointerMove}
                   onPointerUp={handlePointerUp}
                   onPointerCancel={handlePointerUp}
+                  onLostPointerCapture={handleLostPointerCapture}
+                  onContextMenu={(e) => e.preventDefault()}
                   className="absolute inset-0 rounded-lg cursor-crosshair touch-none"
                   style={{ width: '100%', height: '100%', touchAction: 'none', WebkitUserSelect: 'none', userSelect: 'none' }}
                 />
