@@ -57,6 +57,7 @@ type ActiveProjectKey = 'all' | 'unassigned' | string
 interface ProjectsWorkspaceModalProps {
   isOpen: boolean
   onClose: () => void
+  asView?: boolean
   onSelectNote?: (note: Note) => void
   onSelectFolder?: (folderId: string | null) => void
   onNewNote?: (noteType?: NoteType, folderId?: string | null, projectId?: string | null) => void
@@ -100,6 +101,7 @@ type Dialog =
 export default function ProjectsWorkspaceModal({
   isOpen,
   onClose,
+  asView = false,
   onSelectNote,
   onSelectFolder,
   onNewNote,
@@ -444,13 +446,19 @@ export default function ProjectsWorkspaceModal({
 
   /* ─── Early return ──────────────────────────────────────────── */
 
-  if (!isOpen) return null
+  if (!isOpen && !asView) return null
 
   /* ─── Main render ───────────────────────────────────────────── */
 
   return (
-    <div className="fixed inset-0 z-[70] flex items-center justify-center bg-black/50 p-4">
-      <div className="relative flex w-full max-w-5xl max-h-[calc(100vh-3rem)] flex-col overflow-hidden rounded-xl border border-gray-200 bg-white shadow-2xl">
+    <div className={asView ? 'h-full w-full' : 'fixed inset-0 z-[70] flex items-center justify-center bg-black/50 p-4'}>
+      <div
+        className={
+          asView
+            ? 'relative flex h-full w-full flex-col overflow-hidden border border-gray-200 bg-white'
+            : 'relative flex w-full max-w-5xl max-h-[calc(100vh-3rem)] flex-col overflow-hidden rounded-xl border border-gray-200 bg-white shadow-2xl'
+        }
+      >
 
         {/* Loading overlay */}
         {isLoading && (
@@ -678,7 +686,14 @@ export default function ProjectsWorkspaceModal({
 
       {/* ─── Dialogs (single slot) ────────────────────────────── */}
       {dialog && (
-        <div className="fixed inset-0 z-[80] flex items-center justify-center bg-black/40 p-4" onClick={() => !actionLoading && setDialog(null)}>
+        <div
+          className={
+            asView
+              ? 'absolute inset-0 z-[80] flex items-center justify-center bg-black/30 p-4'
+              : 'fixed inset-0 z-[80] flex items-center justify-center bg-black/40 p-4'
+          }
+          onClick={() => !actionLoading && setDialog(null)}
+        >
           <div className="w-full max-w-sm rounded-xl border border-gray-200 bg-white p-5 shadow-2xl" onClick={e => e.stopPropagation()}>
 
             {/* ── Project create/edit ── */}

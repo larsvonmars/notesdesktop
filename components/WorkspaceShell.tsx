@@ -7,7 +7,8 @@ import NoteEditor, { Note } from '@/components/NoteEditor'
 import TaskCalendarModal from '@/components/TaskCalendarModal'
 import WelcomeBackModal from '@/components/WelcomeBackModal'
 import FileExplorerModal from '@/components/FileExplorerModal'
-import { Loader2, FileEdit, Sparkles, FileText, PenTool, Network, BookOpen, Table2, X } from 'lucide-react'
+import SidebarTree from '@/components/SidebarTree'
+import { Loader2, FileEdit, Sparkles, FileText, PenTool, Network, BookOpen, Table2, X, Menu, ChevronLeft, ChevronRight, CheckSquare, FolderOpen, Home, LogOut, Target } from 'lucide-react'
 import { useIsMobile } from '@/lib/useIsMobile'
 import type { NoteType } from '@/lib/notes'
 import { ToastContainer } from '@/components/NotificationCenter'
@@ -17,10 +18,12 @@ type NoteCreationContext = {
   folderArg?: string | null
   projectArg?: string | null
 }
+type WorkspaceView = 'welcome' | 'notes' | 'tasks' | 'files' | 'projects'
 import { useToast } from '@/components/ToastProvider'
 import {
   getNotes,
   getNotesByFolder,
+  getNote,
   createNote,
   updateNote,
   deleteNote,
@@ -38,6 +41,15 @@ import {
   Folder,
   moveFolder,
 } from '@/lib/folders'
+import {
+  getProjects,
+  subscribeToProjects,
+  createProject,
+  updateProject,
+  deleteProject as deleteProjectApi,
+  moveNoteToProject,
+  type Project,
+} from '@/lib/projects'
 
 function WorkspaceContent() {
   const { user, loading, signOut } = useAuth()
@@ -63,13 +75,22 @@ function WorkspaceContent() {
   const [createFolderParentId, setCreateFolderParentId] = useState<string | null>(null)
   const [newFolderName, setNewFolderName] = useState('')
   const createFolderInputRef = useRef<HTMLInputElement | null>(null)
+  const isApplyingUrlRef = useRef(false)
+
+  // Projects state
+  const [projects, setProjects] = useState<Project[]>([])
+  const [isLoadingProjects, setIsLoadingProjects] = useState(true)
   
-  // Task Calendar modal state
-  const [showTaskCalendar, setShowTaskCalendar] = useState(false)
+  // Sidebar state
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(false)
+  
+  // Workspace view state
+  const [activeView, setActiveView] = useState<WorkspaceView>('notes')
+  const [workspaceNavCollapsed, setWorkspaceNavCollapsed] = useState(false)
+  const [workspaceNavOpen, setWorkspaceNavOpen] = useState(false)
+  
+  // Task Calendar view state
   const [taskCalendarInitialView, setTaskCalendarInitialView] = useState<'tasks' | 'calendar' | 'timeline' | 'kanban' | 'timetable'>('tasks')
-  
-  // File Explorer modal state
-  const [showFileExplorer, setShowFileExplorer] = useState(false)
   
   // Welcome Back modal state
   const [showWelcomeBack, setShowWelcomeBack] = useState(false)
@@ -85,32 +106,42 @@ function WorkspaceContent() {
     }
   }, [user, loading])
 
-  const handleNotificationAction = useCallback((notification: AppNotification) => {
+  const handleNotificationAction = (notification: AppNotification) => {
     if (notification.action) {
       switch (notification.action.type) {
         case 'open_task':
-          setShowTaskCalendar(true)
+          setTaskCalendarInitialView('tasks')
+          setActiveView('tasks')
           break
         case 'open_event':
-          setShowTaskCalendar(true)
+          setTaskCalendarInitialView('calendar')
+          setActiveView('tasks')
           break
         case 'open_note':
           if (notification.action.payload) {
             const note = allNotes.find(n => n.id === notification.action!.payload)
-            if (note) setSelectedNote(note)
+            if (note) {
+              activateExistingNote(note)
+              setActiveView('notes')
+            }
           }
           break
       }
     }
-  }, [allNotes])
+  }
 
-  const updateFolderParam = useCallback((folderId: string | null) => {
+  const updateNavigationParams = useCallback((folderId: string | null, noteId: string | null) => {
     if (typeof window === 'undefined') return
     const url = new URL(window.location.href)
     if (folderId) {
       url.searchParams.set('folder', folderId)
     } else {
       url.searchParams.delete('folder')
+    }
+    if (noteId) {
+      url.searchParams.set('note', noteId)
+    } else {
+      url.searchParams.delete('note')
     }
     window.history.replaceState(null, '', url.toString())
   }, [])
@@ -135,11 +166,18 @@ function WorkspaceContent() {
       } else {
         setSelectedProjectId(null)
       }
-
-      updateFolderParam(folderId)
     },
-    [folders, updateFolderParam]
+    [folders]
   )
+
+  const activateExistingNote = useCallback((note: Note) => {
+    setSelectedNote(note)
+    setIsCreatingNew(false)
+    applyFolderSelection(note.folder_id ?? null, {
+      projectId: note.project_id ?? null,
+      preserveDraftState: true,
+    })
+  }, [applyFolderSelection])
 
   useEffect(() => {
     if (!loading && !user) {
@@ -148,27 +186,119 @@ function WorkspaceContent() {
   }, [user, loading, router])
 
   const folderParam = searchParams.get('folder')
+  const noteParam = searchParams.get('note')
 
   useEffect(() => {
-    if (!folderParam) return
-    if (folderParam === selectedFolderId) return
-    applyFolderSelection(folderParam)
-  }, [folderParam, selectedFolderId, applyFolderSelection])
+    if (!user) return
 
-  // Load folders
+    let cancelled = false
+
+    const syncStateFromUrl = async () => {
+      isApplyingUrlRef.current = true
+
+      try {
+        if (isCreatingNew && selectedNote === null && noteParam) {
+          return
+        }
+
+        if (noteParam) {
+          let targetNote =
+            allNotes.find((note) => note.id === noteParam) ??
+            notes.find((note) => note.id === noteParam) ??
+            null
+
+          if (!targetNote) {
+            try {
+              targetNote = await getNote(noteParam)
+            } catch {
+              targetNote = null
+            }
+          }
+
+          if (cancelled) return
+
+          if (!targetNote) {
+            updateNavigationParams(folderParam ?? null, null)
+            return
+          }
+
+          if (
+            selectedNote?.id !== targetNote.id ||
+            selectedFolderId !== (targetNote.folder_id ?? null) ||
+            selectedProjectId !== (targetNote.project_id ?? null) ||
+            isCreatingNew
+          ) {
+            activateExistingNote(targetNote)
+          }
+
+          return
+        }
+
+        const targetFolderId = folderParam ?? null
+        if (selectedFolderId !== targetFolderId) {
+          applyFolderSelection(targetFolderId)
+        }
+      } finally {
+        isApplyingUrlRef.current = false
+      }
+    }
+
+    void syncStateFromUrl()
+
+    return () => {
+      cancelled = true
+    }
+  }, [
+    user,
+    folderParam,
+    noteParam,
+    allNotes,
+    notes,
+    selectedFolderId,
+    selectedProjectId,
+    selectedNote,
+    isCreatingNew,
+    activateExistingNote,
+    applyFolderSelection,
+    updateNavigationParams,
+  ])
+
+  useEffect(() => {
+    if (isApplyingUrlRef.current) return
+    const noteId = isCreatingNew ? null : selectedNote?.id ?? null
+    updateNavigationParams(selectedFolderId, noteId)
+  }, [selectedFolderId, selectedNote?.id, isCreatingNew, updateNavigationParams])
+
+  // Load folders and projects
   useEffect(() => {
     if (user) {
       loadFolders()
+      loadProjects()
     }
   }, [user])
   
   // Show Welcome Back modal once when data is loaded
   useEffect(() => {
-    if (user && !isLoadingFolders && !isLoadingNotes && !hasShownWelcomeBackRef.current) {
+    if (user && !isLoadingFolders && !isLoadingNotes && !isLoadingProjects && !hasShownWelcomeBackRef.current) {
       setShowWelcomeBack(true)
+      setActiveView('welcome')
       hasShownWelcomeBackRef.current = true
     }
-  }, [user, isLoadingFolders, isLoadingNotes])
+  }, [user, isLoadingFolders, isLoadingNotes, isLoadingProjects])
+
+  const closeWelcomeView = useCallback(() => {
+    setShowWelcomeBack(false)
+    setActiveView('notes')
+  }, [])
+
+  const switchWorkspaceView = useCallback((view: WorkspaceView) => {
+    setActiveView(view)
+    setWorkspaceNavOpen(false)
+  }, [])
+
+  useEffect(() => {
+    setWorkspaceNavOpen(false)
+  }, [activeView])
 
   useEffect(() => {
     if (!selectedFolderId) return
@@ -220,30 +350,35 @@ function WorkspaceContent() {
         }
 
         if (eventType === 'INSERT') {
-          if (newRow && belongsInCurrentFolder(newRow)) {
-            setNotes((prev) => {
-              // avoid duplicates
+          if (newRow) {
+            setAllNotes((prev) => {
               if (prev.some((n) => n.id === newRow.id)) return prev
               return [newRow, ...prev]
             })
+            if (belongsInCurrentFolder(newRow)) {
+              setNotes((prev) => {
+                if (prev.some((n) => n.id === newRow.id)) return prev
+                return [newRow, ...prev]
+              })
+            }
           }
         } else if (eventType === 'UPDATE') {
           if (newRow) {
+            setAllNotes((prev) => {
+              const exists = prev.some((n) => n.id === newRow.id)
+              if (exists) return prev.map((n) => (n.id === newRow.id ? newRow : n))
+              return [newRow, ...prev]
+            })
             setNotes((prev) => {
               const exists = prev.some((n) => n.id === newRow.id)
-              // If note already present, replace it
-              if (exists) {
-                return prev.map((n) => (n.id === newRow.id ? newRow : n))
-              }
-              // If it now belongs in the current folder, add it
-              if (belongsInCurrentFolder(newRow)) {
-                return [newRow, ...prev]
-              }
+              if (exists) return prev.map((n) => (n.id === newRow.id ? newRow : n))
+              if (belongsInCurrentFolder(newRow)) return [newRow, ...prev]
               return prev
             })
           }
         } else if (eventType === 'DELETE') {
           if (oldRow) {
+            setAllNotes((prev) => prev.filter((n) => n.id !== oldRow.id))
             setNotes((prev) => prev.filter((n) => n.id !== oldRow.id))
           }
         } else {
@@ -267,6 +402,28 @@ function WorkspaceContent() {
       unsubscribeFolders()
     }
   }, [user, selectedFolderId])
+
+  // Subscribe to real-time project changes
+  useEffect(() => {
+    if (!user) return
+    const unsubscribeProjects = subscribeToProjects(user.id, () => {
+      loadProjects()
+    })
+    return () => {
+      unsubscribeProjects()
+    }
+  }, [user])
+
+  const loadProjects = async () => {
+    try {
+      const fetchedProjects = await getProjects()
+      setProjects(fetchedProjects)
+    } catch (error) {
+      console.error('Error loading projects:', error)
+    } finally {
+      setIsLoadingProjects(false)
+    }
+  }
 
   const loadFolders = async () => {
     try {
@@ -324,11 +481,8 @@ function WorkspaceContent() {
         })
 
         setNotes((prev) => prev.map((note) => (note.id === updated.id ? updated : note)))
-        setSelectedNote(updated)
-        applyFolderSelection(updated.folder_id ?? null, {
-          projectId: updated.project_id ?? null,
-          preserveDraftState: true,
-        })
+        setAllNotes((prev) => prev.map((note) => (note.id === updated.id ? updated : note)))
+        activateExistingNote(updated)
 
         if (!isAuto) {
           toast.push({
@@ -337,18 +491,21 @@ function WorkspaceContent() {
           })
         }
       } else {
+        // Validate selectedFolderId exists in current folders list to avoid FK constraint errors
+        const validFolderId = selectedFolderId && folders.some(f => f.id === selectedFolderId)
+          ? selectedFolderId
+          : null
         const created = await createNote({
           title: noteData.title,
           content: noteData.content,
-          folder_id: selectedFolderId,
+          folder_id: validFolderId,
           project_id: selectedProjectId ?? null,
           note_type: noteData.note_type || newNoteType,
         })
 
         setNotes((prev) => [created, ...prev])
-        setSelectedNote(created)
-        setSelectedProjectId(created.project_id ?? null)
-        setIsCreatingNew(false)
+        setAllNotes((prev) => [created, ...prev])
+        activateExistingNote(created)
 
         if (!isAuto) {
           toast.push({
@@ -375,6 +532,7 @@ function WorkspaceContent() {
     try {
       await deleteNote(id)
       setNotes((prev) => prev.filter((note) => note.id !== id))
+      setAllNotes((prev) => prev.filter((note) => note.id !== id))
       setSelectedNote(null)
       setIsCreatingNew(false)
     } catch (error) {
@@ -386,6 +544,7 @@ function WorkspaceContent() {
   const startNewNote = (type: NoteType, context: NoteCreationContext = {}) => {
     setPendingNoteContext(null)
     const { folderArg, projectArg } = context
+    const targetFolderId = folderArg !== undefined ? folderArg : selectedFolderId
 
     if (folderArg !== undefined) {
       const options = projectArg !== undefined
@@ -394,12 +553,12 @@ function WorkspaceContent() {
       applyFolderSelection(folderArg, options)
     } else if (projectArg !== undefined) {
       setSelectedProjectId(projectArg)
-      updateFolderParam(selectedFolderId)
     }
 
     setSelectedNote(null)
     setIsCreatingNew(true)
     setNewNoteType(type)
+    updateNavigationParams(targetFolderId ?? null, null)
   }
 
   const handleNewNote = (
@@ -439,12 +598,7 @@ function WorkspaceContent() {
   }
 
   const handleSelectNote = (note: Note) => {
-    setSelectedNote(note)
-    setIsCreatingNew(false)
-    applyFolderSelection(note.folder_id ?? null, {
-      projectId: note.project_id ?? null,
-      preserveDraftState: true,
-    })
+    activateExistingNote(note)
   }
 
   const handleSelectFolder = (folderId: string | null) => {
@@ -574,12 +728,8 @@ function WorkspaceContent() {
         note_type: note.note_type,
       })
       setNotes([duplicatedNote, ...notes])
-      setSelectedNote(duplicatedNote)
-      applyFolderSelection(duplicatedNote.folder_id ?? null, {
-        projectId: duplicatedNote.project_id ?? null,
-        preserveDraftState: true,
-      })
-      setIsCreatingNew(false)
+      setAllNotes((prev) => [duplicatedNote, ...prev])
+      activateExistingNote(duplicatedNote)
     } catch (error) {
       console.error('Error duplicating note:', error)
       alert('Failed to duplicate note')
@@ -597,7 +747,7 @@ function WorkspaceContent() {
       
       // If the moved note was selected, update it
       if (selectedNote?.id === noteId) {
-        setSelectedNote(movedNote)
+        activateExistingNote(movedNote)
       }
 
       // Show success toast with folder and project info
@@ -640,6 +790,108 @@ function WorkspaceContent() {
     }
   }
 
+  // ---- Project CRUD handlers ----
+  const handleCreateProject = async () => {
+    try {
+      const newProject = await createProject({ name: 'New Project' })
+      setProjects(prev => [...prev, newProject])
+      toast.push({ title: 'Project created', description: `"${newProject.name}" created`, duration: 3000 })
+    } catch (error) {
+      console.error('Error creating project:', error)
+      toast.push({ title: 'Error', description: 'Failed to create project', duration: 5000 })
+    }
+  }
+
+  const handleRenameProject = async (projectId: string, newName: string) => {
+    try {
+      const updated = await updateProject(projectId, { name: newName })
+      setProjects(prev => prev.map(p => p.id === projectId ? updated : p))
+      toast.push({ title: 'Project renamed', description: `Renamed to "${newName}"`, duration: 3000 })
+    } catch (error) {
+      console.error('Error renaming project:', error)
+      toast.push({ title: 'Error', description: 'Failed to rename project', duration: 5000 })
+    }
+  }
+
+  const handleDeleteProject = async (projectId: string) => {
+    try {
+      await deleteProjectApi(projectId)
+      setProjects(prev => prev.filter(p => p.id !== projectId))
+      // If we were viewing the deleted project, reset selection
+      if (selectedProjectId === projectId) {
+        setSelectedProjectId(null)
+      }
+      // Reload folders and notes since they may have been orphaned
+      loadFolders()
+      loadAllNotes()
+      toast.push({ title: 'Project deleted', description: 'Project and its contents were removed', duration: 3000 })
+    } catch (error) {
+      console.error('Error deleting project:', error)
+      toast.push({ title: 'Error', description: 'Failed to delete project', duration: 5000 })
+    }
+  }
+
+  const handleUpdateProjectColor = async (projectId: string, color: string) => {
+    try {
+      const updated = await updateProject(projectId, { color })
+      setProjects(prev => prev.map(p => p.id === projectId ? updated : p))
+    } catch (error) {
+      console.error('Error updating project color:', error)
+      toast.push({ title: 'Error', description: 'Failed to update project color', duration: 5000 })
+    }
+  }
+
+  const handleMoveNoteToProject = async (noteId: string, projectId: string | null) => {
+    try {
+      await moveNoteToProject(noteId, projectId)
+      // Update allNotes
+      setAllNotes(prev => prev.map(n => n.id === noteId ? { ...n, project_id: projectId } : n))
+      // Update folder-scoped notes
+      setNotes(prev => prev.map(n => n.id === noteId ? { ...n, project_id: projectId } : n))
+      // If the moved note was selected, update it
+      if (selectedNote?.id === noteId) {
+        activateExistingNote({ ...selectedNote, project_id: projectId })
+      }
+      const projectName = projectId
+        ? projects.find(p => p.id === projectId)?.name ?? 'Unknown'
+        : 'Unfiled'
+      toast.push({
+        title: 'Note moved',
+        description: `Moved to project "${projectName}"`,
+        duration: 3000,
+      })
+    } catch (error) {
+      console.error('Error moving note to project:', error)
+      toast.push({ title: 'Move failed', description: 'Failed to move note to project', duration: 5000 })
+    }
+  }
+
+  // ---- Sidebar note deletion handler (from context menu) ----
+  const handleSidebarDeleteNote = async (noteId: string) => {
+    try {
+      await deleteNote(noteId)
+      setNotes(prev => prev.filter(n => n.id !== noteId))
+      setAllNotes(prev => prev.filter(n => n.id !== noteId))
+      // If the deleted note was selected, clear selection
+      if (selectedNote?.id === noteId) {
+        setSelectedNote(null)
+        setIsCreatingNew(false)
+      }
+    } catch (error) {
+      console.error('Error deleting note:', error)
+      toast.push({ title: 'Error', description: 'Failed to delete note', duration: 5000 })
+    }
+  }
+
+  const sidebarOffset = sidebarCollapsed ? '64px' : '280px'
+
+  // Set CSS variable for fixed-position elements (e.g. bottom bar in NoteEditor)
+  useEffect(() => {
+    if (typeof document === 'undefined' || isMobile) return
+    document.documentElement.style.setProperty('--workspace-sidebar-offset', sidebarOffset)
+    return () => { document.documentElement.style.removeProperty('--workspace-sidebar-offset') }
+  }, [sidebarOffset, isMobile])
+
   if (loading) {
     return (
       <div className="flex items-center justify-center min-h-screen">
@@ -672,8 +924,6 @@ function WorkspaceContent() {
     selectedFolderId !== null ||
     notes.length > 0 ||
     folders.length > 0
-
-  const autoOpenPanelKey = !isCreatingNew && !selectedNote && selectedFolderId !== null ? selectedFolderId : undefined
 
   const noteTypeOptions = [
     {
@@ -713,65 +963,265 @@ function WorkspaceContent() {
     },
   ]
 
+  const renderNotesView = () => {
+    if (shouldShowEditor) {
+      return (
+        <NoteEditor
+          note={isCreatingNew ? null : selectedNote}
+          initialNoteType={newNoteType}
+          onSave={handleSaveNote}
+          onCancel={handleCancel}
+          onDelete={selectedNote ? handleDeleteNote : undefined}
+          folders={folderTree}
+          selectedFolderId={selectedFolderId}
+          onSelectFolder={handleSelectFolder}
+          onCreateFolder={handleCreateFolder}
+          onRenameFolder={handleRenameFolder}
+          onDeleteFolder={handleDeleteFolder}
+          onMoveFolder={handleMoveFolder}
+          notes={notes}
+          allNotes={allNotes}
+          onSelectNote={handleSelectNote}
+          onNewNote={handleNewNote}
+          onDuplicateNote={handleDuplicateNote}
+          onMoveNote={handleMoveNote}
+          isLoadingNotes={isLoadingNotes}
+          currentFolderName={getCurrentFolderName()}
+          onSignOut={handleSignOut}
+          userEmail={user.email}
+          onOpenTaskCalendar={() => {
+            setTaskCalendarInitialView('tasks')
+            setActiveView('tasks')
+          }}
+          onOpenFileExplorer={() => setActiveView('files')}
+          onOpenProjectsView={() => setActiveView('projects')}
+          onNotificationAction={handleNotificationAction}
+        />
+      )
+    }
+
+    return (
+      <div className="flex items-center justify-center h-full">
+        <div className="text-center p-8 max-w-md">
+          <div className="relative mb-8">
+            <div className="absolute inset-0 bg-alpine-100 rounded-full blur-3xl opacity-40"></div>
+            <FileEdit className={`relative text-alpine-500 mx-auto ${isMobile ? 'w-16 h-16' : 'w-24 h-24'}`} strokeWidth={1.5} />
+          </div>
+          <h1 className={`font-bold text-gray-900 mb-3 ${isMobile ? 'text-2xl' : 'text-3xl'}`}>Welcome to Saentis Notes</h1>
+          <p className={`text-gray-600 mb-8 ${isMobile ? 'text-base' : 'text-lg'}`}>
+            A distraction-free writing space, inspired by the Alps
+          </p>
+          <div className="space-y-3">
+            <button
+              onClick={() => handleNewNote()}
+              className="w-full inline-flex items-center justify-center gap-3 px-6 py-3 bg-alpine-600 text-white font-medium rounded-lg hover:bg-alpine-700 transition-all duration-150 shadow-sm hover:shadow active:scale-95 touch-target"
+            >
+              <Sparkles size={20} />
+              Start Writing
+            </button>
+            <p className="text-sm text-gray-500">Click the menu button (top-left) to browse your notes</p>
+          </div>
+        </div>
+      </div>
+    )
+  }
+
   return (
     <div className="min-h-screen flex flex-col">
       {/* Notification Toasts */}
       <ToastContainer onAction={handleNotificationAction} />
 
-      {/* Main content area - completely clean */}
-      <main className="flex-1 w-full h-screen overflow-hidden">
-        {shouldShowEditor ? (
-          <NoteEditor
-            note={isCreatingNew ? null : selectedNote}
-            initialNoteType={newNoteType}
-            onSave={handleSaveNote}
-            onCancel={handleCancel}
-            onDelete={selectedNote ? handleDeleteNote : undefined}
-            folders={folderTree}
-            selectedFolderId={selectedFolderId}
-            onSelectFolder={handleSelectFolder}
-            onCreateFolder={handleCreateFolder}
-            onRenameFolder={handleRenameFolder}
-            onDeleteFolder={handleDeleteFolder}
-            onMoveFolder={handleMoveFolder}
-            notes={notes}
-            allNotes={allNotes}
-            onSelectNote={handleSelectNote}
-            onNewNote={handleNewNote}
-            onDuplicateNote={handleDuplicateNote}
-            onMoveNote={handleMoveNote}
-            isLoadingNotes={isLoadingNotes}
-            currentFolderName={getCurrentFolderName()}
-            onSignOut={handleSignOut}
-            userEmail={user.email}
-            autoOpenPanelKey={autoOpenPanelKey}
-            onOpenTaskCalendar={() => setShowTaskCalendar(true)}
-            onOpenFileExplorer={() => setShowFileExplorer(true)}
-            onNotificationAction={handleNotificationAction}
-          />
-        ) : (
-          <div className="flex items-center justify-center h-full">
-            <div className="text-center p-8 max-w-md">
-              <div className="relative mb-8">
-                <div className="absolute inset-0 bg-alpine-100 rounded-full blur-3xl opacity-40"></div>
-                <FileEdit className={`relative text-alpine-500 mx-auto ${isMobile ? 'w-16 h-16' : 'w-24 h-24'}`} strokeWidth={1.5} />
-              </div>
-              <h1 className={`font-bold text-gray-900 mb-3 ${isMobile ? 'text-2xl' : 'text-3xl'}`}>Welcome to Saentis Notes</h1>
-              <p className={`text-gray-600 mb-8 ${isMobile ? 'text-base' : 'text-lg'}`}>
-                A distraction-free writing space, inspired by the Alps
-              </p>
-              <div className="space-y-3">
-                <button
-                  onClick={() => handleNewNote()}
-                  className="w-full inline-flex items-center justify-center gap-3 px-6 py-3 bg-alpine-600 text-white font-medium rounded-lg hover:bg-alpine-700 transition-all duration-150 shadow-sm hover:shadow active:scale-95 touch-target"
-                >
-                  <Sparkles size={20} />
-                  Start Writing
-                </button>
-                <p className="text-sm text-gray-500">Click the menu button (top-left) to browse your notes</p>
-              </div>
+      {/* Unified Sidebar — always visible on desktop, regardless of activeView */}
+      {!isMobile && (
+        <SidebarTree
+          projects={projects}
+          folderTree={folderTree}
+          allNotes={allNotes}
+          selectedNoteId={selectedNote?.id}
+          selectedFolderId={selectedFolderId}
+          selectedProjectId={selectedProjectId}
+          onSelectNote={(note) => {
+            handleSelectNote(note)
+            if (activeView !== 'notes') setActiveView('notes')
+          }}
+          onSelectFolder={handleSelectFolder}
+          onNewNote={(noteType, folderId, projectId) => {
+            if (activeView !== 'notes') setActiveView('notes')
+            handleNewNote(noteType as any, folderId, projectId)
+          }}
+          onCreateFolder={handleCreateFolder}
+          onRenameFolder={handleRenameFolder}
+          onDeleteFolder={handleDeleteFolder}
+          onMoveFolder={handleMoveFolder}
+          onDuplicateNote={handleDuplicateNote}
+          onDeleteNote={handleSidebarDeleteNote}
+          onMoveNote={handleMoveNote}
+          onRenameProject={handleRenameProject}
+          onDeleteProject={handleDeleteProject}
+          onUpdateProjectColor={handleUpdateProjectColor}
+          onCreateProject={handleCreateProject}
+          onMoveNoteToProject={handleMoveNoteToProject}
+          collapsed={sidebarCollapsed}
+          onToggleCollapsed={() => setSidebarCollapsed(prev => !prev)}
+        />
+      )}
+
+      {/* Mobile header */}
+      {isMobile && (
+        <header className="fixed inset-x-0 top-0 z-40 border-b border-border bg-surface px-4 py-3">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-3">
+              <button
+                onClick={() => setWorkspaceNavOpen(prev => !prev)}
+                className="rounded-lg p-2 text-muted transition-colors hover:bg-surface-hover hover:text-foreground"
+                aria-label="Toggle navigation"
+              >
+                <Menu size={20} />
+              </button>
+              <h2 className="text-sm font-semibold text-foreground">Notes Desktop</h2>
             </div>
+            <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-accent text-xs font-bold text-accent-foreground">N</div>
           </div>
+        </header>
+      )}
+
+      {/* Mobile slide-out sidebar */}
+      {isMobile && workspaceNavOpen && (
+        <>
+          <div
+            className="fixed inset-0 z-40 bg-black/40"
+            onClick={() => setWorkspaceNavOpen(false)}
+          />
+          <aside className="fixed inset-y-0 left-0 z-50 w-[280px] border-r border-border bg-surface flex flex-col">
+            <div className="flex items-center justify-between border-b border-border px-3 py-3">
+              <div className="flex items-center gap-3">
+                <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-accent text-sm font-bold text-accent-foreground">N</div>
+                <span className="text-sm font-semibold text-foreground">Notes Desktop</span>
+              </div>
+              <button
+                onClick={() => setWorkspaceNavOpen(false)}
+                className="rounded-lg p-1.5 text-muted transition-colors hover:bg-surface-hover hover:text-foreground"
+                aria-label="Close navigation"
+              >
+                <X size={16} />
+              </button>
+            </div>
+
+            {/* Mobile nav shortcuts */}
+            <div className="border-b border-border px-2 py-2 flex gap-1">
+              {([
+                { key: 'notes' as WorkspaceView, label: 'Notes', icon: FileText },
+                { key: 'tasks' as WorkspaceView, label: 'Tasks', icon: CheckSquare },
+                { key: 'files' as WorkspaceView, label: 'Files', icon: FolderOpen },
+              ]).map(({ key, label, icon: Icon }) => (
+                <button
+                  key={key}
+                  onClick={() => { switchWorkspaceView(key); setWorkspaceNavOpen(false) }}
+                  className={`flex-1 flex items-center justify-center gap-1.5 rounded-lg px-2 py-2 text-xs font-medium transition-all ${
+                    activeView === key
+                      ? 'bg-accent text-accent-foreground shadow-sm'
+                      : 'text-muted hover:bg-surface-hover hover:text-foreground'
+                  }`}
+                >
+                  <Icon className="h-3.5 w-3.5 shrink-0" />
+                  <span>{label}</span>
+                </button>
+              ))}
+            </div>
+
+            {/* Mobile project/folder/note tree */}
+            <div className="flex-1 overflow-y-auto px-2 py-2">
+              <SidebarTree
+                projects={projects}
+                folderTree={folderTree}
+                allNotes={allNotes}
+                selectedNoteId={selectedNote?.id}
+                selectedFolderId={selectedFolderId}
+                selectedProjectId={selectedProjectId}
+                onSelectNote={(note) => {
+                  handleSelectNote(note)
+                  if (activeView !== 'notes') setActiveView('notes')
+                  setWorkspaceNavOpen(false)
+                }}
+                onSelectFolder={handleSelectFolder}
+                onNewNote={(noteType, folderId, projectId) => {
+                  if (activeView !== 'notes') setActiveView('notes')
+                  handleNewNote(noteType as any, folderId, projectId)
+                  setWorkspaceNavOpen(false)
+                }}
+                onCreateFolder={handleCreateFolder}
+                onRenameFolder={handleRenameFolder}
+                onDeleteFolder={handleDeleteFolder}
+                onMoveFolder={handleMoveFolder}
+                onDuplicateNote={handleDuplicateNote}
+                onDeleteNote={handleSidebarDeleteNote}
+                onMoveNote={handleMoveNote}
+                onRenameProject={handleRenameProject}
+                onDeleteProject={handleDeleteProject}
+                onUpdateProjectColor={handleUpdateProjectColor}
+                onCreateProject={handleCreateProject}
+                onMoveNoteToProject={handleMoveNoteToProject}
+                collapsed={false}
+                onToggleCollapsed={() => {}}
+              />
+            </div>
+
+            <div className="border-t border-border px-2 py-2">
+              <button
+                onClick={handleSignOut}
+                className="group flex w-full items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium text-muted transition-all hover:bg-danger-light hover:text-danger"
+              >
+                <LogOut className="h-[18px] w-[18px] shrink-0" />
+                <span className="truncate">Sign out</span>
+              </button>
+            </div>
+          </aside>
+        </>
+      )}
+
+      {/* Main content area */}
+      <main className={`flex-1 w-full h-screen overflow-hidden ${isMobile ? 'pt-14' : ''}`} style={!isMobile ? { paddingLeft: sidebarOffset } : undefined}>
+        {activeView === 'welcome' && (
+          <WelcomeBackModal
+            isOpen={showWelcomeBack}
+            asView
+            onClose={closeWelcomeView}
+            onSelectNote={(note) => {
+              activateExistingNote(note)
+              closeWelcomeView()
+            }}
+            onSelectTask={() => {
+              setTaskCalendarInitialView('tasks')
+              setShowWelcomeBack(false)
+              setActiveView('tasks')
+            }}
+            onOpenTimetable={() => {
+              setTaskCalendarInitialView('timetable')
+              setShowWelcomeBack(false)
+              setActiveView('tasks')
+            }}
+          />
+        )}
+
+        {activeView === 'notes' && renderNotesView()}
+
+        {activeView === 'tasks' && (
+          <TaskCalendarModal
+            isOpen
+            asView
+            onClose={() => setActiveView('notes')}
+            initialView={taskCalendarInitialView}
+            linkedNoteId={selectedNote?.id}
+            linkedProjectId={selectedProjectId || undefined}
+          />
+        )}
+
+        {activeView === 'files' && (
+          <FileExplorerModal
+            isOpen
+            asView
+            onClose={() => setActiveView('notes')}
+          />
         )}
       </main>
 
@@ -870,44 +1320,6 @@ function WorkspaceContent() {
         </div>
       )}
       
-      {/* File Explorer Modal */}
-      <FileExplorerModal
-        isOpen={showFileExplorer}
-        onClose={() => setShowFileExplorer(false)}
-      />
-      
-      {/* Task & Calendar Modal */}
-      <TaskCalendarModal
-        isOpen={showTaskCalendar}
-        onClose={() => {
-          setShowTaskCalendar(false)
-          setTaskCalendarInitialView('tasks')
-        }}
-        initialView={taskCalendarInitialView}
-        linkedNoteId={selectedNote?.id}
-        linkedProjectId={selectedProjectId || undefined}
-      />
-      
-      {/* Welcome Back Modal */}
-      <WelcomeBackModal
-        isOpen={showWelcomeBack}
-        onClose={() => setShowWelcomeBack(false)}
-        onSelectNote={(note) => {
-          setSelectedNote(note)
-          setSelectedFolderId(note.folder_id)
-          setShowWelcomeBack(false)
-        }}
-        onSelectTask={() => {
-          // Open task calendar when a task is selected
-          setShowWelcomeBack(false)
-          setShowTaskCalendar(true)
-        }}
-        onOpenTimetable={() => {
-          setShowWelcomeBack(false)
-          setTaskCalendarInitialView('timetable')
-          setShowTaskCalendar(true)
-        }}
-      />
     </div>
   )
 }

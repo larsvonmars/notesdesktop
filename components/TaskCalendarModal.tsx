@@ -97,6 +97,7 @@ interface TaskCalendarModalProps {
   initialView?: 'tasks' | 'calendar' | 'timeline' | 'kanban' | 'timetable'
   linkedNoteId?: string
   linkedProjectId?: string
+  asView?: boolean
 }
 
 type ViewMode = 'tasks' | 'calendar' | 'timeline' | 'kanban' | 'timetable'
@@ -109,6 +110,7 @@ export default function TaskCalendarModal({
   initialView = 'tasks',
   linkedNoteId,
   linkedProjectId,
+  asView = false,
 }: TaskCalendarModalProps) {
   // View state
   const [viewMode, setViewMode] = useState<ViewMode>(initialView)
@@ -714,11 +716,19 @@ export default function TaskCalendarModal({
     urgent: <Flag size={14} className="text-red-500" />,
   }
 
-  if (!isOpen) return null
+  if (!isOpen && !asView) return null
 
   return (
-    <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/60 p-2 sm:p-4">
-      <div className="flex w-full max-w-7xl max-h-[95vh] sm:max-h-[90vh] flex-col overflow-hidden rounded-2xl border border-gray-200 dark:border-slate-700 bg-white dark:bg-slate-900 shadow-2xl">
+    <div
+      className={asView ? 'h-full w-full' : 'fixed inset-0 z-[100] flex items-center justify-center bg-black/60 p-2 sm:p-4'}
+    >
+      <div
+        className={
+          asView
+            ? 'flex h-full w-full flex-col overflow-hidden border border-gray-200 bg-white dark:border-slate-700 dark:bg-slate-900'
+            : 'flex w-full max-w-7xl max-h-[95vh] sm:max-h-[90vh] flex-col overflow-hidden rounded-2xl border border-gray-200 dark:border-slate-700 bg-white dark:bg-slate-900 shadow-2xl'
+        }
+      >
         {/* Header */}
         <div className="flex items-center justify-between gap-2 border-b border-gray-200 dark:border-slate-700 bg-alpine-50 dark:bg-slate-800 px-3 sm:px-6 py-3 sm:py-4">
           <div className="flex flex-1 min-w-0 items-center gap-2 sm:gap-4">
@@ -781,7 +791,7 @@ export default function TaskCalendarModal({
 
           <ModalCloseButton
             onClick={onClose}
-            ariaLabel="Close task and calendar modal"
+            ariaLabel={asView ? 'Return to notes view' : 'Close task and calendar modal'}
             className="flex-shrink-0"
             size={20}
           />
@@ -822,6 +832,7 @@ export default function TaskCalendarModal({
         )}
 
         {/* Main Content */}
+        {(!asView || !showTaskDetail) && (
         <div className="flex flex-1 overflow-hidden">
           {/* Sidebar */}
           <div className="w-64 border-r border-gray-200 dark:border-slate-700 bg-gray-50 dark:bg-slate-800 overflow-y-auto">
@@ -1420,10 +1431,17 @@ export default function TaskCalendarModal({
             )}
           </div>
         </div>
+        )}
 
         {/* Task Modal */}
         {showTaskModal && (
-          <div className="fixed inset-0 z-[110] flex items-center justify-center bg-black/60 p-4">
+          <div
+            className={
+              asView
+                ? 'absolute inset-0 z-[110] flex items-start justify-center overflow-y-auto bg-surface p-6'
+                : 'fixed inset-0 z-[110] flex items-center justify-center bg-black/60 p-4'
+            }
+          >
             <div className="bg-white dark:bg-slate-900 border border-gray-200 dark:border-slate-700 rounded-xl shadow-2xl max-w-md w-full max-h-[90vh] overflow-y-auto p-4 sm:p-6">
               <h3 className="text-xl font-bold text-gray-900 dark:text-slate-100 mb-4">Create New Task</h3>
               <div className="space-y-4">
@@ -1528,7 +1546,13 @@ export default function TaskCalendarModal({
 
         {/* Event Modal */}
         {showEventModal && (
-          <div className="fixed inset-0 z-[110] flex items-center justify-center bg-black/60 p-4">
+          <div
+            className={
+              asView
+                ? 'absolute inset-0 z-[110] flex items-start justify-center overflow-y-auto bg-surface p-6'
+                : 'fixed inset-0 z-[110] flex items-center justify-center bg-black/60 p-4'
+            }
+          >
             <div className="bg-white dark:bg-slate-900 border border-gray-200 dark:border-slate-700 rounded-xl shadow-2xl max-w-md w-full max-h-[90vh] overflow-y-auto p-4 sm:p-6">
               <h3 className="text-xl font-bold text-gray-900 dark:text-slate-100 mb-4">Create New Event</h3>
               <div className="space-y-4">
@@ -1603,7 +1627,13 @@ export default function TaskCalendarModal({
 
         {/* Timetable Entry Modal */}
         {showTimetableModal && (
-          <div className="fixed inset-0 z-[110] flex items-center justify-center bg-black/60 p-4">
+          <div
+            className={
+              asView
+                ? 'absolute inset-0 z-[110] flex items-start justify-center overflow-y-auto bg-surface p-6'
+                : 'fixed inset-0 z-[110] flex items-center justify-center bg-black/60 p-4'
+            }
+          >
             <div className="bg-white dark:bg-slate-900 border border-gray-200 dark:border-slate-700 rounded-xl shadow-2xl max-w-lg w-full p-4 sm:p-6 max-h-[90vh] overflow-y-auto">
               <h3 className="text-xl font-bold text-gray-900 dark:text-slate-100 mb-4">
                 {editingTimetableEntry ? 'Edit Timetable Entry' : 'New Timetable Entry'}
@@ -1769,7 +1799,13 @@ export default function TaskCalendarModal({
 
         {/* Task Detail Panel */}
         {showTaskDetail && editingTask && (
-          <div className="fixed inset-y-0 right-0 z-[110] w-full max-w-2xl bg-white dark:bg-slate-900 shadow-2xl overflow-y-auto border-l border-gray-200 dark:border-slate-700">
+          <div
+            className={
+              asView
+                ? 'flex flex-1 w-full bg-white dark:bg-slate-900 overflow-y-auto border-l border-gray-200 dark:border-slate-700'
+                : 'fixed inset-y-0 right-0 z-[110] w-full max-w-2xl bg-white dark:bg-slate-900 shadow-2xl overflow-y-auto border-l border-gray-200 dark:border-slate-700'
+            }
+          >
             <div className="sticky top-0 z-10 bg-white dark:bg-slate-900 border-b border-gray-200 dark:border-slate-700 px-6 py-4">
               <div className="flex items-center justify-between">
                 <h3 className="text-xl font-bold text-gray-900 dark:text-slate-100">Task Details</h3>

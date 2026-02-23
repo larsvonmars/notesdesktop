@@ -9,6 +9,23 @@ module.exports = {
   theme: {
     extend: {
       colors: {
+        background: 'var(--background)',
+        foreground: 'var(--foreground)',
+        surface: 'var(--surface)',
+        'surface-hover': 'var(--surface-hover)',
+        'surface-active': 'var(--surface-active)',
+        border: 'var(--border)',
+        'border-strong': 'var(--border-strong)',
+        muted: 'var(--muted)',
+        accent: 'var(--accent)',
+        'accent-light': 'var(--accent-light)',
+        'accent-foreground': 'var(--accent-foreground)',
+        success: 'var(--success)',
+        'success-light': 'var(--success-light)',
+        warning: 'var(--warning)',
+        'warning-light': 'var(--warning-light)',
+        danger: 'var(--danger)',
+        'danger-light': 'var(--danger-light)',
         alpine: {
           50:  '#EFF8FF',
           100: '#DBEEFE',

@@ -255,7 +255,7 @@ export function initializeFileBlockInteractions(
     onContentChange()
   }
 
-  const getContainer = (target: HTMLElement | null): HTMLElement | null => {
+  const getContainer = (target: Element | null): HTMLElement | null => {
     if (!target) return null
     return target.closest('.file-block-container, [data-block-type="file-ref"]') as HTMLElement | null
   }

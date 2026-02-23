@@ -24,9 +24,7 @@ import {
   Link as LinkIcon,
   Search as SearchIcon,
   PenTool,
-  Check,
   Loader2,
-  FolderOpen,
   Target,
   Edit2,
   Network,
@@ -59,7 +57,6 @@ import DataSheetEditor, {
   type DataSheetEditorHandle,
   type DataSheetData
 } from './DataSheetEditor'
-import UnifiedPanel from './UnifiedPanel'
 import ProjectsWorkspaceModal from './ProjectsWorkspaceModal'
 import { useToast } from './ToastProvider'
 import { Note as LibNote } from '../lib/notes'
@@ -74,6 +71,7 @@ import { dataSheetTableBlock, type DataSheetTablePayload } from '../lib/editor/d
 import { fileBlock, type FileBlockPayload, initializeFileBlockInteractions } from '../lib/editor/fileBlock'
 import FileExplorerModal from './FileExplorerModal'
 import SettingsModal from './SettingsModal'
+import NoteDetailsSidebar from './NoteDetailsSidebar'
 import { Settings } from 'lucide-react'
 
 export type { Note } from '../lib/notes'
@@ -157,9 +155,9 @@ interface NoteEditorWithPanelProps extends NoteEditorProps {
   currentFolderName?: string
   userEmail?: string
   onSignOut?: () => void
-  autoOpenPanelKey?: string | number
   onOpenTaskCalendar?: () => void
   onOpenFileExplorer?: () => void
+  onOpenProjectsView?: () => void
   onNotificationAction?: (notification: any) => void
 }
 
@@ -186,9 +184,9 @@ export default function NoteEditor({
   currentFolderName,
   userEmail,
   onSignOut,
-  autoOpenPanelKey,
   onOpenTaskCalendar,
   onOpenFileExplorer,
+  onOpenProjectsView,
   onNotificationAction,
 }: NoteEditorWithPanelProps) {
   const toast = useToast()
@@ -202,6 +200,7 @@ export default function NoteEditor({
   const [dataSheetKey, setDataSheetKey] = useState(0)
   const [noteType, setNoteType] = useState<'rich-text' | 'drawing' | 'mindmap' | 'bullet-journal' | 'data-sheet'>('rich-text')
   const [isSaving, setIsSaving] = useState(false)
+  const [isAutosaving, setIsAutosaving] = useState(false)
   const [isDeleting, setIsDeleting] = useState(false)
   const [hasChanges, setHasChanges] = useState(false)
   const [showTOC, setShowTOC] = useState(false)
@@ -216,6 +215,7 @@ export default function NoteEditor({
   const autosaveTimeoutRef = useRef<number | null>(null)
   const isAutosavingRef = useRef(false)
   const activeFormatsFrameRef = useRef<number | null>(null)
+  const noteLoadingRef = useRef(false) // Suppress hasChanges flicker during note load
   const floatingToolbarRef = useRef<HTMLDivElement | null>(null)
   const floatingToolbarSizeRef = useRef({ width: 0, height: 0 })
   const [floatingToolbar, setFloatingToolbar] = useState({ visible: false, top: 0, left: 0 })
@@ -235,11 +235,11 @@ export default function NoteEditor({
   const blockSearchInputRef = useRef<HTMLInputElement>(null)
   const [showKnowledgeGraph, setShowKnowledgeGraph] = useState(false)
   const [showProjectsModal, setShowProjectsModal] = useState(false)
-  const [showBlockOutlines, setShowBlockOutlines] = useState(false)
   const [showFilePicker, setShowFilePicker] = useState(false)
   const [showSettings, setShowSettings] = useState(false)
+  const [rightSidebarCollapsed, setRightSidebarCollapsed] = useState(false)
   const [projects, setProjects] = useState<Project[]>([])
-
+  const rightSidebarOffset = rightSidebarCollapsed ? '48px' : '280px'
   const currentProjectName = useMemo(() => {
     if (!note?.project_id) return 'inbox'
     const project = projects.find((item) => item.id === note.project_id)
@@ -267,6 +267,13 @@ export default function NoteEditor({
     }
     loadProjects()
   }, [])
+
+  // Set CSS variable for right sidebar offset
+  useEffect(() => {
+    if (typeof document === 'undefined' || isMobile) return
+    document.documentElement.style.setProperty('--workspace-right-sidebar-offset', rightSidebarOffset)
+    return () => { document.documentElement.style.removeProperty('--workspace-right-sidebar-offset') }
+  }, [rightSidebarOffset, isMobile])
   
   // Selected text state for AI assistant integration
   const [selectedText, setSelectedText] = useState('')
@@ -354,6 +361,8 @@ export default function NoteEditor({
   }, [])
 
   useEffect(() => {
+    // Mark that we're loading a note to suppress hasChanges flicker
+    noteLoadingRef.current = true
     if (note) {
       setTitle(note.title)
       setNoteType(note.note_type || 'rich-text')
@@ -446,6 +455,11 @@ export default function NoteEditor({
       setHasChanges(false)
       scheduleHeadingsUpdate()
       
+      // Initialize lastSaveTime from note's updated_at so status shows correctly
+      if (note.updated_at) {
+        setLastSaveTime(new Date(note.updated_at))
+      }
+      
       // Load word goal from localStorage for this note
       if (note.id) {
         const savedGoal = localStorage.getItem(`wordGoal_${note.id}`)
@@ -479,11 +493,16 @@ export default function NoteEditor({
       setHasChanges(false)
       setHeadings([])
       setWordGoal(null)
+      setLastSaveTime(null)
     }
     setActiveFormats(new Set())
+    // Allow the hasChanges effect to run normally after state has settled
+    requestAnimationFrame(() => { noteLoadingRef.current = false })
   }, [note, initialNoteType, scheduleHeadingsUpdate])
 
   useEffect(() => {
+    // Skip hasChanges computation while a note is being loaded (prevents brief flicker)
+    if (noteLoadingRef.current) return
     if (note) {
       if (noteType === 'drawing') {
         const currentDrawingStr = JSON.stringify(drawingData)
@@ -1079,6 +1098,7 @@ export default function NoteEditor({
     if (isAuto) {
       // mark autosave in-flight to avoid concurrent autosaves; use ref to avoid rerenders
       isAutosavingRef.current = true
+      setIsAutosaving(true)
     } else {
       setIsSaving(true)
     }
@@ -1133,6 +1153,7 @@ export default function NoteEditor({
     } finally {
       if (isAuto) {
         isAutosavingRef.current = false
+        setIsAutosaving(false)
       } else {
         setIsSaving(false)
       }
@@ -1601,62 +1622,42 @@ export default function NoteEditor({
 
   return (
     <>
-      {/* Unified Control Panel */}
-      <UnifiedPanel
-        note={note}
-        title={title}
-        onTitleChange={setTitle}
-        onSave={handleSave}
-        onDelete={note && onDelete ? handleDelete : undefined}
-        onCancel={handleCancel}
-        isSaving={isSaving}
-        isDeleting={isDeleting}
-        hasChanges={hasChanges}
-        headings={headings}
-        showTOC={showTOC}
-        onToggleTOC={() => setShowTOC(!showTOC)}
-        onScrollToHeading={(headingId) => editorRef.current?.scrollToHeading(headingId)}
-        onSearch={() => editorRef.current?.showSearchDialog()}
-        onOpenKnowledgeGraph={() => setShowKnowledgeGraph(true)}
-        folders={folders}
-        selectedFolderId={selectedFolderId}
-        onSelectFolder={onSelectFolder}
-        onCreateFolder={onCreateFolder}
-        onRenameFolder={onRenameFolder}
-        onDeleteFolder={onDeleteFolder}
-        onMoveFolder={onMoveFolder}
-        notes={notes}
-        selectedNoteId={note?.id}
-        onSelectNote={onSelectNote}
-        onNewNote={onNewNote}
-        onDuplicateNote={onDuplicateNote}
-        onMoveNote={onMoveNote}
-        isLoadingNotes={isLoadingNotes}
-        currentFolderName={currentFolderName}
-        stats={stats}
-        userEmail={userEmail}
-        onSignOut={onSignOut}
-        autoOpenKey={autoOpenPanelKey}
-        onOpenTaskCalendar={onOpenTaskCalendar}
-        onOpenFileExplorer={onOpenFileExplorer}
-        noteContent={content}
-        mindmapData={mindmapData}
-        selectedMindmapNodeId={selectedMindmapNodeId}
-        selectedText={selectedText}
-        onInsertText={handleAIInsertText}
-        onReplaceText={handleAIReplaceText}
-        onReplaceSelection={handleAIReplaceSelection}
-        onInsertAtCursor={handleAIInsertAtCursor}
-        onAddMindmapNode={handleAIAddMindmapNode}
-        allNotes={allNotes}
-        onNotificationAction={onNotificationAction}
-      />
+      {/* Right Sidebar — Note Details */}
+      {!isMobile && (
+        <NoteDetailsSidebar
+          noteId={note?.id}
+          isNewNote={!note}
+          noteType={noteType}
+          title={title}
+          onTitleChange={setTitle}
+          onSave={() => handleSave()}
+          onDelete={note && onDelete ? handleDelete : undefined}
+          isSaving={isSaving || isAutosaving}
+          isDeleting={isDeleting}
+          hasChanges={hasChanges}
+          lastSaveDisplay={lastSaveDisplay}
+          folderPath={folderPath}
+          projectInfo={projectInfo}
+          stats={stats}
+          headings={headings}
+          onScrollToHeading={(headingId) => editorRef.current?.scrollToHeading(headingId)}
+          wordGoal={wordGoal}
+          wordGoalProgress={wordGoalProgress}
+          onSetWordGoal={handleSetWordGoal}
+          onOpenSettings={() => setShowSettings(true)}
+          collapsed={rightSidebarCollapsed}
+          onToggleCollapsed={() => setRightSidebarCollapsed(prev => !prev)}
+        />
+      )}
 
       {/* Clean Editor Area */}
-      <div className="flex flex-col h-screen bg-white pb-10">        
-        <div className={`flex-1 px-3 py-2 sm:px-4 sm:py-3 overflow-hidden ${showBlockOutlines ? 'show-block-outlines' : ''}`}>
+      <div
+        className="flex h-screen flex-col bg-background pt-16 text-foreground lg:pt-0"
+        style={!isMobile ? { paddingRight: rightSidebarOffset } : undefined}
+      >
+        <div className="flex-1 overflow-hidden px-3 py-2 sm:px-4 sm:py-3">
           <div className="h-full w-full">
-            <div className="relative h-full overflow-hidden flex flex-col bg-white">
+            <div className="relative flex h-full flex-col overflow-hidden rounded-xl border border-border bg-surface">
               {noteType === 'drawing' ? (
                 <DrawingEditor
                   ref={drawingEditorRef}
@@ -1801,140 +1802,6 @@ export default function NoteEditor({
         </div>
       )}
 
-      {/* Status Bar */}
-      <div className="fixed bottom-0 left-0 right-0 z-30 bg-gradient-to-r from-gray-50 to-gray-100 border-t border-gray-200 px-4 py-2 safe-bottom dark:from-slate-900 dark:to-slate-800 dark:border-slate-700">
-        <div className={`flex items-center justify-between text-xs text-gray-600 dark:text-slate-300 ${isMobile ? 'gap-2' : ''}`}>
-          <div className="flex items-center gap-4">
-            {/* Save Status */}
-            <div className="flex items-center gap-1.5">
-              {isSaving ? (
-                <>
-                  <Loader2 size={12} className="animate-spin text-alpine-500" />
-                  <span className="text-alpine-600 font-medium">Saving...</span>
-                </>
-              ) : hasChanges ? (
-                <>
-                  <span className="w-2 h-2 bg-amber-500 rounded-full animate-pulse" />
-                  <span className="text-amber-600 font-medium">Unsaved changes</span>
-                </>
-              ) : lastSaveDisplay ? (
-                <>
-                  <Check size={12} className="text-green-500" />
-                  <span className="text-green-600 font-medium">Saved {lastSaveDisplay}</span>
-                </>
-              ) : null}
-            </div>
-
-            {/* Folder Path - hidden on mobile */}
-            {note && !isMobile && (
-              <div className="flex items-center gap-1.5 text-gray-500 dark:text-slate-400">
-                <FolderOpen size={12} />
-                <span>{folderPath}</span>
-              </div>
-            )}
-
-            {/* Project Badge - hidden on mobile */}
-            {note && projectInfo && !isMobile && (
-              <div 
-                className="flex items-center gap-1.5 px-2 py-0.5 rounded-full text-xs font-medium"
-                style={{ 
-                  backgroundColor: `${projectInfo.color}20`,
-                  color: projectInfo.color
-                }}
-                title={`Project: ${projectInfo.name}`}
-              >
-                <Target size={10} />
-                <span>{projectInfo.name}</span>
-              </div>
-            )}
-
-            {/* Note Type - hidden on mobile */}
-            {note && !isMobile && (
-              <div className="flex items-center gap-1.5 text-gray-500 dark:text-slate-400">
-                <span className="px-1.5 py-0.5 bg-gray-200 rounded text-[10px] font-medium uppercase dark:bg-slate-700 dark:text-slate-200">
-                  {noteType === 'rich-text' ? 'Text' : noteType === 'drawing' ? 'Drawing' : noteType === 'mindmap' ? 'Mindmap' : noteType === 'data-sheet' ? 'Data Sheet' : 'Journal'}
-                </span>
-              </div>
-            )}
-
-            {/* Project Manager Button - hidden on mobile */}
-            {!isMobile && (
-            <button
-              onClick={() => setShowProjectsModal(true)}
-              className="flex items-center gap-1.5 px-2 py-1 text-gray-600 hover:text-alpine-600 hover:bg-alpine-50 rounded transition-colors font-medium dark:text-slate-300 dark:hover:text-alpine-300 dark:hover:bg-slate-700"
-              title="Open Project Manager"
-            >
-              <Target size={14} className="text-alpine-500" />
-              <span>Projects</span>
-            </button>
-            )}
-
-            {/* Settings */}
-            <button
-              onClick={() => setShowSettings(true)}
-              className="flex items-center gap-1.5 px-2 py-1 text-gray-500 hover:text-gray-800 hover:bg-gray-100 rounded transition-colors dark:text-slate-300 dark:hover:text-slate-100 dark:hover:bg-slate-700"
-              title="Settings"
-            >
-              <Settings size={14} />
-              {!isMobile && <span className="text-xs font-medium">Settings</span>}
-            </button>
-          </div>
-
-          {/* Stats - Only for rich text notes */}
-          {noteType === 'rich-text' && (
-            <div className="flex items-center gap-4 text-gray-500 dark:text-slate-400">
-              {/* Word Goal Progress */}
-              {wordGoal && wordGoalProgress ? (
-                <div className="flex items-center gap-2">
-                  <div className="flex items-center gap-1.5">
-                    <Target size={12} className={wordGoalProgress.isComplete ? 'text-green-500' : 'text-alpine-500'} />
-                    <span className={wordGoalProgress.isComplete ? 'text-green-600 dark:text-green-400 font-medium' : 'text-gray-700 dark:text-slate-200'}>
-                      {stats.words}/{wordGoal} words
-                    </span>
-                  </div>
-                  <div className="relative w-24 h-2 bg-gray-200 rounded-full overflow-hidden dark:bg-slate-700">
-                    <div 
-                      className={`absolute left-0 top-0 h-full transition-all duration-300 rounded-full ${
-                        wordGoalProgress.isComplete 
-                          ? 'bg-gradient-to-r from-green-400 to-green-500' 
-                          : 'bg-gradient-to-r from-alpine-400 to-alpine-500'
-                      }`}
-                      style={{ width: `${wordGoalProgress.percentage}%` }}
-                    />
-                  </div>
-                  <button
-                    onClick={() => setShowWordGoalInput(true)}
-                    className="text-gray-400 hover:text-gray-600 transition-colors dark:text-slate-500 dark:hover:text-slate-300"
-                    title="Edit goal"
-                  >
-                    <Edit2 size={10} />
-                  </button>
-                </div>
-              ) : (
-                <>
-                  <span>{stats.words} {stats.words === 1 ? 'word' : 'words'}</span>
-                  {note && (
-                    <button
-                      onClick={() => setShowWordGoalInput(true)}
-                      className="flex items-center gap-1 text-alpine-500 hover:text-alpine-600 transition-colors font-medium"
-                      title="Set word goal"
-                    >
-                      <Target size={12} />
-                      <span>Set goal</span>
-                    </button>
-                  )}
-                </>
-              )}
-              
-              <span>{stats.characters} {stats.characters === 1 ? 'char' : 'chars'}</span>
-              {headings.length > 0 && (
-                <span>{headings.length} {headings.length === 1 ? 'heading' : 'headings'}</span>
-              )}
-            </div>
-          )}
-        </div>
-      </div>
-
       {/* Word Goal Input Modal */}
       {showWordGoalInput && (
         <div className="fixed inset-0 z-[70] flex items-center justify-center p-4 bg-black/50">
@@ -2044,23 +1911,26 @@ export default function NoteEditor({
         uploadPath={noteFileUploadPath}
       />
 
-      {/* Project Manager Modal */}
-      <ProjectsWorkspaceModal
-        isOpen={showProjectsModal}
-        onClose={() => setShowProjectsModal(false)}
-        onSelectNote={onSelectNote}
-        onSelectFolder={onSelectFolder}
-        onNewNote={onNewNote}
-        onDuplicateNote={onDuplicateNote}
-      />
+      {/* Project Manager Modal (fallback when workspace view callback is not provided) */}
+      {!onOpenProjectsView && (
+        <ProjectsWorkspaceModal
+          isOpen={showProjectsModal}
+          onClose={() => setShowProjectsModal(false)}
+          onSelectNote={onSelectNote}
+          onSelectFolder={onSelectFolder}
+          onNewNote={onNewNote}
+          onDuplicateNote={onDuplicateNote}
+        />
+      )}
 
       {/* Floating Content Blocks Button - Only show for rich text notes */}
       {noteType === 'rich-text' && !showContentBlocksMenu && (
         <button
           onClick={openContentBlocksMenu}
           className={`fixed z-40 rounded-full bg-alpine-600 hover:bg-alpine-700 text-white shadow-lg hover:shadow-xl transition-all duration-200 flex items-center justify-center group ${
-            isMobile ? 'right-4 bottom-20 w-14 h-14 touch-target safe-bottom' : 'right-6 bottom-24 w-14 h-14'
+            isMobile ? 'right-4 bottom-20 w-14 h-14 touch-target safe-bottom' : 'bottom-24 w-14 h-14'
           }`}
+          style={!isMobile ? { right: `calc(${rightSidebarOffset} + 24px)` } : undefined}
           title="Insert content block"
         >
           <Plus size={24} className="transition-transform group-hover:rotate-90" />

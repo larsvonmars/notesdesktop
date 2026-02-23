@@ -14,10 +14,6 @@ import type {
 } from 'react'
 import DOMPurify from 'dompurify'
 import type { Config } from 'dompurify'
-import {
-  X
-} from 'lucide-react'
-import EditorToolbar from './EditorToolbar'
 import LinkDialog from './editor/LinkDialog'
 import LinkPopover from './editor/LinkPopover'
 import SearchReplaceDialog from './editor/SearchReplaceDialog'
@@ -38,15 +34,12 @@ import {
   CURSOR_TIMING
 } from '@/lib/editor/cursorPosition'
 import {
-  normalizeInlineNodes,
   normalizeEditorContent,
   sanitizeInlineNodes
 } from '@/lib/editor/domNormalizer'
 import {
   toggleListType,
   toggleChecklistState,
-  addCheckboxToListItem,
-  removeCheckboxFromListItem,
   getClosestListItem,
   mergeAdjacentLists,
   indentListItems,
@@ -126,98 +119,35 @@ interface RichTextEditorProps {
   onChange: (html: string) => void
   disabled?: boolean
   placeholder?: string
-  // Optional custom block descriptors that allow rendering and parsing of blocks
   customBlocks?: CustomBlockDescriptor[]
-  // Optional callback for handling custom commands that need UI interaction (e.g., table insertion, note links)
   onCustomCommand?: (commandId: string) => void
 }
 
 const SANITIZE_CONFIG: Config = {
   ALLOWED_TAGS: [
-    'a',
-    'b',
-    'strong',
-    'i',
-    'em',
-    'u',
-    's',
-    'code',
-    'pre',
-    'p',
-    'br',
-    'div',
-    'span',
-    'blockquote',
-    'ul',
-    'ol',
-    'li',
-    'hr',
-    'input',
-    'h1',
-    'h2',
-    'h3',
-    'mark',
-    'img',
-    'button',
-    'svg',
-    'path'
+    'a', 'b', 'strong', 'i', 'em', 'u', 's', 'code', 'pre', 'p', 'br',
+    'div', 'span', 'blockquote', 'ul', 'ol', 'li', 'hr', 'input',
+    'h1', 'h2', 'h3', 'mark', 'img', 'button', 'svg', 'path', 'table',
+    'thead', 'tbody', 'tr', 'td', 'th'
   ],
-  // allow data-block attributes and stored payload attribute
-  // (data-block-payload stores URI-encoded JSON)
   ALLOWED_ATTR: [
-    'href',
-    'target',
-    'rel',
-    'class',
-    'type',
-    'checked',
-    'data-checked',
-    'id',
-    'data-block',
-    'data-block-type',
-    'data-block-payload',
-    'data-note-id',
-    'data-note-title',
-    'data-folder-id',
-    'data-file-path',
-    'data-file-name',
-    'src',
-    'alt',
-    'width',
-    'height',
-    'style',
-    'data-direction',
-    'aria-label',
-    'title',
-    'draggable',
-    'contenteditable',
-    'xmlns',
-    'viewBox',
-    'fill',
-    'stroke',
-    'stroke-width',
-    'stroke-linecap',
-    'stroke-linejoin',
-    'd'
+    'href', 'target', 'rel', 'class', 'type', 'checked', 'data-checked',
+    'id', 'data-block', 'data-block-type', 'data-block-payload',
+    'data-note-id', 'data-note-title', 'data-folder-id',
+    'data-file-path', 'data-file-name', 'src', 'alt', 'width', 'height',
+    'style', 'data-direction', 'aria-label', 'title', 'draggable',
+    'contenteditable', 'xmlns', 'viewBox', 'fill', 'stroke',
+    'stroke-width', 'stroke-linecap', 'stroke-linejoin', 'd',
+    'colspan', 'rowspan', 'data-checklist'
   ],
   ALLOW_DATA_ATTR: true
 }
 
 // Type describing a custom block renderer/parser that callers can register
 export interface CustomBlockDescriptor {
-  // unique type identifier used in data-block-type
   type: string
-  // render block given an optional payload; should return an HTML string
   render: (payload?: any) => string
-  // optional function to parse the block element back into a payload for serialization
   parse?: (el: HTMLElement) => any
-}
-
-interface BlockMetadata {
-  id: string
-  type: string
-  textPreview: string
-  index: number
 }
 
 // Performance limits
@@ -232,12 +162,6 @@ const ZERO_WIDTH_CHARS_PATTERN = /[\u200B-\u200D\uFEFF]/g
 const BASIC_PASTE_WRAPPER_TAGS = new Set(['DIV', 'P', 'SPAN', 'BR'])
 const SEMANTIC_PASTE_SELECTOR =
   'a,ul,ol,li,pre,code,blockquote,table,thead,tbody,tr,td,th,h1,h2,h3,h4,h5,h6,img,hr,strong,b,em,i,u,s,mark,[data-block],[data-block-type]'
-
-const BLOCK_ROOT_CLASS =
-  'block-root rounded-xl border border-slate-200 bg-white/80 px-3 py-2 my-3 shadow-sm'
-
-// Prevent overlapping block normalizations that can cause visual rubberbanding
-const blockNormalizationGuard = { active: false }
 
 const splitLinesToFragment = (text: string): DocumentFragment => {
   const fragment = document.createDocumentFragment()
@@ -344,18 +268,31 @@ const shouldPreferPlainTextOverHtml = (html: string, plainText: string): boolean
   }
 }
 
+/**
+ * Ensure the editor has at least one paragraph for writing.
+ */
+const ensureEditorHasContent = (editor: HTMLDivElement) => {
+  if (editor.childNodes.length === 0 || (editor.textContent || '').trim() === '') {
+    if (!editor.querySelector('p, h1, h2, h3, ul, ol, blockquote, hr, table, div[data-block]')) {
+      const p = document.createElement('p')
+      p.appendChild(document.createElement('br'))
+      editor.appendChild(p)
+    }
+  }
+}
+
 const RichTextEditor = forwardRef<RichTextEditorHandle, RichTextEditorProps>(
   ({ value, onChange, disabled, placeholder, customBlocks, onCustomCommand }, ref) => {
-    // local ref to hold passed customBlocks (avoid re-creating callbacks when prop changes)
     const customBlocksRef = useRef<CustomBlockDescriptor[] | undefined>(undefined)
-  const editorRef = useRef<HTMLDivElement | null>(null)
+    const editorRef = useRef<HTMLDivElement | null>(null)
     const historyManagerRef = useRef<HistoryManager | null>(null)
     const debouncedCaptureRef = useRef<(() => void) | null>(null)
-  const lastSyncedValueRef = useRef<string>('')
+    const lastSyncedValueRef = useRef<string>('')
     const pendingExternalValueRef = useRef<string | null>(null)
     const mutationObserverRef = useRef<MutationObserver | null>(null)
     const checklistNormalizationTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
     const isProcessingCommandRef = useRef<boolean>(false)
+    const activeFormatsFrameRef = useRef<number | null>(null)
     const {
       showLinkDialog,
       setShowLinkDialog,
@@ -411,234 +348,12 @@ const RichTextEditor = forwardRef<RichTextEditorHandle, RichTextEditorProps>(
       closeTableDialog,
     } = useTableDialogState()
     const savedSelectionRef = useRef<Range | null>(null)
-    const [autoformatEnabled, setAutoformatEnabled] = useState(true)
-    const [blockMetadata, setBlockMetadata] = useState<BlockMetadata[]>([])
-    const [blockPanelOpen, setBlockPanelOpen] = useState(false)
-    const [activeBlockId, setActiveBlockId] = useState<string | null>(null)
-    const [showBlockOutlines, setShowBlockOutlines] = useState(false)
+    const [autoformatEnabled] = useState(true)
     const [activeFormats, setActiveFormats] = useState<Set<string>>(new Set())
-    const blockIdCounterRef = useRef(0)
-    const activeFormatsFrameRef = useRef<number | null>(null)
 
     const isSelectionInsideEditor = useCallback(() => {
       return isSelectionInsideRoot(editorRef.current)
     }, [])
-
-    const createEmptyBlock = useCallback(() => {
-      const block = document.createElement('div')
-      block.setAttribute('data-block', 'true')
-      block.className = BLOCK_ROOT_CLASS
-
-      const paragraph = document.createElement('p')
-      paragraph.appendChild(document.createElement('br'))
-      block.appendChild(paragraph)
-
-      return block
-    }, [])
-
-    const ensureBlockHasContent = useCallback((block: HTMLElement) => {
-      const hasContent = Array.from(block.childNodes).some((node) => {
-        if (node.nodeType === Node.ELEMENT_NODE) return true
-        if (node.nodeType === Node.TEXT_NODE) {
-          return (node.textContent || '').trim().length > 0
-        }
-        return false
-      })
-
-      if (!hasContent) {
-        const paragraph = document.createElement('p')
-        paragraph.appendChild(document.createElement('br'))
-        block.appendChild(paragraph)
-      }
-    }, [])
-
-    const ensureBlockId = useCallback((node: HTMLElement | null) => {
-      if (!node) return ''
-      try {
-        let id = node.getAttribute('data-block-id')
-        if (!id) {
-          blockIdCounterRef.current += 1
-          id = `block-${blockIdCounterRef.current}`
-          node.setAttribute('data-block-id', id)
-        }
-        return id
-      } catch (error) {
-        console.error('Error ensuring block ID:', error)
-        return ''
-      }
-    }, [])
-
-    const wrapNodeInBlock = useCallback(
-      (node: Node) => {
-        if (!editorRef.current || !editorRef.current.isConnected) return null
-
-        const block = document.createElement('div')
-        block.setAttribute('data-block', 'true')
-        block.className = BLOCK_ROOT_CLASS
-
-        // Insert wrapper before moving the node to preserve order
-        try {
-          editorRef.current.insertBefore(block, node)
-          block.appendChild(node)
-          ensureBlockId(block)
-          ensureBlockHasContent(block)
-          return block
-        } catch (error) {
-          console.error('Error wrapping node in block:', error)
-          return null
-        }
-      },
-      [ensureBlockHasContent, ensureBlockId]
-    )
-
-    const enforceBlockStructure = useCallback(
-      (options?: { preserveSelection?: boolean; forceCursorInside?: boolean }) => {
-        if (!editorRef.current || !editorRef.current.isConnected) return
-        if (blockNormalizationGuard.active) return
-
-        blockNormalizationGuard.active = true
-
-        try {
-          const preserveSelection = options?.preserveSelection ?? true
-          const forceCursorInside = options?.forceCursorInside ?? true
-
-          const editor = editorRef.current
-          const savedCursor = preserveSelection ? saveCursorPosition() : null
-
-          let blockCount = 0
-          const nodes = Array.from(editor.childNodes)
-
-          nodes.forEach((node) => {
-            if (node.nodeType === Node.ELEMENT_NODE) {
-              const el = node as HTMLElement
-              if (el.getAttribute('data-block') === 'true') {
-                ensureBlockId(el)
-                ensureBlockHasContent(el)
-                blockCount += 1
-                return
-              }
-            }
-
-            const wrapped = wrapNodeInBlock(node)
-            if (wrapped) {
-              blockCount += 1
-            }
-          })
-
-          if (blockCount === 0) {
-            const block = createEmptyBlock()
-            editor.appendChild(block)
-            ensureBlockId(block)
-            blockCount = 1
-          }
-
-          let anchorBlock: HTMLElement | null = null
-          if (forceCursorInside) {
-            const selection = window.getSelection()
-            if (selection && selection.rangeCount > 0) {
-              const anchor = selection.getRangeAt(0).startContainer
-              anchorBlock = (anchor instanceof HTMLElement ? anchor : anchor.parentElement)?.closest(
-                '[data-block-id]'
-              ) as HTMLElement | null
-            }
-
-            if (!anchorBlock && editor.firstElementChild instanceof HTMLElement) {
-              const targetBlock = editor.firstElementChild
-              ensureBlockId(targetBlock)
-              const focusTarget =
-                (targetBlock.querySelector('p, div, span, li, blockquote') as HTMLElement | null) ??
-                targetBlock
-              try {
-                positionCursorInElement(focusTarget, 'start', editor)
-              } catch (error) {
-                console.warn('Error positioning cursor in normalized block:', error)
-              }
-              setActiveBlockId(targetBlock.getAttribute('data-block-id'))
-              anchorBlock = targetBlock
-            }
-          }
-
-          if (preserveSelection && savedCursor && savedCursor.range.startContainer?.isConnected && savedCursor.range.endContainer?.isConnected) {
-            try {
-              restoreCursorPosition(savedCursor, editor)
-            } catch (error) {
-              console.warn('Could not restore cursor after block normalization:', error)
-            }
-          }
-        } finally {
-          blockNormalizationGuard.active = false
-        }
-      },
-      [createEmptyBlock, ensureBlockHasContent, ensureBlockId, wrapNodeInBlock]
-    )
-
-    const ensureSelectionWithinBlock = useCallback(() => {
-      enforceBlockStructure({ preserveSelection: true, forceCursorInside: false })
-
-      if (!editorRef.current || !editorRef.current.isConnected) return null
-
-      const editor = editorRef.current
-      const block = getClosestFromSelection('[data-block-id]', editor)
-
-      if (block && block.isConnected) {
-        ensureBlockId(block)
-        return block
-      }
-
-      const newBlock = createEmptyBlock()
-      editor.appendChild(newBlock)
-      ensureBlockId(newBlock)
-      const focusTarget = (newBlock.querySelector('p, div, span') as HTMLElement | null) ?? newBlock
-      try {
-        positionCursorInElement(focusTarget, 'start', editor)
-      } catch (error) {
-        console.warn('Error positioning cursor in new block:', error)
-      }
-      setActiveBlockId(newBlock.getAttribute('data-block-id'))
-      return newBlock
-    }, [createEmptyBlock, enforceBlockStructure, ensureBlockId])
-
-    const updateBlockMetadata = useCallback(() => {
-      if (!editorRef.current) return
-      try {
-        const blockNodes = Array.from(editorRef.current.children) as HTMLElement[]
-        const metadata = blockNodes.map((node, idx) => {
-          const id = ensureBlockId(node)
-          const type = node.getAttribute('data-block-type') ?? node.tagName.toLowerCase()
-          const textPreview = (node.textContent || '').replace(/\s+/g, ' ').trim().slice(0, 120)
-          return {
-            id,
-            type,
-            textPreview: textPreview || '(empty)',
-            index: idx + 1
-          }
-        })
-        setBlockMetadata(metadata)
-      } catch (error) {
-        console.error('Error updating block metadata:', error)
-      }
-    }, [ensureBlockId])
-
-    const refreshActiveBlock = useCallback(() => {
-      try {
-        const editor = editorRef.current
-        if (!editor) {
-          setActiveBlockId(null)
-          return
-        }
-
-        const blockElement = getClosestFromSelection('[data-block-id], [data-block="true"]', editor)
-        if (blockElement instanceof HTMLElement) {
-          const id = ensureBlockId(blockElement)
-          setActiveBlockId(id)
-        } else {
-          setActiveBlockId(null)
-        }
-      } catch (error) {
-        console.error('Error refreshing active block:', error)
-        setActiveBlockId(null)
-      }
-    }, [ensureBlockId])
 
     const updateActiveFormats = useCallback(() => {
       try {
@@ -655,35 +370,30 @@ const RichTextEditor = forwardRef<RichTextEditorHandle, RichTextEditorProps>(
           setActiveFormats(new Set())
           return
         }
-        
+
         const formats = new Set<string>()
-        
-        // Check inline formatting
+
         if (element.closest('strong, b')) formats.add('bold')
         if (element.closest('em, i')) formats.add('italic')
         if (element.closest('u')) formats.add('underline')
         if (element.closest('s, strike')) formats.add('strike')
         if (element.closest('code')) formats.add('code')
-        
-        // Check lists
         if (element.closest('ul')) formats.add('unordered-list')
         if (element.closest('ol')) formats.add('ordered-list')
         if (element.closest('ul[data-checklist="true"], ol[data-checklist="true"]')) {
           formats.add('checklist')
         }
-        
-        // Check block-level formatting
         if (element.closest('h1')) formats.add('heading1')
         if (element.closest('h2')) formats.add('heading2')
         if (element.closest('h3')) formats.add('heading3')
         if (element.closest('blockquote')) formats.add('blockquote')
-        
+
         setActiveFormats(formats)
       } catch (error) {
         console.error('Error updating active formats:', error)
         setActiveFormats(new Set())
       }
-    }, []) // Empty deps: only uses DOM APIs and setState
+    }, [])
 
     const scheduleActiveFormatsUpdate = useCallback(() => {
       if (activeFormatsFrameRef.current !== null) {
@@ -696,140 +406,109 @@ const RichTextEditor = forwardRef<RichTextEditorHandle, RichTextEditorProps>(
       })
     }, [updateActiveFormats])
 
-    const focusBlockById = useCallback(
-      (blockId: string) => {
-        if (!editorRef.current || !blockId) return
-        const escapeSelector = (value: string) => {
-          if (typeof CSS !== 'undefined' && CSS.escape) {
-            return CSS.escape(value)
-          }
-          return value.replace(/(["#.;?+*~':!^$\[\]()=>|/@])/g, '\\$1')
-        }
-        const selectorId = escapeSelector(blockId)
-        const block = editorRef.current.querySelector(
-          `[data-block-id="${selectorId}"]`
-        ) as HTMLElement | null
-        if (!block) return
+    const insertFragmentAtSelection = useCallback(
+      (fragment: DocumentFragment) => {
+        if (!editorRef.current) return false
 
-        const focusTarget = (block.querySelector('p, div, span, li, blockquote') as HTMLElement | null) ?? block
-        positionCursorInElement(focusTarget, 'start', editorRef.current)
-        block.scrollIntoView({ behavior: 'smooth', block: 'center' })
-        setActiveBlockId(blockId)
+        try {
+          let selection = window.getSelection()
+          if (!selection || selection.rangeCount === 0) {
+            editorRef.current.focus()
+            selection = window.getSelection()
+          }
+
+          if (!selection || selection.rangeCount === 0) {
+            console.warn('Unable to get selection for fragment insertion')
+            return false
+          }
+
+          const range = selection.getRangeAt(0)
+
+          if (!editorRef.current.contains(range.commonAncestorContainer)) {
+            console.warn('Selection range is outside editor')
+            return false
+          }
+
+          range.deleteContents()
+
+          const nodes = Array.from(fragment.childNodes)
+
+          if (nodes.length === 0) {
+            range.collapse(true)
+            selection.removeAllRanges()
+            selection.addRange(range)
+            return true
+          }
+
+          range.insertNode(fragment)
+
+          const lastNode = nodes[nodes.length - 1]
+          const newRange = document.createRange()
+
+          if (lastNode.nodeType === Node.TEXT_NODE) {
+            newRange.setStart(lastNode, lastNode.textContent?.length ?? 0)
+          } else if (lastNode.childNodes.length > 0) {
+            newRange.setStart(lastNode, lastNode.childNodes.length)
+          } else {
+            newRange.setStartAfter(lastNode)
+          }
+
+          newRange.collapse(true)
+          selection.removeAllRanges()
+          selection.addRange(newRange)
+          return true
+        } catch (error) {
+          console.error('Error inserting fragment at selection:', error)
+          return false
+        }
       },
       []
     )
-    
 
-    const insertFragmentAtSelection = useCallback(
-        (fragment: DocumentFragment) => {
-          if (!editorRef.current) return false
+    const insertCustomBlockAtSelection = useCallback(
+      (html: string) => {
+        const temp = document.createElement('div')
+        temp.innerHTML = html
+        const firstChild = temp.firstChild as HTMLElement
 
-          ensureSelectionWithinBlock()
+        if (firstChild && firstChild.getAttribute && firstChild.getAttribute('data-block') === 'true') {
+          return insertFragmentAtSelection(document.createRange().createContextualFragment(html))
+        }
 
-          try {
-            let selection = window.getSelection()
-            if (!selection || selection.rangeCount === 0) {
-              editorRef.current.focus()
-              selection = window.getSelection()
-            }
+        const wrapper = document.createElement('div')
+        wrapper.setAttribute('data-block', 'true')
+        wrapper.innerHTML = html
 
-            if (!selection || selection.rangeCount === 0) {
-              console.warn('Unable to get selection for fragment insertion')
-              return false
-            }
-
-            const range = selection.getRangeAt(0)
-
-            // Validate range is within editor
-            if (!editorRef.current.contains(range.commonAncestorContainer)) {
-              console.warn('Selection range is outside editor')
-              return false
-            }
-
-            range.deleteContents()
-
-            const nodes = Array.from(fragment.childNodes)
-
-            if (nodes.length === 0) {
-              range.collapse(true)
-              selection.removeAllRanges()
-              selection.addRange(range)
-              return true
-            }
-
-            range.insertNode(fragment)
-
-            const lastNode = nodes[nodes.length - 1]
-            const newRange = document.createRange()
-
-            if (lastNode.nodeType === Node.TEXT_NODE) {
-              newRange.setStart(lastNode, lastNode.textContent?.length ?? 0)
-            } else if (lastNode.childNodes.length > 0) {
-              newRange.setStart(lastNode, lastNode.childNodes.length)
-            } else {
-              newRange.setStartAfter(lastNode)
-            }
-
-            newRange.collapse(true)
-            selection.removeAllRanges()
-            selection.addRange(newRange)
-            return true
-          } catch (error) {
-            console.error('Error inserting fragment at selection:', error)
-            return false
-          }
-        },
-        [editorRef, ensureSelectionWithinBlock]
-      )
-
-        const insertCustomBlockAtSelection = useCallback(
-          (html: string) => {
-            // Parse the HTML to check if it's already marked as a block
-            const temp = document.createElement('div')
-            temp.innerHTML = html
-            const firstChild = temp.firstChild as HTMLElement
-            
-            // If the content already has data-block attribute (inline blocks like note-link),
-            // insert it directly without wrapping
-            if (firstChild && firstChild.getAttribute && firstChild.getAttribute('data-block') === 'true') {
-              return insertFragmentAtSelection(document.createRange().createContextualFragment(html))
-            }
-            
-            // Otherwise, wrap block in a container with data-block-type so it survives sanitization
-            const wrapper = document.createElement('div')
-            wrapper.setAttribute('data-block', 'true')
-            wrapper.innerHTML = html
-
-            return insertFragmentAtSelection(document.createRange().createContextualFragment(wrapper.outerHTML))
-          },
-          [insertFragmentAtSelection]
-        )
+        return insertFragmentAtSelection(document.createRange().createContextualFragment(wrapper.outerHTML))
+      },
+      [insertFragmentAtSelection]
+    )
 
     const insertHTMLAtSelection = useCallback(
-        (html: string) => {
-          const fragment = document.createDocumentFragment()
+      (html: string) => {
+        const fragment = document.createDocumentFragment()
 
-          if (html) {
-            const template = document.createElement('template')
-            template.innerHTML = html
+        if (html) {
+          const template = document.createElement('template')
+          template.innerHTML = html
 
-            while (template.content.firstChild) {
-              fragment.appendChild(template.content.firstChild)
-            }
+          while (template.content.firstChild) {
+            fragment.appendChild(template.content.firstChild)
           }
+        }
 
-          return insertFragmentAtSelection(fragment)
-        },
-        [insertFragmentAtSelection]
-      )
+        return insertFragmentAtSelection(fragment)
+      },
+      [insertFragmentAtSelection]
+    )
 
     const insertPlainTextAtSelection = useCallback(
-        (text: string) => {
-          const fragment = splitLinesToFragment(text)
-          return insertFragmentAtSelection(fragment)
-        },
-        [insertFragmentAtSelection]
-      )
+      (text: string) => {
+        const fragment = splitLinesToFragment(text)
+        return insertFragmentAtSelection(fragment)
+      },
+      [insertFragmentAtSelection]
+    )
 
     // keep customBlocksRef in sync with prop
     useEffect(() => {
@@ -837,36 +516,17 @@ const RichTextEditor = forwardRef<RichTextEditorHandle, RichTextEditorProps>(
     }, [customBlocks])
 
     useEffect(() => {
-      updateBlockMetadata()
-    }, [updateBlockMetadata])
-
-    useEffect(() => {
       const handleSelection = () => {
         if (!isSelectionInsideEditor()) {
-          setActiveBlockId(null)
           setActiveFormats(new Set())
           return
         }
-
-        refreshActiveBlock()
         scheduleActiveFormatsUpdate()
       }
 
       document.addEventListener('selectionchange', handleSelection)
       return () => document.removeEventListener('selectionchange', handleSelection)
-    }, [isSelectionInsideEditor, refreshActiveBlock, scheduleActiveFormatsUpdate])
-
-    useEffect(() => {
-      if (!editorRef.current) return
-      const nodes = editorRef.current.querySelectorAll('[data-block-id]')
-      nodes.forEach((node) => {
-        if (showBlockOutlines) {
-          node.setAttribute('data-block-outline', 'true')
-        } else {
-          node.removeAttribute('data-block-outline')
-        }
-      })
-    }, [showBlockOutlines, blockMetadata])
+    }, [isSelectionInsideEditor, scheduleActiveFormatsUpdate])
 
     const sanitize = useCallback(
       (html: string) => {
@@ -876,21 +536,16 @@ const RichTextEditor = forwardRef<RichTextEditorHandle, RichTextEditorProps>(
       []
     )
 
-    // WebView-specific focus helper
     const forceWebViewFocus = useCallback(() => {
-      if (!editorRef.current) return;
-      
-      // WebView sometimes needs extra focus handling
-      editorRef.current.blur();
+      if (!editorRef.current) return
+      editorRef.current.blur()
       setTimeout(() => {
-        editorRef.current?.focus();
-      }, 50);
-    }, []);
+        editorRef.current?.focus()
+      }, 50)
+    }, [])
 
-    // Debounced checklist normalization
     const normalizeChecklistItemsInline = useCallback(() => {
       if (!editorRef.current) return
-
       normalizeAllLists(editorRef.current)
     }, [])
 
@@ -898,7 +553,7 @@ const RichTextEditor = forwardRef<RichTextEditorHandle, RichTextEditorProps>(
       if (checklistNormalizationTimerRef.current) {
         clearTimeout(checklistNormalizationTimerRef.current)
       }
-      
+
       checklistNormalizationTimerRef.current = setTimeout(() => {
         normalizeChecklistItemsInline()
       }, 150)
@@ -906,17 +561,15 @@ const RichTextEditor = forwardRef<RichTextEditorHandle, RichTextEditorProps>(
 
     const emitChange = useCallback(() => {
       if (!editorRef.current) return
-      
+
       try {
-        // Validate editor is still connected
         if (!editorRef.current.isConnected) {
           console.warn('Editor disconnected, skipping change emission')
           return
         }
-        
+
         const sanitized = sanitize(editorRef.current.innerHTML)
-        
-        // Compare against what we last synced, not the (potentially stale) value prop
+
         if (sanitized !== lastSyncedValueRef.current) {
           lastSyncedValueRef.current = sanitized
           onChange(sanitized)
@@ -924,13 +577,12 @@ const RichTextEditor = forwardRef<RichTextEditorHandle, RichTextEditorProps>(
             debouncedCaptureRef.current()
           }
         }
-        
-        updateBlockMetadata()
+
         scheduleActiveFormatsUpdate()
       } catch (error) {
         console.error('Error emitting change:', error)
       }
-    }, [onChange, sanitize, updateBlockMetadata, scheduleActiveFormatsUpdate])
+    }, [onChange, sanitize, scheduleActiveFormatsUpdate])
 
     // Public API: insert a custom block by type and optional payload
     const insertCustomBlock = useCallback(
@@ -946,9 +598,6 @@ const RichTextEditor = forwardRef<RichTextEditorHandle, RichTextEditorProps>(
           const html = desc.render(payload)
           const ok = insertCustomBlockAtSelection(html)
           if (ok) {
-            // mark the inserted block's top-level element with data-block-type
-            // and, if a payload was provided, attach it as data-block-payload
-            // we do this after a short timeout to allow DOM insertion
             setTimeout(() => {
               if (!editorRef.current) return
               const blocks = editorRef.current.querySelectorAll('[data-block]')
@@ -964,15 +613,13 @@ const RichTextEditor = forwardRef<RichTextEditorHandle, RichTextEditorProps>(
                   }
                 }
               })
-              
-              // For block-level custom blocks (like images), ensure there's a paragraph after
-              // for continued editing if the block is at the end
+
+              // Ensure there's a paragraph after block-level custom blocks for continued editing
               const selection = window.getSelection()
               if (selection && selection.rangeCount > 0) {
                 const range = selection.getRangeAt(0)
                 const container = range.commonAncestorContainer
-                
-                // Find the custom block that was just inserted
+
                 let blockElement: HTMLElement | null = null
                 if (container.nodeType === Node.ELEMENT_NODE) {
                   blockElement = (container as HTMLElement).querySelector('[data-block="true"]')
@@ -982,22 +629,17 @@ const RichTextEditor = forwardRef<RichTextEditorHandle, RichTextEditorProps>(
                 } else if (container.parentElement) {
                   blockElement = container.parentElement.closest('[data-block="true"]') as HTMLElement
                 }
-                
-                // Check if this is a block-level element (like image) and needs a trailing paragraph
-                // We check the block type directly rather than getComputedStyle for better performance
+
                 if (blockElement && blockElement.getAttribute('data-block-type') === type) {
-                  // Known block-level custom block types
                   const blockLevelTypes = ['image', 'table', 'file']
                   const isBlockLevel = blockLevelTypes.includes(type)
                   const hasNextSibling = blockElement.nextElementSibling
-                  
+
                   if (isBlockLevel && !hasNextSibling) {
-                    // Create a paragraph after the block for continued editing
                     const paragraph = document.createElement('p')
                     paragraph.appendChild(document.createElement('br'))
                     blockElement.parentNode?.insertBefore(paragraph, blockElement.nextSibling)
-                    
-                    // Position cursor in the new paragraph
+
                     const newRange = document.createRange()
                     newRange.setStart(paragraph, 0)
                     newRange.collapse(true)
@@ -1018,7 +660,7 @@ const RichTextEditor = forwardRef<RichTextEditorHandle, RichTextEditorProps>(
       [insertCustomBlockAtSelection, emitChange]
     )
 
-    // Rehydrate existing custom blocks in the editor by running descriptor.parse
+    // Rehydrate existing custom blocks in the editor
     const rehydrateExistingBlocks = useCallback(() => {
       if (!editorRef.current) return
       const descriptors = customBlocksRef.current || []
@@ -1037,8 +679,6 @@ const RichTextEditor = forwardRef<RichTextEditorHandle, RichTextEditorProps>(
           } catch (e) {
             // parsing failed - ignore
           }
-        } else {
-          // if there is already a payload attribute, leave it as-is; otherwise clear
         }
       })
     }, [])
@@ -1064,160 +704,31 @@ const RichTextEditor = forwardRef<RichTextEditorHandle, RichTextEditorProps>(
         if (!target || !editorElement.contains(target)) {
           return
         }
-        
-        // Check for note link clicks
+
         const noteLinkElement = target.closest('[data-block-type="note-link"]') as HTMLElement | null
         if (noteLinkElement) {
           event.preventDefault()
           const noteId = noteLinkElement.getAttribute('data-note-id')
           if (noteId) {
-            // Dispatch custom event that parent can listen to
-            window.dispatchEvent(new CustomEvent('note-link-click', { 
-              detail: { noteId } 
+            window.dispatchEvent(new CustomEvent('note-link-click', {
+              detail: { noteId }
             }))
           }
           return
         }
-
       }
-      
+
       editorElement.addEventListener('click', handleClick)
-      
+
       return () => {
         editorElement.removeEventListener('click', handleClick)
       }
     }, [])
 
-    const createChecklistCheckbox = useCallback(() => {
-      const checkbox = document.createElement('input')
-      checkbox.type = 'checkbox'
-      checkbox.className = 'align-middle mr-2 checklist-checkbox'
-      checkbox.setAttribute('data-checked', 'false')
-      checkbox.addEventListener('change', () => {
-        checkbox.setAttribute('data-checked', checkbox.checked ? 'true' : 'false')
-        if (checkbox.checked) {
-          checkbox.setAttribute('checked', 'true')
-        } else {
-          checkbox.removeAttribute('checked')
-        }
-        emitChange()
-      })
-      return checkbox
-    }, [emitChange])
-
-    const markChecklistList = useCallback(
-      (list: HTMLUListElement | HTMLOListElement | null | undefined, isChecklist: boolean) => {
-        if (!list) return
-        if (isChecklist) {
-          list.classList.add('checklist-list')
-          list.setAttribute('data-checklist', 'true')
-        } else {
-          list.classList.remove('checklist-list')
-          list.removeAttribute('data-checklist')
-        }
-      },
-      []
-    )
-
-    const markChecklistItem = useCallback((listItem: HTMLLIElement, isChecklist: boolean) => {
-      if (isChecklist) {
-        listItem.classList.add('checklist-item')
-        listItem.setAttribute('data-checklist', 'true')
-      } else {
-        listItem.classList.remove('checklist-item')
-        listItem.removeAttribute('data-checklist')
-      }
-      markChecklistList(listItem.parentElement as HTMLUListElement | HTMLOListElement | null, isChecklist)
-    }, [markChecklistList])
-
-    const ensureTextNode = useCallback((element: HTMLElement): Text => {
-      const existingTextNode = Array.from(element.childNodes).find(
-        (node): node is Text => node.nodeType === Node.TEXT_NODE
-      )
-      if (existingTextNode) {
-        return existingTextNode
-      }
-      const textNode = document.createTextNode('')
-      element.appendChild(textNode)
-      return textNode
-    }, [])
-
-    const getChecklistItemText = useCallback((listItem: HTMLLIElement) => {
-      return Array.from(listItem.childNodes)
-        .filter((node) => {
-          return !(node instanceof HTMLInputElement && node.type === 'checkbox')
-        })
-        .map((node) => node.textContent ?? '')
-        .join('')
-        .trim()
-    }, [])
-
-    const addCheckboxToListItem = useCallback(
-      (listItem: HTMLLIElement) => {
-        const existingCheckbox = listItem.querySelector('input[type="checkbox"]') as
-          | HTMLInputElement
-          | null
-
-        if (existingCheckbox) {
-          existingCheckbox.classList.add('checklist-checkbox', 'align-middle', 'mr-2')
-          markChecklistItem(listItem, true)
-          ensureTextNode(listItem)
-          return existingCheckbox
-        }
-
-        const checkbox = createChecklistCheckbox()
-        listItem.insertBefore(checkbox, listItem.firstChild)
-        markChecklistItem(listItem, true)
-        ensureTextNode(listItem)
-        return checkbox
-      },
-      [createChecklistCheckbox, ensureTextNode, markChecklistItem]
-    )
-
-    const removeCheckboxFromListItem = useCallback(
-      (listItem: HTMLLIElement) => {
-        const checkbox = listItem.querySelector('input[type="checkbox"]')
-        if (checkbox) {
-          checkbox.remove()
-        }
-        markChecklistItem(listItem, false)
-      },
-      [markChecklistItem]
-    )
-
-    const convertListToChecklist = useCallback(
-      (list: HTMLUListElement | HTMLOListElement) => {
-        Array.from(list.children).forEach((child) => {
-          if (child instanceof HTMLLIElement) {
-            addCheckboxToListItem(child)
-          }
-        })
-        markChecklistList(list, true)
-      },
-      [addCheckboxToListItem, markChecklistList]
-    )
-
-    const convertListToRegular = useCallback(
-      (list: HTMLUListElement | HTMLOListElement) => {
-        Array.from(list.children).forEach((child) => {
-          if (child instanceof HTMLLIElement) {
-            removeCheckboxFromListItem(child)
-          }
-        })
-        markChecklistList(list, false)
-      },
-      [markChecklistList, removeCheckboxFromListItem]
-    )
-
-    const normalizeChecklistItems = useCallback(() => {
-      if (!editorRef.current) return
-      normalizeAllLists(editorRef.current)
-    }, [])
-
     // Setup mutation observer for checklist normalization
     useEffect(() => {
       if (!editorRef.current) return
-      
+
       const observer = new MutationObserver((mutations) => {
         const hasRelevantChanges = mutations.some(mutation => {
           if (mutation.target instanceof HTMLElement) {
@@ -1226,7 +737,7 @@ const RichTextEditor = forwardRef<RichTextEditorHandle, RichTextEditorProps>(
               return true
             }
           }
-          
+
           for (const node of Array.from(mutation.addedNodes)) {
             if (node instanceof HTMLElement) {
               if (node.tagName === 'LI' || node.querySelector('li') || node.querySelector('input[type="checkbox"]')) {
@@ -1234,24 +745,24 @@ const RichTextEditor = forwardRef<RichTextEditorHandle, RichTextEditorProps>(
               }
             }
           }
-          
+
           return false
         })
-        
+
         if (hasRelevantChanges) {
           scheduleChecklistNormalization()
         }
       })
-      
+
       observer.observe(editorRef.current, {
         childList: true,
         subtree: true,
         attributes: true,
         attributeFilter: ['checked', 'data-checked']
       })
-      
+
       mutationObserverRef.current = observer
-      
+
       return () => {
         observer.disconnect()
         if (checklistNormalizationTimerRef.current) {
@@ -1266,21 +777,18 @@ const RichTextEditor = forwardRef<RichTextEditorHandle, RichTextEditorProps>(
     const execCommand = useCallback(
       (command: string, valueArg?: string) => {
         if (disabled || !editorRef.current || !editorRef.current.isConnected) return
-        
-        // Prevent concurrent command execution to avoid race conditions
+
         if (isProcessingCommandRef.current) {
           console.warn('Command execution already in progress, skipping:', command)
           return
         }
 
-        if (!ensureSelectionWithinBlock()) return
-        
         isProcessingCommandRef.current = true
-        
+
         try {
           const editor = editorRef.current
           const selection = window.getSelection()
-          
+
           if (selection && selection.rangeCount > 0) {
             try {
               const range = selection.getRangeAt(0)
@@ -1291,7 +799,7 @@ const RichTextEditor = forwardRef<RichTextEditorHandle, RichTextEditorProps>(
               console.warn('Error sanitizing inline nodes:', e)
             }
           }
-          
+
           switch (command) {
             case 'bold':
               applyInlineStyle('strong')
@@ -1326,7 +834,7 @@ const RichTextEditor = forwardRef<RichTextEditorHandle, RichTextEditorProps>(
             default:
               console.warn(`Unsupported rich text command: ${command}`)
           }
-          
+
           if (editor.isConnected) {
             try {
               normalizeEditorContent(editor)
@@ -1335,34 +843,30 @@ const RichTextEditor = forwardRef<RichTextEditorHandle, RichTextEditorProps>(
               console.warn('Error normalizing content after command:', e)
             }
           }
-          
+
           emitChange()
         } catch (error) {
-          console.error('Error in execCommand:', error);
-          // Try to recover gracefully
+          console.error('Error in execCommand:', error)
           try {
             if (editorRef.current && editorRef.current.isConnected) {
-              normalizeEditorContent(editorRef.current);
+              normalizeEditorContent(editorRef.current)
             }
           } catch (e) {
-            console.error('Failed to recover from execCommand error:', e);
+            console.error('Failed to recover from execCommand error:', e)
           }
         } finally {
-          // Reset the processing flag synchronously
           isProcessingCommandRef.current = false
         }
       },
-      [disabled, emitChange, ensureSelectionWithinBlock]
+      [disabled, emitChange]
     )
 
     const applyCode = useCallback(() => {
       if (disabled || !editorRef.current || !editorRef.current.isConnected) return
-      
-      if (!ensureSelectionWithinBlock()) return
-      
+
       try {
         applyInlineStyle('code')
-        
+
         if (editorRef.current && editorRef.current.isConnected) {
           try {
             normalizeEditorContent(editorRef.current)
@@ -1370,23 +874,21 @@ const RichTextEditor = forwardRef<RichTextEditorHandle, RichTextEditorProps>(
             console.warn('Error normalizing after code application:', e)
           }
         }
-        
+
         emitChange()
       } catch (error) {
-        console.error('Error in applyCode:', error);
+        console.error('Error in applyCode:', error)
       }
-    }, [disabled, emitChange, ensureSelectionWithinBlock])
+    }, [disabled, emitChange])
 
     const toggleChecklist = useCallback(() => {
       if (disabled || !editorRef.current || !editorRef.current.isConnected) return
-      
-      if (!ensureSelectionWithinBlock()) return
-      
+
       const editor = editorRef.current
-      
+
       try {
         toggleChecklistState(editor)
-        
+
         if (editor.isConnected) {
           try {
             normalizeEditorContent(editor)
@@ -1395,64 +897,43 @@ const RichTextEditor = forwardRef<RichTextEditorHandle, RichTextEditorProps>(
             console.warn('Error normalizing after checklist toggle:', e)
           }
         }
-        
+
         emitChange()
       } catch (error) {
-        console.error('Error in toggleChecklist:', error);
+        console.error('Error in toggleChecklist:', error)
       }
-    }, [disabled, emitChange, ensureSelectionWithinBlock])
+    }, [disabled, emitChange])
 
-    /**
-     * Apply heading format - improved with better cursor positioning
-     * Uses applyBlockFormat from commandDispatcher with enhanced cursor management
-     */
     const applyHeading = useCallback(
       (level: 1 | 2 | 3) => {
         if (disabled || !editorRef.current || !editorRef.current.isConnected) return
-        
-        if (!ensureSelectionWithinBlock()) return
-        
+
         const editor = editorRef.current
-        
-        // Ensure focus before any operations (critical for WebView)
+
         try {
           editor.focus()
         } catch (e) {
           console.warn('Error focusing editor:', e)
           return
         }
-        
+
         try {
-          // Use the commandDispatcher's applyBlockFormat function
-          // This already handles cursor positioning internally
           applyBlockFormat(`h${level}` as 'h1' | 'h2' | 'h3', editor)
-          
-          // Add heading ID after block format completes
-          // Use EXTRA_LONG timing to ensure applyBlockFormat's cursor positioning (LONG=80ms) completes first
-          // This prevents race conditions where we try to find the heading before cursor is properly restored
+
           setTimeout(() => {
             try {
-              // Verify editor is still valid
-              if (!editor.isConnected) {
-                console.warn('Editor removed from DOM during heading operation')
-                return
-              }
-              
-              // Try to find the heading at the current cursor position first
+              if (!editor.isConnected) return
+
               const selection = window.getSelection()
               let targetHeading: HTMLElement | null = null
-              
+
               if (selection && selection.rangeCount > 0) {
                 try {
                   const range = selection.getRangeAt(0)
-                  if (!range.startContainer.isConnected) {
-                    console.warn('Selection not connected during heading ID assignment')
-                    return
-                  }
-                  
+                  if (!range.startContainer.isConnected) return
+
                   let node: Node | null = range.startContainer
-                  
-                  // Find the heading element containing the cursor
+
                   while (node && node !== editor) {
                     if (node.nodeType === Node.ELEMENT_NODE) {
                       const element = node as HTMLElement
@@ -1468,9 +949,7 @@ const RichTextEditor = forwardRef<RichTextEditorHandle, RichTextEditorProps>(
                   console.warn('Error finding heading element:', e)
                 }
               }
-              
-              // If we found a heading at cursor position, assign ID to it
-              // Only assign if the heading doesn't already have an ID
+
               if (targetHeading && targetHeading.isConnected && !targetHeading.id) {
                 try {
                   targetHeading.id = generateHeadingId(targetHeading.textContent || '')
@@ -1478,8 +957,7 @@ const RichTextEditor = forwardRef<RichTextEditorHandle, RichTextEditorProps>(
                   console.warn('Error generating heading ID:', e)
                 }
               }
-              
-              // Normalize and emit change once
+
               if (editor.isConnected) {
                 try {
                   normalizeEditorContent(editor)
@@ -1494,7 +972,6 @@ const RichTextEditor = forwardRef<RichTextEditorHandle, RichTextEditorProps>(
           }, CURSOR_TIMING.EXTRA_LONG)
         } catch (error) {
           console.error('Error in applyHeading:', error)
-          // Try to recover by normalizing
           try {
             if (editor.isConnected) {
               normalizeEditorContent(editor)
@@ -1504,7 +981,7 @@ const RichTextEditor = forwardRef<RichTextEditorHandle, RichTextEditorProps>(
           }
         }
       },
-      [disabled, emitChange, ensureSelectionWithinBlock]
+      [disabled, emitChange]
     )
 
     const getHeadings = useCallback(() => {
@@ -1517,17 +994,14 @@ const RichTextEditor = forwardRef<RichTextEditorHandle, RichTextEditorProps>(
       }))
     }, [])
 
-    // Save current selection
     const saveSelection = useCallback(() => {
       savedSelectionRef.current = saveSelectionRange(editorRef.current)
     }, [])
 
-    // Restore saved selection
     const restoreSelection = useCallback(() => {
       restoreSelectionRange(savedSelectionRef.current, editorRef.current)
     }, [])
 
-    // Validate URL
     const validateUrl = useCallback((url: string): { valid: boolean; error: string } => {
       if (!url.trim()) {
         return { valid: false, error: 'URL is required' }
@@ -1536,34 +1010,30 @@ const RichTextEditor = forwardRef<RichTextEditorHandle, RichTextEditorProps>(
       try {
         const trimmed = url.trim()
         const lowerTrimmed = trimmed.toLowerCase()
-        
-        // Check for common XSS patterns
-        if (lowerTrimmed.startsWith('javascript:') || 
+
+        if (lowerTrimmed.startsWith('javascript:') ||
             lowerTrimmed.startsWith('data:') ||
             lowerTrimmed.startsWith('vbscript:')) {
           return { valid: false, error: 'Invalid or dangerous protocol' }
         }
-        
-        // Add protocol if missing
+
         let testUrl = trimmed
         if (!testUrl.match(/^[a-zA-Z][a-zA-Z\d+\-.]*:/)) {
           testUrl = 'https://' + testUrl
         }
-        
+
         const urlObj = new URL(testUrl)
-        
-        // Check for valid protocols only
+
         if (!['http:', 'https:', 'mailto:', 'tel:'].includes(urlObj.protocol)) {
           return { valid: false, error: 'Invalid protocol. Use http, https, mailto, or tel' }
         }
-        
-        // Additional validation for http/https
+
         if (['http:', 'https:'].includes(urlObj.protocol)) {
           if (!urlObj.hostname || urlObj.hostname.length < 2) {
             return { valid: false, error: 'Invalid hostname' }
           }
         }
-        
+
         return { valid: true, error: '' }
       } catch (error) {
         console.error('URL validation error:', error)
@@ -1571,28 +1041,25 @@ const RichTextEditor = forwardRef<RichTextEditorHandle, RichTextEditorProps>(
       }
     }, [])
 
-    // Normalize URL (add https:// if missing)
     const normalizeUrl = useCallback((url: string): string => {
       const trimmed = url.trim()
       if (!trimmed) return trimmed
-      
+
       const lowerTrimmed = trimmed.toLowerCase()
-      
-      // Prevent XSS through URL
-      if (lowerTrimmed.startsWith('javascript:') || 
+
+      if (lowerTrimmed.startsWith('javascript:') ||
           lowerTrimmed.startsWith('data:') ||
           lowerTrimmed.startsWith('vbscript:')) {
         return ''
       }
-      
+
       if (!trimmed.match(/^[a-zA-Z][a-zA-Z\d+\-.]*:/)) {
         return 'https://' + trimmed
       }
-      
+
       return trimmed
     }, [])
 
-    // Link functionality
     const insertLink = useCallback(() => {
       if (disabled) return
 
@@ -1617,7 +1084,6 @@ const RichTextEditor = forwardRef<RichTextEditorHandle, RichTextEditorProps>(
 
     const applyLink = useCallback(() => {
       try {
-        // Validate URL
         const validation = validateUrl(linkUrl)
         if (!validation.valid) {
           setLinkUrlError(validation.error)
@@ -1625,13 +1091,12 @@ const RichTextEditor = forwardRef<RichTextEditorHandle, RichTextEditorProps>(
         }
 
         const normalizedUrl = normalizeUrl(linkUrl)
-        
-        // Additional safety check
+
         if (!normalizedUrl) {
           setLinkUrlError('Invalid URL')
           return
         }
-        
+
         restoreSelection()
 
         const selection = window.getSelection()
@@ -1642,7 +1107,7 @@ const RichTextEditor = forwardRef<RichTextEditorHandle, RichTextEditorProps>(
 
         const range = selection.getRangeAt(0)
         const existingLink = getClosestFromSelection('a', editorRef.current)
-        
+
         const parsedUrl = new URL(normalizedUrl)
         const shouldOpenInNewTab = parsedUrl.protocol === 'http:' || parsedUrl.protocol === 'https:'
 
@@ -1673,8 +1138,7 @@ const RichTextEditor = forwardRef<RichTextEditorHandle, RichTextEditorProps>(
             range.deleteContents()
             range.insertNode(link)
           }
-          
-          // Position cursor after the link for better UX
+
           applyCursorOperation(() => {
             try {
               const newRange = document.createRange()
@@ -1688,13 +1152,11 @@ const RichTextEditor = forwardRef<RichTextEditorHandle, RichTextEditorProps>(
           }, CURSOR_TIMING.SHORT)
         }
 
-        // Add to recent links
         addToRecentLinks(normalizedUrl, linkText || normalizedUrl)
 
         resetLinkDialog()
         emitChange()
-        
-        // Ensure focus returns to editor
+
         applyCursorOperation(() => {
           editorRef.current?.focus()
         }, CURSOR_TIMING.MEDIUM)
@@ -1704,25 +1166,22 @@ const RichTextEditor = forwardRef<RichTextEditorHandle, RichTextEditorProps>(
       }
     }, [linkUrl, linkText, restoreSelection, emitChange, validateUrl, normalizeUrl, addToRecentLinks, resetLinkDialog])
 
-    // Edit link
     const editLink = useCallback((linkElement: HTMLAnchorElement) => {
       setLinkUrl(linkElement.getAttribute('href') || '')
       setLinkText(linkElement.textContent || '')
       setLinkUrlError('')
       hideLinkPopoverNow()
-      
-      // Select the link element
+
       const range = document.createRange()
       range.selectNodeContents(linkElement)
       const selection = window.getSelection()
       selection?.removeAllRanges()
       selection?.addRange(range)
-      
+
       saveSelection()
       setShowLinkDialog(true)
     }, [saveSelection, hideLinkPopoverNow])
 
-    // Remove link
     const removeLink = useCallback((linkElement: HTMLAnchorElement) => {
       const text = linkElement.textContent || ''
       const textNode = document.createTextNode(text)
@@ -1731,7 +1190,6 @@ const RichTextEditor = forwardRef<RichTextEditorHandle, RichTextEditorProps>(
       emitChange()
     }, [emitChange, hideLinkPopoverNow])
 
-    // Open link in new tab
     const openLink = useCallback((url: string) => {
       window.open(url, '_blank', 'noopener,noreferrer')
     }, [])
@@ -1744,12 +1202,9 @@ const RichTextEditor = forwardRef<RichTextEditorHandle, RichTextEditorProps>(
         const match = searchMatches[matchIndex]
         const range = document.createRange()
         const selection = window.getSelection()
-        
-        if (!selection) {
-          console.warn('No selection available for highlighting match')
-          return
-        }
-        
+
+        if (!selection) return
+
         const walker = document.createTreeWalker(
           editorRef.current,
           NodeFilter.SHOW_TEXT,
@@ -1765,8 +1220,7 @@ const RichTextEditor = forwardRef<RichTextEditorHandle, RichTextEditorProps>(
             const rawOffset = match.index - currentPos
             const offset = Math.max(0, Math.min(rawOffset, nodeLength))
             const endOffset = Math.min(offset + match.length, nodeLength)
-            
-            // Set range with clamped offsets
+
             range.setStart(node, offset)
             range.setEnd(node, endOffset)
             break
@@ -1777,8 +1231,7 @@ const RichTextEditor = forwardRef<RichTextEditorHandle, RichTextEditorProps>(
 
         selection.removeAllRanges()
         selection.addRange(range)
-        
-        // Safely scroll into view
+
         const containerElement = range.startContainer.parentElement
         if (containerElement && containerElement.scrollIntoView) {
           containerElement.scrollIntoView({
@@ -1801,13 +1254,11 @@ const RichTextEditor = forwardRef<RichTextEditorHandle, RichTextEditorProps>(
         const content = editorRef.current.textContent || ''
         const query = caseSensitive ? searchQuery : searchQuery.toLowerCase()
         const searchIn = caseSensitive ? content : content.toLowerCase()
-        
+
         const matches: SearchMatch[] = []
         let index = searchIn.indexOf(query)
-        
-        // Limit matches to prevent performance issues
         let matchCount = 0
-        
+
         while (index !== -1 && matchCount < MAX_SEARCH_MATCHES) {
           matches.push({
             index,
@@ -1818,13 +1269,9 @@ const RichTextEditor = forwardRef<RichTextEditorHandle, RichTextEditorProps>(
           matchCount++
         }
 
-        if (matchCount >= MAX_SEARCH_MATCHES) {
-          console.warn(`Search limited to ${MAX_SEARCH_MATCHES} matches`)
-        }
-
         setSearchMatches(matches)
         setCurrentMatchIndex(0)
-        
+
         if (matches.length > 0) {
           highlightMatch(0)
         }
@@ -1835,30 +1282,22 @@ const RichTextEditor = forwardRef<RichTextEditorHandle, RichTextEditorProps>(
     }, [searchQuery, caseSensitive, highlightMatch])
 
     const nextMatch = useCallback(() => {
-      try {
-        if (searchMatches.length === 0) return
-        const nextIndex = (currentMatchIndex + 1) % searchMatches.length
-        setCurrentMatchIndex(nextIndex)
-        highlightMatch(nextIndex)
-      } catch (error) {
-        console.error('Error navigating to next match:', error)
-      }
+      if (searchMatches.length === 0) return
+      const nextIndex = (currentMatchIndex + 1) % searchMatches.length
+      setCurrentMatchIndex(nextIndex)
+      highlightMatch(nextIndex)
     }, [currentMatchIndex, searchMatches, highlightMatch])
 
     const previousMatch = useCallback(() => {
-      try {
-        if (searchMatches.length === 0) return
-        const prevIndex = (currentMatchIndex - 1 + searchMatches.length) % searchMatches.length
-        setCurrentMatchIndex(prevIndex)
-        highlightMatch(prevIndex)
-      } catch (error) {
-        console.error('Error navigating to previous match:', error)
-      }
+      if (searchMatches.length === 0) return
+      const prevIndex = (currentMatchIndex - 1 + searchMatches.length) % searchMatches.length
+      setCurrentMatchIndex(prevIndex)
+      highlightMatch(prevIndex)
     }, [currentMatchIndex, searchMatches, highlightMatch])
 
     const replaceCurrentMatch = useCallback(() => {
       if (searchMatches.length === 0 || !editorRef.current) return
-      
+
       try {
         highlightMatch(currentMatchIndex)
         const replaced = insertPlainTextAtSelection(replaceQuery)
@@ -1868,7 +1307,7 @@ const RichTextEditor = forwardRef<RichTextEditorHandle, RichTextEditorProps>(
           mergeAdjacentLists(editorRef.current)
           scheduleChecklistNormalization()
         }
-        
+
         emitChange()
         performSearch()
       } catch (error) {
@@ -1878,15 +1317,14 @@ const RichTextEditor = forwardRef<RichTextEditorHandle, RichTextEditorProps>(
 
     const replaceAllMatches = useCallback(() => {
       if (!editorRef.current || !searchQuery) return
-      
+
       try {
         const contentRoot = editorRef.current
         const flags = caseSensitive ? 'g' : 'gi'
-        
-        // Escape special regex characters
+
         const escapedQuery = searchQuery.replace(REGEX_ESCAPE_PATTERN, '\\$&')
         const regex = new RegExp(escapedQuery, flags)
-        
+
         const textNodes: Text[] = []
         const walker = document.createTreeWalker(contentRoot, NodeFilter.SHOW_TEXT, null)
         let node = walker.nextNode()
@@ -1907,17 +1345,14 @@ const RichTextEditor = forwardRef<RichTextEditorHandle, RichTextEditorProps>(
             matchCount += matches.length
           }
         })
-        
+
         if (matchCount >= MAX_REPLACE_MATCHES) {
-          console.warn(`Too many matches (${matchCount}+) for replace all operation, limit is ${MAX_REPLACE_MATCHES}`)
+          console.warn(`Too many matches (${matchCount}+) for replace all operation`)
           return
         }
 
-        if (matchCount === 0) {
-          return
-        }
-        
-        // Replace text-only nodes to avoid corrupting HTML structure/attributes
+        if (matchCount === 0) return
+
         textNodes.forEach((textNode) => {
           const value = textNode.textContent || ''
           if (!value) return
@@ -1934,181 +1369,47 @@ const RichTextEditor = forwardRef<RichTextEditorHandle, RichTextEditorProps>(
       }
     }, [searchQuery, replaceQuery, caseSensitive, emitChange, performSearch, scheduleChecklistNormalization])
 
-    // Horizontal rule
     const insertHorizontalRule = useCallback(() => {
       if (disabled || !editorRef.current || !editorRef.current.isConnected) return
-      
-      if (!ensureSelectionWithinBlock()) return
-      
+
       const editor = editorRef.current
-      
+
       try {
         const selection = window.getSelection()
-        if (!selection || selection.rangeCount === 0) {
-          console.warn('No selection for horizontal rule insertion')
-          return
-        }
-        
+        if (!selection || selection.rangeCount === 0) return
+
         const range = selection.getRangeAt(0)
-        
-        // Validate range is connected
-        if (!range.startContainer.isConnected) {
-          console.warn('Selection not connected for horizontal rule')
-          return
-        }
-        
+        if (!range.startContainer.isConnected) return
+
         const hr = document.createElement('hr')
-        
+
         try {
           range.insertNode(hr)
         } catch (e) {
           console.error('Error inserting horizontal rule node:', e)
           return
         }
-        
+
         const p = document.createElement('p')
         p.appendChild(document.createElement('br'))
-        
+
         if (hr.parentNode && hr.isConnected) {
           try {
             hr.parentNode.insertBefore(p, hr.nextSibling)
-            
-            // Use improved cursor positioning with validation
+
             if (p.isConnected && editor.isConnected) {
               positionCursorInElement(p, 'start', editor)
             }
           } catch (e) {
             console.error('Error inserting paragraph after hr:', e)
           }
-        } else {
-          console.warn('Horizontal rule has no parent or not connected, cannot insert paragraph')
         }
-        
+
         emitChange()
       } catch (error) {
         console.error('Error inserting horizontal rule:', error)
       }
-    }, [disabled, emitChange, ensureSelectionWithinBlock])
-
-    const createRootLevelBlock = useCallback(() => {
-      if (!editorRef.current || !editorRef.current.isConnected) return null
-
-      try {
-        const editor = editorRef.current
-        
-        const newBlock = document.createElement('div')
-        newBlock.setAttribute('data-block', 'true')
-        newBlock.className = BLOCK_ROOT_CLASS
-
-        const paragraph = document.createElement('p')
-        paragraph.appendChild(document.createElement('br'))
-        newBlock.appendChild(paragraph)
-
-        const selection = window.getSelection()
-        let anchorBlock: HTMLElement | null = null
-        if (selection && selection.rangeCount > 0) {
-          try {
-            const anchorNode = selection.getRangeAt(0).startContainer
-            if (anchorNode.isConnected) {
-              anchorBlock = (anchorNode instanceof HTMLElement ? anchorNode : anchorNode.parentElement)?.closest(
-                '[data-block-id]'
-              ) as HTMLElement | null
-            }
-          } catch (e) {
-            console.warn('Error getting anchor block:', e)
-          }
-        }
-
-        try {
-          if (anchorBlock && anchorBlock.isConnected && anchorBlock.parentElement === editor) {
-            anchorBlock.insertAdjacentElement('afterend', newBlock)
-          } else {
-            editor.appendChild(newBlock)
-          }
-        } catch (e) {
-          console.error('Error inserting new block:', e)
-          return null
-        }
-
-        ensureBlockId(newBlock)
-        
-        // Verify block was successfully inserted
-        if (!newBlock.isConnected) {
-          console.warn('New block not connected after insertion')
-          return null
-        }
-        
-        const target = (newBlock.querySelector('p, div, span') as HTMLElement | null) ?? newBlock
-        
-        try {
-          positionCursorInElement(target, 'start', editor)
-        } catch (e) {
-          console.warn('Error positioning cursor in new block:', e)
-        }
-        
-        try {
-          normalizeEditorContent(editor)
-        } catch (e) {
-          console.warn('Error normalizing editor content:', e)
-        }
-        
-        emitChange()
-        updateBlockMetadata()
-        return newBlock
-      } catch (error) {
-        console.error('Error creating root level block:', error)
-        return null
-      }
-    }, [emitChange, ensureBlockId, updateBlockMetadata])
-
-    const deleteActiveBlock = useCallback(() => {
-      if (!editorRef.current || !editorRef.current.isConnected || !activeBlockId) return
-
-      try {
-        const editor = editorRef.current
-        const escapeSelector = (value: string) =>
-          value.replace(/[\\"]/g, '\\$&')
-        const block = editor.querySelector(
-          `[data-block-id="${escapeSelector(activeBlockId)}"]`
-        ) as HTMLElement | null
-        if (!block) return
-
-        // Determine the sibling to focus after deletion
-        const nextSibling = block.nextElementSibling as HTMLElement | null
-        const prevSibling = block.previousElementSibling as HTMLElement | null
-        const targetSibling = nextSibling || prevSibling
-
-        block.remove()
-
-        // Ensure there is always at least one block left
-        if (!editor.querySelector('[data-block]')) {
-          const newBlock = createEmptyBlock()
-          editor.appendChild(newBlock)
-          ensureBlockId(newBlock)
-          const focusTarget = (newBlock.querySelector('p, div, span') as HTMLElement | null) ?? newBlock
-          positionCursorInElement(focusTarget, 'start', editor)
-          setActiveBlockId(newBlock.getAttribute('data-block-id'))
-        } else if (targetSibling) {
-          ensureBlockId(targetSibling)
-          const focusTarget = (targetSibling.querySelector('p, div, span, li, blockquote') as HTMLElement | null) ?? targetSibling
-          positionCursorInElement(focusTarget, 'start', editor)
-          setActiveBlockId(targetSibling.getAttribute('data-block-id'))
-        }
-
-        emitChange()
-        updateBlockMetadata()
-      } catch (error) {
-        console.error('Error deleting active block:', error)
-      }
-    }, [activeBlockId, createEmptyBlock, emitChange, ensureBlockId, updateBlockMetadata])
-
-    /**
-     * Ensure the editor always has at least one block for writing
-     * Creates a default block if the editor is empty
-     */
-    const ensureDefaultBlock = useCallback(() => {
-      enforceBlockStructure({ preserveSelection: true, forceCursorInside: true })
-    }, [enforceBlockStructure])
+    }, [disabled, emitChange])
 
     const applyHistoryAction = useCallback(
       (action: 'undo' | 'redo') => {
@@ -2120,16 +1421,11 @@ const RichTextEditor = forwardRef<RichTextEditorHandle, RichTextEditorProps>(
           historyManagerRef.current.redo()
         }
 
-        enforceBlockStructure({ preserveSelection: true, forceCursorInside: true })
         emitChange()
       },
-      [emitChange, enforceBlockStructure]
+      [emitChange]
     )
 
-    /**
-     * Execute a rich text command
-     * This is the main entry point for all formatting commands
-     */
     const executeRichTextCommand = useCallback((cmd: RichTextCommand) => {
       switch (cmd) {
         case 'bold':
@@ -2183,48 +1479,19 @@ const RichTextEditor = forwardRef<RichTextEditorHandle, RichTextEditorProps>(
       }
     }, [execCommand, applyCode, toggleChecklist, applyHeading, insertHorizontalRule, insertLink, applyHistoryAction])
 
-    const handleBlockTypeChange = useCallback((value: string) => {
-      if (disabled || !editorRef.current || !editorRef.current.isConnected) return
-      
-      try {
-        switch (value) {
-          case 'heading1':
-            applyHeading(1)
-            break
-          case 'heading2':
-            applyHeading(2)
-            break
-          case 'heading3':
-            applyHeading(3)
-            break
-          case 'blockquote':
-            execCommand('formatBlock', 'blockquote')
-            break
-          case 'paragraph':
-          case 'p':
-            execCommand('formatBlock', 'p')
-            break
-          default:
-            console.warn('Unknown block type:', value)
-        }
-      } catch (error) {
-        console.error('Error in handleBlockTypeChange:', error)
-      }
-    }, [disabled, applyHeading, execCommand])
-
     const scrollToHeading = useCallback((headingId: string) => {
       if (!editorRef.current || !headingId) return
-      
-      const escapedId = typeof CSS !== 'undefined' && CSS.escape 
+
+      const escapedId = typeof CSS !== 'undefined' && CSS.escape
         ? CSS.escape(headingId)
         : headingId.replace(/[!"#$%&'()*+,.\/:;<=>?@[\\\]^`{|}~]/g, '\\$&')
       const heading = editorRef.current.querySelector(`#${escapedId}`)
       if (heading && heading instanceof HTMLElement) {
         const editorRect = editorRef.current.getBoundingClientRect()
         const headingRect = heading.getBoundingClientRect()
-        
+
         const scrollTop = editorRef.current.scrollTop + (headingRect.top - editorRect.top) - 16
-        
+
         editorRef.current.scrollTo({
           top: scrollTop,
           behavior: 'smooth'
@@ -2246,7 +1513,7 @@ const RichTextEditor = forwardRef<RichTextEditorHandle, RichTextEditorProps>(
             const context = getSelectionContext(editorRef.current)
             const element = context?.element
             if (!element) return false
-            
+
             switch (command) {
               case 'bold':
                 return !!element?.closest('strong, b')
@@ -2300,21 +1567,6 @@ const RichTextEditor = forwardRef<RichTextEditorHandle, RichTextEditorProps>(
         insertCustomBlock: (type: string, payload?: any) => {
           return insertCustomBlock(type, payload)
         },
-        getBlockPayloads: () => {
-          if (!editorRef.current) return []
-          const nodes = Array.from(editorRef.current.querySelectorAll('[data-block][data-block-type]'))
-          return nodes.map((n) => {
-            const type = n.getAttribute('data-block-type') || ''
-            const raw = n.getAttribute('data-block-payload')
-            let payload: any = undefined
-            if (raw) {
-              try {
-                payload = JSON.parse(decodeURIComponent(raw))
-              } catch {}
-            }
-            return { type, payload, node: n }
-          })
-        },
         exec: (command: RichTextCommand) => {
           executeRichTextCommand(command)
         }
@@ -2337,38 +1589,27 @@ const RichTextEditor = forwardRef<RichTextEditorHandle, RichTextEditorProps>(
 
       try {
         const editorEl = editorRef.current
-        
-        // Validate editor is still connected to DOM
+
         if (!editorEl.isConnected) {
           console.warn('Editor not connected to DOM during value sync')
           return
         }
-        
+
         const sanitizedValue = sanitize(value || '')
 
-        // Only update if value has actually changed to prevent unnecessary renders
         if (lastSyncedValueRef.current !== sanitizedValue) {
-          // Skip DOM clobbering when the editor is focused – the user is
-          // actively typing and the DOM is the source of truth.  The only
-          // time we need to force-write innerHTML is when an *external*
-          // source changed the value (e.g. loading a different note, undo
-          // from the parent, or a collaborative update).
           const editorHasFocus = editorEl === document.activeElement || editorEl.contains(document.activeElement)
           if (editorHasFocus) {
-            // Defer external updates while the user is actively typing. We'll
-            // flush this on blur to avoid clobbering live composition/selection.
             pendingExternalValueRef.current = sanitizedValue
             return
           }
 
-          // Store cursor position before update
           const savedCursorPos = saveCursorPosition()
-          
+
           editorEl.innerHTML = sanitizedValue
           lastSyncedValueRef.current = sanitizedValue
           pendingExternalValueRef.current = null
-          
-          // Restore cursor position after update if it was valid
+
           if (savedCursorPos) {
             try {
               restoreCursorPosition(savedCursorPos, editorEl)
@@ -2376,7 +1617,7 @@ const RichTextEditor = forwardRef<RichTextEditorHandle, RichTextEditorProps>(
               console.warn('Could not restore cursor position:', error)
             }
           }
-          
+
           if (historyManagerRef.current) {
             try {
               historyManagerRef.current.capture()
@@ -2385,18 +1626,15 @@ const RichTextEditor = forwardRef<RichTextEditorHandle, RichTextEditorProps>(
             }
           }
 
-          // Only run post-sync maintenance when we actually wrote innerHTML
           scheduleChecklistNormalization()
           rehydrateExistingBlocks()
-          updateBlockMetadata()
         }
 
-        // Ensure editor always has a default block when empty
-        ensureDefaultBlock()
+        ensureEditorHasContent(editorEl)
       } catch (error) {
         console.error('Error synchronizing editor value:', error)
       }
-    }, [sanitize, value, scheduleChecklistNormalization, rehydrateExistingBlocks, updateBlockMetadata, ensureDefaultBlock])
+    }, [sanitize, value, scheduleChecklistNormalization, rehydrateExistingBlocks])
 
     const flushPendingExternalValue = useCallback(() => {
       const editorEl = editorRef.current
@@ -2425,12 +1663,11 @@ const RichTextEditor = forwardRef<RichTextEditorHandle, RichTextEditorProps>(
 
         scheduleChecklistNormalization()
         rehydrateExistingBlocks()
-        updateBlockMetadata()
-        ensureDefaultBlock()
+        ensureEditorHasContent(editorEl)
       } catch (error) {
         console.error('Error flushing pending external value:', error)
       }
-    }, [sanitize, scheduleChecklistNormalization, rehydrateExistingBlocks, updateBlockMetadata, ensureDefaultBlock])
+    }, [sanitize, scheduleChecklistNormalization, rehydrateExistingBlocks])
 
     const handleEditorBlur = useCallback(() => {
       window.setTimeout(() => {
@@ -2450,7 +1687,6 @@ const RichTextEditor = forwardRef<RichTextEditorHandle, RichTextEditorProps>(
         } else {
           target.removeAttribute('checked')
         }
-        // Update progress on the parent checklist
         const parentList = getClosestList(target)
         if (parentList) {
           updateChecklistProgress(parentList)
@@ -2465,13 +1701,12 @@ const RichTextEditor = forwardRef<RichTextEditorHandle, RichTextEditorProps>(
       }
     }, [emitChange])
 
-    // Initialize image block interactions (resize and delete)
+    // Initialize image block interactions
     useEffect(() => {
       if (!editorRef.current) return
-      
-      // Dynamically import and initialize image block interactions
+
       let cleanupFn: (() => void) | undefined = undefined
-      
+
       const initImageBlocks = async () => {
         try {
           const { initializeImageBlockInteractions } = await import('@/lib/editor/imageBlock')
@@ -2480,9 +1715,9 @@ const RichTextEditor = forwardRef<RichTextEditorHandle, RichTextEditorProps>(
           console.error('Failed to initialize image block interactions:', error)
         }
       }
-      
+
       initImageBlocks()
-      
+
       return () => {
         if (cleanupFn) {
           cleanupFn()
@@ -2504,241 +1739,220 @@ const RichTextEditor = forwardRef<RichTextEditorHandle, RichTextEditorProps>(
 
     const handleInput = () => {
       try {
-        // Validate editor is still connected to DOM
         if (!editorRef.current || !editorRef.current.isConnected) {
           console.warn('Editor disconnected during input')
           return
         }
-        enforceBlockStructure({ preserveSelection: true, forceCursorInside: false })
         emitChange()
       } catch (error) {
         console.error('Error in handleInput:', error)
       }
     }
 
-  const handleKeyDown = (event: ReactKeyboardEvent<HTMLDivElement>) => {
-    try {
-      // Validate editor state
-      if (disabled || !editorRef.current || !editorRef.current.isConnected) {
-        return
-      }
+    const handleKeyDown = (event: ReactKeyboardEvent<HTMLDivElement>) => {
+      try {
+        if (disabled || !editorRef.current || !editorRef.current.isConnected) {
+          return
+        }
 
-      if (!ensureSelectionWithinBlock()) {
-        return
-      }
+        // Handle autoformatting
+        if (autoformatEnabled && shouldApplyAutoformat(event.nativeEvent)) {
+          try {
+            const selection = window.getSelection()
+            if (selection && selection.rangeCount > 0) {
+              const range = selection.getRangeAt(0)
+              const node = range.startContainer
 
-      // Handle autoformatting
-      if (autoformatEnabled && shouldApplyAutoformat(event.nativeEvent)) {
-        try {
-          const selection = window.getSelection()
-          if (selection && selection.rangeCount > 0) {
-            const range = selection.getRangeAt(0)
-            const node = range.startContainer
-            
-            // Check for inline autoformatting (bold, italic, etc.)
-            if (node.nodeType === Node.TEXT_NODE && event.key === ' ') {
-              const textNode = node as Text
-              const cursorOffset = range.startOffset
-              
-              if (applyAutoformat(textNode, cursorOffset)) {
-                event.preventDefault()
-                emitChange()
-                return
-              }
-            }
-            
-            // Check for list prefix patterns (at start of line)
-            if (event.key === ' ') {
-              const textNode = node.nodeType === Node.TEXT_NODE ? node as Text : null
-              if (textNode) {
-                const text = textNode.textContent?.substring(0, range.startOffset) || ''
-                const lineStart = text.lastIndexOf('\n') + 1
-                const lineText = text.substring(lineStart)
-                const action = checkListPrefixPattern(lineText)
-                
-                if (action) {
+              if (node.nodeType === Node.TEXT_NODE && event.key === ' ') {
+                const textNode = node as Text
+                const cursorOffset = range.startOffset
+
+                if (applyAutoformat(textNode, cursorOffset)) {
                   event.preventDefault()
-                  
-                  // Remove the pattern text
-                  const patternLength = lineText.length
-                  const removeRange = document.createRange()
-                  removeRange.setStart(textNode, range.startOffset - patternLength)
-                  removeRange.setEnd(textNode, range.startOffset)
-                  removeRange.deleteContents()
-                  
-                  // Apply the formatting
-                  switch (action) {
-                    case 'unordered-list':
-                      execCommand('insertUnorderedList')
-                      break
-                    case 'ordered-list':
-                      execCommand('insertOrderedList')
-                      break
-                    case 'checklist':
-                      toggleChecklist()
-                      break
-                    case 'heading1':
-                      applyHeading(1)
-                      break
-                    case 'heading2':
-                      applyHeading(2)
-                      break
-                    case 'heading3':
-                      applyHeading(3)
-                      break
-                    case 'blockquote':
-                      execCommand('formatBlock', 'blockquote')
-                      break
-                    case 'horizontal-rule':
-                      insertHorizontalRule()
-                      break
-                  }
-                  
                   emitChange()
                   return
                 }
               }
-            }
-          }
-        } catch (error) {
-          console.error('Error in autoformatting:', error)
-        }
-      }
-      
-      if (event.key === 'Enter' && (event.metaKey || event.ctrlKey)) {
-        try {
-          event.preventDefault()
-          createRootLevelBlock()
-          return
-        } catch (error) {
-          console.error('Error creating root level block:', error)
-        }
-      }
 
-      // Handle Tab/Shift+Tab for list indent/outdent
-      if (event.key === 'Tab' && !event.metaKey && !event.ctrlKey && !event.altKey) {
-        try {
-          const selection = window.getSelection()
-          if (selection && selection.anchorNode) {
-            const li = getClosestListItem(selection.anchorNode)
-            if (li) {
-              event.preventDefault()
-              const editor = editorRef.current
-              if (event.shiftKey) {
-                outdentListItems(editor)
-              } else {
-                indentListItems(editor)
+              if (event.key === ' ') {
+                const textNode = node.nodeType === Node.TEXT_NODE ? node as Text : null
+                if (textNode) {
+                  const text = textNode.textContent?.substring(0, range.startOffset) || ''
+                  const lineStart = text.lastIndexOf('\n') + 1
+                  const lineText = text.substring(lineStart)
+                  const action = checkListPrefixPattern(lineText)
+
+                  if (action) {
+                    event.preventDefault()
+
+                    const patternLength = lineText.length
+                    const removeRange = document.createRange()
+                    removeRange.setStart(textNode, range.startOffset - patternLength)
+                    removeRange.setEnd(textNode, range.startOffset)
+                    removeRange.deleteContents()
+
+                    switch (action) {
+                      case 'unordered-list':
+                        execCommand('insertUnorderedList')
+                        break
+                      case 'ordered-list':
+                        execCommand('insertOrderedList')
+                        break
+                      case 'checklist':
+                        toggleChecklist()
+                        break
+                      case 'heading1':
+                        applyHeading(1)
+                        break
+                      case 'heading2':
+                        applyHeading(2)
+                        break
+                      case 'heading3':
+                        applyHeading(3)
+                        break
+                      case 'blockquote':
+                        execCommand('formatBlock', 'blockquote')
+                        break
+                      case 'horizontal-rule':
+                        insertHorizontalRule()
+                        break
+                    }
+
+                    emitChange()
+                    return
+                  }
+                }
               }
-              normalizeAllLists(editor)
-              emitChange()
-              return
             }
+          } catch (error) {
+            console.error('Error in autoformatting:', error)
           }
-        } catch (error) {
-          console.error('Error handling Tab indent/outdent:', error)
         }
-      }
 
-      // Handle Backspace at start of list item
-      if (event.key === 'Backspace' && !event.metaKey && !event.ctrlKey && !event.shiftKey && !event.altKey) {
-        try {
-          const editor = editorRef.current
-          if (handleListBackspace(editor)) {
-            event.preventDefault()
-            normalizeAllLists(editor)
-            emitChange()
-            return
+        // Handle Tab/Shift+Tab for list indent/outdent
+        if (event.key === 'Tab' && !event.metaKey && !event.ctrlKey && !event.altKey) {
+          try {
+            const selection = window.getSelection()
+            if (selection && selection.anchorNode) {
+              const li = getClosestListItem(selection.anchorNode)
+              if (li) {
+                event.preventDefault()
+                const editor = editorRef.current
+                if (event.shiftKey) {
+                  outdentListItems(editor)
+                } else {
+                  indentListItems(editor)
+                }
+                normalizeAllLists(editor)
+                emitChange()
+                return
+              }
+            }
+          } catch (error) {
+            console.error('Error handling Tab indent/outdent:', error)
           }
-        } catch (error) {
-          console.error('Error handling list Backspace:', error)
         }
-      }
 
-      // Handle Enter key for list items (bullet, ordered, checklist)
-      if (event.key === 'Enter' && !event.shiftKey) {
-        try {
-          const selection = window.getSelection()
-          if (!selection || !selection.anchorNode) {
-            return
-          }
-          
-          const currentListItem = getClosestListItem(selection.anchorNode)
-          if (currentListItem && currentListItem.isConnected) {
+        // Handle Backspace at start of list item
+        if (event.key === 'Backspace' && !event.metaKey && !event.ctrlKey && !event.shiftKey && !event.altKey) {
+          try {
             const editor = editorRef.current
-            if (handleListEnter(editor)) {
+            if (handleListBackspace(editor)) {
               event.preventDefault()
               normalizeAllLists(editor)
               emitChange()
               return
             }
+          } catch (error) {
+            console.error('Error handling list Backspace:', error)
+          }
+        }
+
+        // Handle Enter key for list items
+        if (event.key === 'Enter' && !event.shiftKey) {
+          try {
+            const selection = window.getSelection()
+            if (!selection || !selection.anchorNode) {
+              return
+            }
+
+            const currentListItem = getClosestListItem(selection.anchorNode)
+            if (currentListItem && currentListItem.isConnected) {
+              const editor = editorRef.current
+              if (handleListEnter(editor)) {
+                event.preventDefault()
+                normalizeAllLists(editor)
+                emitChange()
+                return
+              }
+            }
+          } catch (error) {
+            console.error('Error handling list Enter key:', error)
+          }
+        }
+
+        // Handle keyboard shortcuts
+        try {
+          if (!(event.metaKey || event.ctrlKey)) return
+          const key = event.key.toLowerCase()
+
+          if (key === 'b' && !event.shiftKey) {
+            event.preventDefault()
+            execCommand('bold')
+          } else if (key === 'i') {
+            event.preventDefault()
+            execCommand('italic')
+          } else if (key === 'u') {
+            event.preventDefault()
+            execCommand('underline')
+          } else if (event.shiftKey && key === 'x') {
+            event.preventDefault()
+            execCommand('strikeThrough')
+          } else if (event.shiftKey && key === 'c') {
+            event.preventDefault()
+            toggleChecklist()
+          } else if (event.shiftKey && key === 'b') {
+            event.preventDefault()
+            execCommand('formatBlock', 'blockquote')
+          } else if (event.shiftKey && key === 'l') {
+            event.preventDefault()
+            execCommand('insertUnorderedList')
+          } else if (event.shiftKey && key === 'o') {
+            event.preventDefault()
+            execCommand('insertOrderedList')
+          } else if (event.altKey && key === '1') {
+            event.preventDefault()
+            applyHeading(1)
+          } else if (event.altKey && key === '2') {
+            event.preventDefault()
+            applyHeading(2)
+          } else if (event.altKey && key === '3') {
+            event.preventDefault()
+            applyHeading(3)
+          } else if (key === '`') {
+            event.preventDefault()
+            applyCode()
+          } else if (key === 'k') {
+            event.preventDefault()
+            insertLink()
+          } else if (key === 'f') {
+            event.preventDefault()
+            setShowSearchDialog(true)
+          } else if (key === 'z') {
+            event.preventDefault()
+            if (event.shiftKey) {
+              applyHistoryAction('redo')
+            } else {
+              applyHistoryAction('undo')
+            }
           }
         } catch (error) {
-          console.error('Error handling list Enter key:', error)
-        }
-      }
-
-      // Handle keyboard shortcuts
-      try {
-        if (!(event.metaKey || event.ctrlKey)) return
-        const key = event.key.toLowerCase()
-
-        if (key === 'b' && !event.shiftKey) {
-          event.preventDefault()
-          execCommand('bold')
-        } else if (key === 'i') {
-          event.preventDefault()
-          execCommand('italic')
-        } else if (key === 'u') {
-          event.preventDefault()
-          execCommand('underline')
-        } else if (event.shiftKey && key === 'x') {
-          event.preventDefault()
-          execCommand('strikeThrough')
-        } else if (event.shiftKey && key === 'c') {
-          event.preventDefault()
-          toggleChecklist()
-        } else if (event.shiftKey && key === 'b') {
-          event.preventDefault()
-          execCommand('formatBlock', 'blockquote')
-        } else if (event.shiftKey && key === 'l') {
-          event.preventDefault()
-          execCommand('insertUnorderedList')
-        } else if (event.shiftKey && key === 'o') {
-          event.preventDefault()
-          execCommand('insertOrderedList')
-        } else if (event.altKey && key === '1') {
-          event.preventDefault()
-          applyHeading(1)
-        } else if (event.altKey && key === '2') {
-          event.preventDefault()
-          applyHeading(2)
-        } else if (event.altKey && key === '3') {
-          event.preventDefault()
-          applyHeading(3)
-        } else if (key === '`') {
-          event.preventDefault()
-          applyCode()
-        } else if (key === 'k') {
-          event.preventDefault()
-          insertLink()
-        } else if (key === 'f') {
-          event.preventDefault()
-          setShowSearchDialog(true)
-        } else if (key === 'z') {
-          event.preventDefault()
-          if (event.shiftKey) {
-            applyHistoryAction('redo')
-          } else {
-            applyHistoryAction('undo')
-          }
+          console.error('Error handling keyboard shortcut:', error)
         }
       } catch (error) {
-        console.error('Error handling keyboard shortcut:', error)
+        console.error('Critical error in handleKeyDown:', error)
       }
-    } catch (error) {
-      console.error('Critical error in handleKeyDown:', error)
     }
-  }
 
     const handlePaste = (event: ReactClipboardEvent<HTMLDivElement>) => {
       if (disabled) return
@@ -2748,14 +1962,13 @@ const RichTextEditor = forwardRef<RichTextEditorHandle, RichTextEditorProps>(
         const finalizeInsertion = () => {
           try {
             if (editorRef.current) {
-              enforceBlockStructure({ preserveSelection: true, forceCursorInside: true })
               normalizeEditorContent(editorRef.current)
               mergeAdjacentLists(editorRef.current)
             }
             scheduleChecklistNormalization()
             emitChange()
           } catch (error) {
-            console.error('Error finalizing paste:', error);
+            console.error('Error finalizing paste:', error)
           }
         }
 
@@ -2777,17 +1990,16 @@ const RichTextEditor = forwardRef<RichTextEditorHandle, RichTextEditorProps>(
                 finalizeInsertion()
               }
             } catch (error) {
-              console.error('Error pasting markdown:', error);
+              console.error('Error pasting markdown:', error)
             }
           }).catch(error => {
-            console.error('Error converting markdown:', error);
-            // Fallback to plain text
+            console.error('Error converting markdown:', error)
             try {
               if (textForPlainPaste && insertPlainTextAtSelection(textForPlainPaste)) {
                 finalizeInsertion()
               }
             } catch (e) {
-              console.error('Error in markdown fallback:', e);
+              console.error('Error in markdown fallback:', e)
             }
           })
           return
@@ -2807,8 +2019,7 @@ const RichTextEditor = forwardRef<RichTextEditorHandle, RichTextEditorProps>(
               finalizeInsertion()
             }
           } catch (error) {
-            console.error('Error pasting HTML:', error);
-            // Fallback to plain text
+            console.error('Error pasting HTML:', error)
             if (textForPlainPaste && insertPlainTextAtSelection(textForPlainPaste)) {
               finalizeInsertion()
             }
@@ -2865,8 +2076,7 @@ const RichTextEditor = forwardRef<RichTextEditorHandle, RichTextEditorProps>(
               finalizeInsertion()
             }
           } catch (error) {
-            console.error('Error pasting URL:', error);
-            // Fallback to plain text
+            console.error('Error pasting URL:', error)
             if (insertPlainTextAtSelection(textForPlainPaste)) {
               finalizeInsertion()
             }
@@ -2878,32 +2088,12 @@ const RichTextEditor = forwardRef<RichTextEditorHandle, RichTextEditorProps>(
           finalizeInsertion()
         }
       } catch (error) {
-        console.error('Critical error in handlePaste:', error);
+        console.error('Critical error in handlePaste:', error)
       }
     }
 
-    const toolbarButtonClass =
-      'inline-flex h-9 w-9 items-center justify-center rounded-lg border border-transparent bg-white text-slate-600 shadow-sm hover:bg-slate-100 hover:text-slate-900 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-alpine-500 disabled:opacity-40'
-
     return (
       <div className="flex h-full min-h-0 flex-col overflow-hidden">
-        <EditorToolbar
-          onCommand={executeRichTextCommand}
-          onBlockTypeChange={handleBlockTypeChange}
-          onUndo={() => applyHistoryAction('undo')}
-          onRedo={() => applyHistoryAction('redo')}
-          onNewBlock={createRootLevelBlock}
-          onDeleteBlock={deleteActiveBlock}
-          onToggleBlockPanel={() => setBlockPanelOpen((prev) => !prev)}
-          onToggleBlockOutlines={() => setShowBlockOutlines((prev) => !prev)}
-          blockPanelOpen={blockPanelOpen}
-          showBlockOutlines={showBlockOutlines}
-          activeBlockId={activeBlockId}
-          activeBlockType={blockMetadata.find((block) => block.id === activeBlockId)?.type}
-          activeFormats={activeFormats}
-          disabled={disabled}
-        />
-
         <div className="flex-1 min-h-0 overflow-hidden">
           <div
             ref={editorRef}
@@ -2921,47 +2111,6 @@ const RichTextEditor = forwardRef<RichTextEditorHandle, RichTextEditorProps>(
             aria-multiline="true"
             aria-disabled={disabled}
           />
-
-          {blockPanelOpen && (
-            <div className="fixed right-4 top-24 z-50 w-80 max-h-[70vh] overflow-y-auto rounded-2xl border border-slate-200 bg-white/95 shadow-2xl">
-              <div className="flex items-center justify-between border-b border-slate-100 px-4 py-3">
-                <div>
-                  <p className="text-sm font-semibold text-slate-900">Block navigator</p>
-                  <p className="text-xs text-slate-500">{blockMetadata.length} blocks</p>
-                </div>
-                <button
-                  className="text-slate-400 transition hover:text-slate-600"
-                  onClick={() => setBlockPanelOpen(false)}
-                  aria-label="Close block navigator"
-                >
-                  <X size={16} />
-                </button>
-              </div>
-              <div className="divide-y divide-slate-100">
-                {blockMetadata.length === 0 ? (
-                  <p className="px-4 py-6 text-sm text-slate-500">Start typing to create blocks.</p>
-                ) : (
-                  blockMetadata.map((block) => (
-                    <button
-                      key={block.id}
-                      className={`flex w-full flex-col gap-1 px-4 py-3 text-left transition hover:bg-slate-50 ${
-                        activeBlockId === block.id ? 'bg-alpine-50/80 ring-1 ring-alpine-200' : ''
-                      }`}
-                      onClick={() => focusBlockById(block.id)}
-                    >
-                      <div className="flex items-center justify-between text-[11px] font-semibold uppercase tracking-wide text-slate-500">
-                        <span>Block {block.index}</span>
-                        <span>{block.type}</span>
-                      </div>
-                      <p className="text-sm text-slate-700">
-                        {block.textPreview}
-                      </p>
-                    </button>
-                  ))
-                )}
-              </div>
-            </div>
-          )}
         </div>
 
         <LinkDialog
@@ -3015,6 +2164,7 @@ const RichTextEditor = forwardRef<RichTextEditorHandle, RichTextEditorProps>(
           onReplace={replaceCurrentMatch}
           onReplaceAll={replaceAllMatches}
         />
+
         <TableInsertDialog
           isOpen={showTableDialog}
           tableRows={tableRows}
@@ -3040,6 +2190,7 @@ const RichTextEditor = forwardRef<RichTextEditorHandle, RichTextEditorProps>(
             forceWebViewFocus()
           }}
         />
+
         <TableToolbar
           isVisible={tableToolbarVisible}
           top={tableToolbarPos.top}
@@ -3051,13 +2202,6 @@ const RichTextEditor = forwardRef<RichTextEditorHandle, RichTextEditorProps>(
           onDeleteCol={deleteTableCol}
           onDeleteTable={deleteTable}
         />
-        <style jsx global>{`
-          [data-block-outline='true'] {
-            outline: 2px dashed rgba(59, 130, 246, 0.75);
-            outline-offset: 6px;
-            border-radius: 12px;
-          }
-        `}</style>
       </div>
     )
   }

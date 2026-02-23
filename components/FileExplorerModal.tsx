@@ -64,6 +64,8 @@ export interface FileExplorerModalProps {
   initialPath?: string
   /** Optional folder path to always use as upload target */
   uploadPath?: string
+  /** Render as a full view (no overlay) */
+  asView?: boolean
 }
 
 type ViewMode = 'grid' | 'list'
@@ -115,6 +117,7 @@ export default function FileExplorerModal({
   title = 'File Explorer',
   initialPath = '',
   uploadPath,
+  asView = false,
 }: FileExplorerModalProps) {
   const toast = useToast()
 
@@ -557,7 +560,7 @@ export default function FileExplorerModal({
   // RENDER
   // ============================================================================
 
-  if (!isOpen) return null
+  if (!isOpen && !asView) return null
 
   const isSelectMode = !!onSelectFiles
   const hasSelection = selectedPaths.size > 0
@@ -566,12 +569,22 @@ export default function FileExplorerModal({
   return (
     <>
       <div
-        className="fixed inset-0 z-[100] flex items-center justify-center bg-black/60 p-4 sm:p-6"
+        className={
+          asView
+            ? 'h-full w-full'
+            : 'fixed inset-0 z-[100] flex items-center justify-center bg-black/60 p-4 sm:p-6'
+        }
         onClick={(e) => {
-          if (e.target === e.currentTarget) onClose()
+          if (!asView && e.target === e.currentTarget) onClose()
         }}
       >
-        <div className="flex w-full max-w-5xl max-h-[calc(100vh-2rem)] sm:max-h-[calc(100vh-3rem)] flex-col overflow-hidden rounded-2xl border border-gray-200 dark:border-slate-700 bg-white dark:bg-slate-900 shadow-2xl">
+        <div
+          className={
+            asView
+              ? 'flex h-full w-full flex-col overflow-hidden border border-gray-200 bg-white dark:border-slate-700 dark:bg-slate-900'
+              : 'flex w-full max-w-5xl max-h-[calc(100vh-2rem)] sm:max-h-[calc(100vh-3rem)] flex-col overflow-hidden rounded-2xl border border-gray-200 dark:border-slate-700 bg-white dark:bg-slate-900 shadow-2xl'
+          }
+        >
           {/* ============ HEADER ============ */}
           <div className="flex items-center justify-between border-b border-gray-200 dark:border-slate-700 px-4 sm:px-5 py-3 sm:py-3.5 bg-gradient-to-r from-white to-gray-50 dark:from-slate-900 dark:to-slate-800">
             <div className="flex items-center gap-3">

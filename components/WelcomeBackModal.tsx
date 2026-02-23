@@ -33,6 +33,7 @@ interface WelcomeBackModalProps {
   onSelectNote?: (note: Note) => void
   onSelectTask?: (task: Task) => void
   onOpenTimetable?: () => void
+  asView?: boolean
 }
 
 const noteTypeIcon = (type: string) => {
@@ -85,6 +86,7 @@ export default function WelcomeBackModal({
   onSelectNote,
   onSelectTask,
   onOpenTimetable,
+  asView = false,
 }: WelcomeBackModalProps) {
   const [openTasks, setOpenTasks] = useState<Task[]>([])
   const [recentNotes, setRecentNotes] = useState<Note[]>([])
@@ -151,11 +153,17 @@ export default function WelcomeBackModal({
     }
   }
 
-  if (!isOpen) return null
+  if (!isOpen && !asView) return null
 
   return (
-    <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/60 p-3 sm:p-6">
-      <div className="flex w-full max-w-4xl max-h-[calc(100vh-2rem)] flex-col overflow-hidden rounded-2xl border border-alpine-100 dark:border-slate-700 bg-white/95 dark:bg-slate-900/95 backdrop-blur-sm shadow-2xl sm:max-h-[calc(100vh-4rem)]">
+    <div className={asView ? 'h-full w-full' : 'fixed inset-0 z-[100] flex items-center justify-center bg-black/60 p-3 sm:p-6'}>
+      <div
+        className={
+          asView
+            ? 'flex h-full w-full flex-col overflow-hidden border border-alpine-100 bg-white dark:border-slate-700 dark:bg-slate-900'
+            : 'flex w-full max-w-4xl max-h-[calc(100vh-2rem)] flex-col overflow-hidden rounded-2xl border border-alpine-100 dark:border-slate-700 bg-white/95 dark:bg-slate-900/95 backdrop-blur-sm shadow-2xl sm:max-h-[calc(100vh-4rem)]'
+        }
+      >
         {/* Header */}
         <header className="flex flex-col gap-3 border-b border-alpine-100 dark:border-slate-700 bg-gradient-to-r from-alpine-50 to-peak-50 dark:from-slate-900 dark:to-slate-800 px-4 py-4 sm:flex-row sm:items-center sm:justify-between sm:px-6">
           <div className="flex flex-col gap-1">

@@ -2,20 +2,82 @@
 @tailwind components;
 @tailwind utilities;
 
-/* ===== Saentis Notes – Alpine Theme ===== */
+/* ===== Saentis Notes – Design Tokens ===== */
+
+/* Light theme tokens */
+:root {
+  /* Semantic color tokens */
+  --background:        #f8fafc;
+  --foreground:        #0f172a;
+  --surface:           #ffffff;
+  --surface-hover:     #f1f5f9;
+  --surface-active:    #e2e8f0;
+  --border:            #e2e8f0;
+  --border-strong:     #cbd5e1;
+  --muted:             #64748b;
+  --accent:            #16a34a;
+  --accent-light:      #dcfce7;
+  --accent-foreground: #ffffff;
+  --success:           #10b981;
+  --success-light:     #d1fae5;
+  --warning:           #f59e0b;
+  --warning-light:     #fef3c7;
+  --danger:            #ef4444;
+  --danger-light:      #fee2e2;
+  --sidebar-width:     260px;
+  --sidebar-collapsed: 64px;
+
+  /* Alpine gradient (kept for backward compat) */
+  --alpine-gradient-from: #EFF8FF;
+  --alpine-gradient-to:   #F0FDFA;
+
+  /* Safe area insets */
+  --sat: env(safe-area-inset-top, 0px);
+  --sar: env(safe-area-inset-right, 0px);
+  --sab: env(safe-area-inset-bottom, 0px);
+  --sal: env(safe-area-inset-left, 0px);
+}
+
+/* Dark theme token overrides */
+:root.dark {
+  --background:        #0c0a09;
+  --foreground:        #e7e5e4;
+  --surface:           #1c1917;
+  --surface-hover:     #292524;
+  --surface-active:    #44403c;
+  --border:            #292524;
+  --border-strong:     #44403c;
+  --muted:             #a8a29e;
+  --accent:            #22c55e;
+  --accent-light:      #052e16;
+  --accent-foreground: #ffffff;
+  --success:           #34d399;
+  --success-light:     #064e3b;
+  --warning:           #fbbf24;
+  --warning-light:     #78350f;
+  --danger:            #f87171;
+  --danger-light:      #7f1d1d;
+
+  --alpine-gradient-from: #0f172a;
+  --alpine-gradient-to:   #1a2235;
+  color-scheme: dark;
+}
+
+/* New thin themed scrollbar */
+::-webkit-scrollbar       { width: 6px; height: 6px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: var(--border-strong); border-radius: 3px; }
+::-webkit-scrollbar-thumb:hover { background: var(--muted); }
+
+/* ===== Saentis Notes – Base Theme ===== */
 @layer base {
   :root {
-    --alpine-gradient-from: #EFF8FF;
-    --alpine-gradient-to:   #F0FDFA;
-    /* Safe area insets – filled by the OS on mobile devices with notches */
-    --sat: env(safe-area-inset-top, 0px);
-    --sar: env(safe-area-inset-right, 0px);
-    --sab: env(safe-area-inset-bottom, 0px);
-    --sal: env(safe-area-inset-left, 0px);
+    /* (tokens defined above, outside @layer) */
   }
 
   body {
-    @apply bg-gradient-to-br from-[var(--alpine-gradient-from)] to-[var(--alpine-gradient-to)] min-h-screen;
+    @apply min-h-screen bg-background text-foreground;
+    font-family: var(--font-geist-sans), ui-sans-serif, system-ui, sans-serif;
     /* Prevent pull-to-refresh and rubber-banding on mobile */
     overscroll-behavior: none;
     /* Prevent iOS text-size adjust on rotation */
@@ -643,12 +705,7 @@
    The .dark selector on <html> adds enough specificity to win.
    ═══════════════════════════════════════════════════════════ */
 
-/* ── 0. Root variables ── */
-.dark {
-  --alpine-gradient-from: #0f172a;
-  --alpine-gradient-to:   #1a2235;
-  color-scheme: dark;
-}
+/* Dark mode legacy overrides – individual Tailwind class remappings */
 
 /* ── 1. Background colors ── */
 .dark .bg-white          { background-color: #1e293b; }
@@ -848,21 +905,8 @@
   color: #f1f5f9;
 }
 
-/* Webkit scrollbar for dark mode */
-.dark ::-webkit-scrollbar {
-  width: 8px;
-  height: 8px;
-}
-.dark ::-webkit-scrollbar-track {
-  background: transparent;
-}
-.dark ::-webkit-scrollbar-thumb {
-  background: #475569;
-  border-radius: 4px;
-}
-.dark ::-webkit-scrollbar-thumb:hover {
-  background: #64748b;
-}
+/* Scrollbar in dark mode is handled by the CSS variable tokens (--border-strong, --muted)
+   set in :root.dark above — no override needed here. */
 
 /* ── 11. Form inputs in dark mode ── */
 .dark input,
