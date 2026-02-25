@@ -73,6 +73,7 @@ import FileExplorerModal from './FileExplorerModal'
 import SettingsModal from './SettingsModal'
 import NoteDetailsSidebar from './NoteDetailsSidebar'
 import { Settings } from 'lucide-react'
+import { htmlToMarkdown } from '@/lib/editor/markdownHelpers'
 
 export type { Note } from '../lib/notes'
 
@@ -92,6 +93,26 @@ interface NoteEditorProps {
 }
 
 const stripHtml = (html: string) => html.replace(/<[^>]*>/g, ' ').replace(/&nbsp;/g, ' ').trim()
+
+const escapeHtml = (value: string) =>
+  value
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;')
+
+const extractNoteLinkIdsFromHtml = (htmlContent: string): string[] => {
+  if (!htmlContent) return []
+
+  const parser = new DOMParser()
+  const doc = parser.parseFromString(htmlContent, 'text/html')
+  const linkElements = doc.querySelectorAll('[data-block-type="note-link"]')
+
+  return Array.from(linkElements)
+    .map(el => el.getAttribute('data-note-id'))
+    .filter((id): id is string => !!id)
+}
 
 const sanitizePathSegment = (value: string, fallback: string): string => {
   const transliterated = value
@@ -254,7 +275,6 @@ export default function NoteEditor({
     const projectSegment = sanitizePathSegment(currentProjectName, 'inbox')
     return `${projectSegment}/${currentNoteStorageName}/file`
   }, [currentProjectName, currentNoteStorageName])
-  
   // Load projects for display
   useEffect(() => {
     const loadProjects = async () => {
@@ -1389,6 +1409,67 @@ export default function NoteEditor({
     return { percentage, isComplete }
   }, [wordGoal, stats.words])
 
+  const notesForConnections = useMemo(() => {
+    if (allNotes && allNotes.length > 0) return allNotes
+    return notes || []
+  }, [allNotes, notes])
+
+  const folderPathMap = useMemo(() => {
+    const map = new Map<string, string>()
+
+    const walk = (nodes: any[], path: string[] = []) => {
+      for (const node of nodes) {
+        const nextPath = [...path, node.name]
+        map.set(node.id, nextPath.join(' / '))
+        if (Array.isArray(node.children) && node.children.length > 0) {
+          walk(node.children, nextPath)
+        }
+      }
+    }
+
+    walk(folders || [])
+    return map
+  }, [folders])
+
+  const connectionData = useMemo(() => {
+    if (!note?.id) {
+      return {
+        backlinks: [] as Array<{ id: string; title: string; folderPath?: string; relationCount: number }>,
+        connectionsCount: 0,
+      }
+    }
+
+    const currentLinks = noteType === 'rich-text'
+      ? extractNoteLinkIdsFromHtml(content)
+      : extractNoteLinkIdsFromHtml(note.content || '')
+    const outgoingIds = new Set(currentLinks.filter((id) => id !== note.id))
+
+    const backlinks = notesForConnections
+      .filter((candidate) => candidate.id !== note.id && candidate.note_type === 'rich-text')
+      .map((candidate) => {
+        const links = extractNoteLinkIdsFromHtml(candidate.content)
+        const relationCount = links.filter((id) => id === note.id).length
+        if (relationCount <= 0) return null
+
+        return {
+          id: candidate.id,
+          title: candidate.title || 'Untitled note',
+          folderPath: candidate.folder_id ? folderPathMap.get(candidate.folder_id) : 'All Notes',
+          relationCount,
+        }
+      })
+      .filter((item): item is { id: string; title: string; folderPath?: string; relationCount: number } => !!item)
+      .sort((a, b) => b.relationCount - a.relationCount || a.title.localeCompare(b.title))
+
+    const allConnectionIds = new Set<string>(outgoingIds)
+    backlinks.forEach((item) => allConnectionIds.add(item.id))
+
+    return {
+      backlinks,
+      connectionsCount: allConnectionIds.size,
+    }
+  }, [note?.id, note?.content, noteType, content, notesForConnections, folderPathMap])
+
   // Get folder path for display
   const folderPath = useMemo(() => {
     if (!note?.folder_id) return 'All Notes'
@@ -1434,6 +1515,135 @@ export default function NoteEditor({
     const diffHours = Math.floor(diffMins / 60)
     return `${diffHours}h ago`
   }, [lastSaveTime])
+
+  const downloadTextFile = useCallback((fileName: string, body: string, mimeType: string) => {
+    const blob = new Blob([body], { type: mimeType })
+    const url = URL.createObjectURL(blob)
+    const anchor = document.createElement('a')
+    anchor.href = url
+    anchor.download = fileName
+    document.body.appendChild(anchor)
+    anchor.click()
+    document.body.removeChild(anchor)
+    URL.revokeObjectURL(url)
+  }, [])
+
+  const getStructuredExportContent = useCallback(() => {
+    if (noteType === 'drawing') {
+      return JSON.stringify(drawingData || { pages: [], width: 800, height: 600, currentPage: 0 }, null, 2)
+    }
+    if (noteType === 'mindmap') {
+      return JSON.stringify(mindmapData || {}, null, 2)
+    }
+    if (noteType === 'bullet-journal') {
+      return JSON.stringify(bulletJournalData || { entries: [] }, null, 2)
+    }
+    if (noteType === 'data-sheet') {
+      return JSON.stringify(dataSheetData || { rows: [] }, null, 2)
+    }
+    return content
+  }, [noteType, drawingData, mindmapData, bulletJournalData, dataSheetData, content])
+
+  const handleExportMarkdown = useCallback(() => {
+    const fileBase = sanitizePathSegment(title || note?.title || '', 'untitled-note')
+
+    if (noteType === 'rich-text') {
+      const markdown = editorRef.current?.getMarkdown() || htmlToMarkdown(content)
+      downloadTextFile(`${fileBase}.md`, markdown, 'text/markdown;charset=utf-8')
+      toast.push({ title: 'Markdown exported' })
+      return
+    }
+
+    const structured = getStructuredExportContent()
+    const markdown = `# ${title || note?.title || 'Untitled note'}\n\nType: ${noteType}\n\n\`\`\`json\n${structured}\n\`\`\`\n`
+    downloadTextFile(`${fileBase}.md`, markdown, 'text/markdown;charset=utf-8')
+    toast.push({ title: 'Markdown exported' })
+  }, [title, note?.title, noteType, content, getStructuredExportContent, downloadTextFile, toast])
+
+  const handleExportPdf = useCallback(() => {
+    const printWindow = window.open('', '_blank', 'noopener,noreferrer,width=980,height=1200')
+    if (!printWindow) {
+      toast.push({ title: 'Could not open print dialog', description: 'Please allow pop-ups to export PDF.' })
+      return
+    }
+
+    const printableTitle = escapeHtml(title || note?.title || 'Untitled note')
+    const bodyHtml = noteType === 'rich-text'
+      ? (editorRef.current?.getHTML() || content)
+      : `<pre>${escapeHtml(getStructuredExportContent())}</pre>`
+
+    printWindow.document.write(`
+      <!doctype html>
+      <html>
+        <head>
+          <meta charset="utf-8" />
+          <title>${printableTitle}</title>
+          <style>
+            :root { color-scheme: light; }
+            body { font-family: Inter, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; margin: 32px; color: #111827; }
+            h1 { margin: 0 0 20px; font-size: 24px; }
+            pre { white-space: pre-wrap; word-break: break-word; background: #f8fafc; border: 1px solid #e5e7eb; border-radius: 8px; padding: 12px; }
+            img { max-width: 100%; height: auto; }
+            table { border-collapse: collapse; width: 100%; }
+            td, th { border: 1px solid #e5e7eb; padding: 6px; vertical-align: top; }
+          </style>
+        </head>
+        <body>
+          <h1>${printableTitle}</h1>
+          ${bodyHtml}
+        </body>
+      </html>
+    `)
+    printWindow.document.close()
+    printWindow.focus()
+    window.setTimeout(() => {
+      printWindow.print()
+    }, 150)
+
+    toast.push({ title: 'Print dialog opened', description: 'Choose “Save as PDF” to export.' })
+  }, [title, note?.title, noteType, content, getStructuredExportContent, toast])
+
+  const handleSelectBacklink = useCallback(async (noteId: string) => {
+    const targetNote = notesForConnections.find((item) => item.id === noteId)
+    if (targetNote) {
+      onSelectNote(targetNote)
+      return
+    }
+
+    try {
+      const { getNote } = await import('../lib/notes')
+      const fetchedNote = await getNote(noteId)
+      if (fetchedNote) {
+        onSelectNote(fetchedNote)
+      } else {
+        toast.push({ title: 'Note not found', description: 'The related note could not be found.' })
+      }
+    } catch (error) {
+      console.error('Failed to load related note:', error)
+      toast.push({ title: 'Error loading note', description: 'Failed to open the related note.' })
+    }
+  }, [notesForConnections, onSelectNote, toast])
+
+  const handleSelectOutgoing = useCallback(async (noteId: string) => {
+    const targetNote = notesForConnections.find((item) => item.id === noteId)
+    if (targetNote) {
+      onSelectNote(targetNote)
+      return
+    }
+
+    try {
+      const { getNote } = await import('../lib/notes')
+      const fetchedNote = await getNote(noteId)
+      if (fetchedNote) {
+        onSelectNote(fetchedNote)
+      } else {
+        toast.push({ title: 'Note not found', description: 'The linked note could not be found.' })
+      }
+    } catch (error) {
+      console.error('Failed to load linked note:', error)
+      toast.push({ title: 'Error loading note', description: 'Failed to open the linked note.' })
+    }
+  }, [notesForConnections, onSelectNote, toast])
 
   const toolbar: Array<{
     label: string
@@ -1645,6 +1855,14 @@ export default function NoteEditor({
           wordGoalProgress={wordGoalProgress}
           onSetWordGoal={handleSetWordGoal}
           onOpenSettings={() => setShowSettings(true)}
+          onExportMarkdown={handleExportMarkdown}
+          onExportPdf={handleExportPdf}
+          onOpenConnections={() => setShowKnowledgeGraph(true)}
+          backlinks={connectionData.backlinks}
+          connectionsCount={connectionData.connectionsCount}
+          onSelectBacklink={handleSelectBacklink}
+          outgoingLinks={connectionData.outgoingLinks}
+          onSelectOutgoing={handleSelectOutgoing}
           collapsed={rightSidebarCollapsed}
           onToggleCollapsed={() => setRightSidebarCollapsed(prev => !prev)}
         />

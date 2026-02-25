@@ -19,6 +19,7 @@ import {
   Table2,
   Settings,
   X,
+  Download,
   type LucideIcon,
 } from 'lucide-react'
 
@@ -56,6 +57,19 @@ export interface NoteDetailsSidebarProps {
   
   // Settings
   onOpenSettings: () => void
+
+  // Export
+  onExportMarkdown?: () => void
+  onExportPdf?: () => void
+
+  // Connections
+  onOpenConnections?: () => void
+  backlinks?: Array<{ id: string; title: string; folderPath?: string; relationCount: number }>
+  connectionsCount?: number
+  onSelectBacklink?: (noteId: string) => void
+
+  outgoingLinks?: Array<{ id: string; title: string; folderPath?: string }>
+  onSelectOutgoing?: (noteId: string) => void
   
   // Visibility
   collapsed: boolean
@@ -91,6 +105,14 @@ export default function NoteDetailsSidebar({
   wordGoalProgress,
   onSetWordGoal,
   onOpenSettings,
+  onExportMarkdown,
+  onExportPdf,
+  onOpenConnections,
+  backlinks = [],
+  connectionsCount = 0,
+  onSelectBacklink,
+  outgoingLinks = [],
+  onSelectOutgoing,
   collapsed,
   onToggleCollapsed,
 }: NoteDetailsSidebarProps) {
@@ -178,6 +200,40 @@ export default function NoteDetailsSidebar({
           >
             <Settings size={14} />
           </button>
+
+          {/* Export */}
+          {(onExportMarkdown || onExportPdf) && (
+            <div className="mt-1 h-px w-6 bg-border" />
+          )}
+          {onExportMarkdown && (
+            <button
+              onClick={onExportMarkdown}
+              className="p-1.5 rounded-lg text-muted hover:bg-surface-hover hover:text-foreground transition-colors"
+              title="Export Markdown"
+            >
+              <FileText size={14} />
+            </button>
+          )}
+          {onExportPdf && (
+            <button
+              onClick={onExportPdf}
+              className="p-1.5 rounded-lg text-muted hover:bg-surface-hover hover:text-foreground transition-colors"
+              title="Export PDF"
+            >
+              <Download size={14} />
+            </button>
+          )}
+
+          {/* Connections */}
+          {onOpenConnections && (
+            <button
+              onClick={onOpenConnections}
+              className="p-1.5 rounded-lg text-muted hover:bg-surface-hover hover:text-foreground transition-colors"
+              title={`Connections (${connectionsCount})`}
+            >
+              <Network size={14} />
+            </button>
+          )}
         </nav>
       </aside>
     )
@@ -302,6 +358,33 @@ export default function NoteDetailsSidebar({
             </div>
           )}
         </div>
+
+        {/* Export Section */}
+        {(onExportMarkdown || onExportPdf) && (
+          <div className="px-3 py-3 border-b border-border">
+            <label className="text-[10px] font-semibold text-muted uppercase tracking-wider mb-2 block">Export</label>
+            <div className="space-y-1.5">
+              {onExportMarkdown && (
+                <button
+                  onClick={onExportMarkdown}
+                  className="flex w-full items-center gap-2 rounded-lg px-2.5 py-1.5 text-xs text-foreground/80 transition-colors hover:bg-surface-hover hover:text-foreground"
+                >
+                  <FileText size={13} className="text-muted" />
+                  <span>Export as Markdown</span>
+                </button>
+              )}
+              {onExportPdf && (
+                <button
+                  onClick={onExportPdf}
+                  className="flex w-full items-center gap-2 rounded-lg px-2.5 py-1.5 text-xs text-foreground/80 transition-colors hover:bg-surface-hover hover:text-foreground"
+                >
+                  <Download size={13} className="text-muted" />
+                  <span>Export as PDF</span>
+                </button>
+              )}
+            </div>
+          </div>
+        )}
 
         {/* Stats Section (rich-text only) */}
         {noteType === 'rich-text' && (
@@ -430,6 +513,70 @@ export default function NoteDetailsSidebar({
                 ))}
               </div>
             )}
+          </div>
+        )}
+
+        {/* Connections */}
+        {onOpenConnections && (
+          <div className="px-3 py-3 border-t border-border">
+            <button
+              onClick={onOpenConnections}
+              className="mb-2 flex w-full items-center gap-1.5 text-left"
+            >
+              <Network size={13} className="text-muted" />
+              <span className="text-[10px] font-semibold text-muted uppercase tracking-wider">Connections</span>
+              <span className="ml-auto text-[10px] text-muted">{connectionsCount}</span>
+            </button>
+
+            {backlinks.length > 0 ? (
+              <div className="space-y-0.5">
+                {backlinks.slice(0, 8).map((item) => (
+                  <button
+                    key={item.id}
+                    onClick={() => onSelectBacklink?.(item.id)}
+                    className="w-full rounded-md px-2 py-1 text-left text-xs text-foreground/80 transition-colors hover:bg-surface-hover hover:text-foreground"
+                    title={`${item.title}${item.folderPath ? ` · ${item.folderPath}` : ''}`}
+                  >
+                    <div className="truncate font-medium">{item.title || 'Untitled note'}</div>
+                    {item.folderPath && (
+                      <div className="truncate text-[10px] text-muted">{item.folderPath}</div>
+                    )}
+                  </button>
+                ))}
+                {backlinks.length > 8 && (
+                  <div className="px-2 pt-1 text-[10px] text-muted">+{backlinks.length - 8} more backlinks</div>
+                )}
+              </div>
+            ) : (
+              <div className="text-xs text-muted">No backlinks yet</div>
+            )}
+
+            {/* Outgoing Links */}
+            <div className="mt-4">
+              <div className="text-[10px] font-semibold text-muted uppercase tracking-wider mb-1">Outgoing Links</div>
+              {outgoingLinks.length > 0 ? (
+                <div className="space-y-0.5">
+                  {outgoingLinks.slice(0, 8).map((item) => (
+                    <button
+                      key={item.id}
+                      onClick={() => onSelectOutgoing?.(item.id)}
+                      className="w-full rounded-md px-2 py-1 text-left text-xs text-foreground/80 transition-colors hover:bg-surface-hover hover:text-foreground"
+                      title={`${item.title}${item.folderPath ? ` · ${item.folderPath}` : ''}`}
+                    >
+                      <div className="truncate font-medium">{item.title || 'Untitled note'}</div>
+                      {item.folderPath && (
+                        <div className="truncate text-[10px] text-muted">{item.folderPath}</div>
+                      )}
+                    </button>
+                  ))}
+                  {outgoingLinks.length > 8 && (
+                    <div className="px-2 pt-1 text-[10px] text-muted">+{outgoingLinks.length - 8} more links</div>
+                  )}
+                </div>
+              ) : (
+                <div className="text-xs text-muted">No outgoing links</div>
+              )}
+            </div>
           </div>
         )}
       </div>
