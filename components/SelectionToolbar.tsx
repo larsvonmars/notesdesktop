@@ -124,6 +124,21 @@ export default function SelectionToolbar({
     { key: 'blue', title: 'Highlight: Blue', colorClass: 'bg-blue-200' },
   ]
 
+  const textColors = [
+    { key: 'default', title: 'Color: Default', colorClass: 'bg-transparent', indicatorClass: 'border border-gray-300' },
+    { key: 'red', title: 'Color: Red', colorClass: 'bg-red-500' },
+    { key: 'green', title: 'Color: Green', colorClass: 'bg-green-500' },
+    { key: 'blue', title: 'Color: Blue', colorClass: 'bg-blue-500' },
+    { key: 'purple', title: 'Color: Purple', colorClass: 'bg-purple-500' },
+  ]
+
+  const fontSizes = [
+    { key: '12', label: '12px' },
+    { key: '16', label: '16px' },
+    { key: '20', label: '20px' },
+    { key: '24', label: '24px' },
+  ]
+
   return (
     <div
       ref={toolbarRef}
@@ -163,6 +178,45 @@ export default function SelectionToolbar({
           <span className={`${colorClass} inline-block h-4 w-4 rounded`} />
         </button>
       ))}
+      {/* Text color buttons */}
+      {textColors.map(({ key, title, colorClass, indicatorClass }) => (
+        <button
+          key={key}
+          onClick={() => handleCommand(`color:${key}`)}
+          onMouseDown={(e) => e.preventDefault()}
+          title={title}
+          disabled={isDisabled}
+          className={`p-1 rounded hover:opacity-90 touch-target`}
+          aria-label={title}
+        >
+          <span className={`${colorClass} inline-block h-4 w-4 rounded ${indicatorClass ?? ''}`} />
+        </button>
+      ))}
+
+      {/* Font size buttons */}
+      {fontSizes.map(({ key, label }) => (
+        <button
+          key={key}
+          onClick={() => handleCommand(`font-size:${key}`)}
+          onMouseDown={(e) => e.preventDefault()}
+          title={`Font size ${label}`}
+          disabled={isDisabled}
+          className={`px-2 py-1 text-xs rounded hover:bg-gray-700 touch-target`}
+          aria-label={`Font size ${label}`}
+        >
+          {label}
+        </button>
+      ))}
+      <button
+        onClick={() => handleCommand('font-size:clear')}
+        onMouseDown={(e) => e.preventDefault()}
+        title="Reset font size"
+        disabled={isDisabled}
+        className={`p-2 rounded hover:bg-gray-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed touch-target`}
+        aria-label="Reset font size"
+      >
+        A
+      </button>
       <button
         onClick={() => handleCommand('highlight:clear')}
         onMouseDown={(e) => e.preventDefault()}

@@ -958,6 +958,113 @@ const RichTextEditor = forwardRef<RichTextEditorHandle, RichTextEditorProps>(
       }
     }, [disabled, emitChange])
 
+    const applyColor = useCallback((colorKey: string | null) => {
+      if (disabled || !editorRef.current) return
+
+      try {
+        const selection = window.getSelection()
+        if (!selection || selection.rangeCount === 0) return
+        const range = selection.getRangeAt(0)
+        if (range.collapsed) return
+
+        if (colorKey === 'default' || colorKey === null) {
+          // remove color spans
+          const walker = document.createTreeWalker(range.commonAncestorContainer as Node, NodeFilter.SHOW_ELEMENT, null)
+          const toRemove: HTMLElement[] = []
+          let node = walker.nextNode() as HTMLElement | null
+          while (node) {
+            if (node.nodeType === Node.ELEMENT_NODE && node.hasAttribute && node.hasAttribute('data-color')) {
+              toRemove.push(node)
+            }
+            node = walker.nextNode() as HTMLElement | null
+          }
+
+          toRemove.forEach((el) => {
+            const parent = el.parentNode
+            while (el.firstChild) parent?.insertBefore(el.firstChild, el)
+            parent?.removeChild(el)
+          })
+
+          emitChange()
+          return
+        }
+
+        const span = document.createElement('span')
+        span.setAttribute('data-color', colorKey)
+
+        try {
+          const frag = range.extractContents()
+          span.appendChild(frag)
+          range.insertNode(span)
+
+          const newRange = document.createRange()
+          newRange.setStartAfter(span)
+          newRange.collapse(true)
+          selection.removeAllRanges()
+          selection.addRange(newRange)
+        } catch (e) {
+          console.error('Error applying color:', e)
+        }
+
+        emitChange()
+      } catch (error) {
+        console.error('Error in applyColor:', error)
+      }
+    }, [disabled, emitChange])
+
+    const applyFontSize = useCallback((sizeKey: string | null) => {
+      if (disabled || !editorRef.current) return
+
+      try {
+        const selection = window.getSelection()
+        if (!selection || selection.rangeCount === 0) return
+        const range = selection.getRangeAt(0)
+        if (range.collapsed) return
+
+        if (sizeKey === 'clear' || sizeKey === null) {
+          const walker = document.createTreeWalker(range.commonAncestorContainer as Node, NodeFilter.SHOW_ELEMENT, null)
+          const toRemove: HTMLElement[] = []
+          let node = walker.nextNode() as HTMLElement | null
+          while (node) {
+            if (node.nodeType === Node.ELEMENT_NODE && node.hasAttribute && node.hasAttribute('data-font-size')) {
+              toRemove.push(node)
+            }
+            node = walker.nextNode() as HTMLElement | null
+          }
+
+          toRemove.forEach((el) => {
+            const parent = el.parentNode
+            while (el.firstChild) parent?.insertBefore(el.firstChild, el)
+            parent?.removeChild(el)
+          })
+
+          emitChange()
+          return
+        }
+
+        const span = document.createElement('span')
+        span.setAttribute('data-font-size', sizeKey)
+
+        try {
+          const frag = range.extractContents()
+          span.appendChild(frag)
+          range.insertNode(span)
+
+          const newRange = document.createRange()
+          newRange.setStartAfter(span)
+          newRange.collapse(true)
+          selection.removeAllRanges()
+          selection.addRange(newRange)
+        } catch (e) {
+          console.error('Error applying font size:', e)
+        }
+
+        emitChange()
+      } catch (error) {
+        console.error('Error in applyFontSize:', error)
+      }
+    }, [disabled, emitChange])
+
     const toggleChecklist = useCallback(() => {
       if (disabled || !editorRef.current || !editorRef.current.isConnected) return
 
@@ -1504,16 +1611,40 @@ const RichTextEditor = forwardRef<RichTextEditorHandle, RichTextEditorProps>(
     )
 
     const executeRichTextCommand = useCallback((cmd: RichTextCommand) => {
-      // Support highlight commands like 'highlight:yellow' or 'highlight:clear'
-      if (typeof cmd === 'string' && cmd.startsWith('highlight:')) {
-        const parts = cmd.split(':')
-        const color = parts[1]
-        if (color === 'clear') {
-          applyHighlight(null)
-        } else {
-          applyHighlight(color)
+      // Support highlight, color and font-size commands like 'highlight:yellow', 'color:red', 'font-size:16'
+      if (typeof cmd === 'string') {
+        if (cmd.startsWith('highlight:')) {
+          const parts = cmd.split(':')
+          const color = parts[1]
+          if (color === 'clear') {
+            applyHighlight(null)
+          } else {
+            applyHighlight(color)
+          }
+          return
         }
-        return
+
+        if (cmd.startsWith('color:')) {
+          const parts = cmd.split(':')
+          const color = parts[1]
+          if (color === 'clear') {
+            applyColor('default')
+          } else {
+            applyColor(color)
+          }
+          return
+        }
+
+        if (cmd.startsWith('font-size:')) {
+          const parts = cmd.split(':')
+          const size = parts[1]
+          if (size === 'clear') {
+            applyFontSize('clear')
+          } else {
+            applyFontSize(size)
+          }
+          return
+        }
       }
       switch (cmd) {
         case 'bold':

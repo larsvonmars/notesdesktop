@@ -728,6 +728,29 @@
     padding: 0 0.12em !important;
     border-radius: 2px !important;
   }
+
+  /* Text color mappings for persisted data-color attribute */
+  [contenteditable='true'] span[data-color='red'] {
+    color: #dc2626 !important;
+  }
+
+  [contenteditable='true'] span[data-color='green'] {
+    color: #16a34a !important;
+  }
+
+  [contenteditable='true'] span[data-color='blue'] {
+    color: #2563eb !important;
+  }
+
+  [contenteditable='true'] span[data-color='purple'] {
+    color: #7c3aed !important;
+  }
+
+  /* Font size mappings for persisted data-font-size attribute */
+  [contenteditable='true'] span[data-font-size='12'] { font-size: 12px !important; }
+  [contenteditable='true'] span[data-font-size='16'] { font-size: 16px !important; }
+  [contenteditable='true'] span[data-font-size='20'] { font-size: 20px !important; }
+  [contenteditable='true'] span[data-font-size='24'] { font-size: 24px !important; }
 }
 
 /* ─── Mobile-specific overrides ─── */
