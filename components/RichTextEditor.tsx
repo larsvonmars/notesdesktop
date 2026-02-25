@@ -901,6 +901,63 @@ const RichTextEditor = forwardRef<RichTextEditorHandle, RichTextEditorProps>(
       }
     }, [disabled, emitChange])
 
+    const applyHighlight = useCallback((color: string | null) => {
+      if (disabled || !editorRef.current) return
+
+      try {
+        const selection = window.getSelection()
+        if (!selection || selection.rangeCount === 0) return
+
+        const range = selection.getRangeAt(0)
+        if (range.collapsed) return
+
+        if (color === null) {
+          // remove highlight: unwrap spans with data-highlight inside range
+          const walker = document.createTreeWalker(range.commonAncestorContainer as Node, NodeFilter.SHOW_ELEMENT, null)
+          const toRemove: HTMLElement[] = []
+          let node = walker.nextNode() as HTMLElement | null
+          while (node) {
+            if (node.nodeType === Node.ELEMENT_NODE && node.hasAttribute && node.hasAttribute('data-highlight')) {
+              toRemove.push(node)
+            }
+            node = walker.nextNode() as HTMLElement | null
+          }
+
+          toRemove.forEach((el) => {
+            const parent = el.parentNode
+            while (el.firstChild) parent?.insertBefore(el.firstChild, el)
+            parent?.removeChild(el)
+          })
+
+          emitChange()
+          return
+        }
+
+        // Wrap selection in span with data-highlight attribute
+        const span = document.createElement('span')
+        span.setAttribute('data-highlight', color)
+
+        try {
+          const frag = range.extractContents()
+          span.appendChild(frag)
+          range.insertNode(span)
+
+          // Reposition cursor after inserted span
+          const newRange = document.createRange()
+          newRange.setStartAfter(span)
+          newRange.collapse(true)
+          selection.removeAllRanges()
+          selection.addRange(newRange)
+        } catch (e) {
+          console.error('Error applying highlight:', e)
+        }
+
+        emitChange()
+      } catch (error) {
+        console.error('Error in applyHighlight:', error)
+      }
+    }, [disabled, emitChange])
+
     const toggleChecklist = useCallback(() => {
       if (disabled || !editorRef.current || !editorRef.current.isConnected) return
 
@@ -1447,6 +1504,17 @@ const RichTextEditor = forwardRef<RichTextEditorHandle, RichTextEditorProps>(
     )
 
     const executeRichTextCommand = useCallback((cmd: RichTextCommand) => {
+      // Support highlight commands like 'highlight:yellow' or 'highlight:clear'
+      if (typeof cmd === 'string' && cmd.startsWith('highlight:')) {
+        const parts = cmd.split(':')
+        const color = parts[1]
+        if (color === 'clear') {
+          applyHighlight(null)
+        } else {
+          applyHighlight(color)
+        }
+        return
+      }
       switch (cmd) {
         case 'bold':
           execCommand('bold')

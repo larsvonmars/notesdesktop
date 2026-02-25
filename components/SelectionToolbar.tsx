@@ -117,6 +117,13 @@ export default function SelectionToolbar({
     { command: 'link', icon: LinkIcon, label: 'Link (⌘K)' },
   ]
 
+  const highlightColors = [
+    { key: 'yellow', title: 'Highlight: Yellow', colorClass: 'bg-yellow-200' },
+    { key: 'green', title: 'Highlight: Green', colorClass: 'bg-green-200' },
+    { key: 'pink', title: 'Highlight: Pink', colorClass: 'bg-pink-200' },
+    { key: 'blue', title: 'Highlight: Blue', colorClass: 'bg-blue-200' },
+  ]
+
   return (
     <div
       ref={toolbarRef}
@@ -142,6 +149,30 @@ export default function SelectionToolbar({
           <Icon size={isMobile ? 20 : 16} />
         </button>
       ))}
+      {/* Highlight color buttons */}
+      {highlightColors.map(({ key, title, colorClass }) => (
+        <button
+          key={key}
+          onClick={() => handleCommand(`highlight:${key}`)}
+          onMouseDown={(e) => e.preventDefault()}
+          title={title}
+          disabled={isDisabled}
+          className={`p-1 rounded hover:opacity-90 touch-target`}
+          aria-label={title}
+        >
+          <span className={`${colorClass} inline-block h-4 w-4 rounded`} />
+        </button>
+      ))}
+      <button
+        onClick={() => handleCommand('highlight:clear')}
+        onMouseDown={(e) => e.preventDefault()}
+        title="Remove highlight"
+        disabled={isDisabled}
+        className={`p-2 rounded hover:bg-gray-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed touch-target`}
+        aria-label="Remove highlight"
+      >
+        Clear
+      </button>
     </div>
   )
 }

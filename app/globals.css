@@ -703,6 +703,31 @@
   [contenteditable='true'] table[data-no-outline='true'] {
     border-collapse: collapse !important;
   }
+
+  /* Highlight colors persisted via data-highlight attribute */
+  [contenteditable='true'] span[data-highlight='yellow'] {
+    background-color: #FEF3C7 !important;
+    padding: 0 0.12em !important;
+    border-radius: 2px !important;
+  }
+
+  [contenteditable='true'] span[data-highlight='green'] {
+    background-color: #DCFCE7 !important;
+    padding: 0 0.12em !important;
+    border-radius: 2px !important;
+  }
+
+  [contenteditable='true'] span[data-highlight='pink'] {
+    background-color: #FCE7F3 !important;
+    padding: 0 0.12em !important;
+    border-radius: 2px !important;
+  }
+
+  [contenteditable='true'] span[data-highlight='blue'] {
+    background-color: #E6F0FF !important;
+    padding: 0 0.12em !important;
+    border-radius: 2px !important;
+  }
 }
 
 /* ─── Mobile-specific overrides ─── */
