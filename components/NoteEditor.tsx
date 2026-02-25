@@ -1436,6 +1436,7 @@ export default function NoteEditor({
       return {
         backlinks: [] as Array<{ id: string; title: string; folderPath?: string; relationCount: number }>,
         connectionsCount: 0,
+        outgoingLinks: [] as Array<{ id: string; title: string; folderPath?: string }>,
       }
     }
 
@@ -1458,15 +1459,25 @@ export default function NoteEditor({
           relationCount,
         }
       })
-      .filter((item): item is { id: string; title: string; folderPath?: string; relationCount: number } => !!item)
+      .filter((item): item is { id: string; title: string; folderPath: string | undefined; relationCount: number } => !!item)
       .sort((a, b) => b.relationCount - a.relationCount || a.title.localeCompare(b.title))
 
     const allConnectionIds = new Set<string>(outgoingIds)
     backlinks.forEach((item) => allConnectionIds.add(item.id))
 
+    // Build outgoingLinks array
+    const outgoingLinks = notesForConnections
+      .filter((candidate) => outgoingIds.has(candidate.id))
+      .map((candidate) => ({
+        id: candidate.id,
+        title: candidate.title || 'Untitled note',
+        folderPath: candidate.folder_id ? folderPathMap.get(candidate.folder_id) : 'All Notes',
+      }))
+
     return {
       backlinks,
       connectionsCount: allConnectionIds.size,
+      outgoingLinks,
     }
   }, [note?.id, note?.content, noteType, content, notesForConnections, folderPathMap])
 
