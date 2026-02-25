@@ -284,7 +284,7 @@ const ensureEditorHasContent = (editor: HTMLDivElement) => {
 const RichTextEditor = forwardRef<RichTextEditorHandle, RichTextEditorProps>(
   ({ value, onChange, disabled, placeholder, customBlocks, onCustomCommand }, ref) => {
     const customBlocksRef = useRef<CustomBlockDescriptor[] | undefined>(undefined)
-    const editorRef = useRef<HTMLDivElement | null>(null)
+      const editorRef = useRef<HTMLDivElement | null>(null)
     const historyManagerRef = useRef<HistoryManager | null>(null)
     const debouncedCaptureRef = useRef<(() => void) | null>(null)
     const lastSyncedValueRef = useRef<string>('')
@@ -693,6 +693,26 @@ const RichTextEditor = forwardRef<RichTextEditorHandle, RichTextEditorProps>(
       deleteTable,
       getTableDimensionsLabel,
     } = useTableToolbar({ editorRef, onEmitChange: emitChange })
+
+    const toggleTableOutlines = useCallback(() => {
+      try {
+        const editor = editorRef.current
+        if (!editor) return
+
+        const table = getClosestFromSelection('table', editor) as HTMLElement | null
+        if (!table) return
+
+        if (table.getAttribute('data-no-outline') === 'true') {
+          table.removeAttribute('data-no-outline')
+        } else {
+          table.setAttribute('data-no-outline', 'true')
+        }
+
+        emitChange()
+      } catch (error) {
+        console.error('Error toggling table outlines:', error)
+      }
+    }, [emitChange])
 
     // Editor click handler to detect note link clicks
     useEffect(() => {
@@ -2104,6 +2124,10 @@ const RichTextEditor = forwardRef<RichTextEditorHandle, RichTextEditorProps>(
       }
     }
 
+    // Determine outlines visibility for the currently selected table (per-table)
+    const currentTable = typeof window !== 'undefined' ? getClosestFromSelection('table', editorRef.current) as HTMLElement | null : null
+    const outlinesVisibleForToolbar = currentTable ? currentTable.getAttribute('data-no-outline') !== 'true' : true
+
     return (
       <div className="flex h-full min-h-0 flex-col overflow-hidden">
         <div className="flex-1 min-h-0 overflow-hidden">
@@ -2213,6 +2237,8 @@ const RichTextEditor = forwardRef<RichTextEditorHandle, RichTextEditorProps>(
           onAddCol={addTableCol}
           onDeleteCol={deleteTableCol}
           onDeleteTable={deleteTable}
+          outlinesVisible={outlinesVisibleForToolbar}
+          onToggleOutlines={toggleTableOutlines}
         />
       </div>
     )

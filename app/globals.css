@@ -675,6 +675,34 @@
     height: 0;
     width: 0;
   }
+
+  /* Table outline visibility toggle: when the root has .hide-table-outlines,
+     remove visible table borders/outlines for a cleaner look. This is a UI
+     preference and is applied at runtime (not persisted to sanitized HTML). */
+  .hide-table-outlines [contenteditable='true'] table,
+  .hide-table-outlines [contenteditable='true'] table th,
+  .hide-table-outlines [contenteditable='true'] table td {
+    border: none !important;
+    box-shadow: none !important;
+  }
+
+  .hide-table-outlines [contenteditable='true'] table {
+    border-collapse: collapse !important;
+  }
+
+  /* Per-table attribute to hide outlines on an individual table element. Using
+     a data attribute ensures the preference is preserved in the editor HTML
+     (DOMPurify is configured to allow data-* attributes). */
+  [contenteditable='true'] table[data-no-outline='true'],
+  [contenteditable='true'] table[data-no-outline='true'] th,
+  [contenteditable='true'] table[data-no-outline='true'] td {
+    border: none !important;
+    box-shadow: none !important;
+  }
+
+  [contenteditable='true'] table[data-no-outline='true'] {
+    border-collapse: collapse !important;
+  }
 }
 
 /* ─── Mobile-specific overrides ─── */

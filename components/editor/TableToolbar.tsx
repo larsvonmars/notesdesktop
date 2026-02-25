@@ -10,6 +10,8 @@ interface TableToolbarProps {
   onAddCol: () => void
   onDeleteCol: () => void
   onDeleteTable: () => void
+  outlinesVisible?: boolean
+  onToggleOutlines?: () => void
 }
 
 export default function TableToolbar({
@@ -22,6 +24,8 @@ export default function TableToolbar({
   onAddCol,
   onDeleteCol,
   onDeleteTable,
+  outlinesVisible,
+  onToggleOutlines,
 }: TableToolbarProps) {
   if (!isVisible) return null
 
@@ -45,6 +49,12 @@ export default function TableToolbar({
       </button>
       <button onClick={onDeleteTable} className="inline-flex items-center gap-1 px-2 py-1 text-sm rounded text-red-600 hover:bg-red-50">
         <Trash2 size={14} /> Delete
+      </button>
+      <button
+        onClick={onToggleOutlines}
+        className="inline-flex items-center gap-1 px-2 py-1 text-sm rounded hover:bg-gray-100"
+      >
+        {outlinesVisible ? 'Hide outlines' : 'Show outlines'}
       </button>
     </div>
   )
