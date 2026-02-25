@@ -131,11 +131,11 @@ const SANITIZE_CONFIG: Config = {
     'thead', 'tbody', 'tr', 'td', 'th'
   ],
   ALLOWED_ATTR: [
-    'href', 'target', 'rel', 'class', 'type', 'checked', 'data-checked',
+    'href', 'target', 'rel', 'type', 'checked', 'data-checked',
     'id', 'data-block', 'data-block-type', 'data-block-payload',
     'data-note-id', 'data-note-title', 'data-folder-id',
     'data-file-path', 'data-file-name', 'src', 'alt', 'width', 'height',
-    'style', 'data-direction', 'aria-label', 'title', 'draggable',
+    'data-direction', 'aria-label', 'title', 'draggable',
     'contenteditable', 'xmlns', 'viewBox', 'fill', 'stroke',
     'stroke-width', 'stroke-linecap', 'stroke-linejoin', 'd',
     'colspan', 'rowspan', 'data-checklist'
@@ -1966,6 +1966,16 @@ const RichTextEditor = forwardRef<RichTextEditorHandle, RichTextEditorProps>(
               mergeAdjacentLists(editorRef.current)
             }
             scheduleChecklistNormalization()
+
+            // Reapply editor link classes to pasted links so they match editor styling
+            if (editorRef.current) {
+              const links = editorRef.current.querySelectorAll('a')
+              links.forEach((link) => {
+                ;(link as HTMLAnchorElement).className =
+                  'text-alpine-600 hover:text-alpine-800 underline decoration-alpine-400 decoration-2 underline-offset-2 transition-colors cursor-pointer inline-flex items-center gap-1'
+              })
+            }
+
             emitChange()
           } catch (error) {
             console.error('Error finalizing paste:', error)
@@ -1975,7 +1985,9 @@ const RichTextEditor = forwardRef<RichTextEditorHandle, RichTextEditorProps>(
         const html = event.clipboardData.getData('text/html')
         const rawText = event.clipboardData.getData('text/plain')
         const text = normalizePastedText(rawText)
-        const textForPlainPaste = collapseSoftWrappedLines(text)
+        // Use normalized text directly; do not collapse soft-wrapped lines to avoid
+        // altering user-intended line breaks/spaces.
+        const textForPlainPaste = text
 
         if (text && looksLikeMarkdown(text)) {
           const selectionSnapshot = saveSelectionUtil()
