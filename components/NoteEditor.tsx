@@ -1692,6 +1692,22 @@ export default function NoteEditor({
       icon: <FileText size={16} />, 
       onClick: () => editorRef.current?.requestNoteLink() 
     },
+    // Highlight colors
+    { label: 'Highlight Yellow', icon: <span className="inline-block h-4 w-4 rounded bg-yellow-300" />, onClick: () => handleCommand('highlight:yellow') },
+    { label: 'Highlight Green', icon: <span className="inline-block h-4 w-4 rounded bg-green-300" />, onClick: () => handleCommand('highlight:green') },
+    { label: 'Highlight Pink', icon: <span className="inline-block h-4 w-4 rounded bg-pink-300" />, onClick: () => handleCommand('highlight:pink') },
+    { label: 'Highlight Blue', icon: <span className="inline-block h-4 w-4 rounded bg-blue-300" />, onClick: () => handleCommand('highlight:blue') },
+    // Text colors
+    { label: 'Color Default', icon: <span className="inline-block h-4 w-4 rounded border border-gray-300" />, onClick: () => handleCommand('color:default') },
+    { label: 'Color Red', icon: <span className="inline-block h-4 w-4 rounded bg-red-500" />, onClick: () => handleCommand('color:red') },
+    { label: 'Color Green', icon: <span className="inline-block h-4 w-4 rounded bg-green-500" />, onClick: () => handleCommand('color:green') },
+    { label: 'Color Blue', icon: <span className="inline-block h-4 w-4 rounded bg-blue-500" />, onClick: () => handleCommand('color:blue') },
+    { label: 'Color Purple', icon: <span className="inline-block h-4 w-4 rounded bg-purple-500" />, onClick: () => handleCommand('color:purple') },
+    // Font sizes
+    { label: 'Font 12', icon: <span className="text-xs">12</span>, onClick: () => handleCommand('font-size:12') },
+    { label: 'Font 16', icon: <span className="text-sm">16</span>, onClick: () => handleCommand('font-size:16') },
+    { label: 'Font 20', icon: <span className="text-base">20</span>, onClick: () => handleCommand('font-size:20') },
+    { label: 'Font 24', icon: <span className="text-lg">24</span>, onClick: () => handleCommand('font-size:24') },
     { label: 'Undo', command: 'undo', icon: <Undo size={16} /> },
     { label: 'Redo', command: 'redo', icon: <Redo size={16} /> }
   ]

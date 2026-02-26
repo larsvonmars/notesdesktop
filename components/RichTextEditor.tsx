@@ -97,6 +97,9 @@ export type RichTextCommand =
   | 'redo'
   | 'link'
   | 'horizontal-rule'
+  | `highlight:${string}`
+  | `color:${string}`
+  | `font-size:${string}`
 
 export interface RichTextEditorHandle {
   focus: () => void
@@ -353,6 +356,49 @@ const RichTextEditor = forwardRef<RichTextEditorHandle, RichTextEditorProps>(
 
     const isSelectionInsideEditor = useCallback(() => {
       return isSelectionInsideRoot(editorRef.current)
+    }, [])
+
+    const queryCommandStateLocal = useCallback((command: string) => {
+      try {
+        const context = getSelectionContext(editorRef.current)
+        const element = context?.element
+        if (!element) return false
+
+        switch (command) {
+          case 'bold':
+            return !!element?.closest('strong, b')
+          case 'italic':
+            return !!element?.closest('em, i')
+          case 'underline':
+            return !!element?.closest('u')
+          case 'strikeThrough':
+            return !!element?.closest('s, strike')
+          case 'code':
+            return !!element?.closest('code')
+          case 'insertUnorderedList':
+            return !!element?.closest('ul')
+          case 'insertOrderedList':
+            return !!element?.closest('ol')
+          case 'checklist':
+            return !!element?.closest('ul[data-checklist="true"], ol[data-checklist="true"]')
+          case 'heading1':
+            return !!element?.closest('h1')
+          case 'heading2':
+            return !!element?.closest('h2')
+          case 'heading3':
+            return !!element?.closest('h3')
+          case 'blockquote':
+            return !!element?.closest('blockquote')
+          default:
+            try {
+              return document.queryCommandState?.(command) ?? false
+            } catch {
+              return false
+            }
+        }
+      } catch {
+        return false
+      }
     }, [])
 
     const updateActiveFormats = useCallback(() => {
@@ -912,12 +958,22 @@ const RichTextEditor = forwardRef<RichTextEditorHandle, RichTextEditorProps>(
         if (range.collapsed) return
 
         if (color === null) {
-          // remove highlight: unwrap spans with data-highlight inside range
+          // remove highlight: unwrap spans with data-highlight that intersect the selection
           const walker = document.createTreeWalker(range.commonAncestorContainer as Node, NodeFilter.SHOW_ELEMENT, null)
           const toRemove: HTMLElement[] = []
+          // Also check the ancestor itself
+          const ancestor = range.commonAncestorContainer as HTMLElement
+          if (ancestor.nodeType === Node.ELEMENT_NODE && ancestor.hasAttribute?.('data-highlight')) {
+            toRemove.push(ancestor)
+          }
           let node = walker.nextNode() as HTMLElement | null
           while (node) {
-            if (node.nodeType === Node.ELEMENT_NODE && node.hasAttribute && node.hasAttribute('data-highlight')) {
+            if (
+              node.nodeType === Node.ELEMENT_NODE &&
+              node.hasAttribute &&
+              node.hasAttribute('data-highlight') &&
+              range.intersectsNode(node)
+            ) {
               toRemove.push(node)
             }
             node = walker.nextNode() as HTMLElement | null
@@ -942,10 +998,9 @@ const RichTextEditor = forwardRef<RichTextEditorHandle, RichTextEditorProps>(
           span.appendChild(frag)
           range.insertNode(span)
 
-          // Reposition cursor after inserted span
+          // Keep the styled text selected so the toolbar stays visible
           const newRange = document.createRange()
-          newRange.setStartAfter(span)
-          newRange.collapse(true)
+          newRange.selectNodeContents(span)
           selection.removeAllRanges()
           selection.addRange(newRange)
         } catch (e) {
@@ -968,12 +1023,21 @@ const RichTextEditor = forwardRef<RichTextEditorHandle, RichTextEditorProps>(
         if (range.collapsed) return
 
         if (colorKey === 'default' || colorKey === null) {
-          // remove color spans
+          // remove color spans that intersect the selection
           const walker = document.createTreeWalker(range.commonAncestorContainer as Node, NodeFilter.SHOW_ELEMENT, null)
           const toRemove: HTMLElement[] = []
+          const ancestor = range.commonAncestorContainer as HTMLElement
+          if (ancestor.nodeType === Node.ELEMENT_NODE && ancestor.hasAttribute?.('data-color')) {
+            toRemove.push(ancestor)
+          }
           let node = walker.nextNode() as HTMLElement | null
           while (node) {
-            if (node.nodeType === Node.ELEMENT_NODE && node.hasAttribute && node.hasAttribute('data-color')) {
+            if (
+              node.nodeType === Node.ELEMENT_NODE &&
+              node.hasAttribute &&
+              node.hasAttribute('data-color') &&
+              range.intersectsNode(node)
+            ) {
               toRemove.push(node)
             }
             node = walker.nextNode() as HTMLElement | null
@@ -997,9 +1061,9 @@ const RichTextEditor = forwardRef<RichTextEditorHandle, RichTextEditorProps>(
           span.appendChild(frag)
           range.insertNode(span)
 
+          // Keep the styled text selected so the toolbar stays visible
           const newRange = document.createRange()
-          newRange.setStartAfter(span)
-          newRange.collapse(true)
+          newRange.selectNodeContents(span)
           selection.removeAllRanges()
           selection.addRange(newRange)
         } catch (e) {
@@ -1022,11 +1086,21 @@ const RichTextEditor = forwardRef<RichTextEditorHandle, RichTextEditorProps>(
         if (range.collapsed) return
 
         if (sizeKey === 'clear' || sizeKey === null) {
+          // remove font-size spans that intersect the selection
           const walker = document.createTreeWalker(range.commonAncestorContainer as Node, NodeFilter.SHOW_ELEMENT, null)
           const toRemove: HTMLElement[] = []
+          const ancestor = range.commonAncestorContainer as HTMLElement
+          if (ancestor.nodeType === Node.ELEMENT_NODE && ancestor.hasAttribute?.('data-font-size')) {
+            toRemove.push(ancestor)
+          }
           let node = walker.nextNode() as HTMLElement | null
           while (node) {
-            if (node.nodeType === Node.ELEMENT_NODE && node.hasAttribute && node.hasAttribute('data-font-size')) {
+            if (
+              node.nodeType === Node.ELEMENT_NODE &&
+              node.hasAttribute &&
+              node.hasAttribute('data-font-size') &&
+              range.intersectsNode(node)
+            ) {
               toRemove.push(node)
             }
             node = walker.nextNode() as HTMLElement | null
@@ -1050,9 +1124,9 @@ const RichTextEditor = forwardRef<RichTextEditorHandle, RichTextEditorProps>(
           span.appendChild(frag)
           range.insertNode(span)
 
+          // Keep the styled text selected so the toolbar stays visible
           const newRange = document.createRange()
-          newRange.setStartAfter(span)
-          newRange.collapse(true)
+          newRange.selectNodeContents(span)
           selection.removeAllRanges()
           selection.addRange(newRange)
         } catch (e) {
