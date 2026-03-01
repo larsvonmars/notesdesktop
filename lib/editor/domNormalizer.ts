@@ -4,6 +4,21 @@
  */
 
 /**
+ * Map of semantically equivalent tag names. For example, <b> and <strong> are equivalent.
+ */
+const TAG_EQUIVALENCES: Record<string, string> = {
+  B: 'STRONG',
+  I: 'EM',
+}
+
+/**
+ * Normalize a tag name to its canonical form using equivalences.
+ */
+function canonicalTag(tagName: string): string {
+  return TAG_EQUIVALENCES[tagName] || tagName
+}
+
+/**
  * Merge adjacent text nodes
  */
 function mergeAdjacentTextNodes(parent: Node): void {
@@ -54,17 +69,40 @@ function mergeAdjacentIdenticalElements(parent: Node): void {
 }
 
 /**
- * Check if two elements are identical (same tag and attributes)
+ * Check if two elements are identical (same tag and attributes) and should be merged.
+ * Treats <b>/<strong> and <i>/<em> as equivalent.
  */
 function areElementsIdentical(a: Element, b: Element): boolean {
-  if (a.tagName !== b.tagName) return false
+  const canonA = canonicalTag(a.tagName)
+  const canonB = canonicalTag(b.tagName)
   
-  // For inline formatting tags, we consider them identical
-  const inlineTags = ['STRONG', 'EM', 'CODE', 'U', 'S', 'B', 'I']
-  if (inlineTags.includes(a.tagName)) {
+  if (canonA !== canonB) return false
+  
+  // For inline formatting tags, we consider them identical if they share the same canonical tag
+  const inlineTags = ['STRONG', 'EM', 'CODE', 'U', 'S', 'MARK', 'SPAN']
+  if (inlineTags.includes(canonA)) {
+    // For SPAN and MARK, also check that they share the same class and style
+    if (canonA === 'SPAN' || canonA === 'MARK') {
+      return a.className === b.className && (a as HTMLElement).style.cssText === (b as HTMLElement).style.cssText
+    }
     return true
   }
   
+  return false
+}
+
+/**
+ * Check if an element contains only whitespace and/or <br> elements (visually empty but structurally meaningful)
+ */
+function hasOnlyBrContent(element: Element): boolean {
+  for (const child of Array.from(element.childNodes)) {
+    if (child.nodeType === Node.ELEMENT_NODE && (child as Element).tagName === 'BR') {
+      return true // Contains a <br>, not truly empty
+    }
+    if (child.nodeType === Node.TEXT_NODE && (child.textContent || '').trim() !== '') {
+      return false // Has visible text content
+    }
+  }
   return false
 }
 
@@ -73,7 +111,7 @@ function areElementsIdentical(a: Element, b: Element): boolean {
  */
 function removeEmptyInlineElements(parent: Node): void {
   const childNodes = Array.from(parent.childNodes)
-  const inlineTags = ['STRONG', 'EM', 'CODE', 'U', 'S', 'B', 'I', 'SPAN']
+  const inlineTags = ['STRONG', 'EM', 'CODE', 'U', 'S', 'B', 'I', 'SPAN', 'MARK']
   
   for (const node of childNodes) {
     if (node.nodeType === Node.ELEMENT_NODE) {
@@ -82,8 +120,8 @@ function removeEmptyInlineElements(parent: Node): void {
       // Recursively clean children first
       removeEmptyInlineElements(element)
       
-      // Remove if empty and inline
-      if (inlineTags.includes(element.tagName) && element.textContent?.trim() === '') {
+      // Remove if empty and inline, but preserve elements containing <br>
+      if (inlineTags.includes(element.tagName) && element.textContent?.trim() === '' && !hasOnlyBrContent(element)) {
         parent.removeChild(element)
       }
     }
@@ -92,6 +130,7 @@ function removeEmptyInlineElements(parent: Node): void {
 
 /**
  * Unwrap redundant nested tags (e.g., <strong><strong>text</strong></strong>)
+ * Also handles semantic equivalences like <b><strong>text</strong></b>
  */
 function unwrapRedundantNestedTags(parent: Node): void {
   const childNodes = Array.from(parent.childNodes)
@@ -100,10 +139,10 @@ function unwrapRedundantNestedTags(parent: Node): void {
     if (node.nodeType === Node.ELEMENT_NODE) {
       const element = node as Element
       
-      // Check if this element has a single child of the same type
+      // Check if this element has a single child of the same (or equivalent) type
       if (
         element.children.length === 1 &&
-        element.children[0].tagName === element.tagName
+        canonicalTag(element.children[0].tagName) === canonicalTag(element.tagName)
       ) {
         const child = element.children[0]
         
@@ -150,31 +189,32 @@ export function sanitizeInlineNodes(range: Range): void {
 }
 
 /**
- * Normalize an element and its descendants
+ * Normalize an element and its descendants.
+ * Children are normalized before the parent applies merge/cleanup rules,
+ * so recursive processing in merge functions is no longer needed for children
+ * that have already been visited.
  */
 function normalizeElement(element: Element): void {
-  // Merge adjacent text nodes
-  mergeAdjacentTextNodes(element)
-  
-  // Merge adjacent identical elements
-  mergeAdjacentIdenticalElements(element)
-  
-  // Remove empty inline elements
-  removeEmptyInlineElements(element)
-  
-  // Unwrap redundant nested tags
-  unwrapRedundantNestedTags(element)
-  
-  // Recursively normalize children
+  // First normalize all children (bottom-up)
   Array.from(element.children).forEach(child => {
     normalizeElement(child)
   })
+
+  // Then apply normalization passes on this element
+  mergeAdjacentTextNodes(element)
+  mergeAdjacentIdenticalElements(element)
+  removeEmptyInlineElements(element)
+  unwrapRedundantNestedTags(element)
 }
 
 /**
- * Normalize the entire editor content
+ * Normalize the entire editor content, preserving selection where possible.
  */
 export function normalizeEditorContent(editorElement: HTMLElement): void {
+  // Save selection before normalization
+  const selection = window.getSelection()
+  const savedRange = selection && selection.rangeCount > 0 ? selection.getRangeAt(0).cloneRange() : null
+
   normalizeElement(editorElement)
   
   // Ensure editor has at least one block element
@@ -183,6 +223,19 @@ export function normalizeEditorContent(editorElement: HTMLElement): void {
     const p = document.createElement('p')
     p.appendChild(document.createElement('br'))
     editorElement.appendChild(p)
+  }
+
+  // Restore selection after normalization
+  if (savedRange && selection) {
+    try {
+      // Only restore if the range is still valid within the editor
+      if (editorElement.contains(savedRange.startContainer) && editorElement.contains(savedRange.endContainer)) {
+        selection.removeAllRanges()
+        selection.addRange(savedRange)
+      }
+    } catch {
+      // Range may be stale if normalization removed the target nodes
+    }
   }
 }
 

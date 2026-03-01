@@ -1,4 +1,4 @@
-import { Minus, Plus, Trash2 } from 'lucide-react'
+import { Minus, Plus, Trash2, Type } from 'lucide-react'
 
 interface TableToolbarProps {
   isVisible: boolean
@@ -10,6 +10,7 @@ interface TableToolbarProps {
   onAddCol: () => void
   onDeleteCol: () => void
   onDeleteTable: () => void
+  onToggleHeaderRow?: () => void
   outlinesVisible?: boolean
   onToggleOutlines?: () => void
 }
@@ -24,6 +25,7 @@ export default function TableToolbar({
   onAddCol,
   onDeleteCol,
   onDeleteTable,
+  onToggleHeaderRow,
   outlinesVisible,
   onToggleOutlines,
 }: TableToolbarProps) {
@@ -47,6 +49,11 @@ export default function TableToolbar({
       <button onClick={onDeleteCol} className="inline-flex items-center gap-1 px-2 py-1 text-sm rounded hover:bg-gray-100">
         <Minus size={14} /> Col
       </button>
+      {onToggleHeaderRow && (
+        <button onClick={onToggleHeaderRow} className="inline-flex items-center gap-1 px-2 py-1 text-sm rounded hover:bg-gray-100">
+          <Type size={14} /> Header
+        </button>
+      )}
       <button onClick={onDeleteTable} className="inline-flex items-center gap-1 px-2 py-1 text-sm rounded text-red-600 hover:bg-red-50">
         <Trash2 size={14} /> Delete
       </button>

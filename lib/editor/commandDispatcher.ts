@@ -360,7 +360,7 @@ function unwrapElement(element: Element): void {
 /**
  * Get the closest block-level ancestor of a node
  */
-function getBlockAncestor(node: Node | null): HTMLElement | null {
+export function getBlockAncestor(node: Node | null): HTMLElement | null {
   if (!node) return null
   
   const blockTags = ['P', 'DIV', 'H1', 'H2', 'H3', 'H4', 'H5', 'H6', 'BLOCKQUOTE', 'PRE', 'LI']
@@ -581,6 +581,126 @@ function restoreOffsetWithinBlock(block: HTMLElement, offset: number, selection:
   range.collapse(false)
   selection.removeAllRanges()
   selection.addRange(range)
+}
+
+/**
+ * Apply text alignment to the block ancestor of the current selection.
+ * Sets CSS textAlign on the block-level element.
+ */
+export function applyTextAlignment(
+  alignment: 'left' | 'center' | 'right',
+  editorElement?: HTMLElement | null
+): void {
+  try {
+    const selection = window.getSelection()
+    if (!selection || selection.rangeCount === 0) {
+      console.warn('No selection available for text alignment')
+      return
+    }
+
+    const range = selection.getRangeAt(0)
+    if (!range.startContainer.isConnected) {
+      console.warn('Selection not connected to DOM')
+      return
+    }
+
+    // Collect all block ancestors touched by the selection
+    const blocks: HTMLElement[] = []
+    const startBlock = getBlockAncestor(range.startContainer)
+    const endBlock = getBlockAncestor(range.endContainer)
+
+    if (startBlock) {
+      blocks.push(startBlock)
+    }
+
+    // If selection spans multiple blocks, walk siblings between them
+    if (startBlock && endBlock && startBlock !== endBlock) {
+      let current: HTMLElement | null = startBlock
+      while (current && current !== endBlock) {
+        const next = current.nextElementSibling as HTMLElement | null
+        if (next) {
+          blocks.push(next)
+        }
+        current = next
+      }
+    }
+
+    // If no block found, try the editor root's direct child containing the selection
+    if (blocks.length === 0 && editorElement) {
+      let node: Node | null = range.startContainer
+      while (node && node.parentNode !== editorElement) {
+        node = node.parentNode
+      }
+      if (node && node instanceof HTMLElement) {
+        blocks.push(node)
+      }
+    }
+
+    if (blocks.length === 0) {
+      console.warn('No block found for text alignment')
+      return
+    }
+
+    // Check if all blocks already have this alignment — toggle to 'left' (default)
+    const allAligned = blocks.every(b => b.style.textAlign === alignment)
+    const newAlign = allAligned && alignment !== 'left' ? '' : (alignment === 'left' ? '' : alignment)
+
+    for (const block of blocks) {
+      if (newAlign) {
+        block.style.textAlign = newAlign
+      } else {
+        block.style.removeProperty('text-align')
+        // Clean up empty style attribute
+        if (!block.getAttribute('style')?.trim()) {
+          block.removeAttribute('style')
+        }
+      }
+    }
+
+    // Re-focus the editor
+    if (editorElement && editorElement.isConnected) {
+      editorElement.focus()
+    }
+  } catch (error) {
+    console.error('Error in applyTextAlignment:', error)
+  }
+}
+
+/**
+ * Get the current text alignment of the block at the selection.
+ * Returns 'left' if no explicit alignment is set.
+ */
+export function getTextAlignment(
+  editorElement?: HTMLElement | null
+): 'left' | 'center' | 'right' {
+  try {
+    const selection = window.getSelection()
+    if (!selection || selection.rangeCount === 0) return 'left'
+
+    const range = selection.getRangeAt(0)
+    const block = getBlockAncestor(range.startContainer)
+
+    if (!block) {
+      // Try editor root's direct child
+      if (editorElement) {
+        let node: Node | null = range.startContainer
+        while (node && node.parentNode !== editorElement) {
+          node = node.parentNode
+        }
+        if (node && node instanceof HTMLElement) {
+          const align = node.style.textAlign
+          if (align === 'center' || align === 'right') return align
+        }
+      }
+      return 'left'
+    }
+
+    const align = block.style.textAlign
+    if (align === 'center' || align === 'right') return align
+    return 'left'
+  } catch {
+    return 'left'
+  }
 }
 
 /**

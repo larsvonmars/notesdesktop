@@ -13,6 +13,7 @@ import { useIsMobile } from '@/lib/useIsMobile'
 import type { NoteType } from '@/lib/notes'
 import { ToastContainer } from '@/components/NotificationCenter'
 import { initNotifications, destroyNotifications, type AppNotification } from '@/lib/notifications'
+import { ErrorBoundary } from '@/components/ErrorBoundary'
 
 type NoteCreationContext = {
   folderArg?: string | null
@@ -1326,15 +1327,17 @@ function WorkspaceContent() {
 
 export default function WorkspaceShell() {
   return (
-    <Suspense fallback={
-      <div className="flex items-center justify-center min-h-screen">
-        <div className="text-center">
-          <Loader2 className="w-12 h-12 text-alpine-600 animate-spin mx-auto mb-4" />
-          <div className="text-lg text-gray-700 font-medium">Loading your workspace...</div>
+    <ErrorBoundary label="Workspace">
+      <Suspense fallback={
+        <div className="flex items-center justify-center min-h-screen">
+          <div className="text-center">
+            <Loader2 className="w-12 h-12 text-alpine-600 animate-spin mx-auto mb-4" />
+            <div className="text-lg text-gray-700 font-medium">Loading your workspace...</div>
+          </div>
         </div>
-      </div>
-    }>
-      <WorkspaceContent />
-    </Suspense>
+      }>
+        <WorkspaceContent />
+      </Suspense>
+    </ErrorBoundary>
   )
 }

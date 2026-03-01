@@ -78,6 +78,16 @@ export const KEYBOARD_SHORTCUTS: KeyboardShortcut[] = [
     description: 'Heading 3',
     category: 'blocks'
   },
+  {
+    keys: ['⌘⇧E', 'Ctrl+Shift+E'],
+    description: 'Align Center',
+    category: 'blocks'
+  },
+  {
+    keys: ['⌘⇧R', 'Ctrl+Shift+R'],
+    description: 'Align Right',
+    category: 'blocks'
+  },
   
   // Editing shortcuts
   {
@@ -91,9 +101,31 @@ export const KEYBOARD_SHORTCUTS: KeyboardShortcut[] = [
     category: 'editing'
   },
   {
+    keys: ['Ctrl+Y'],
+    description: 'Redo (Windows)',
+    category: 'editing'
+  },
+  {
     keys: ['⌘F', 'Ctrl+F'],
     description: 'Find & Replace',
     category: 'editing'
+  },
+  
+  // Navigation shortcuts
+  {
+    keys: ['Tab'],
+    description: 'Indent list / Next table cell',
+    category: 'navigation'
+  },
+  {
+    keys: ['⇧Tab', 'Shift+Tab'],
+    description: 'Outdent list / Previous table cell',
+    category: 'navigation'
+  },
+  {
+    keys: ['Escape'],
+    description: 'Collapse selection / Close dialogs',
+    category: 'navigation'
   },
 ]
 

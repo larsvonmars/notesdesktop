@@ -1,7 +1,20 @@
 'use client'
 
 import { useEffect, useState, useCallback, useRef } from 'react'
-import { Bold, Italic, Underline, Strikethrough, Code, Link as LinkIcon } from 'lucide-react'
+import {
+  Bold,
+  Italic,
+  Underline,
+  Strikethrough,
+  Code,
+  Link as LinkIcon,
+  AlignLeft,
+  AlignCenter,
+  AlignRight,
+  Quote,
+  MoreHorizontal,
+  Type as TypeIcon,
+} from 'lucide-react'
 import { useIsMobile } from '@/lib/useIsMobile'
 
 interface SelectionToolbarProps {
@@ -22,7 +35,9 @@ export default function SelectionToolbar({
 }: SelectionToolbarProps) {
   const [isVisible, setIsVisible] = useState(false)
   const [position, setPosition] = useState<Position>({ top: 0, left: 0 })
+  const [showMore, setShowMore] = useState(false)
   const toolbarRef = useRef<HTMLDivElement>(null)
+  const moreRef = useRef<HTMLDivElement>(null)
   const [activeCommands, setActiveCommands] = useState<Set<string>>(new Set())
   const isMobile = useIsMobile()
 
@@ -50,7 +65,7 @@ export default function SelectionToolbar({
     }
 
     const toolbarHeight = isMobile ? 48 : 40
-    const toolbarWidth = isMobile ? 280 : 300
+    const toolbarWidth = isMobile ? 320 : 420
     const margin = 8
 
     // Position above selection if possible, otherwise below
@@ -77,6 +92,24 @@ export default function SelectionToolbar({
     if (queryCommandState('underline')) active.add('underline')
     if (queryCommandState('strikeThrough')) active.add('strike')
     if (queryCommandState('code')) active.add('code')
+    // Headings
+    if (queryCommandState('heading1')) active.add('heading1')
+    if (queryCommandState('heading2')) active.add('heading2')
+    if (queryCommandState('heading3')) active.add('heading3')
+    // Block
+    if (queryCommandState('blockquote')) active.add('blockquote')
+    // Alignment
+    if (queryCommandState('align-left')) active.add('align-left')
+    if (queryCommandState('align-center')) active.add('align-center')
+    if (queryCommandState('align-right')) active.add('align-right')
+    // Detect active highlight color
+    for (const c of ['yellow', 'green', 'pink', 'blue']) {
+      if (queryCommandState(`highlight:${c}`)) active.add(`highlight:${c}`)
+    }
+    // Detect active text color
+    for (const c of ['red', 'green', 'blue', 'purple']) {
+      if (queryCommandState(`color:${c}`)) active.add(`color:${c}`)
+    }
     setActiveCommands(active)
   }, [queryCommandState, isMobile])
 
@@ -86,18 +119,40 @@ export default function SelectionToolbar({
       setTimeout(updatePosition, 10)
     }
 
+    const handleHide = () => {
+      setIsVisible(false)
+      setShowMore(false)
+    }
+
     document.addEventListener('selectionchange', handleSelectionChange)
     document.addEventListener('mouseup', handleSelectionChange)
-    window.addEventListener('resize', () => setIsVisible(false))
-    window.addEventListener('scroll', () => setIsVisible(false), true)
+    window.addEventListener('resize', handleHide)
+    window.addEventListener('scroll', handleHide, true)
 
     return () => {
       document.removeEventListener('selectionchange', handleSelectionChange)
       document.removeEventListener('mouseup', handleSelectionChange)
-      window.removeEventListener('resize', () => setIsVisible(false))
-      window.removeEventListener('scroll', () => setIsVisible(false), true)
+      window.removeEventListener('resize', handleHide)
+      window.removeEventListener('scroll', handleHide, true)
     }
   }, [updatePosition])
+
+  // Close "more" dropdown when clicking outside
+  useEffect(() => {
+    if (!showMore) return
+    const handleClickOutside = (e: MouseEvent) => {
+      if (
+        moreRef.current &&
+        !moreRef.current.contains(e.target as Node) &&
+        toolbarRef.current &&
+        !toolbarRef.current.contains(e.target as Node)
+      ) {
+        setShowMore(false)
+      }
+    }
+    document.addEventListener('mousedown', handleClickOutside)
+    return () => document.removeEventListener('mousedown', handleClickOutside)
+  }, [showMore])
 
   const handleCommand = (command: string) => {
     if (isDisabled) return
@@ -108,13 +163,30 @@ export default function SelectionToolbar({
 
   if (!isVisible) return null
 
-  const buttons = [
-    { command: 'bold', icon: Bold, label: 'Bold (⌘B)' },
-    { command: 'italic', icon: Italic, label: 'Italic (⌘I)' },
-    { command: 'underline', icon: Underline, label: 'Underline (⌘U)' },
-    { command: 'strike', icon: Strikethrough, label: 'Strikethrough (⌘⇧X)' },
-    { command: 'code', icon: Code, label: 'Code (⌘`)' },
-    { command: 'link', icon: LinkIcon, label: 'Link (⌘K)' },
+  // Determine current heading label for the heading cycle button
+  const currentHeading = activeCommands.has('heading1')
+    ? 'H1'
+    : activeCommands.has('heading2')
+    ? 'H2'
+    : activeCommands.has('heading3')
+    ? 'H3'
+    : 'P'
+
+  // Primary inline formatting buttons
+  const inlineButtons = [
+    { command: 'bold', icon: Bold, label: 'Bold (Ctrl+B)' },
+    { command: 'italic', icon: Italic, label: 'Italic (Ctrl+I)' },
+    { command: 'underline', icon: Underline, label: 'Underline (Ctrl+U)' },
+    { command: 'strike', icon: Strikethrough, label: 'Strikethrough (Ctrl+Shift+X)' },
+    { command: 'code', icon: Code, label: 'Inline Code (Ctrl+`)' },
+    { command: 'link', icon: LinkIcon, label: 'Link (Ctrl+K)' },
+  ]
+
+  // Alignment buttons
+  const alignmentButtons = [
+    { command: 'align-left', icon: AlignLeft, label: 'Align Left' },
+    { command: 'align-center', icon: AlignCenter, label: 'Center (Ctrl+Shift+E)' },
+    { command: 'align-right', icon: AlignRight, label: 'Right (Ctrl+Shift+R)' },
   ]
 
   const highlightColors = [
@@ -133,100 +205,202 @@ export default function SelectionToolbar({
   ]
 
   const fontSizes = [
-    { key: '12', label: '12px' },
-    { key: '16', label: '16px' },
-    { key: '20', label: '20px' },
-    { key: '24', label: '24px' },
+    { key: '12', label: '12' },
+    { key: '16', label: '16' },
+    { key: '20', label: '20' },
+    { key: '24', label: '24' },
   ]
+
+  const btnBase = `rounded hover:bg-gray-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed touch-target`
+  const btnSize = isMobile ? 'p-2.5 min-w-[40px] min-h-[40px]' : 'p-1.5 min-w-[30px] min-h-[30px]'
+  const iconSize = isMobile ? 18 : 15
+
+  const Divider = () => (
+    <div className="w-px h-5 bg-gray-600 mx-0.5 shrink-0" />
+  )
 
   return (
     <div
       ref={toolbarRef}
-      className={`fixed z-50 flex items-center ${isMobile ? 'gap-0.5' : 'gap-1'} rounded-lg bg-gray-900 text-white shadow-lg ${isMobile ? 'px-1.5 py-1.5' : 'px-2 py-1.5'} animate-in fade-in duration-150`}
+      className={`fixed z-50 flex flex-col rounded-lg bg-gray-900 text-white shadow-lg ${isMobile ? 'px-1.5 py-1' : 'px-1.5 py-1'} animate-in fade-in duration-150`}
       style={{ top: position.top, left: position.left }}
       onMouseDown={(e) => {
         // Prevent toolbar from taking focus away from editor
         e.preventDefault()
       }}
     >
-      {buttons.map(({ command, icon: Icon, label }) => (
+      {/* Row 1: Heading cycle + inline formatting + alignment + blockquote + more */}
+      <div className="flex items-center gap-0.5 flex-wrap">
+        {/* Heading cycle button */}
         <button
-          key={command}
-          onClick={() => handleCommand(command)}
+          onClick={() => {
+            // Cycle: P -> H1 -> H2 -> H3 -> P
+            if (currentHeading === 'P') handleCommand('heading1')
+            else if (currentHeading === 'H1') handleCommand('heading2')
+            else if (currentHeading === 'H2') handleCommand('heading3')
+            else handleCommand('heading1') // H3 → toggle off → becomes P, then next click → H1
+          }}
           onMouseDown={(e) => e.preventDefault()}
-          title={label}
+          title={`Block: ${currentHeading} (click to cycle)`}
           disabled={isDisabled}
-          className={`${isMobile ? 'p-2.5 min-w-[40px] min-h-[40px]' : 'p-2 min-w-[36px] min-h-[36px]'} rounded hover:bg-gray-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed touch-target ${
-            activeCommands.has(command) ? 'bg-gray-700' : ''
+          className={`${btnBase} flex items-center gap-0.5 ${isMobile ? 'px-2.5 py-2' : 'px-2 py-1'} font-semibold text-xs ${
+            currentHeading !== 'P' ? 'bg-gray-700' : ''
           }`}
-          aria-label={label}
+          aria-label={`Block: ${currentHeading}`}
         >
-          <Icon size={isMobile ? 20 : 16} />
+          <TypeIcon size={iconSize} />
+          <span>{currentHeading}</span>
         </button>
-      ))}
-      {/* Highlight color buttons */}
-      {highlightColors.map(({ key, title, colorClass }) => (
-        <button
-          key={key}
-          onClick={() => handleCommand(`highlight:${key}`)}
-          onMouseDown={(e) => e.preventDefault()}
-          title={title}
-          disabled={isDisabled}
-          className={`p-1 rounded hover:opacity-90 touch-target`}
-          aria-label={title}
-        >
-          <span className={`${colorClass} inline-block h-4 w-4 rounded`} />
-        </button>
-      ))}
-      {/* Text color buttons */}
-      {textColors.map(({ key, title, colorClass, indicatorClass }) => (
-        <button
-          key={key}
-          onClick={() => handleCommand(`color:${key}`)}
-          onMouseDown={(e) => e.preventDefault()}
-          title={title}
-          disabled={isDisabled}
-          className={`p-1 rounded hover:opacity-90 touch-target`}
-          aria-label={title}
-        >
-          <span className={`${colorClass} inline-block h-4 w-4 rounded ${indicatorClass ?? ''}`} />
-        </button>
-      ))}
 
-      {/* Font size buttons */}
-      {fontSizes.map(({ key, label }) => (
+        <Divider />
+
+        {/* Inline buttons */}
+        {inlineButtons.map(({ command, icon: Icon, label }) => (
+          <button
+            key={command}
+            onClick={() => handleCommand(command)}
+            onMouseDown={(e) => e.preventDefault()}
+            title={label}
+            disabled={isDisabled}
+            className={`${btnSize} ${btnBase} ${
+              activeCommands.has(command) ? 'bg-gray-700' : ''
+            }`}
+            aria-label={label}
+          >
+            <Icon size={iconSize} />
+          </button>
+        ))}
+
+        <Divider />
+
+        {/* Alignment buttons */}
+        {alignmentButtons.map(({ command, icon: Icon, label }) => (
+          <button
+            key={command}
+            onClick={() => handleCommand(command)}
+            onMouseDown={(e) => e.preventDefault()}
+            title={label}
+            disabled={isDisabled}
+            className={`${btnSize} ${btnBase} ${
+              activeCommands.has(command) ? 'bg-gray-700' : ''
+            }`}
+            aria-label={label}
+          >
+            <Icon size={iconSize} />
+          </button>
+        ))}
+
+        <Divider />
+
+        {/* Blockquote toggle */}
         <button
-          key={key}
-          onClick={() => handleCommand(`font-size:${key}`)}
+          onClick={() => handleCommand('blockquote')}
           onMouseDown={(e) => e.preventDefault()}
-          title={`Font size ${label}`}
+          title="Blockquote (Ctrl+Shift+B)"
           disabled={isDisabled}
-          className={`px-2 py-1 text-xs rounded hover:bg-gray-700 touch-target`}
-          aria-label={`Font size ${label}`}
+          className={`${btnSize} ${btnBase} ${
+            activeCommands.has('blockquote') ? 'bg-gray-700' : ''
+          }`}
+          aria-label="Blockquote"
         >
-          {label}
+          <Quote size={iconSize} />
         </button>
-      ))}
-      <button
-        onClick={() => handleCommand('font-size:clear')}
-        onMouseDown={(e) => e.preventDefault()}
-        title="Reset font size"
-        disabled={isDisabled}
-        className={`p-2 rounded hover:bg-gray-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed touch-target`}
-        aria-label="Reset font size"
-      >
-        A
-      </button>
-      <button
-        onClick={() => handleCommand('highlight:clear')}
-        onMouseDown={(e) => e.preventDefault()}
-        title="Remove highlight"
-        disabled={isDisabled}
-        className={`p-2 rounded hover:bg-gray-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed touch-target`}
-        aria-label="Remove highlight"
-      >
-        Clear
-      </button>
+
+        {/* More button for secondary options (colors, font sizes) */}
+        <Divider />
+        <button
+          onClick={() => setShowMore(!showMore)}
+          onMouseDown={(e) => e.preventDefault()}
+          title="More formatting"
+          disabled={isDisabled}
+          className={`${btnSize} ${btnBase} ${showMore ? 'bg-gray-700' : ''}`}
+          aria-label="More formatting"
+        >
+          <MoreHorizontal size={iconSize} />
+        </button>
+      </div>
+
+      {/* Row 2: Expandable panel with highlights, colors, font sizes */}
+      {showMore && (
+        <div
+          ref={moreRef}
+          className="flex items-center gap-0.5 flex-wrap pt-1 mt-1 border-t border-gray-700"
+          onMouseDown={(e) => e.preventDefault()}
+        >
+          {/* Highlight color buttons */}
+          {highlightColors.map(({ key, title, colorClass }) => (
+            <button
+              key={key}
+              onClick={() => handleCommand(`highlight:${key}`)}
+              onMouseDown={(e) => e.preventDefault()}
+              title={title}
+              disabled={isDisabled}
+              className={`p-1 rounded hover:opacity-90 touch-target ${
+                activeCommands.has(`highlight:${key}`) ? 'ring-2 ring-white/70' : ''
+              }`}
+              aria-label={title}
+            >
+              <span className={`${colorClass} inline-block h-4 w-4 rounded`} />
+            </button>
+          ))}
+          <button
+            onClick={() => handleCommand('highlight:clear')}
+            onMouseDown={(e) => e.preventDefault()}
+            title="Remove highlight"
+            disabled={isDisabled}
+            className={`px-1.5 py-0.5 text-[10px] rounded hover:bg-gray-700 touch-target`}
+            aria-label="Remove highlight"
+          >
+            ✕
+          </button>
+
+          <Divider />
+
+          {/* Text color buttons */}
+          {textColors.map(({ key, title, colorClass, indicatorClass }) => (
+            <button
+              key={key}
+              onClick={() => handleCommand(`color:${key}`)}
+              onMouseDown={(e) => e.preventDefault()}
+              title={title}
+              disabled={isDisabled}
+              className={`p-1 rounded hover:opacity-90 touch-target ${
+                activeCommands.has(`color:${key}`) ? 'ring-2 ring-white/70' : ''
+              }`}
+              aria-label={title}
+            >
+              <span className={`${colorClass} inline-block h-4 w-4 rounded ${indicatorClass ?? ''}`} />
+            </button>
+          ))}
+
+          <Divider />
+
+          {/* Font size buttons */}
+          {fontSizes.map(({ key, label }) => (
+            <button
+              key={key}
+              onClick={() => handleCommand(`font-size:${key}`)}
+              onMouseDown={(e) => e.preventDefault()}
+              title={`Font size ${label}px`}
+              disabled={isDisabled}
+              className={`px-1.5 py-0.5 text-[10px] rounded hover:bg-gray-700 touch-target`}
+              aria-label={`Font size ${label}px`}
+            >
+              {label}
+            </button>
+          ))}
+          <button
+            onClick={() => handleCommand('font-size:clear')}
+            onMouseDown={(e) => e.preventDefault()}
+            title="Reset font size"
+            disabled={isDisabled}
+            className={`px-1.5 py-0.5 text-[10px] rounded hover:bg-gray-700 touch-target`}
+            aria-label="Reset font size"
+          >
+            A↺
+          </button>
+        </div>
+      )}
     </div>
   )
 }

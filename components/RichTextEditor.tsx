@@ -22,6 +22,8 @@ import TableToolbar from './editor/TableToolbar'
 import {
   applyInlineStyle,
   applyBlockFormat,
+  applyTextAlignment,
+  getTextAlignment,
   generateHeadingId,
   saveSelection as saveSelectionUtil,
   restoreSelection as restoreSelectionUtil
@@ -55,7 +57,8 @@ import { HistoryManager, createDebouncedCapture } from '@/lib/editor/historyMana
 import {
   looksLikeMarkdown,
   markdownToHtml,
-  htmlToMarkdown
+  htmlToMarkdown,
+  cleanPastedHtml
 } from '@/lib/editor/markdownHelpers'
 import {
   getSelectionContext,
@@ -97,6 +100,9 @@ export type RichTextCommand =
   | 'redo'
   | 'link'
   | 'horizontal-rule'
+  | 'align-left'
+  | 'align-center'
+  | 'align-right'
   | `highlight:${string}`
   | `color:${string}`
   | `font-size:${string}`
@@ -124,6 +130,8 @@ interface RichTextEditorProps {
   placeholder?: string
   customBlocks?: CustomBlockDescriptor[]
   onCustomCommand?: (commandId: string) => void
+  /** Called when an image is pasted from clipboard. The callback should handle upload and return the image URL. */
+  onImagePaste?: (file: File) => Promise<{ src: string; alt: string } | null>
 }
 
 const SANITIZE_CONFIG: Config = {
@@ -135,15 +143,38 @@ const SANITIZE_CONFIG: Config = {
   ],
   ALLOWED_ATTR: [
     'href', 'target', 'rel', 'type', 'checked', 'data-checked',
-    'id', 'data-block', 'data-block-type', 'data-block-payload',
+    'id', 'class', 'data-block', 'data-block-type', 'data-block-payload',
     'data-note-id', 'data-note-title', 'data-folder-id',
     'data-file-path', 'data-file-name', 'src', 'alt', 'width', 'height',
     'data-direction', 'aria-label', 'title', 'draggable',
     'contenteditable', 'xmlns', 'viewBox', 'fill', 'stroke',
     'stroke-width', 'stroke-linecap', 'stroke-linejoin', 'd',
-    'colspan', 'rowspan', 'data-checklist'
+    'colspan', 'rowspan', 'data-checklist', 'style'
   ],
   ALLOW_DATA_ATTR: true
+}
+
+// Restrict inline styles to safe CSS properties only
+const ALLOWED_CSS_PROPERTIES = new Set(['text-align', 'font-size'])
+
+if (typeof window !== 'undefined' && typeof DOMPurify.addHook === 'function') {
+  DOMPurify.addHook('afterSanitizeAttributes', (node) => {
+    if (node.hasAttribute('style')) {
+      const style = (node as HTMLElement).style
+      const allowed: string[] = []
+      for (let i = 0; i < style.length; i++) {
+        const prop = style[i]
+        if (ALLOWED_CSS_PROPERTIES.has(prop)) {
+          allowed.push(`${prop}: ${style.getPropertyValue(prop)}`)
+        }
+      }
+      if (allowed.length > 0) {
+        node.setAttribute('style', allowed.join('; '))
+      } else {
+        node.removeAttribute('style')
+      }
+    }
+  })
 }
 
 // Type describing a custom block renderer/parser that callers can register
@@ -190,15 +221,28 @@ const normalizePastedText = (text: string): string => {
     .split('\n')
     .map((line) => line.replace(/[ \t]+$/g, ''))
 
+  // Strip leading and trailing blank lines
   while (lines.length > 0 && lines[0].trim() === '') {
     lines.shift()
   }
-
   while (lines.length > 0 && lines[lines.length - 1].trim() === '') {
     lines.pop()
   }
 
-  return lines.join('\n').replace(EXTRA_BLANK_LINES_PATTERN, '\n\n')
+  // Collapse 3+ consecutive blank lines down to a single blank line
+  const result: string[] = []
+  let consecutiveBlank = 0
+  for (const line of lines) {
+    if (line.trim() === '') {
+      consecutiveBlank++
+      if (consecutiveBlank <= 1) result.push(line)
+    } else {
+      consecutiveBlank = 0
+      result.push(line)
+    }
+  }
+
+  return result.join('\n')
 }
 
 const STRUCTURED_LINE_PATTERN = /^(\s*([-*+]\s|\d+\.\s|>\s|#{1,6}\s|```|~~~|\|))/
@@ -285,7 +329,7 @@ const ensureEditorHasContent = (editor: HTMLDivElement) => {
 }
 
 const RichTextEditor = forwardRef<RichTextEditorHandle, RichTextEditorProps>(
-  ({ value, onChange, disabled, placeholder, customBlocks, onCustomCommand }, ref) => {
+  ({ value, onChange, disabled, placeholder, customBlocks, onCustomCommand, onImagePaste }, ref) => {
     const customBlocksRef = useRef<CustomBlockDescriptor[] | undefined>(undefined)
       const editorRef = useRef<HTMLDivElement | null>(null)
     const historyManagerRef = useRef<HistoryManager | null>(null)
@@ -296,6 +340,7 @@ const RichTextEditor = forwardRef<RichTextEditorHandle, RichTextEditorProps>(
     const checklistNormalizationTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
     const isProcessingCommandRef = useRef<boolean>(false)
     const activeFormatsFrameRef = useRef<number | null>(null)
+    const isComposingRef = useRef<boolean>(false)
     const {
       showLinkDialog,
       setShowLinkDialog,
@@ -389,12 +434,30 @@ const RichTextEditor = forwardRef<RichTextEditorHandle, RichTextEditorProps>(
             return !!element?.closest('h3')
           case 'blockquote':
             return !!element?.closest('blockquote')
-          default:
+          case 'align-left':
+            return getTextAlignment(editorRef.current) === 'left'
+          case 'align-center':
+            return getTextAlignment(editorRef.current) === 'center'
+          case 'align-right':
+            return getTextAlignment(editorRef.current) === 'right'
+          default: {
+            // Handle highlight:<color> and color:<color> queries
+            if (command.startsWith('highlight:')) {
+              const hlColor = command.slice('highlight:'.length)
+              const hlEl = element?.closest('[data-highlight]') as HTMLElement | null
+              return hlEl?.getAttribute('data-highlight') === hlColor
+            }
+            if (command.startsWith('color:')) {
+              const colorVal = command.slice('color:'.length)
+              const colorEl = element?.closest('[data-color]') as HTMLElement | null
+              return colorEl?.getAttribute('data-color') === colorVal
+            }
             try {
               return document.queryCommandState?.(command) ?? false
             } catch {
               return false
             }
+          }
         }
       } catch {
         return false
@@ -433,6 +496,24 @@ const RichTextEditor = forwardRef<RichTextEditorHandle, RichTextEditorProps>(
         if (element.closest('h2')) formats.add('heading2')
         if (element.closest('h3')) formats.add('heading3')
         if (element.closest('blockquote')) formats.add('blockquote')
+
+        // Detect text alignment
+        const currentAlign = getTextAlignment(editorRef.current)
+        formats.add(`align-${currentAlign}`)
+
+        // Detect highlight color
+        const hlEl = element.closest('[data-highlight]') as HTMLElement | null
+        if (hlEl) {
+          const hlColor = hlEl.getAttribute('data-highlight')
+          if (hlColor) formats.add(`highlight:${hlColor}`)
+        }
+
+        // Detect text color
+        const colorEl = element.closest('[data-color]') as HTMLElement | null
+        if (colorEl) {
+          const colorVal = colorEl.getAttribute('data-color')
+          if (colorVal) formats.add(`color:${colorVal}`)
+        }
 
         setActiveFormats(formats)
       } catch (error) {
@@ -630,6 +711,26 @@ const RichTextEditor = forwardRef<RichTextEditorHandle, RichTextEditorProps>(
       }
     }, [onChange, sanitize, scheduleActiveFormatsUpdate])
 
+    // Track IME composition state so we can skip handleKeyDown during composition
+    useEffect(() => {
+      const editor = editorRef.current
+      if (!editor) return
+
+      const onCompositionStart = () => { isComposingRef.current = true }
+      const onCompositionEnd = () => {
+        isComposingRef.current = false
+        // Emit change after composition finishes (e.g. CJK input)
+        emitChange()
+      }
+
+      editor.addEventListener('compositionstart', onCompositionStart)
+      editor.addEventListener('compositionend', onCompositionEnd)
+      return () => {
+        editor.removeEventListener('compositionstart', onCompositionStart)
+        editor.removeEventListener('compositionend', onCompositionEnd)
+      }
+    }, [emitChange])
+
     // Public API: insert a custom block by type and optional payload
     const insertCustomBlock = useCallback(
       (type: string, payload?: any) => {
@@ -737,6 +838,7 @@ const RichTextEditor = forwardRef<RichTextEditorHandle, RichTextEditorProps>(
       addTableCol,
       deleteTableCol,
       deleteTable,
+      toggleHeaderRow,
       getTableDimensionsLabel,
     } = useTableToolbar({ editorRef, onEmitChange: emitChange })
 
@@ -1242,6 +1344,21 @@ const RichTextEditor = forwardRef<RichTextEditorHandle, RichTextEditorProps>(
       [disabled, emitChange]
     )
 
+    const applyTextAlignmentCmd = useCallback(
+      (alignment: 'left' | 'center' | 'right') => {
+        if (disabled || !editorRef.current || !editorRef.current.isConnected) return
+        const editor = editorRef.current
+        try {
+          editor.focus()
+          applyTextAlignment(alignment, editor)
+          emitChange()
+        } catch (error) {
+          console.error('Error in applyTextAlignmentCmd:', error)
+        }
+      },
+      [disabled, emitChange]
+    )
+
     const getHeadings = useCallback(() => {
       if (!editorRef.current) return []
       const headings = editorRef.current.querySelectorAll('h1, h2, h3')
@@ -1693,7 +1810,14 @@ const RichTextEditor = forwardRef<RichTextEditorHandle, RichTextEditorProps>(
           if (color === 'clear') {
             applyHighlight(null)
           } else {
-            applyHighlight(color)
+            // Toggle: if already highlighted with this color, remove it
+            const context = getSelectionContext(editorRef.current)
+            const el = context?.element?.closest('[data-highlight]') as HTMLElement | null
+            if (el && el.getAttribute('data-highlight') === color) {
+              applyHighlight(null)
+            } else {
+              applyHighlight(color)
+            }
           }
           return
         }
@@ -1704,7 +1828,14 @@ const RichTextEditor = forwardRef<RichTextEditorHandle, RichTextEditorProps>(
           if (color === 'clear') {
             applyColor('default')
           } else {
-            applyColor(color)
+            // Toggle: if already colored with this color, remove it
+            const context = getSelectionContext(editorRef.current)
+            const el = context?.element?.closest('[data-color]') as HTMLElement | null
+            if (el && el.getAttribute('data-color') === color) {
+              applyColor('default')
+            } else {
+              applyColor(color)
+            }
           }
           return
         }
@@ -1769,8 +1900,15 @@ const RichTextEditor = forwardRef<RichTextEditorHandle, RichTextEditorProps>(
         case 'redo':
           applyHistoryAction('redo')
           break
+        case 'align-left':
+        case 'align-center':
+        case 'align-right': {
+          const align = cmd.replace('align-', '') as 'left' | 'center' | 'right'
+          applyTextAlignmentCmd(align)
+          break
+        }
       }
-    }, [execCommand, applyCode, toggleChecklist, applyHeading, insertHorizontalRule, insertLink, applyHistoryAction])
+    }, [execCommand, applyCode, toggleChecklist, applyHeading, insertHorizontalRule, insertLink, applyHistoryAction, applyTextAlignmentCmd])
 
     const scrollToHeading = useCallback((headingId: string) => {
       if (!editorRef.current || !headingId) return
@@ -1832,12 +1970,24 @@ const RichTextEditor = forwardRef<RichTextEditorHandle, RichTextEditorProps>(
                 return !!element?.closest('h3')
               case 'blockquote':
                 return !!element?.closest('blockquote')
-              default:
+              default: {
+                // Handle highlight:<color> and color:<color> queries
+                if (command.startsWith('highlight:')) {
+                  const hlColor = command.slice('highlight:'.length)
+                  const hlEl = element?.closest('[data-highlight]') as HTMLElement | null
+                  return hlEl?.getAttribute('data-highlight') === hlColor
+                }
+                if (command.startsWith('color:')) {
+                  const colorVal = command.slice('color:'.length)
+                  const colorEl = element?.closest('[data-color]') as HTMLElement | null
+                  return colorEl?.getAttribute('data-color') === colorVal
+                }
                 try {
                   return document.queryCommandState?.(command) ?? false
                 } catch {
                   return false
                 }
+              }
             }
           } catch {
             return false
@@ -1963,10 +2113,17 @@ const RichTextEditor = forwardRef<RichTextEditorHandle, RichTextEditorProps>(
     }, [sanitize, scheduleChecklistNormalization, rehydrateExistingBlocks])
 
     const handleEditorBlur = useCallback(() => {
-      window.setTimeout(() => {
+      // Use rAF instead of setTimeout(0) to allow focus-regain within the same frame to cancel the flush
+      requestAnimationFrame(() => {
+        const editorEl = editorRef.current
+        if (!editorEl) return
+        // Only flush if the editor truly lost focus (not just a focus shift within the editor)
+        const activeEl = document.activeElement
+        if (editorEl === activeEl || editorEl.contains(activeEl)) return
         flushPendingExternalValue()
-      }, 0)
-    }, [flushPendingExternalValue])
+        emitChange() // Notify parent so hasChanges stays accurate after flush
+      })
+    }, [flushPendingExternalValue, emitChange])
 
     useEffect(() => {
       if (!editorRef.current) return
@@ -2048,6 +2205,11 @@ const RichTextEditor = forwardRef<RichTextEditorHandle, RichTextEditorProps>(
           return
         }
 
+        // Guard: don't intercept keystrokes during IME composition
+        if (event.nativeEvent.isComposing || isComposingRef.current) {
+          return
+        }
+
         // Handle autoformatting
         if (autoformatEnabled && shouldApplyAutoformat(event.nativeEvent)) {
           try {
@@ -2122,11 +2284,12 @@ const RichTextEditor = forwardRef<RichTextEditorHandle, RichTextEditorProps>(
           }
         }
 
-        // Handle Tab/Shift+Tab for list indent/outdent
+        // Handle Tab/Shift+Tab for list indent/outdent and table cell navigation
         if (event.key === 'Tab' && !event.metaKey && !event.ctrlKey && !event.altKey) {
           try {
             const selection = window.getSelection()
             if (selection && selection.anchorNode) {
+              // Check if we're inside a list item first
               const li = getClosestListItem(selection.anchorNode)
               if (li) {
                 event.preventDefault()
@@ -2138,6 +2301,36 @@ const RichTextEditor = forwardRef<RichTextEditorHandle, RichTextEditorProps>(
                 }
                 normalizeAllLists(editor)
                 emitChange()
+                return
+              }
+
+              // Check if we're inside a table cell — navigate between cells
+              const td = (selection.anchorNode.nodeType === Node.TEXT_NODE
+                ? selection.anchorNode.parentElement
+                : selection.anchorNode as Element
+              )?.closest('td, th')
+              if (td && editorRef.current?.contains(td)) {
+                event.preventDefault()
+                const row = td.parentElement as HTMLTableRowElement | null
+                const table = td.closest('table')
+                if (row && table) {
+                  const cells = Array.from(table.querySelectorAll('td, th'))
+                  const currentIndex = cells.indexOf(td as HTMLTableCellElement)
+                  const nextIndex = event.shiftKey ? currentIndex - 1 : currentIndex + 1
+                  if (nextIndex >= 0 && nextIndex < cells.length) {
+                    const targetCell = cells[nextIndex] as HTMLElement
+                    // Place cursor at start of next cell
+                    const range = document.createRange()
+                    if (targetCell.firstChild) {
+                      range.setStart(targetCell.firstChild, 0)
+                    } else {
+                      range.setStart(targetCell, 0)
+                    }
+                    range.collapse(true)
+                    selection.removeAllRanges()
+                    selection.addRange(range)
+                  }
+                }
                 return
               }
             }
@@ -2184,10 +2377,35 @@ const RichTextEditor = forwardRef<RichTextEditorHandle, RichTextEditorProps>(
           }
         }
 
+        // Handle Escape key: collapse selection, close floating toolbars/dialogs
+        if (event.key === 'Escape') {
+          const selection = window.getSelection()
+          if (selection && !selection.isCollapsed) {
+            selection.collapseToEnd()
+            event.preventDefault()
+            return
+          }
+          // Close search dialog if open
+          if (showSearchDialog) {
+            setShowSearchDialog(false)
+            event.preventDefault()
+            return
+          }
+        }
+
         // Handle keyboard shortcuts
         try {
           if (!(event.metaKey || event.ctrlKey)) return
           const key = event.key.toLowerCase()
+
+          // Ctrl+Y — redo (Windows convention)
+          if (key === 'y' && !event.shiftKey && !event.altKey) {
+            event.preventDefault()
+            applyHistoryAction('redo')
+            return
+          }
+
+          // Ctrl+Shift+V — paste as plain text (handled in paste handler via flag)
 
           if (key === 'b' && !event.shiftKey) {
             event.preventDefault()
@@ -2201,6 +2419,12 @@ const RichTextEditor = forwardRef<RichTextEditorHandle, RichTextEditorProps>(
           } else if (event.shiftKey && key === 'x') {
             event.preventDefault()
             execCommand('strikeThrough')
+          } else if (event.shiftKey && key === 'e') {
+            event.preventDefault()
+            applyTextAlignmentCmd('center')
+          } else if (event.shiftKey && key === 'r') {
+            event.preventDefault()
+            applyTextAlignmentCmd('right')
           } else if (event.shiftKey && key === 'c') {
             event.preventDefault()
             toggleChecklist()
@@ -2257,6 +2481,39 @@ const RichTextEditor = forwardRef<RichTextEditorHandle, RichTextEditorProps>(
             if (editorRef.current) {
               normalizeEditorContent(editorRef.current)
               mergeAdjacentLists(editorRef.current)
+
+              // Remove empty block-level elements left behind after paste
+              const empties = editorRef.current.querySelectorAll(
+                'p:empty, div:empty:not([data-block])'
+              )
+              empties.forEach((el) => el.remove())
+
+              // Collapse consecutive BR elements (max 1 between content)
+              const allBrs = Array.from(editorRef.current.querySelectorAll('br'))
+              for (const br of allBrs) {
+                let next = br.nextSibling
+                while (next) {
+                  if (
+                    next.nodeType === Node.TEXT_NODE &&
+                    (next.textContent || '').trim() === ''
+                  ) {
+                    const tmp = next.nextSibling
+                    next.remove()
+                    next = tmp
+                    continue
+                  }
+                  if (
+                    next.nodeType === Node.ELEMENT_NODE &&
+                    (next as HTMLElement).tagName === 'BR'
+                  ) {
+                    const tmp = next.nextSibling
+                    next.remove()
+                    next = tmp
+                    continue
+                  }
+                  break
+                }
+              }
             }
             scheduleChecklistNormalization()
 
@@ -2278,38 +2535,90 @@ const RichTextEditor = forwardRef<RichTextEditorHandle, RichTextEditorProps>(
         const html = event.clipboardData.getData('text/html')
         const rawText = event.clipboardData.getData('text/plain')
         const text = normalizePastedText(rawText)
-        // Use normalized text directly; do not collapse soft-wrapped lines to avoid
-        // altering user-intended line breaks/spaces.
+
+        // ── 0. Image/file paste path ──────────────────────────────────────
+        // Check for pasted images (e.g., screenshots from clipboard)
+        if (onImagePaste && event.clipboardData.items) {
+          for (const item of Array.from(event.clipboardData.items)) {
+            if (item.type.startsWith('image/')) {
+              const file = item.getAsFile()
+              if (file) {
+                // Insert a placeholder while uploading
+                const placeholderId = `paste-placeholder-${Date.now()}`
+                const placeholderHtml = `<div id="${placeholderId}" class="inline-flex items-center gap-2 px-3 py-2 text-sm bg-gray-100 text-gray-500 rounded border border-gray-300 animate-pulse" contenteditable="false">Uploading image...</div>`
+                insertHTMLAtSelection(placeholderHtml)
+                emitChange()
+
+                // Handle the async upload
+                onImagePaste(file)
+                  .then((result) => {
+                    const placeholder = editorRef.current?.querySelector(`#${placeholderId}`)
+                    if (placeholder && result) {
+                      // Replace placeholder with actual image block
+                      const blockDescriptor = customBlocks?.find(b => b.type === 'image')
+                      if (blockDescriptor) {
+                        const blockHtml = blockDescriptor.render(result)
+                        const wrapper = document.createElement('div')
+                        wrapper.innerHTML = blockHtml
+                        const blockEl = wrapper.firstElementChild
+                        if (blockEl) {
+                          placeholder.replaceWith(blockEl)
+                          emitChange()
+                        }
+                      }
+                    } else if (placeholder) {
+                      // Upload failed or was cancelled — remove placeholder
+                      placeholder.remove()
+                      emitChange()
+                    }
+                  })
+                  .catch((err) => {
+                    console.error('Image paste upload failed:', err)
+                    const placeholder = editorRef.current?.querySelector(`#${placeholderId}`)
+                    if (placeholder) {
+                      placeholder.remove()
+                      emitChange()
+                    }
+                  })
+                return // Don't process further — image paste handled
+              }
+            }
+          }
+        }
         const textForPlainPaste = text
 
+        // ── 1. Markdown path ──────────────────────────────────────────────
         if (text && looksLikeMarkdown(text)) {
           const selectionSnapshot = saveSelectionUtil()
-          markdownToHtml(text).then((convertedHtml) => {
-            try {
-              if (selectionSnapshot) {
-                restoreSelectionUtil(selectionSnapshot)
-              }
+          markdownToHtml(text)
+            .then((convertedHtml) => {
+              try {
+                if (selectionSnapshot) {
+                  restoreSelectionUtil(selectionSnapshot)
+                }
 
-              const sanitized = sanitize(convertedHtml)
-              if (insertHTMLAtSelection(sanitized)) {
-                finalizeInsertion()
+                const sanitized = sanitize(convertedHtml)
+                if (insertHTMLAtSelection(sanitized)) {
+                  finalizeInsertion()
+                }
+              } catch (error) {
+                console.error('Error pasting markdown:', error)
               }
-            } catch (error) {
-              console.error('Error pasting markdown:', error)
-            }
-          }).catch(error => {
-            console.error('Error converting markdown:', error)
-            try {
-              if (textForPlainPaste && insertPlainTextAtSelection(textForPlainPaste)) {
-                finalizeInsertion()
+            })
+            .catch((error) => {
+              console.error('Error converting markdown:', error)
+              try {
+                if (textForPlainPaste && insertPlainTextAtSelection(textForPlainPaste)) {
+                  finalizeInsertion()
+                }
+              } catch (e) {
+                console.error('Error in markdown fallback:', e)
               }
-            } catch (e) {
-              console.error('Error in markdown fallback:', e)
-            }
-          })
+            })
           return
         }
 
+        // ── 2. Rich HTML path ─────────────────────────────────────────────
         if (html) {
           if (textForPlainPaste && shouldPreferPlainTextOverHtml(html, textForPlainPaste)) {
             if (insertPlainTextAtSelection(textForPlainPaste)) {
@@ -2319,7 +2628,9 @@ const RichTextEditor = forwardRef<RichTextEditorHandle, RichTextEditorProps>(
           }
 
           try {
-            const sanitized = sanitize(html)
+            // Clean up external-source HTML before sanitizing
+            const cleaned = cleanPastedHtml(html)
+            const sanitized = sanitize(cleaned)
             if (insertHTMLAtSelection(sanitized)) {
               finalizeInsertion()
             }
@@ -2332,6 +2643,7 @@ const RichTextEditor = forwardRef<RichTextEditorHandle, RichTextEditorProps>(
           return
         }
 
+        // ── 3. Plain-text / URL path ──────────────────────────────────────
         if (!textForPlainPaste) {
           return
         }
@@ -2400,6 +2712,41 @@ const RichTextEditor = forwardRef<RichTextEditorHandle, RichTextEditorProps>(
     // Determine outlines visibility for the currently selected table (per-table)
     const currentTable = typeof window !== 'undefined' ? getClosestFromSelection('table', editorRef.current) as HTMLElement | null : null
     const outlinesVisibleForToolbar = currentTable ? currentTable.getAttribute('data-no-outline') !== 'true' : true
+
+    // Handle virtual keyboard on mobile: adjust editor padding so cursor stays visible
+    useEffect(() => {
+      const vv = typeof window !== 'undefined' ? window.visualViewport : null
+      if (!vv) return
+
+      const onResize = () => {
+        const editor = editorRef.current
+        if (!editor) return
+
+        // Height difference between layout viewport and visual viewport = keyboard height
+        const keyboardHeight = window.innerHeight - vv.height
+        if (keyboardHeight > 50) {
+          // Virtual keyboard is open — add bottom padding so user can scroll past it
+          editor.style.paddingBottom = `${keyboardHeight + 16}px`
+
+          // Scroll cursor into view if it's behind the keyboard
+          const selection = window.getSelection()
+          if (selection && selection.rangeCount > 0) {
+            const range = selection.getRangeAt(0)
+            const rect = range.getBoundingClientRect()
+            const visibleBottom = vv.height + vv.offsetTop
+            if (rect.bottom > visibleBottom - 40) {
+              editor.scrollTop += rect.bottom - visibleBottom + 60
+            }
+          }
+        } else {
+          // Keyboard closed — reset padding
+          editor.style.paddingBottom = ''
+        }
+      }
+
+      vv.addEventListener('resize', onResize)
+      return () => vv.removeEventListener('resize', onResize)
+    }, [])
 
     return (
       <div className="flex h-full min-h-0 flex-col overflow-hidden">
@@ -2510,6 +2857,7 @@ const RichTextEditor = forwardRef<RichTextEditorHandle, RichTextEditorProps>(
           onAddCol={addTableCol}
           onDeleteCol={deleteTableCol}
           onDeleteTable={deleteTable}
+          onToggleHeaderRow={toggleHeaderRow}
           outlinesVisible={outlinesVisibleForToolbar}
           onToggleOutlines={toggleTableOutlines}
         />

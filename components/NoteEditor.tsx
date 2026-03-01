@@ -36,6 +36,9 @@ import {
   ListOrdered as OrderedListIcon,
   Image as ImageIcon,
   Paperclip,
+  AlignLeft,
+  AlignCenter,
+  AlignRight,
 } from 'lucide-react'
 import RichTextEditor, {
   type RichTextCommand,
@@ -63,6 +66,7 @@ import { Note as LibNote } from '../lib/notes'
 import { getProjects, Project } from '../lib/projects'
 import NoteLinkDialog from './NoteLinkDialog'
 import DataSheetPickerDialog from './DataSheetPickerDialog'
+import { ErrorBoundary } from './ErrorBoundary'
 import KnowledgeGraphModal from './KnowledgeGraphModal'
 import { useIsMobile } from '@/lib/useIsMobile'
 import { noteLinkBlock } from '../lib/editor/noteLinkBlock'
@@ -154,6 +158,9 @@ const commandShortcuts: Record<RichTextCommand, string> = {
   heading3: '⌘/Ctrl+Alt+3',
   link: '⌘/Ctrl+K',
   'horizontal-rule': '',
+  'align-left': '',
+  'align-center': '⌘/Ctrl+⇧+E',
+  'align-right': '⌘/Ctrl+⇧+R',
   undo: '⌘/Ctrl+Z',
   redo: '⌘/Ctrl+⇧+Z'
 }
@@ -235,6 +242,8 @@ export default function NoteEditor({
   const headingUpdateTimeoutRef = useRef<number | null>(null)
   const autosaveTimeoutRef = useRef<number | null>(null)
   const isAutosavingRef = useRef(false)
+  const autosaveRetryCountRef = useRef(0)
+  const MAX_AUTOSAVE_RETRIES = 3
   const activeFormatsFrameRef = useRef<number | null>(null)
   const noteLoadingRef = useRef(false) // Suppress hasChanges flicker during note load
   const floatingToolbarRef = useRef<HTMLDivElement | null>(null)
@@ -577,6 +586,55 @@ export default function NoteEditor({
     }
   }, [])
 
+  // Flush pending saves on window close or app hide to prevent data loss
+  const handleSaveRef = useRef<((opts?: { isAuto?: boolean }) => void) | null>(null)
+  const hasChangesRef = useRef(hasChanges)
+  hasChangesRef.current = hasChanges
+
+  useEffect(() => {
+    const flushSave = () => {
+      if (hasChangesRef.current && !isAutosavingRef.current && handleSaveRef.current) {
+        handleSaveRef.current({ isAuto: true })
+      }
+    }
+
+    const handleBeforeUnload = (e: BeforeUnloadEvent) => {
+      if (hasChangesRef.current) {
+        flushSave()
+        e.preventDefault()
+        e.returnValue = '' // Required for Chrome
+      }
+    }
+
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === 'hidden') {
+        flushSave()
+      }
+    }
+
+    window.addEventListener('beforeunload', handleBeforeUnload)
+    document.addEventListener('visibilitychange', handleVisibilityChange)
+
+    // Tauri close-requested integration (if available)
+    let tauriUnlisten: (() => void) | null = null
+    ;(async () => {
+      try {
+        const { listen } = await import('@tauri-apps/api/event')
+        tauriUnlisten = await listen('tauri://close-requested', () => {
+          flushSave()
+        })
+      } catch {
+        // Not in a Tauri environment — ignore
+      }
+    })()
+
+    return () => {
+      window.removeEventListener('beforeunload', handleBeforeUnload)
+      document.removeEventListener('visibilitychange', handleVisibilityChange)
+      tauriUnlisten?.()
+    }
+  }, [])
+
   const updateActiveFormats = useCallback(() => {
     if (!editorRef.current) return
     
@@ -597,6 +655,20 @@ export default function NoteEditor({
     if (editorRef.current.queryCommandState('heading2')) formats.add('heading2')
     if (editorRef.current.queryCommandState('heading3')) formats.add('heading3')
     if (editorRef.current.queryCommandState('blockquote')) formats.add('blockquote')
+
+    // Check alignment
+    if (editorRef.current.queryCommandState('align-left')) formats.add('align-left')
+    if (editorRef.current.queryCommandState('align-center')) formats.add('align-center')
+    if (editorRef.current.queryCommandState('align-right')) formats.add('align-right')
+
+    // Check highlight colors
+    for (const c of ['yellow', 'green', 'pink', 'blue']) {
+      if (editorRef.current.queryCommandState(`highlight:${c}`)) formats.add(`highlight:${c}`)
+    }
+    // Check text colors
+    for (const c of ['red', 'green', 'blue', 'purple']) {
+      if (editorRef.current.queryCommandState(`color:${c}`)) formats.add(`color:${c}`)
+    }
     
     setActiveFormats(formats)
   }, [])
@@ -1110,7 +1182,9 @@ export default function NoteEditor({
       autosaveTimeoutRef.current = null
     }
 
-    if (!title.trim()) {
+    // For manual save, require title. For autosave, use fallback.
+    const effectiveTitle = title.trim() || (isAuto ? 'Untitled' : '')
+    if (!effectiveTitle) {
       if (!isAuto) alert('Please enter a title')
       return
     }
@@ -1127,14 +1201,14 @@ export default function NoteEditor({
       if (noteType === 'drawing') {
         const drawingContent = JSON.stringify(drawingData)
         await onSave({
-          title: title.trim(),
+          title: effectiveTitle,
           content: drawingContent,
           note_type: 'drawing',
         }, isAuto)
       } else if (noteType === 'mindmap') {
         const mindmapContent = JSON.stringify(mindmapData)
         await onSave({
-          title: title.trim(),
+          title: effectiveTitle,
           content: mindmapContent,
           note_type: 'mindmap',
         }, isAuto)
@@ -1143,32 +1217,53 @@ export default function NoteEditor({
         try { await bulletJournalRef.current?.saveToDb() } catch (e) { console.error('BJ saveToDb error', e) }
         const bjContent = JSON.stringify(bulletJournalData)
         await onSave({
-          title: title.trim(),
+          title: effectiveTitle,
           content: bjContent,
           note_type: 'bullet-journal',
         }, isAuto)
       } else if (noteType === 'data-sheet') {
         const dsContent = JSON.stringify(dataSheetData)
         await onSave({
-          title: title.trim(),
+          title: effectiveTitle,
           content: dsContent,
           note_type: 'data-sheet',
         }, isAuto)
       } else {
         await onSave({
-          title: title.trim(),
+          title: effectiveTitle,
           content,
           note_type: 'rich-text',
         }, isAuto)
       }
       setHasChanges(false)
       setLastSaveTime(new Date())
+      // Reset retry counter on success
+      if (isAuto) autosaveRetryCountRef.current = 0
     } catch (error: any) {
       if (!isAuto) {
         alert('Failed to save note: ' + error.message)
       } else {
-        // for autosave failures, log but don't interrupt the UI
         console.error('Autosave failed:', error)
+        autosaveRetryCountRef.current++
+
+        if (autosaveRetryCountRef.current <= MAX_AUTOSAVE_RETRIES) {
+          // Retry with exponential backoff
+          const retryDelay = Math.min(2000 * Math.pow(2, autosaveRetryCountRef.current - 1), 16000)
+          autosaveTimeoutRef.current = window.setTimeout(() => {
+            autosaveTimeoutRef.current = null
+            if (hasChanges && !isSaving && !isDeleting) {
+              handleSave({ isAuto: true })
+            }
+          }, retryDelay)
+        } else {
+          // Max retries exceeded — notify user
+          toast.push({
+            title: 'Autosave failed',
+            description: 'Changes could not be saved automatically. Please save manually.',
+            duration: 8000,
+          })
+          autosaveRetryCountRef.current = 0
+        }
       }
     } finally {
       if (isAuto) {
@@ -1178,7 +1273,7 @@ export default function NoteEditor({
         setIsSaving(false)
       }
     }
-  }, [content, drawingData, mindmapData, onSave, title, noteType])
+  }, [content, drawingData, mindmapData, onSave, title, noteType, hasChanges, isSaving, isDeleting, toast])
 
   // Autosave: debounce saves after a short period of inactivity.
   useEffect(() => {
@@ -1190,15 +1285,15 @@ export default function NoteEditor({
       autosaveTimeoutRef.current = null
     }
 
-    // Only schedule autosave when there are unsaved changes, not currently saving/deleting,
-    // and the note has a non-empty title (avoid creating unnamed notes)
-    if (!hasChanges || isSaving || isDeleting || !title.trim()) {
+    // Only schedule autosave when there are unsaved changes, not currently saving/deleting.
+    // Title is no longer required — autosave uses "Untitled" as fallback.
+    if (!hasChanges || isSaving || isDeleting) {
       return
     }
 
     autosaveTimeoutRef.current = window.setTimeout(() => {
       // safety guards before saving
-      if (!hasChanges || isSaving || isDeleting || !title.trim()) {
+      if (!hasChanges || isSaving || isDeleting) {
         autosaveTimeoutRef.current = null
         return
       }
@@ -1220,6 +1315,9 @@ export default function NoteEditor({
       }
     }
   }, [title, content, drawingData, mindmapData, noteType, hasChanges, isSaving, isDeleting, handleSave])
+
+  // Keep ref in sync now that handleSave is declared
+  handleSaveRef.current = handleSave
 
   const handleDelete = async () => {
     if (!note || !onDelete) return
@@ -1673,7 +1771,10 @@ export default function NoteEditor({
     { label: 'Bullets', command: 'unordered-list', icon: <List size={16} /> },
     { label: 'Numbered', command: 'ordered-list', icon: <ListOrdered size={16} /> },
     { label: 'Quote', command: 'blockquote', icon: <Quote size={16} /> },
-    { label: 'Checklist', command: 'checklist', icon: <CheckSquare size={16} /> }
+    { label: 'Checklist', command: 'checklist', icon: <CheckSquare size={16} /> },
+    { label: 'Left', command: 'align-left', icon: <AlignLeft size={16} /> },
+    { label: 'Center', command: 'align-center', icon: <AlignCenter size={16} /> },
+    { label: 'Right', command: 'align-right', icon: <AlignRight size={16} /> },
   ]
 
   const secondaryToolbar: Array<{
@@ -1693,16 +1794,16 @@ export default function NoteEditor({
       onClick: () => editorRef.current?.requestNoteLink() 
     },
     // Highlight colors
-    { label: 'Highlight Yellow', icon: <span className="inline-block h-4 w-4 rounded bg-yellow-300" />, onClick: () => handleCommand('highlight:yellow') },
-    { label: 'Highlight Green', icon: <span className="inline-block h-4 w-4 rounded bg-green-300" />, onClick: () => handleCommand('highlight:green') },
-    { label: 'Highlight Pink', icon: <span className="inline-block h-4 w-4 rounded bg-pink-300" />, onClick: () => handleCommand('highlight:pink') },
-    { label: 'Highlight Blue', icon: <span className="inline-block h-4 w-4 rounded bg-blue-300" />, onClick: () => handleCommand('highlight:blue') },
+    { label: 'Highlight Yellow', command: 'highlight:yellow' as RichTextCommand, icon: <span className="inline-block h-4 w-4 rounded bg-yellow-300" />, onClick: () => handleCommand('highlight:yellow') },
+    { label: 'Highlight Green', command: 'highlight:green' as RichTextCommand, icon: <span className="inline-block h-4 w-4 rounded bg-green-300" />, onClick: () => handleCommand('highlight:green') },
+    { label: 'Highlight Pink', command: 'highlight:pink' as RichTextCommand, icon: <span className="inline-block h-4 w-4 rounded bg-pink-300" />, onClick: () => handleCommand('highlight:pink') },
+    { label: 'Highlight Blue', command: 'highlight:blue' as RichTextCommand, icon: <span className="inline-block h-4 w-4 rounded bg-blue-300" />, onClick: () => handleCommand('highlight:blue') },
     // Text colors
-    { label: 'Color Default', icon: <span className="inline-block h-4 w-4 rounded border border-gray-300" />, onClick: () => handleCommand('color:default') },
-    { label: 'Color Red', icon: <span className="inline-block h-4 w-4 rounded bg-red-500" />, onClick: () => handleCommand('color:red') },
-    { label: 'Color Green', icon: <span className="inline-block h-4 w-4 rounded bg-green-500" />, onClick: () => handleCommand('color:green') },
-    { label: 'Color Blue', icon: <span className="inline-block h-4 w-4 rounded bg-blue-500" />, onClick: () => handleCommand('color:blue') },
-    { label: 'Color Purple', icon: <span className="inline-block h-4 w-4 rounded bg-purple-500" />, onClick: () => handleCommand('color:purple') },
+    { label: 'Color Default', command: 'color:default' as RichTextCommand, icon: <span className="inline-block h-4 w-4 rounded border border-gray-300" />, onClick: () => handleCommand('color:default') },
+    { label: 'Color Red', command: 'color:red' as RichTextCommand, icon: <span className="inline-block h-4 w-4 rounded bg-red-500" />, onClick: () => handleCommand('color:red') },
+    { label: 'Color Green', command: 'color:green' as RichTextCommand, icon: <span className="inline-block h-4 w-4 rounded bg-green-500" />, onClick: () => handleCommand('color:green') },
+    { label: 'Color Blue', command: 'color:blue' as RichTextCommand, icon: <span className="inline-block h-4 w-4 rounded bg-blue-500" />, onClick: () => handleCommand('color:blue') },
+    { label: 'Color Purple', command: 'color:purple' as RichTextCommand, icon: <span className="inline-block h-4 w-4 rounded bg-purple-500" />, onClick: () => handleCommand('color:purple') },
     // Font sizes
     { label: 'Font 12', icon: <span className="text-xs">12</span>, onClick: () => handleCommand('font-size:12') },
     { label: 'Font 16', icon: <span className="text-sm">16</span>, onClick: () => handleCommand('font-size:16') },
@@ -1904,43 +2005,75 @@ export default function NoteEditor({
           <div className="h-full w-full">
             <div className="relative flex h-full flex-col overflow-hidden rounded-xl border border-border bg-surface">
               {noteType === 'drawing' ? (
-                <DrawingEditor
-                  ref={drawingEditorRef}
-                  value={drawingData}
-                  onChange={setDrawingData}
-                  disabled={isSaving || isDeleting}
-                />
+                <ErrorBoundary label="Drawing Editor" inline>
+                  <DrawingEditor
+                    ref={drawingEditorRef}
+                    value={drawingData}
+                    onChange={setDrawingData}
+                    disabled={isSaving || isDeleting}
+                  />
+                </ErrorBoundary>
               ) : noteType === 'mindmap' ? (
-                <MindmapEditor
-                  ref={mindmapEditorRef}
-                  initialData={mindmapData || undefined}
-                  onChange={setMindmapData}
-                  onSelectedNodeChange={(nodeId, _node) => setSelectedMindmapNodeId(nodeId)}
-                  readOnly={isSaving || isDeleting}
-                />
+                <ErrorBoundary label="Mindmap Editor" inline>
+                  <MindmapEditor
+                    ref={mindmapEditorRef}
+                    initialData={mindmapData || undefined}
+                    onChange={setMindmapData}
+                    onSelectedNodeChange={(nodeId, _node) => setSelectedMindmapNodeId(nodeId)}
+                    readOnly={isSaving || isDeleting}
+                  />
+                </ErrorBoundary>
               ) : noteType === 'bullet-journal' ? (
-                <BulletJournalEditor
-                  ref={bulletJournalRef}
-                  noteId={note?.id ?? null}
-                  initialData={bulletJournalData}
-                  onChange={setBulletJournalData}
-                  disabled={isSaving || isDeleting}
-                />
+                <ErrorBoundary label="Journal Editor" inline>
+                  <BulletJournalEditor
+                    ref={bulletJournalRef}
+                    noteId={note?.id ?? null}
+                    initialData={bulletJournalData}
+                    onChange={setBulletJournalData}
+                    disabled={isSaving || isDeleting}
+                  />
+                </ErrorBoundary>
               ) : noteType === 'data-sheet' ? (
-                <DataSheetEditor
-                  key={note?.id ?? `new-${dataSheetKey}`}
-                  ref={dataSheetRef}
-                  initialData={dataSheetData}
-                  onChange={setDataSheetData}
-                  disabled={isSaving || isDeleting}
-                />
+                <ErrorBoundary label="Data Sheet" inline>
+                  <DataSheetEditor
+                    key={note?.id ?? `new-${dataSheetKey}`}
+                    ref={dataSheetRef}
+                    initialData={dataSheetData}
+                    onChange={setDataSheetData}
+                    disabled={isSaving || isDeleting}
+                  />
+                </ErrorBoundary>
               ) : (
+                <ErrorBoundary label="Rich Text Editor" inline>
                 <RichTextEditor
                     ref={editorRef}
                     value={content}
                     onChange={handleContentChange}
                     disabled={isSaving || isDeleting}
                     placeholder="Start writing your note..."
+                    onImagePaste={async (file: File) => {
+                      if (file.size > MAX_IMAGE_SIZE_BYTES) {
+                        toast.push({ title: 'Image too large', description: 'Pasted image exceeds the 10MB limit.' })
+                        return null
+                      }
+                      return new Promise((resolve) => {
+                        const reader = new FileReader()
+                        reader.onload = (e) => {
+                          const dataUrl = e.target?.result as string
+                          if (dataUrl) {
+                            const sanitizedAlt = file.name?.replace(/[<>"']/g, '') || 'Pasted image'
+                            resolve({ src: dataUrl, alt: sanitizedAlt })
+                          } else {
+                            resolve(null)
+                          }
+                        }
+                        reader.onerror = () => {
+                          toast.push({ title: 'Paste failed', description: 'Could not read pasted image.' })
+                          resolve(null)
+                        }
+                        reader.readAsDataURL(file)
+                      })
+                    }}
                     onCustomCommand={(commandId) => {
                       if (commandId === 'note-link') {
                         saveNoteLinkSelection()
@@ -1980,6 +2113,7 @@ export default function NoteEditor({
                       }
                     ]}
                   />
+                </ErrorBoundary>
               )}
             </div>
           </div>
@@ -1990,7 +2124,7 @@ export default function NoteEditor({
       {noteType === 'rich-text' && floatingToolbar.visible && (
         <div
           ref={floatingToolbarRef}
-          className="fixed z-50 flex flex-wrap items-center justify-center gap-1.5 rounded-2xl border border-gray-200 bg-white/95 px-3 py-2 shadow-lg backdrop-blur"
+          className="fixed z-50 flex flex-wrap items-center justify-center gap-1.5 rounded-2xl border border-gray-200 bg-white/95 px-3 py-2 shadow-lg backdrop-blur dark:border-gray-700 dark:bg-gray-800/95 dark:shadow-black/30"
           style={{
             top: floatingToolbar.top,
             left: floatingToolbar.left,
@@ -2006,12 +2140,12 @@ export default function NoteEditor({
                 type="button"
                 onMouseDown={(event) => event.preventDefault()}
                 onClick={() => handleCommand(command)}
-                className={`inline-flex items-center justify-center rounded-full border text-gray-600 transition-colors focus:outline-none focus:ring-2 focus:ring-alpine-500 ${
+                className={`inline-flex items-center justify-center rounded-full border text-gray-600 transition-colors focus:outline-none focus:ring-2 focus:ring-alpine-500 dark:text-gray-300 ${
                   isMobile ? 'h-11 w-11' : 'h-9 w-9'
                 } ${
                   isActive
-                    ? 'border-alpine-300 bg-alpine-100 text-alpine-700'
-                    : 'border-transparent hover:border-gray-300 hover:text-gray-900'
+                    ? 'border-alpine-300 bg-alpine-100 text-alpine-700 dark:border-alpine-600 dark:bg-alpine-900/50 dark:text-alpine-300'
+                    : 'border-transparent hover:border-gray-300 hover:text-gray-900 dark:hover:border-gray-600 dark:hover:text-gray-100'
                 }`}
                 title={`${label} (${commandShortcuts[command]})`}
               >
@@ -2021,10 +2155,12 @@ export default function NoteEditor({
           })}
 
           {secondaryToolbar.length > 0 && (
-            <span className="mx-1 h-6 w-px bg-gray-200" aria-hidden="true" />
+            <span className="mx-1 h-6 w-px bg-gray-200 dark:bg-gray-600" aria-hidden="true" />
           )}
 
-          {secondaryToolbar.map(({ label, command, icon, onClick }) => (
+          {secondaryToolbar.map(({ label, command, icon, onClick }) => {
+            const isActive = command ? activeFormats.has(command) : false
+            return (
             <button
               key={label}
               type="button"
@@ -2036,14 +2172,19 @@ export default function NoteEditor({
                   handleCommand(command)
                 }
               }}
-              className={`inline-flex items-center justify-center rounded-full border border-transparent text-gray-500 transition-colors hover:border-gray-300 hover:text-gray-800 focus:outline-none focus:ring-2 focus:ring-alpine-500 ${
+              className={`inline-flex items-center justify-center rounded-full border text-gray-500 transition-colors hover:border-gray-300 hover:text-gray-800 focus:outline-none focus:ring-2 focus:ring-alpine-500 dark:text-gray-400 dark:hover:border-gray-600 dark:hover:text-gray-200 ${
                 isMobile ? 'h-11 w-11' : 'h-9 w-9'
+              } ${
+                isActive
+                  ? 'border-alpine-300 bg-alpine-100 text-alpine-700 dark:border-alpine-600 dark:bg-alpine-900/50 dark:text-alpine-300'
+                  : 'border-transparent'
               }`}
               title={command ? `${label} (${commandShortcuts[command]})` : label}
             >
               {icon}
             </button>
-          ))}
+            )
+          })}
         </div>
       )}
 

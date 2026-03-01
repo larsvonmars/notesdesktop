@@ -384,6 +384,32 @@
     border-top: 2px solid #3b82f6 !important;
   }
 
+  /* ─── Block-level spacing inside editor ─── */
+  /* Paragraphs & divs: tight spacing to avoid large gaps on paste */
+  [contenteditable='true'] p {
+    margin: 0.25em 0 !important;
+  }
+
+  [contenteditable='true'] > div:not([data-block]):not([data-block-type]) {
+    margin: 0.15em 0 !important;
+  }
+
+  /* First and last direct children shouldn't add outer spacing */
+  [contenteditable='true'] > :first-child {
+    margin-top: 0 !important;
+  }
+
+  [contenteditable='true'] > :last-child {
+    margin-bottom: 0 !important;
+  }
+
+  /* Pre / code blocks */
+  [contenteditable='true'] pre {
+    margin: 0.5em 0 !important;
+    padding: 0.75em 1em !important;
+    @apply bg-gray-100 rounded-md overflow-x-auto;
+  }
+
   /* Heading styles */
   [contenteditable='true'] h1 {
     font-size: 2.5rem !important;
