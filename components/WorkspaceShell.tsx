@@ -72,9 +72,11 @@ function WorkspaceContent() {
   const [selectedFolderId, setSelectedFolderId] = useState<string | null>(null)
   const [selectedProjectId, setSelectedProjectId] = useState<string | null>(null)
   const [selectedNote, setSelectedNote] = useState<Note | null>(null)
+  const selectedNoteRef = useRef<Note | null>(null)
   const [isLoadingNotes, setIsLoadingNotes] = useState(true)
   const [isLoadingFolders, setIsLoadingFolders] = useState(true)
   const [isCreatingNew, setIsCreatingNew] = useState(false)
+  const isCreatingNewSaveRef = useRef(false)
   const [newNoteType, setNewNoteType] = useState<NoteType>('rich-text')
   const [pendingNoteContext, setPendingNoteContext] = useState<NoteCreationContext | null>(null)
   // Create-folder modal state (replace window.prompt for Tauri compatibility)
@@ -127,6 +129,8 @@ function WorkspaceContent() {
       setSelectedFolderId(folderId)
 
       if (!options?.preserveDraftState) {
+        selectedNoteRef.current = null
+        isCreatingNewSaveRef.current = false
         setSelectedNote(null)
         setIsCreatingNew(false)
       }
@@ -144,6 +148,8 @@ function WorkspaceContent() {
   )
 
   const activateExistingNote = useCallback((note: Note) => {
+    selectedNoteRef.current = note
+    isCreatingNewSaveRef.current = false
     setSelectedNote(note)
     setIsCreatingNew(false)
     applyFolderSelection(note.folder_id ?? null, {
@@ -475,19 +481,43 @@ function WorkspaceContent() {
     }
   }, [user])
 
-  const handleSaveNote = async (
+  // Keep save-related refs in sync for the memoized handleSaveNote
+  const selectedFolderIdSaveRef = useRef(selectedFolderId)
+  selectedFolderIdSaveRef.current = selectedFolderId
+  const selectedProjectIdSaveRef = useRef(selectedProjectId)
+  selectedProjectIdSaveRef.current = selectedProjectId
+  const newNoteTypeSaveRef = useRef(newNoteType)
+  newNoteTypeSaveRef.current = newNoteType
+  const foldersSaveRef = useRef(folders)
+  foldersSaveRef.current = folders
+
+  // Memoized with useCallback — uses refs for frequently-changing values
+  // so the function identity stays stable across renders. This prevents
+  // NoteEditor's handleSave / autosave effect from being recreated every
+  // render, which was resetting the autosave timer and causing stale-
+  // closure races when switching notes.
+  const handleSaveNote = useCallback(async (
     noteData: { title: string; content: string; note_type?: NoteType },
     isAuto = false
   ) => {
+    // Read the CURRENT note from the ref, not a stale closure value.
+    // This prevents saving note A's content to note B after a switch.
+    const currentNote = selectedNoteRef.current
+    const creatingNew = isCreatingNewSaveRef.current
+
     try {
       suppressRealtimeRef.current = isAuto
 
-      if (selectedNote && !isCreatingNew) {
-        const updated = await updateNote(selectedNote.id, {
+      if (currentNote && !creatingNew) {
+        const updated = await updateNote(currentNote.id, {
           title: noteData.title,
           content: noteData.content,
           note_type: noteData.note_type,
         })
+
+        // After the async save, verify the note is still selected.
+        // If the user switched away, don't overwrite selectedNote.
+        if (selectedNoteRef.current?.id !== currentNote.id) return
 
         setNotes((prev) => prev.map((note) => (note.id === updated.id ? updated : note)))
         setAllNotes((prev) => prev.map((note) => (note.id === updated.id ? updated : note)))
@@ -495,6 +525,7 @@ function WorkspaceContent() {
         // (folder/project don't change during save). Using
         // activateExistingNote here would re-trigger applyFolderSelection
         // and feed into the URL sync cycle unnecessarily.
+        selectedNoteRef.current = updated
         setSelectedNote(updated)
 
         if (!isAuto) {
@@ -505,15 +536,15 @@ function WorkspaceContent() {
         }
       } else {
         // Validate selectedFolderId exists in current folders list to avoid FK constraint errors
-        const validFolderId = selectedFolderId && folders.some(f => f.id === selectedFolderId)
-          ? selectedFolderId
-          : null
+        const fId = selectedFolderIdSaveRef.current
+        const fList = foldersSaveRef.current
+        const validFolderId = fId && fList.some(f => f.id === fId) ? fId : null
         const created = await createNote({
           title: noteData.title,
           content: noteData.content,
           folder_id: validFolderId,
-          project_id: selectedProjectId ?? null,
-          note_type: noteData.note_type || newNoteType,
+          project_id: selectedProjectIdSaveRef.current ?? null,
+          note_type: noteData.note_type || newNoteTypeSaveRef.current,
         })
 
         setNotes((prev) => [created, ...prev])
@@ -537,7 +568,7 @@ function WorkspaceContent() {
     } finally {
       suppressRealtimeRef.current = false
     }
-  }
+  }, [toast, activateExistingNote])
 
   const handleDeleteNote = async (id: string) => {
     if (!selectedNote) return
@@ -546,6 +577,8 @@ function WorkspaceContent() {
       await deleteNote(id)
       setNotes((prev) => prev.filter((note) => note.id !== id))
       setAllNotes((prev) => prev.filter((note) => note.id !== id))
+      selectedNoteRef.current = null
+      isCreatingNewSaveRef.current = false
       setSelectedNote(null)
       setIsCreatingNew(false)
     } catch (error) {
@@ -568,6 +601,8 @@ function WorkspaceContent() {
       setSelectedProjectId(projectArg)
     }
 
+    selectedNoteRef.current = null
+    isCreatingNewSaveRef.current = true
     setSelectedNote(null)
     setIsCreatingNew(true)
     setNewNoteType(type)
@@ -716,6 +751,8 @@ function WorkspaceContent() {
   }
 
   const handleCancel = () => {
+    isCreatingNewSaveRef.current = false
+    selectedNoteRef.current = null
     setIsCreatingNew(false)
     setSelectedNote(null)
   }
@@ -887,6 +924,8 @@ function WorkspaceContent() {
       setAllNotes(prev => prev.filter(n => n.id !== noteId))
       // If the deleted note was selected, clear selection
       if (selectedNote?.id === noteId) {
+        selectedNoteRef.current = null
+        isCreatingNewSaveRef.current = false
         setSelectedNote(null)
         setIsCreatingNew(false)
       }

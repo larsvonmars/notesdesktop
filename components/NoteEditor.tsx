@@ -531,7 +531,22 @@ export default function NoteEditor({
     }, 150)
   }, [])
 
+  // Track the previous note id so we can detect actual note switches
+  // (as opposed to same-note reference updates from saves)
+  const prevNoteIdRef = useRef<string | undefined>(note?.id)
+
   useEffect(() => {
+    const isNoteSwitched = prevNoteIdRef.current !== note?.id
+    prevNoteIdRef.current = note?.id
+
+    // Cancel any pending autosave from the PREVIOUS note immediately.
+    // Without this, a stale autosave callback could fire between renders
+    // and save old note content to the newly selected note's ID.
+    if (isNoteSwitched && autosaveTimeoutRef.current !== null) {
+      window.clearTimeout(autosaveTimeoutRef.current)
+      autosaveTimeoutRef.current = null
+    }
+
     // Mark that we're loading a note to suppress hasChanges flicker
     noteLoadingRef.current = true
     if (note) {
@@ -669,7 +684,11 @@ export default function NoteEditor({
     setActiveFormats(new Set())
     // Allow the hasChanges effect to run normally after state has settled
     requestAnimationFrame(() => { noteLoadingRef.current = false })
-  }, [note, initialNoteType, scheduleHeadingsUpdate])
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- we intentionally
+    // key on note?.id (not the full object) so same-note saves don't cause
+    // a full editor reset. The note-loading effect should only run when the
+    // actual note changes or when creating a new note.
+  }, [note?.id, initialNoteType, scheduleHeadingsUpdate])
 
   useEffect(() => {
     // Skip hasChanges computation while a note is being loaded (prevents brief flicker)
