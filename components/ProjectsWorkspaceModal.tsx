@@ -23,6 +23,8 @@ import {
   Check,
   XCircle,
   BookOpen,
+  Table2,
+  type LucideIcon,
 } from 'lucide-react'
 import { useToast } from './ToastProvider'
 import {
@@ -49,6 +51,7 @@ import {
   getNotes,
   deleteNote,
 } from '@/lib/notes'
+import { getNoteTypePresentation, type NoteTypeIconKey } from '@/lib/note-types'
 
 /* ─── Types ───────────────────────────────────────────────────── */
 
@@ -77,15 +80,20 @@ const updatedAtFormatter = new Intl.DateTimeFormat('default', {
   timeStyle: 'short',
 })
 
+const NOTE_TYPE_ICON_MAP: Record<NoteTypeIconKey, LucideIcon> = {
+  'file-text': FileText,
+  'pen-tool': PenTool,
+  network: Network,
+  'book-open': BookOpen,
+  'table-2': Table2,
+}
+
 /* ─── Helpers ─────────────────────────────────────────────────── */
 
 const noteTypeIcon = (type: NoteType) => {
-  switch (type) {
-    case 'drawing': return <PenTool size={14} className="text-purple-500" />
-    case 'mindmap': return <Network size={14} className="text-green-500" />
-    case 'bullet-journal': return <BookOpen size={14} className="text-amber-500" />
-    default: return <FileText size={14} className="text-alpine-500" />
-  }
+  const presentation = getNoteTypePresentation(type)
+  const Icon = NOTE_TYPE_ICON_MAP[presentation.iconKey]
+  return <Icon size={14} className={presentation.iconClassName} />
 }
 
 type Dialog =

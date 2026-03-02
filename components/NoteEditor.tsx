@@ -62,7 +62,7 @@ import DataSheetEditor, {
 } from './DataSheetEditor'
 import ProjectsWorkspaceModal from './ProjectsWorkspaceModal'
 import { useToast } from './ToastProvider'
-import { Note as LibNote } from '../lib/notes'
+import { Note as LibNote, createNote, createNoteAttachment, deleteNoteAttachment, getNote, getNoteAttachments } from '../lib/notes'
 import { getProjects, Project } from '../lib/projects'
 import NoteLinkDialog from './NoteLinkDialog'
 import DataSheetPickerDialog from './DataSheetPickerDialog'
@@ -78,6 +78,8 @@ import SettingsModal from './SettingsModal'
 import NoteDetailsSidebar from './NoteDetailsSidebar'
 import { Settings } from 'lucide-react'
 import { htmlToMarkdown } from '@/lib/editor/markdownHelpers'
+import type { NoteType } from '@/lib/notes'
+import { deleteFile, uploadImageFile } from '@/lib/file-storage'
 
 export type { Note } from '../lib/notes'
 
@@ -88,12 +90,12 @@ interface NoteEditorProps {
   note?: LibNote | null
   // `isAuto` will be passed when the editor triggers an autosave so parents can handle it differently
   onSave: (
-    note: { title: string; content: string; note_type?: 'rich-text' | 'drawing' | 'mindmap' | 'bullet-journal' | 'data-sheet' },
+    note: { title: string; content: string; note_type?: NoteType },
     isAuto?: boolean
   ) => Promise<void>
   onCancel?: () => void
   onDelete?: (id: string) => Promise<void>
-  initialNoteType?: 'rich-text' | 'drawing' | 'mindmap' | 'bullet-journal' | 'data-sheet'
+  initialNoteType?: NoteType
 }
 
 const stripHtml = (html: string) => html.replace(/<[^>]*>/g, ' ').replace(/&nbsp;/g, ' ').trim()
@@ -105,6 +107,143 @@ const escapeHtml = (value: string) =>
     .replace(/>/g, '&gt;')
     .replace(/"/g, '&quot;')
     .replace(/'/g, '&#39;')
+
+const sanitizeImageAltText = (value: string | null | undefined, fallback: string = 'Image') => {
+  const sanitized = (value || '')
+    .replace(/[<>"']/g, '')
+    .trim()
+  return sanitized || fallback
+}
+
+const LEGACY_IMAGE_SRC_PATTERN = /src\s*=\s*["'](?:data:|file:\/\/)/i
+
+const containsLegacyImageSources = (html: string): boolean => {
+  if (!html) return false
+  return LEGACY_IMAGE_SRC_PATTERN.test(html)
+}
+
+const extractReferencedImageAttachments = (html: string): { attachmentIds: Set<string>; storagePaths: Set<string> } => {
+  const attachmentIds = new Set<string>()
+  const storagePaths = new Set<string>()
+
+  if (!html) {
+    return { attachmentIds, storagePaths }
+  }
+
+  const parser = new DOMParser()
+  const doc = parser.parseFromString(html, 'text/html')
+  const imageBlocks = Array.from(doc.querySelectorAll('[data-block-type="image"]'))
+
+  for (const block of imageBlocks) {
+    const attachmentId = block.getAttribute('data-attachment-id')?.trim()
+    if (attachmentId) {
+      attachmentIds.add(attachmentId)
+    }
+
+    const storagePath = block.getAttribute('data-storage-path')?.trim()
+    if (storagePath) {
+      storagePaths.add(storagePath)
+    }
+
+    const encodedPayload = block.getAttribute('data-block-payload')
+    if (!encodedPayload) continue
+
+    try {
+      const parsed = JSON.parse(decodeURIComponent(encodedPayload)) as { attachmentId?: string; storagePath?: string }
+      if (parsed.attachmentId && typeof parsed.attachmentId === 'string') {
+        attachmentIds.add(parsed.attachmentId)
+      }
+      if (parsed.storagePath && typeof parsed.storagePath === 'string') {
+        storagePaths.add(parsed.storagePath)
+      }
+    } catch {
+      // ignore malformed payloads
+    }
+  }
+
+  return { attachmentIds, storagePaths }
+}
+
+const fileNameExtensionForMimeType = (mimeType: string | undefined): string => {
+  const normalized = (mimeType || '').toLowerCase()
+  if (normalized.includes('jpeg') || normalized.includes('jpg')) return 'jpg'
+  if (normalized.includes('png')) return 'png'
+  if (normalized.includes('gif')) return 'gif'
+  if (normalized.includes('webp')) return 'webp'
+  if (normalized.includes('svg')) return 'svg'
+  if (normalized.includes('bmp')) return 'bmp'
+  return 'png'
+}
+
+const buildLegacyMigrationFileName = (src: string, preferredAlt?: string): string => {
+  const trimmedAlt = sanitizeImageAltText(preferredAlt, 'image')
+    .replace(/\s+/g, '-')
+    .toLowerCase()
+  const safeBase = trimmedAlt || 'image'
+
+  if (src.startsWith('data:')) {
+    const mimeType = src.slice(5, src.indexOf(';') > -1 ? src.indexOf(';') : src.length)
+    const ext = fileNameExtensionForMimeType(mimeType)
+    return `${safeBase}.${ext}`
+  }
+
+  if (src.startsWith('file://')) {
+    const rawPath = src.replace('file://', '')
+    const pathParts = rawPath.split(/[\\/]/)
+    const fileName = pathParts[pathParts.length - 1] || ''
+    if (fileName && /\.[a-z0-9]+$/i.test(fileName)) {
+      return sanitizePathSegment(fileName, `${safeBase}.png`)
+    }
+  }
+
+  return `${safeBase}.png`
+}
+
+const dataUrlToFile = async (dataUrl: string, fileName: string): Promise<File> => {
+  const response = await fetch(dataUrl)
+  const blob = await response.blob()
+  return new File([blob], fileName, {
+    type: blob.type || 'application/octet-stream',
+    lastModified: Date.now(),
+  })
+}
+
+const getImageDimensions = (file: File): Promise<{ width: number; height: number } | null> => {
+  return new Promise((resolve) => {
+    const objectUrl = URL.createObjectURL(file)
+    const image = new Image()
+
+    image.onload = () => {
+      const width = image.naturalWidth
+      const height = image.naturalHeight
+      URL.revokeObjectURL(objectUrl)
+      resolve(width > 0 && height > 0 ? { width, height } : null)
+    }
+
+    image.onerror = () => {
+      URL.revokeObjectURL(objectUrl)
+      resolve(null)
+    }
+
+    image.src = objectUrl
+  })
+}
+
+const readImageFileAsDataUrl = (file: File): Promise<string> => {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader()
+    reader.onload = (event) => {
+      const result = event.target?.result
+      if (typeof result === 'string' && result.startsWith('data:')) {
+        resolve(result)
+      } else {
+        reject(new Error('Could not read file as data URL'))
+      }
+    }
+    reader.onerror = () => reject(reader.error || new Error('Failed to read file'))
+    reader.readAsDataURL(file)
+  })
+}
 
 const extractNoteLinkIdsFromHtml = (htmlContent: string): string[] => {
   if (!htmlContent) return []
@@ -176,17 +315,15 @@ interface NoteEditorWithPanelProps extends NoteEditorProps {
   notes?: LibNote[]
   allNotes?: LibNote[]  // All notes for AI tool calling
   onSelectNote?: (note: LibNote) => void
-  onNewNote?: (noteType?: 'rich-text' | 'drawing' | 'mindmap' | 'bullet-journal' | 'data-sheet', folderId?: string | null, projectId?: string | null) => void
+  onNewNote?: (noteType?: NoteType, folderId?: string | null, projectId?: string | null) => void
   onDuplicateNote?: (note: LibNote) => void
   onMoveNote?: (noteId: string, newFolderId: string | null) => Promise<void>
   isLoadingNotes?: boolean
   currentFolderName?: string
   userEmail?: string
   onSignOut?: () => void
-  onOpenTaskCalendar?: () => void
   onOpenFileExplorer?: () => void
   onOpenProjectsView?: () => void
-  onNotificationAction?: (notification: any) => void
 }
 
 export default function NoteEditor({ 
@@ -212,10 +349,8 @@ export default function NoteEditor({
   currentFolderName,
   userEmail,
   onSignOut,
-  onOpenTaskCalendar,
   onOpenFileExplorer,
   onOpenProjectsView,
-  onNotificationAction,
 }: NoteEditorWithPanelProps) {
   const toast = useToast()
   const isMobile = useIsMobile()
@@ -226,7 +361,7 @@ export default function NoteEditor({
   const [bulletJournalData, setBulletJournalData] = useState<BulletJournalData | null>(null)
   const [dataSheetData, setDataSheetData] = useState<DataSheetData | null>(null)
   const [dataSheetKey, setDataSheetKey] = useState(0)
-  const [noteType, setNoteType] = useState<'rich-text' | 'drawing' | 'mindmap' | 'bullet-journal' | 'data-sheet'>('rich-text')
+  const [noteType, setNoteType] = useState<NoteType>('rich-text')
   const [isSaving, setIsSaving] = useState(false)
   const [isAutosaving, setIsAutosaving] = useState(false)
   const [isDeleting, setIsDeleting] = useState(false)
@@ -244,6 +379,8 @@ export default function NoteEditor({
   const isAutosavingRef = useRef(false)
   const autosaveRetryCountRef = useRef(0)
   const MAX_AUTOSAVE_RETRIES = 3
+  const migratingLegacyImagesRef = useRef(false)
+  const migratedNotesRef = useRef<Set<string>>(new Set())
   const activeFormatsFrameRef = useRef<number | null>(null)
   const noteLoadingRef = useRef(false) // Suppress hasChanges flicker during note load
   const floatingToolbarRef = useRef<HTMLDivElement | null>(null)
@@ -283,6 +420,11 @@ export default function NoteEditor({
   const noteFileUploadPath = useMemo(() => {
     const projectSegment = sanitizePathSegment(currentProjectName, 'inbox')
     return `${projectSegment}/${currentNoteStorageName}/file`
+  }, [currentProjectName, currentNoteStorageName])
+
+  const noteImageUploadPath = useMemo(() => {
+    const projectSegment = sanitizePathSegment(currentProjectName, 'inbox')
+    return `${projectSegment}/${currentNoteStorageName}/image`
   }, [currentProjectName, currentNoteStorageName])
   // Load projects for display
   useEffect(() => {
@@ -969,27 +1111,283 @@ export default function NoteEditor({
     []
   )
 
+  const uploadAndBuildImagePayload = useCallback(async (
+    file: File,
+    sourceType: 'insert' | 'paste' | 'drop' | 'migration',
+    options?: {
+      preferredAlt?: string
+      silent?: boolean
+      legacySource?: string
+      originalDataUrl?: string
+    }
+  ) => {
+    const mimeType = (file.type || '').toLowerCase()
+    if (!mimeType.startsWith('image/')) {
+      if (!options?.silent) {
+        toast.push({ title: 'Unsupported file type', description: 'Please select a valid image file.' })
+      }
+      return null
+    }
+
+    if (file.size > MAX_IMAGE_SIZE_BYTES) {
+      if (!options?.silent) {
+        toast.push({ title: 'Image too large', description: 'Image file is too large. Maximum size is 10MB.' })
+      }
+      return null
+    }
+
+    const uploaded = await uploadImageFile(file, noteImageUploadPath)
+    const dimensions = await getImageDimensions(file)
+    const alt = sanitizeImageAltText(
+      options?.preferredAlt || file.name,
+      sourceType === 'paste' ? 'Pasted image' : 'Image'
+    )
+
+    let attachmentId: string | undefined
+    try {
+      const attachment = await createNoteAttachment({
+        note_id: note?.id ?? null,
+        kind: 'image',
+        storage_path: uploaded.path,
+        url: uploaded.url,
+        mime_type: uploaded.file.type || null,
+        size_bytes: uploaded.file.size,
+        width: dimensions?.width ?? null,
+        height: dimensions?.height ?? null,
+        alt_text: alt,
+        source_type: sourceType,
+        metadata: {
+          original_name: file.name,
+          uploaded_name: uploaded.file.name,
+          ...(options?.legacySource ? { legacy_source: options.legacySource } : {}),
+        },
+      })
+      attachmentId = attachment.id
+    } catch (attachmentError) {
+      console.warn('Image uploaded but attachment record failed:', attachmentError)
+    }
+
+    return {
+      src: uploaded.url,
+      alt,
+      attachmentId,
+      storagePath: uploaded.path,
+      mimeType: uploaded.file.type,
+      sizeBytes: uploaded.file.size,
+      sourceType,
+      uploadedAt: new Date().toISOString(),
+      width: dimensions?.width,
+      height: dimensions?.height,
+    }
+  }, [note?.id, noteImageUploadPath, toast])
+
+  const migrateLegacyImagesInHtml = useCallback(async (html: string) => {
+    if (!containsLegacyImageSources(html)) {
+      return { html, migratedCount: 0, failedCount: 0 }
+    }
+
+    const parser = new DOMParser()
+    const doc = parser.parseFromString(html, 'text/html')
+    const imageNodes = Array.from(doc.querySelectorAll('img'))
+
+    let migratedCount = 0
+    let failedCount = 0
+
+    for (const img of imageNodes) {
+      const src = img.getAttribute('src') || ''
+      if (!(src.startsWith('data:') || src.startsWith('file://'))) {
+        continue
+      }
+
+      try {
+        let migrationDataUrl = src
+
+        if (src.startsWith('file://')) {
+          const { convertFileUrlToDataUrl } = await import('@/lib/tauri/imageStorage')
+          const converted = await convertFileUrlToDataUrl(src)
+          if (!converted || !converted.startsWith('data:')) {
+            throw new Error('Could not read file:// image for migration')
+          }
+          migrationDataUrl = converted
+        }
+
+        if (!migrationDataUrl.startsWith('data:')) {
+          throw new Error('Legacy image source is not a data URL')
+        }
+
+        const fileName = buildLegacyMigrationFileName(src, img.getAttribute('alt') || undefined)
+        const file = await dataUrlToFile(migrationDataUrl, fileName)
+
+        const payload = await uploadAndBuildImagePayload(file, 'migration', {
+          preferredAlt: img.getAttribute('alt') || undefined,
+          legacySource: src,
+          originalDataUrl: migrationDataUrl,
+          silent: true,
+        })
+
+        if (!payload) {
+          failedCount++
+          continue
+        }
+
+        img.setAttribute('src', payload.src)
+        img.setAttribute('alt', payload.alt || 'Image')
+
+        const container = img.closest('[data-block][data-block-type="image"]') as HTMLElement | null
+        if (container) {
+          if (payload.attachmentId) container.setAttribute('data-attachment-id', payload.attachmentId)
+          if (payload.storagePath) container.setAttribute('data-storage-path', payload.storagePath)
+          if (payload.mimeType) container.setAttribute('data-mime-type', payload.mimeType)
+          if (payload.sizeBytes) container.setAttribute('data-size-bytes', String(payload.sizeBytes))
+          container.setAttribute('data-source-type', 'migration')
+          if (payload.uploadedAt) container.setAttribute('data-uploaded-at', payload.uploadedAt)
+
+          try {
+            const encodedPayload = container.getAttribute('data-block-payload')
+            const parsedPayload = encodedPayload
+              ? JSON.parse(decodeURIComponent(encodedPayload))
+              : {}
+            const mergedPayload = {
+              ...parsedPayload,
+              src: payload.src,
+              alt: payload.alt,
+              attachmentId: payload.attachmentId,
+              storagePath: payload.storagePath,
+              mimeType: payload.mimeType,
+              sizeBytes: payload.sizeBytes,
+              sourceType: 'migration',
+              uploadedAt: payload.uploadedAt,
+            }
+            container.setAttribute('data-block-payload', encodeURIComponent(JSON.stringify(mergedPayload)))
+          } catch {
+            // ignore malformed legacy payloads
+          }
+        }
+
+        migratedCount++
+      } catch (error) {
+        console.warn('Legacy image migration failed for one image:', error)
+        failedCount++
+      }
+    }
+
+    return {
+      html: doc.body.innerHTML,
+      migratedCount,
+      failedCount,
+    }
+  }, [uploadAndBuildImagePayload])
+
+  useEffect(() => {
+    if (!note?.id || noteType !== 'rich-text') return
+    if (migratedNotesRef.current.has(note.id)) return
+    if (!containsLegacyImageSources(content)) {
+      migratedNotesRef.current.add(note.id)
+      return
+    }
+    if (migratingLegacyImagesRef.current) return
+
+    migratedNotesRef.current.add(note.id)
+    migratingLegacyImagesRef.current = true
+    let cancelled = false
+
+    ;(async () => {
+      try {
+        const migration = await migrateLegacyImagesInHtml(content)
+        if (cancelled) return
+
+        if (migration.migratedCount > 0 && migration.html !== content) {
+          setContent(migration.html)
+          setHasChanges(true)
+          toast.push({
+            title: 'Images migrated',
+            description: `Migrated ${migration.migratedCount} legacy image${migration.migratedCount === 1 ? '' : 's'} to cloud storage.`,
+          })
+        }
+
+        if (migration.failedCount > 0) {
+          toast.push({
+            title: 'Some images could not be migrated',
+            description: `${migration.failedCount} legacy image${migration.failedCount === 1 ? '' : 's'} could not be migrated automatically.`,
+          })
+        }
+      } catch (error) {
+        if (!cancelled) {
+          console.error('Legacy image migration failed:', error)
+          toast.push({
+            title: 'Image migration failed',
+            description: 'Could not migrate one or more legacy images automatically.',
+          })
+        }
+      } finally {
+        migratingLegacyImagesRef.current = false
+      }
+    })()
+
+    return () => {
+      cancelled = true
+    }
+  }, [content, migrateLegacyImagesInHtml, note?.id, noteType, toast])
+
+  const reconcileOrphanedImageAttachments = useCallback(async (noteId: string, html: string) => {
+    const referenced = extractReferencedImageAttachments(html)
+    const attachments = await getNoteAttachments(noteId)
+    const imageAttachments = attachments.filter((attachment) => attachment.kind === 'image')
+
+    const orphaned = imageAttachments.filter((attachment) => {
+      if (referenced.attachmentIds.has(attachment.id)) return false
+      if (attachment.storage_path && referenced.storagePaths.has(attachment.storage_path)) return false
+      return true
+    })
+
+    let deletedCount = 0
+    let failedCount = 0
+
+    for (const attachment of orphaned) {
+      try {
+        if (attachment.storage_path) {
+          try {
+            await deleteFile(attachment.storage_path)
+          } catch (storageError) {
+            console.warn('Failed to delete orphaned image storage object:', storageError)
+          }
+        }
+
+        await deleteNoteAttachment(attachment.id)
+        deletedCount++
+      } catch (error) {
+        console.warn('Failed to delete orphaned note attachment record:', error)
+        failedCount++
+      }
+    }
+
+    return {
+      deletedCount,
+      failedCount,
+    }
+  }, [])
+
   const handleInsertImage = useCallback(async () => {
+
     hideContentBlocksMenu(async () => {
       try {
         // Try to use Tauri native file dialog first
-        const { isTauriEnvironment, selectImageFile, readImageAsDataUrl, saveImageToLocal } = await import('@/lib/tauri/imageStorage')
+        const { isTauriEnvironment, selectImageFile, readImageAsDataUrl } = await import('@/lib/tauri/imageStorage')
         
         if (isTauriEnvironment()) {
           // Use Tauri native file dialog
           const selected = await selectImageFile()
           
           if (selected) {
-            // Read the image as data URL
             const dataUrl = await readImageAsDataUrl(selected.path)
-            
             if (dataUrl && editorRef.current && editorRef.current.insertCustomBlock) {
-              // Save to local storage and get file:// URL
-              const localUrl = await saveImageToLocal(dataUrl, selected.name)
-              
+              const imageFile = await dataUrlToFile(dataUrl, selected.name)
+              const payload = await uploadAndBuildImagePayload(imageFile, 'insert')
+
+              if (!payload) return
+
               editorRef.current.insertCustomBlock('image', {
-                src: localUrl,
-                alt: selected.name
+                ...payload,
               })
               setHasChanges(true)
             }
@@ -999,34 +1397,22 @@ export default function NoteEditor({
           const input = document.createElement('input')
           input.type = 'file'
           input.accept = 'image/*'
-          input.onchange = (e: Event) => {
+          input.onchange = async (e: Event) => {
             const target = e.target as HTMLInputElement
             const file = target.files?.[0]
             if (file) {
-              // Validate file size
-              if (file.size > MAX_IMAGE_SIZE_BYTES) {
-                toast.push({ title: 'Image too large', description: 'Image file is too large. Maximum size is 10MB.' })
-                return
-              }
+              try {
+                const payload = await uploadAndBuildImagePayload(file, 'insert')
+                if (!payload || !editorRef.current?.insertCustomBlock) return
 
-              // Convert the image to a data URL
-              const reader = new FileReader()
-              reader.onload = (readerEvent) => {
-                const dataUrl = readerEvent.target?.result as string
-                if (dataUrl && editorRef.current && editorRef.current.insertCustomBlock) {
-                  // Sanitize filename for use as alt text
-                  const sanitizedAlt = file.name.replace(/[<>"']/g, '')
-                  editorRef.current.insertCustomBlock('image', {
-                    src: dataUrl,
-                    alt: sanitizedAlt || 'Image'
-                  })
-                  setHasChanges(true)
-                }
+                editorRef.current.insertCustomBlock('image', {
+                  ...payload,
+                })
+                setHasChanges(true)
+              } catch (uploadError) {
+                console.error('Image upload failed:', uploadError)
+                toast.push({ title: 'Upload failed', description: 'Could not upload image. Please try again.' })
               }
-              reader.onerror = () => {
-                toast.push({ title: 'Error reading file', description: 'Failed to read image file. Please try again.' })
-              }
-              reader.readAsDataURL(file)
             }
           }
           input.click()
@@ -1036,7 +1422,7 @@ export default function NoteEditor({
         toast.push({ title: 'Error', description: 'Failed to insert image. Please try again.' })
       }
     })
-  }, [hideContentBlocksMenu, toast])
+  }, [hideContentBlocksMenu, uploadAndBuildImagePayload, toast])
 
   const handleInsertFile = useCallback(() => {
     hideContentBlocksMenu(() => {
@@ -1198,6 +1584,8 @@ export default function NoteEditor({
     }
 
     try {
+      let savedRichTextContent: string | null = null
+
       if (noteType === 'drawing') {
         const drawingContent = JSON.stringify(drawingData)
         await onSave({
@@ -1229,12 +1617,38 @@ export default function NoteEditor({
           note_type: 'data-sheet',
         }, isAuto)
       } else {
+        let contentToSave = content
+        if (containsLegacyImageSources(contentToSave)) {
+          const migration = await migrateLegacyImagesInHtml(contentToSave)
+          if (migration.migratedCount > 0) {
+            contentToSave = migration.html
+            setContent(contentToSave)
+          }
+        }
+
         await onSave({
           title: effectiveTitle,
-          content,
+          content: contentToSave,
           note_type: 'rich-text',
         }, isAuto)
+
+        savedRichTextContent = contentToSave
       }
+
+      if (noteType === 'rich-text' && note?.id && savedRichTextContent !== null) {
+        try {
+          const cleanupResult = await reconcileOrphanedImageAttachments(note.id, savedRichTextContent)
+          if (cleanupResult.failedCount > 0) {
+            toast.push({
+              title: 'Some image cleanup failed',
+              description: `${cleanupResult.failedCount} removed image attachment${cleanupResult.failedCount === 1 ? '' : 's'} could not be fully cleaned up.`,
+            })
+          }
+        } catch (cleanupError) {
+          console.error('Failed to reconcile note image attachments:', cleanupError)
+        }
+      }
+
       setHasChanges(false)
       setLastSaveTime(new Date())
       // Reset retry counter on success
@@ -1273,7 +1687,7 @@ export default function NoteEditor({
         setIsSaving(false)
       }
     }
-  }, [content, drawingData, mindmapData, onSave, title, noteType, hasChanges, isSaving, isDeleting, toast])
+  }, [content, drawingData, mindmapData, onSave, title, noteType, hasChanges, isSaving, isDeleting, toast, migrateLegacyImagesInHtml, note?.id, reconcileOrphanedImageAttachments])
 
   // Autosave: debounce saves after a short period of inactivity.
   useEffect(() => {
@@ -1958,6 +2372,59 @@ export default function NoteEditor({
     }
   }, [noteType, toast])
 
+  const textNotesForMindmap = useMemo(
+    () => (allNotes ?? []).filter((item) => item.note_type === 'rich-text'),
+    [allNotes]
+  )
+
+  const handleCreateTextNoteFromMindmap = useCallback(
+    async ({ title: sourceTitle, description }: { title: string; description: string }) => {
+      const title = sourceTitle.trim() || 'Untitled Note'
+      const descriptionHtml = description.trim()
+        ? `<p>${escapeHtml(description).replace(/\n/g, '<br>')}</p>`
+        : ''
+
+      const created = await createNote({
+        title,
+        content: descriptionHtml,
+        folder_id: note?.folder_id ?? selectedFolderId ?? null,
+        project_id: note?.project_id ?? null,
+        note_type: 'rich-text',
+      })
+
+      toast.push({ title: 'Text note created', description: `"${created.title || title}" linked to node.` })
+
+      return {
+        id: created.id,
+        title: created.title || title,
+        content: created.content || descriptionHtml,
+      }
+    },
+    [note?.folder_id, note?.project_id, selectedFolderId, toast]
+  )
+
+  const handleOpenTextNoteFromMindmap = useCallback(
+    async (noteId: string) => {
+      const targetNote = (allNotes ?? []).find((item) => item.id === noteId)
+      if (targetNote) {
+        onSelectNote(targetNote)
+        return
+      }
+
+      try {
+        const fetched = await getNote(noteId)
+        if (!fetched) {
+          toast.push({ title: 'Note not found', description: 'The linked note could not be opened.' })
+          return
+        }
+        onSelectNote(fetched)
+      } catch {
+        toast.push({ title: 'Open failed', description: 'Could not open linked note.' })
+      }
+    },
+    [allNotes, onSelectNote, toast]
+  )
+
   return (
     <>
       {/* Right Sidebar — Note Details */}
@@ -2020,6 +2487,13 @@ export default function NoteEditor({
                     initialData={mindmapData || undefined}
                     onChange={setMindmapData}
                     onSelectedNodeChange={(nodeId, _node) => setSelectedMindmapNodeId(nodeId)}
+                    textNotes={textNotesForMindmap.map((item) => ({
+                      id: item.id,
+                      title: item.title || 'Untitled',
+                      content: item.content || '',
+                    }))}
+                    onCreateTextNote={handleCreateTextNoteFromMindmap}
+                    onOpenTextNote={handleOpenTextNoteFromMindmap}
                     readOnly={isSaving || isDeleting}
                   />
                 </ErrorBoundary>
@@ -2052,27 +2526,22 @@ export default function NoteEditor({
                     disabled={isSaving || isDeleting}
                     placeholder="Start writing your note..."
                     onImagePaste={async (file: File) => {
-                      if (file.size > MAX_IMAGE_SIZE_BYTES) {
-                        toast.push({ title: 'Image too large', description: 'Pasted image exceeds the 10MB limit.' })
+                      try {
+                        return await uploadAndBuildImagePayload(file, 'paste')
+                      } catch (error) {
+                        console.error('Paste upload failed:', error)
+                        toast.push({ title: 'Paste failed', description: 'Could not upload pasted image.' })
                         return null
                       }
-                      return new Promise((resolve) => {
-                        const reader = new FileReader()
-                        reader.onload = (e) => {
-                          const dataUrl = e.target?.result as string
-                          if (dataUrl) {
-                            const sanitizedAlt = file.name?.replace(/[<>"']/g, '') || 'Pasted image'
-                            resolve({ src: dataUrl, alt: sanitizedAlt })
-                          } else {
-                            resolve(null)
-                          }
-                        }
-                        reader.onerror = () => {
-                          toast.push({ title: 'Paste failed', description: 'Could not read pasted image.' })
-                          resolve(null)
-                        }
-                        reader.readAsDataURL(file)
-                      })
+                    }}
+                    onImageDrop={async (file: File) => {
+                      try {
+                        return await uploadAndBuildImagePayload(file, 'drop')
+                      } catch (error) {
+                        console.error('Drop upload failed:', error)
+                        toast.push({ title: 'Drop failed', description: 'Could not upload dropped image.' })
+                        return null
+                      }
                     }}
                     onCustomCommand={(commandId) => {
                       if (commandId === 'note-link') {

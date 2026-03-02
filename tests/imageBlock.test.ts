@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
-import { imageBlock, initializeImageBlockInteractions, type ImagePayload, type CropData, type ImageAlignment } from '@/lib/editor/imageBlock'
+import { imageBlock, initializeImageBlockInteractions, rehydrateImageWidths, type ImagePayload, type CropData, type ImageAlignment } from '@/lib/editor/imageBlock'
 
 describe('Image Block', () => {
   let container: HTMLDivElement
@@ -33,7 +33,7 @@ describe('Image Block', () => {
       expect(html).toContain(payload.alt)
     })
 
-    it('should render resize handles', () => {
+    it('should NOT render resize handles in the HTML (they live in a separate overlay)', () => {
       const payload: ImagePayload = {
         src: 'data:image/png;base64,test',
         alt: 'Test image'
@@ -41,16 +41,9 @@ describe('Image Block', () => {
 
       const html = imageBlock.render(payload)
       
-      // Should have 8 resize handles (4 corners + 4 edges)
-      expect(html.match(/image-resize-handle/g)?.length).toBe(8)
-      expect(html).toContain('data-direction="nw"')
-      expect(html).toContain('data-direction="ne"')
-      expect(html).toContain('data-direction="sw"')
-      expect(html).toContain('data-direction="se"')
-      expect(html).toContain('data-direction="n"')
-      expect(html).toContain('data-direction="s"')
-      expect(html).toContain('data-direction="w"')
-      expect(html).toContain('data-direction="e"')
+      // Resize handles are no longer part of the serialised HTML
+      expect(html).not.toContain('image-resize-handle')
+      expect(html).not.toContain('data-direction=')
     })
 
     it('should render a delete button', () => {
@@ -65,7 +58,7 @@ describe('Image Block', () => {
       expect(html).toContain('Delete image')
     })
 
-    it('should apply width styles when provided', () => {
+    it('should apply width as a data-width attribute when provided', () => {
       const payload: ImagePayload = {
         src: 'data:image/png;base64,test',
         alt: 'Test image',
@@ -74,6 +67,9 @@ describe('Image Block', () => {
 
       const html = imageBlock.render(payload)
       
+      // Width is stored as data-attribute (survives DOMPurify sanitiser)
+      expect(html).toContain('data-width="500"')
+      // Also has inline style for immediate render (stripped by sanitiser, restored by rehydrate)
       expect(html).toContain('width: 500px')
     })
 
@@ -86,8 +82,8 @@ describe('Image Block', () => {
 
       const html = imageBlock.render(payload)
       
-      // Should clamp to minimum of 100px
-      expect(html).toContain('width: 100px')
+      // Should clamp to minimum of 100px, stored as data-width
+      expect(html).toContain('data-width="100"')
     })
 
     it('should enforce maximum dimensions', () => {
@@ -99,8 +95,8 @@ describe('Image Block', () => {
 
       const html = imageBlock.render(payload)
       
-      // Should clamp to maximum of 4000px
-      expect(html).toContain('width: 4000px')
+      // Should clamp to maximum of 4000px, stored as data-width
+      expect(html).toContain('data-width="4000"')
     })
 
     it('should handle invalid dimensions gracefully', () => {
@@ -186,10 +182,48 @@ describe('Image Block', () => {
   describe('initializeImageBlockInteractions', () => {
     it('should initialize without errors', () => {
       const onContentChange = vi.fn()
+      let cleanup: () => void
       
       expect(() => {
-        initializeImageBlockInteractions(editor, onContentChange)
+        cleanup = initializeImageBlockInteractions(editor, onContentChange)
       }).not.toThrow()
+
+      cleanup!()
+    })
+
+    it('rehydrateImageWidths restores style.width from data-width on init', () => {
+      const payload: ImagePayload = {
+        src: 'data:image/png;base64,test',
+        alt: 'Test image',
+        width: 320
+      }
+
+      const html = imageBlock.render(payload)
+      editor.innerHTML = html
+
+      // Simulate sanitiser stripping inline styles: ensure no style.width before rehydration
+      const wrapper = editor.querySelector('.image-block-wrapper') as HTMLElement
+      wrapper.style.width = '' // strip any inline style
+
+      // data-width must be present from render()
+      expect(wrapper.getAttribute('data-width')).toBe('320')
+
+      // initializeImageBlockInteractions calls rehydrateImageWidths internally
+      const cleanup = initializeImageBlockInteractions(editor, vi.fn())
+
+      expect(wrapper.style.width).toBe('320px')
+      cleanup()
+    })
+
+    it('rehydrateImageWidths standalone function restores style.width', () => {
+      const wrapper = document.createElement('div')
+      wrapper.className = 'image-block-wrapper'
+      wrapper.setAttribute('data-width', '480')
+      editor.appendChild(wrapper)
+
+      rehydrateImageWidths(editor)
+
+      expect(wrapper.style.width).toBe('480px')
     })
 
     it('should handle delete button click', () => {
@@ -202,7 +236,7 @@ describe('Image Block', () => {
       const html = imageBlock.render(payload)
       editor.innerHTML = html
       
-      initializeImageBlockInteractions(editor, onContentChange)
+      const cleanup = initializeImageBlockInteractions(editor, onContentChange)
 
       const deleteBtn = editor.querySelector('.image-delete-btn') as HTMLButtonElement
       expect(deleteBtn).toBeTruthy()
@@ -211,6 +245,7 @@ describe('Image Block', () => {
 
       expect(editor.querySelector('.image-block-container')).toBeNull()
       expect(onContentChange).toHaveBeenCalled()
+      cleanup()
     })
 
     it('should create a paragraph after deleting image if editor becomes empty', () => {
@@ -223,7 +258,7 @@ describe('Image Block', () => {
       const html = imageBlock.render(payload)
       editor.innerHTML = html
       
-      initializeImageBlockInteractions(editor, onContentChange)
+      const cleanup = initializeImageBlockInteractions(editor, onContentChange)
 
       const deleteBtn = editor.querySelector('.image-delete-btn') as HTMLButtonElement
       deleteBtn.click()
@@ -231,6 +266,7 @@ describe('Image Block', () => {
       // Editor should have a paragraph with a br tag
       expect(editor.querySelector('p')).toBeTruthy()
       expect(editor.querySelector('p br')).toBeTruthy()
+      cleanup()
     })
 
     it('should return cleanup function', () => {
@@ -252,7 +288,7 @@ describe('Image Block', () => {
   })
 
   describe('resize functionality', () => {
-    it('should initialize resize handlers', () => {
+    it('should create overlay with 8 resize handles on document.body', () => {
       const onContentChange = vi.fn()
       const payload: ImagePayload = {
         src: 'data:image/png;base64,test',
@@ -262,13 +298,18 @@ describe('Image Block', () => {
       const html = imageBlock.render(payload)
       editor.innerHTML = html
       
-      initializeImageBlockInteractions(editor, onContentChange)
+      const cleanup = initializeImageBlockInteractions(editor, onContentChange)
 
-      const resizeHandles = editor.querySelectorAll('.image-resize-handle')
+      // Handles live in a fixed overlay appended to document.body, NOT inside the editor
+      const overlay = document.body.querySelector('.image-resize-overlay')
+      expect(overlay).toBeTruthy()
+      const resizeHandles = overlay!.querySelectorAll('.image-resize-handle')
       expect(resizeHandles.length).toBe(8)
+
+      cleanup()
     })
 
-    it('should have correct cursor styles for resize handles', () => {
+    it('overlay handles should have correct data-direction attributes', () => {
       const payload: ImagePayload = {
         src: 'data:image/png;base64,test',
         alt: 'Test image'
@@ -277,11 +318,22 @@ describe('Image Block', () => {
       const html = imageBlock.render(payload)
       editor.innerHTML = html
 
-      const nwHandle = editor.querySelector('[data-direction="nw"]')
-      const seHandle = editor.querySelector('[data-direction="se"]')
-      
-      expect(nwHandle?.classList.contains('cursor-nw-resize')).toBe(true)
-      expect(seHandle?.classList.contains('cursor-se-resize')).toBe(true)
+      const cleanup = initializeImageBlockInteractions(editor, vi.fn())
+
+      const overlay = document.body.querySelector('.image-resize-overlay')!
+      const directions = ['nw', 'ne', 'sw', 'se', 'n', 's', 'w', 'e']
+      for (const dir of directions) {
+        expect(overlay.querySelector(`[data-direction="${dir}"]`)).toBeTruthy()
+      }
+
+      cleanup()
+    })
+
+    it('cleanup should remove the overlay from the DOM', () => {
+      const cleanup = initializeImageBlockInteractions(editor, vi.fn())
+      expect(document.body.querySelector('.image-resize-overlay')).toBeTruthy()
+      cleanup()
+      expect(document.body.querySelector('.image-resize-overlay')).toBeNull()
     })
   })
 
@@ -337,28 +389,23 @@ describe('Image Block', () => {
 
       const html = imageBlock.render(payload)
       
-      // Image, buttons, and handles should have contenteditable="false"
+      // Image, buttons should have contenteditable="false"
       // but not the container itself (for proper cursor positioning)
       expect(html).toContain('contenteditable="false"')
       
-      // Verify it's on the right elements
       const tempDiv = document.createElement('div')
       tempDiv.innerHTML = html
-      const container = tempDiv.firstElementChild as HTMLElement
-      const img = container.querySelector('img')
-      const deleteBtn = container.querySelector('.image-delete-btn')
-      const handles = container.querySelectorAll('.image-resize-handle')
+      const imgContainer = tempDiv.firstElementChild as HTMLElement
+      const img = imgContainer.querySelector('img')
+      const deleteBtn = imgContainer.querySelector('.image-delete-btn')
       
       // Container should NOT have contenteditable="false"
-      expect(container.getAttribute('contenteditable')).toBeNull()
+      expect(imgContainer.getAttribute('contenteditable')).toBeNull()
       // Image should have it
       expect(img?.getAttribute('contenteditable')).toBe('false')
       // Delete button should have it
       expect(deleteBtn?.getAttribute('contenteditable')).toBe('false')
-      // Handles should have it
-      handles.forEach(handle => {
-        expect(handle.getAttribute('contenteditable')).toBe('false')
-      })
+      // Handles no longer in rendered HTML — they live in overlay
     })
   })
 

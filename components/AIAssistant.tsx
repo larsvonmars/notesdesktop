@@ -59,6 +59,7 @@ import {
   type CalendarSuggestion,
   type ToolCallHandler,
 } from '@/lib/ai'
+import type { NoteType } from '@/lib/notes'
 import {
   getAIChatsByNote,
   getAIChats,
@@ -415,7 +416,7 @@ export default function AIAssistant({
         id: note.id,
         title: note.title || 'Untitled',
         content: plainContent,
-        type: (note.note_type || 'rich-text') as 'rich-text' | 'drawing' | 'mindmap' | 'bullet-journal',
+        type: (note.note_type || 'rich-text') as NoteType,
       }
     }
     

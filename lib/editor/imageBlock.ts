@@ -17,6 +17,12 @@ export interface CropData {
 export interface ImagePayload {
   src: string
   alt?: string
+  attachmentId?: string
+  storagePath?: string
+  mimeType?: string
+  sizeBytes?: number
+  sourceType?: 'insert' | 'paste' | 'drop' | 'migration'
+  uploadedAt?: string
   width?: number
   height?: number
   alignment?: ImageAlignment
@@ -64,17 +70,21 @@ export const imageBlock: CustomBlockDescriptor = {
     const alt = escapeHtml(payload.alt || 'Image')
     const caption = payload.caption ? escapeHtml(payload.caption) : ''
     const alignment = payload.alignment || 'center'
+    const attachmentId = payload.attachmentId ? escapeHtml(payload.attachmentId) : ''
+    const storagePath = payload.storagePath ? escapeHtml(payload.storagePath) : ''
+    const mimeType = payload.mimeType ? escapeHtml(payload.mimeType) : ''
+    const sourceType = payload.sourceType ? escapeHtml(payload.sourceType) : ''
+    const uploadedAt = payload.uploadedAt ? escapeHtml(payload.uploadedAt) : ''
+    const sizeBytes = typeof payload.sizeBytes === 'number' && Number.isFinite(payload.sizeBytes)
+      ? Math.max(0, Math.round(payload.sizeBytes))
+      : undefined
     
     // Sanitize dimensions
     const width = sanitizeDimension(payload.width)
     
-    // Build styles for wrapper based on alignment and width
-    const wrapperStyles: string[] = []
-    if (width) {
-      wrapperStyles.push(`width: ${width}px`)
-    }
-    
-    const wrapperStyleAttr = wrapperStyles.length > 0 ? ` style="${wrapperStyles.join('; ')}"` : ''
+    // Store width as a data-attribute (survives DOMPurify ALLOW_DATA_ATTR; rehydrated to style.width at runtime)
+    // Also set inline style for immediate render (stripped by sanitiser on save, restored by rehydrateImageWidths)
+    const wrapperWidthAttr = width ? ` data-width="${width}" style="width: ${width}px"` : ''
     
     // Container alignment classes
     let containerClasses = 'image-block-container my-4 relative group'
@@ -106,10 +116,19 @@ export const imageBlock: CustomBlockDescriptor = {
     }
 
     // Create an image block with custom UI elements
-    return `<div class="${containerClasses}" data-block="true" data-block-type="image" data-alignment="${alignment}">
+    const attachmentAttributes = [
+      attachmentId ? `data-attachment-id="${attachmentId}"` : '',
+      storagePath ? `data-storage-path="${storagePath}"` : '',
+      mimeType ? `data-mime-type="${mimeType}"` : '',
+      sourceType ? `data-source-type="${sourceType}"` : '',
+      uploadedAt ? `data-uploaded-at="${uploadedAt}"` : '',
+      sizeBytes !== undefined ? `data-size-bytes="${sizeBytes}"` : '',
+    ].filter(Boolean).join(' ')
 
-      <div class="image-block-wrapper relative inline-flex flex-col justify-center items-center max-w-full"${wrapperStyleAttr}>
-        <div class="relative w-full">
+    return `<div class="${containerClasses}" data-block="true" data-block-type="image" data-alignment="${alignment}" ${attachmentAttributes}>
+
+      <div class="image-block-wrapper relative inline-flex flex-col justify-center items-center max-w-full"${wrapperWidthAttr}>
+        <div class="relative inline-block">
 
           <img src="${src}" alt="${alt}" class="${imgClasses}" style="${imgStyles}" draggable="false" contenteditable="false" />
           
@@ -168,16 +187,6 @@ export const imageBlock: CustomBlockDescriptor = {
             </svg>
           </button>
 
-          
-          <!-- Resize handles -->
-          <div class="image-resize-handle image-resize-nw absolute -top-1.5 -left-1.5 w-3 h-3 bg-blue-500 border-2 border-white rounded-full cursor-nw-resize opacity-0 group-hover:opacity-100 transition-opacity shadow-md z-10" data-direction="nw" contenteditable="false"></div>
-          <div class="image-resize-handle image-resize-ne absolute -top-1.5 -right-1.5 w-3 h-3 bg-blue-500 border-2 border-white rounded-full cursor-ne-resize opacity-0 group-hover:opacity-100 transition-opacity shadow-md z-10" data-direction="ne" contenteditable="false"></div>
-          <div class="image-resize-handle image-resize-sw absolute -bottom-1.5 -left-1.5 w-3 h-3 bg-blue-500 border-2 border-white rounded-full cursor-sw-resize opacity-0 group-hover:opacity-100 transition-opacity shadow-md z-10" data-direction="sw" contenteditable="false"></div>
-          <div class="image-resize-handle image-resize-se absolute -bottom-1.5 -right-1.5 w-3 h-3 bg-blue-500 border-2 border-white rounded-full cursor-se-resize opacity-0 group-hover:opacity-100 transition-opacity shadow-md z-10" data-direction="se" contenteditable="false"></div>
-          <div class="image-resize-handle image-resize-n absolute -top-1.5 left-1/2 -translate-x-1/2 w-3 h-3 bg-blue-500 border-2 border-white rounded-full cursor-n-resize opacity-0 group-hover:opacity-100 transition-opacity shadow-md z-10" data-direction="n" contenteditable="false"></div>
-          <div class="image-resize-handle image-resize-s absolute -bottom-1.5 left-1/2 -translate-x-1/2 w-3 h-3 bg-blue-500 border-2 border-white rounded-full cursor-s-resize opacity-0 group-hover:opacity-100 transition-opacity shadow-md z-10" data-direction="s" contenteditable="false"></div>
-          <div class="image-resize-handle image-resize-w absolute top-1/2 -translate-y-1/2 -left-1.5 w-3 h-3 bg-blue-500 border-2 border-white rounded-full cursor-w-resize opacity-0 group-hover:opacity-100 transition-opacity shadow-md z-10" data-direction="w" contenteditable="false"></div>
-          <div class="image-resize-handle image-resize-e absolute top-1/2 -translate-y-1/2 -right-1.5 w-3 h-3 bg-blue-500 border-2 border-white rounded-full cursor-e-resize opacity-0 group-hover:opacity-100 transition-opacity shadow-md z-10" data-direction="e" contenteditable="false"></div>
         </div>
         ${caption ? `<div class="image-caption text-sm text-gray-600 italic mt-2 px-2 text-center" contenteditable="true">${caption}</div>` : ''}
         <!-- Note: Caption is escaped during render and further sanitized by DOMPurify in RichTextEditor.
@@ -197,19 +206,31 @@ export const imageBlock: CustomBlockDescriptor = {
       return undefined
     }
 
-    // Try to get dimensions from the wrapper's inline style first
+    // Read width from data-width attribute (sanitizer-safe); fall back to inline style for legacy content
     const wrapper = el.querySelector('.image-block-wrapper') as HTMLElement
     let width: number | undefined = undefined
     
-    if (wrapper && wrapper.style.width) {
-      const parsedWidth = parseInt(wrapper.style.width, 10)
-      if (!Number.isNaN(parsedWidth)) {
-        width = parsedWidth
+    if (wrapper) {
+      const dataWidth = wrapper.getAttribute('data-width')
+      if (dataWidth) {
+        const parsedWidth = parseInt(dataWidth, 10)
+        if (!Number.isNaN(parsedWidth)) width = parsedWidth
+      } else if (wrapper.style.width) {
+        const parsedWidth = parseInt(wrapper.style.width, 10)
+        if (!Number.isNaN(parsedWidth)) width = parsedWidth
       }
     }
     
     // Get alignment from container's data attribute
     const alignment = el.getAttribute('data-alignment') as ImageAlignment | null
+    const attachmentId = el.getAttribute('data-attachment-id') || undefined
+    const storagePath = el.getAttribute('data-storage-path') || undefined
+    const mimeType = el.getAttribute('data-mime-type') || undefined
+    const sourceType = (el.getAttribute('data-source-type') as ImagePayload['sourceType']) || undefined
+    const uploadedAt = el.getAttribute('data-uploaded-at') || undefined
+    const sizeBytesAttr = el.getAttribute('data-size-bytes')
+    const parsedSizeBytes = sizeBytesAttr ? parseInt(sizeBytesAttr, 10) : undefined
+    const sizeBytes = Number.isFinite(parsedSizeBytes) ? parsedSizeBytes : undefined
     
     // Get caption if present
     const captionEl = el.querySelector('.image-caption') as HTMLElement
@@ -237,6 +258,12 @@ export const imageBlock: CustomBlockDescriptor = {
     return {
       src,
       alt: img.getAttribute('alt') || undefined,
+      attachmentId,
+      storagePath,
+      mimeType,
+      sizeBytes,
+      sourceType,
+      uploadedAt,
       width,
       alignment: alignment || undefined,
       caption,
@@ -477,256 +504,574 @@ function exitCropMode(container: HTMLElement) {
 }
 
 /**
- * Initialize image block interactions (resize, delete, alignment, crop)
- * This should be called after the editor content is rendered
+ * Rehydrate image wrapper widths from data-width attributes.
+ * Called after sanitizer passes that strip inline styles.
+ */
+export function rehydrateImageWidths(root: HTMLElement) {
+  root.querySelectorAll<HTMLElement>('.image-block-wrapper[data-width]').forEach((wrapper) => {
+    const dw = wrapper.getAttribute('data-width')
+    if (dw) wrapper.style.width = `${dw}px`
+  })
+}
+
+// ─── Resize-handle overlay ──────────────────────────────────────────────────
+// The 8 handles + border outline live in a single fixed-position overlay element
+// that is appended to `document.body`, completely outside the contenteditable
+// tree. It tracks the bounding rect of the currently-hovered image wrapper.
+
+const HANDLE_DIRECTIONS = ['nw', 'ne', 'sw', 'se', 'n', 's', 'w', 'e'] as const
+type HandleDirection = typeof HANDLE_DIRECTIONS[number]
+
+const CURSOR_MAP: Record<HandleDirection, string> = {
+  nw: 'nw-resize', ne: 'ne-resize', sw: 'sw-resize', se: 'se-resize',
+  n: 'n-resize', s: 's-resize', w: 'w-resize', e: 'e-resize',
+}
+
+function createResizeOverlay(): {
+  overlay: HTMLElement
+  handles: Map<HandleDirection, HTMLElement>
+  border: HTMLElement
+} {
+  const overlay = document.createElement('div')
+  overlay.className = 'image-resize-overlay'
+  // Fixed-position wrapper; not inside the editor
+  overlay.style.cssText = 'position:fixed;top:0;left:0;width:0;height:0;pointer-events:none;z-index:9999;'
+
+  // Thin border outline shown around the image while the overlay is visible
+  const border = document.createElement('div')
+  border.className = 'image-resize-border'
+  border.style.cssText = 'position:fixed;pointer-events:none;border:2px solid #6366f1;border-radius:6px;z-index:9998;'
+  overlay.appendChild(border)
+
+  const handles = new Map<HandleDirection, HTMLElement>()
+
+  for (const dir of HANDLE_DIRECTIONS) {
+    const h = document.createElement('div')
+    h.className = `image-resize-handle image-resize-${dir}`
+    h.setAttribute('data-direction', dir)
+    h.style.cssText =
+      `position:fixed;width:12px;height:12px;background:#3b82f6;border:2px solid #fff;` +
+      `border-radius:50%;cursor:${CURSOR_MAP[dir]};pointer-events:auto;z-index:10000;` +
+      `box-shadow:0 1px 3px rgba(0,0,0,0.25);transition:transform 0.1s;`
+    overlay.appendChild(h)
+    handles.set(dir, h)
+  }
+
+  return { overlay, handles, border }
+}
+
+/** Position every handle + the border outline around the given viewport rect. */
+function positionOverlay(
+  rect: DOMRect,
+  handles: Map<HandleDirection, HTMLElement>,
+  border: HTMLElement,
+) {
+  const hw = 6 // half handle width
+  const { left: l, top: t, right: r, bottom: b, width: w, height: h } = rect
+  const cx = l + w / 2
+  const cy = t + h / 2
+
+  const pos: Record<HandleDirection, [number, number]> = {
+    nw: [l, t], ne: [r, t], sw: [l, b], se: [r, b],
+    n: [cx, t], s: [cx, b], w: [l, cy], e: [r, cy],
+  }
+
+  for (const dir of HANDLE_DIRECTIONS) {
+    const el = handles.get(dir)!
+    const [x, y] = pos[dir]
+    el.style.left = `${x - hw}px`
+    el.style.top = `${y - hw}px`
+  }
+
+  border.style.left = `${l - 1}px`
+  border.style.top = `${t - 1}px`
+  border.style.width = `${w + 2}px`
+  border.style.height = `${h + 2}px`
+}
+
+/**
+ * Initialize image block interactions (resize, delete, alignment, crop, drag-to-reposition).
+ *
+ * Resize handles now live in a **fixed-position overlay** appended to `document.body`,
+ * completely outside the contenteditable tree. They track the bounding rect of the
+ * hovered / active image wrapper, so they are never affected by the editor DOM, the
+ * DOMPurify sanitiser, or scroll position issues.
  */
 export function initializeImageBlockInteractions(editorElement: HTMLElement, onContentChange: () => void) {
   if (!editorElement) return () => {}
 
-  // --- Delete Handler ---
-  const handleDelete = (e: MouseEvent) => {
+  // Restore style.width from data-width on every init
+  rehydrateImageWidths(editorElement)
+
+  // ─── Overlay setup ─────────────────────────────────────────────────────────
+  const { overlay, handles, border } = createResizeOverlay()
+  document.body.appendChild(overlay)
+
+  let activeContainer: HTMLElement | null = null // the .image-block-container currently showing handles
+
+  const showOverlay = (container: HTMLElement) => {
+    const wrapper = container.querySelector('.image-block-wrapper') as HTMLElement
+    if (!wrapper) return
+    activeContainer = container
+    overlay.style.display = ''
+    const rect = wrapper.getBoundingClientRect()
+    positionOverlay(rect, handles, border)
+  }
+
+  const hideOverlay = () => {
+    if (isResizing) return // don't hide during an active resize drag
+    overlay.style.display = 'none'
+    activeContainer = null
+  }
+
+  /** Refresh overlay position (e.g. during resize or scroll). */
+  const refreshOverlay = () => {
+    if (!activeContainer) return
+    const wrapper = activeContainer.querySelector('.image-block-wrapper') as HTMLElement
+    if (!wrapper) { hideOverlay(); return }
+    const rect = wrapper.getBoundingClientRect()
+    positionOverlay(rect, handles, border)
+  }
+
+  // Show / hide on hover over image blocks inside the editor
+  const handlePointerEnter = (e: PointerEvent) => {
+    if (isResizing || isDraggingImage) return
     const target = e.target as HTMLElement
-    // Check for delete button or its children
-    const deleteBtn = target.closest('.image-delete-btn')
-    
-    if (deleteBtn) {
-      e.preventDefault()
-      e.stopPropagation()
-      
-      const container = deleteBtn.closest('.image-block-container')
-      if (container) {
-        const nextElement = container.nextElementSibling
-        
-        // Remove the container
-        container.remove()
-        
-        // If there's no next element, create a paragraph so user can continue typing
-        if (!nextElement) {
-          const paragraph = document.createElement('p')
-          paragraph.appendChild(document.createElement('br'))
-          
-          // Insert after where the image was (which might be at the end)
-          if (container.parentNode) {
-            container.parentNode.appendChild(paragraph)
-          } else {
-            editorElement.appendChild(paragraph)
-          }
-        }
-        
-        onContentChange()
-      }
+    const container = target.closest?.('.image-block-container') as HTMLElement | null
+    if (container && editorElement.contains(container)) {
+      showOverlay(container)
     }
   }
 
-  // --- Alignment Handler ---
+  const handlePointerLeave = (e: PointerEvent) => {
+    if (isResizing) return
+    const target = e.target as HTMLElement
+    const container = target.closest?.('.image-block-container') as HTMLElement | null
+    if (!container || container === activeContainer) {
+      // Check if related target is still inside the same container OR inside the overlay
+      const related = e.relatedTarget as HTMLElement | null
+      if (related && (related.closest?.('.image-block-container') === activeContainer || overlay.contains(related))) return
+      hideOverlay()
+    }
+  }
+
+  // Also hide when the pointer leaves the overlay itself (e.g. user moves away from handles)
+  const handleOverlayLeave = (e: PointerEvent) => {
+    if (isResizing) return
+    const related = e.relatedTarget as HTMLElement | null
+    if (related && related.closest?.('.image-block-container') === activeContainer) return
+    hideOverlay()
+  }
+  overlay.addEventListener('pointerleave', handleOverlayLeave)
+
+  // Keep overlay tracking the image during scroll
+  const handleScroll = () => { refreshOverlay() }
+
+  // ─── Delete ────────────────────────────────────────────────────────────────
+  const handleDelete = (e: MouseEvent) => {
+    const target = e.target as HTMLElement
+    const deleteBtn = target.closest('.image-delete-btn')
+    if (!deleteBtn) return
+
+    e.preventDefault()
+    e.stopPropagation()
+
+    const container = deleteBtn.closest('.image-block-container')
+    if (container) {
+      const nextElement = container.nextElementSibling
+      hideOverlay()
+      container.remove()
+
+      if (!nextElement) {
+        const paragraph = document.createElement('p')
+        paragraph.appendChild(document.createElement('br'))
+        editorElement.appendChild(paragraph)
+      }
+
+      onContentChange()
+    }
+  }
+
+  // ─── Alignment ─────────────────────────────────────────────────────────────
   const handleAlignment = (e: MouseEvent) => {
     const target = e.target as HTMLElement
     const alignBtn = target.closest('.image-align-btn') as HTMLElement
-    
-    if (alignBtn) {
-      e.preventDefault()
-      e.stopPropagation()
-      
-      const newAlignment = alignBtn.getAttribute('data-align') as ImageAlignment
-      const container = alignBtn.closest('.image-block-container') as HTMLElement
-      
-      if (container && newAlignment) {
-        // Update data attribute
-        container.setAttribute('data-alignment', newAlignment)
-        
-        // Update container classes
-        container.classList.remove('mr-auto', 'ml-auto', 'mx-auto', 'w-full')
-        
-        if (newAlignment === 'left') {
-          container.classList.add('mr-auto')
-        } else if (newAlignment === 'right') {
-          container.classList.add('ml-auto')
-        } else if (newAlignment === 'center') {
-          container.classList.add('mx-auto')
-        } else if (newAlignment === 'full') {
-          container.classList.add('w-full')
-          // For full width, also update wrapper
-          const wrapper = container.querySelector('.image-block-wrapper') as HTMLElement
-          if (wrapper) {
-            wrapper.style.width = '100%'
-          }
-        }
-        
-        onContentChange()
+    if (!alignBtn) return
+
+    e.preventDefault()
+    e.stopPropagation()
+
+    const newAlignment = alignBtn.getAttribute('data-align') as ImageAlignment
+    const container = alignBtn.closest('.image-block-container') as HTMLElement
+
+    if (container && newAlignment) {
+      container.setAttribute('data-alignment', newAlignment)
+      container.classList.remove('mr-auto', 'ml-auto', 'mx-auto', 'w-full')
+
+      if (newAlignment === 'left') {
+        container.classList.add('mr-auto')
+      } else if (newAlignment === 'right') {
+        container.classList.add('ml-auto')
+      } else if (newAlignment === 'center') {
+        container.classList.add('mx-auto')
+      } else if (newAlignment === 'full') {
+        container.classList.add('w-full')
+        const wrapper = container.querySelector('.image-block-wrapper') as HTMLElement
+        if (wrapper) wrapper.style.width = '100%'
       }
+
+      // Re-position the overlay after the layout shift
+      requestAnimationFrame(() => refreshOverlay())
+      onContentChange()
     }
   }
 
-  // --- Crop Handler ---
+  // ─── Crop ──────────────────────────────────────────────────────────────────
   const handleCropToggle = (e: MouseEvent) => {
     const target = e.target as HTMLElement
     const cropBtn = target.closest('.image-crop-btn')
-    
-    if (cropBtn) {
-      e.preventDefault()
-      e.stopPropagation()
-      
-      const container = cropBtn.closest('.image-block-container') as HTMLElement
-      if (container) {
-        // Toggle crop mode
-        const isCropping = container.classList.contains('cropping')
-        
-        if (isCropping) {
-          // Exit crop mode
-          exitCropMode(container)
-        } else {
-          // Enter crop mode
-          enterCropMode(container, onContentChange)
-        }
+    if (!cropBtn) return
+
+    e.preventDefault()
+    e.stopPropagation()
+
+    const container = cropBtn.closest('.image-block-container') as HTMLElement
+    if (container) {
+      if (container.classList.contains('cropping')) {
+        exitCropMode(container)
+      } else {
+        hideOverlay()
+        enterCropMode(container, onContentChange)
       }
     }
   }
 
-  // --- Resize Handler ---
-  // State for the current resize operation
+  // ─── Resize (overlay-based) ────────────────────────────────────────────────
   let isResizing = false
-  let currentHandle: HTMLElement | null = null
-  let currentContainer: HTMLElement | null = null
-  let currentWrapper: HTMLElement | null = null
+  let resizeHandle: HTMLElement | null = null
+  let resizeContainer: HTMLElement | null = null
+  let resizeWrapper: HTMLElement | null = null
   let startX = 0
   let startY = 0
   let startWidth = 0
   let startHeight = 0
   let aspectRatio = 1
+  let resizeTooltip: HTMLElement | null = null
 
-  const handlePointerMove = (e: PointerEvent) => {
-    if (!isResizing || !currentHandle || !currentWrapper) return
-    
+  const removeResizeTooltip = () => {
+    resizeTooltip?.remove()
+    resizeTooltip = null
+  }
+
+  const updateResizeTooltip = (w: number, h: number) => {
+    if (!resizeTooltip) {
+      resizeTooltip = document.createElement('div')
+      resizeTooltip.className = 'image-resize-tooltip'
+      document.body.appendChild(resizeTooltip)
+    }
+    if (!resizeWrapper) return
+    const rect = resizeWrapper.getBoundingClientRect()
+    resizeTooltip.textContent = `${Math.round(w)} × ${Math.round(h)} px`
+    resizeTooltip.style.left = `${rect.left + rect.width / 2}px`
+    resizeTooltip.style.top = `${rect.top - 28}px`
+  }
+
+  const handleResizePointerMove = (e: PointerEvent) => {
+    if (!isResizing || !resizeHandle || !resizeWrapper) return
     e.preventDefault()
-    
-    const direction = currentHandle.getAttribute('data-direction')
+
+    const direction = resizeHandle.getAttribute('data-direction') as HandleDirection
     const deltaX = e.clientX - startX
     const deltaY = e.clientY - startY
-    
+    const freeResize = e.shiftKey
+
     let newWidth = startWidth
     let newHeight = startHeight
-    
-    // Calculate new dimensions based on resize direction
-    // We maintain aspect ratio for all resize operations to prevent distortion
+
     switch (direction) {
-      case 'se': // Southeast (bottom-right)
-      case 'e':  // East (right)
+      case 'se': case 'e':
         newWidth = Math.max(MIN_IMAGE_SIZE, startWidth + deltaX)
-        newHeight = newWidth / aspectRatio
+        newHeight = freeResize ? startHeight : newWidth / aspectRatio
         break
-      case 'sw': // Southwest (bottom-left)
-      case 'w':  // West (left)
+      case 'sw': case 'w':
         newWidth = Math.max(MIN_IMAGE_SIZE, startWidth - deltaX)
-        newHeight = newWidth / aspectRatio
+        newHeight = freeResize ? startHeight : newWidth / aspectRatio
         break
-      case 'ne': // Northeast (top-right)
+      case 'ne':
         newWidth = Math.max(MIN_IMAGE_SIZE, startWidth + deltaX)
-        newHeight = newWidth / aspectRatio
+        newHeight = freeResize ? startHeight : newWidth / aspectRatio
         break
-      case 'nw': // Northwest (top-left)
+      case 'nw':
         newWidth = Math.max(MIN_IMAGE_SIZE, startWidth - deltaX)
-        newHeight = newWidth / aspectRatio
+        newHeight = freeResize ? startHeight : newWidth / aspectRatio
         break
-      case 's':  // South (bottom)
+      case 's':
         newHeight = Math.max(MIN_IMAGE_SIZE, startHeight + deltaY)
-        newWidth = newHeight * aspectRatio
+        newWidth = freeResize ? startWidth : newHeight * aspectRatio
         break
-      case 'n':  // North (top)
+      case 'n':
         newHeight = Math.max(MIN_IMAGE_SIZE, startHeight - deltaY)
-        newWidth = newHeight * aspectRatio
+        newWidth = freeResize ? startWidth : newHeight * aspectRatio
         break
     }
-    
-    // Apply new dimensions
-    // We only set width, and let height be auto to maintain aspect ratio and prevent layout issues
-    currentWrapper.style.width = `${newWidth}px`
-    // currentWrapper.style.height = `${newHeight}px` // Removed to allow auto height
+
+    newWidth = Math.min(newWidth, MAX_IMAGE_SIZE)
+    newHeight = Math.min(newHeight, MAX_IMAGE_SIZE)
+
+    resizeWrapper.style.width = `${newWidth}px`
+    refreshOverlay()
+    updateResizeTooltip(newWidth, newHeight)
   }
 
-  const handlePointerUp = (e: PointerEvent) => {
-    if (isResizing) {
-      isResizing = false
-      
-      if (currentContainer) {
-        currentContainer.classList.remove('resizing')
-        onContentChange() // Save changes
-      }
-      
-      document.body.style.cursor = ''
-      
-      // Clean up global listeners
-      document.removeEventListener('pointermove', handlePointerMove)
-      document.removeEventListener('pointerup', handlePointerUp)
-      
-      // Reset state
-      currentHandle = null
-      currentContainer = null
-      currentWrapper = null
+  const handleResizePointerUp = () => {
+    if (!isResizing) return
+    isResizing = false
+
+    if (resizeContainer && resizeWrapper) {
+      resizeContainer.classList.remove('resizing')
+      const finalWidth = parseFloat(resizeWrapper.style.width) || startWidth
+      resizeWrapper.setAttribute('data-width', String(Math.round(finalWidth)))
+      onContentChange()
     }
+
+    document.body.style.cursor = ''
+    removeResizeTooltip()
+
+    document.removeEventListener('pointermove', handleResizePointerMove)
+    document.removeEventListener('pointerup', handleResizePointerUp)
+
+    resizeHandle = null
+    resizeContainer = null
+    resizeWrapper = null
+
+    // Re-show overlay at final position
+    if (activeContainer) refreshOverlay()
   }
 
-  const handlePointerDown = (e: PointerEvent) => {
+  // Pointer-down on any overlay handle starts a resize
+  const handleResizePointerDown = (e: PointerEvent) => {
     const target = e.target as HTMLElement
-    if (target.classList.contains('image-resize-handle')) {
-      e.preventDefault()
-      e.stopPropagation()
-      
-      // Only left click (button 0)
-      if (e.button !== 0) return
+    if (!target.classList.contains('image-resize-handle')) return
+    if (e.button !== 0 || !activeContainer) return
 
-      currentHandle = target
-      currentContainer = target.closest('.image-block-container') as HTMLElement
-      currentWrapper = currentContainer?.querySelector('.image-block-wrapper') as HTMLElement
-      
-      if (currentWrapper) {
-        const img = currentWrapper.querySelector('img')
-        // If image is missing, we can't resize properly
-        if (!img) return
+    e.preventDefault()
+    e.stopPropagation()
 
-        isResizing = true
-        const rect = currentWrapper.getBoundingClientRect()
-        const imgRect = img.getBoundingClientRect()
-        
-        startWidth = rect.width
-        startHeight = rect.height
-        
-        // Use image aspect ratio for correctness, as wrapper might be distorted or have extra space
-        aspectRatio = imgRect.width / imgRect.height
-        
-        startX = e.clientX
-        startY = e.clientY
-        
-        // Add resizing class for visual feedback
-        currentContainer?.classList.add('resizing')
-        document.body.style.cursor = window.getComputedStyle(target).cursor
-        
-        // Attach global listeners for drag operation
-        document.addEventListener('pointermove', handlePointerMove)
-        document.addEventListener('pointerup', handlePointerUp)
-        
-        // Capture pointer to ensure we get events even if cursor leaves window
-        target.setPointerCapture(e.pointerId)
-      }
+    resizeHandle = target
+    resizeContainer = activeContainer
+    resizeWrapper = activeContainer.querySelector('.image-block-wrapper') as HTMLElement
+    if (!resizeWrapper) return
+
+    const img = resizeWrapper.querySelector('img') as HTMLImageElement
+    if (!img) return
+
+    isResizing = true
+    const rect = resizeWrapper.getBoundingClientRect()
+    startWidth = rect.width
+    startHeight = rect.height
+
+    if (img.naturalWidth && img.naturalHeight) {
+      aspectRatio = img.naturalWidth / img.naturalHeight
+    } else {
+      const imgRect = img.getBoundingClientRect()
+      aspectRatio = imgRect.width > 0 && imgRect.height > 0 ? imgRect.width / imgRect.height : 1
     }
+
+    startX = e.clientX
+    startY = e.clientY
+
+    resizeContainer.classList.add('resizing')
+    document.body.style.cursor = target.style.cursor
+
+    document.addEventListener('pointermove', handleResizePointerMove)
+    document.addEventListener('pointerup', handleResizePointerUp)
+
+    target.setPointerCapture(e.pointerId)
   }
 
-  // Attach initial listeners to the editor element
-  // Use capturing phase to ensure we get events before they bubble
+  // Attach pointerdown to every handle in the overlay
+  handles.forEach((h) => {
+    h.addEventListener('pointerdown', handleResizePointerDown)
+  })
+
+  // ─── Drag-to-reposition ────────────────────────────────────────────────────
+  const NON_DRAG_SELECTORS = [
+    '.image-resize-handle',
+    '.image-delete-btn',
+    '.image-align-btn',
+    '.image-crop-btn',
+    '.image-caption',
+    '.crop-overlay',
+  ]
+
+  let isDraggingImage = false
+  let dragContainer: HTMLElement | null = null
+  let dragGhost: HTMLElement | null = null
+  let dragCaret: HTMLElement | null = null
+  let dragStartX = 0
+  let dragStartY = 0
+  let dragPointerMoved = false
+  const DRAG_THRESHOLD = 6
+
+  const removeImageDragUI = () => {
+    dragGhost?.remove()
+    dragGhost = null
+    dragCaret?.remove()
+    dragCaret = null
+    dragContainer?.removeAttribute('data-dragging')
+    document.documentElement.style.removeProperty('cursor')
+  }
+
+  const caretRangeAt = (x: number, y: number): Range | null => {
+    if (typeof (document as any).caretRangeFromPoint === 'function') {
+      return (document as any).caretRangeFromPoint(x, y) as Range | null
+    }
+    if (typeof (document as any).caretPositionFromPoint === 'function') {
+      const pos = (document as any).caretPositionFromPoint(x, y)
+      if (!pos) return null
+      const r = document.createRange()
+      r.setStart(pos.offsetNode, pos.offset)
+      return r
+    }
+    return null
+  }
+
+  const updateDropCaret = (x: number, y: number) => {
+    if (!dragCaret) return
+    const range = caretRangeAt(x, y)
+    if (!range) return
+    const rects = range.getClientRects()
+    if (rects.length === 0) return
+    const rect = rects[0]
+    dragCaret.style.left = `${rect.left + window.scrollX}px`
+    dragCaret.style.top = `${rect.top + window.scrollY}px`
+    dragCaret.style.height = `${Math.max(rect.height, 16)}px`
+  }
+
+  const handleImagePointerMove = (e: PointerEvent) => {
+    if (!isDraggingImage || !dragContainer) return
+
+    const dx = e.clientX - dragStartX
+    const dy = e.clientY - dragStartY
+    if (!dragPointerMoved && Math.sqrt(dx * dx + dy * dy) < DRAG_THRESHOLD) return
+
+    dragPointerMoved = true
+
+    if (!dragGhost) {
+      dragGhost = document.createElement('div')
+      dragGhost.className = 'image-drag-ghost'
+      dragGhost.style.cssText =
+        'position:fixed;pointer-events:none;z-index:9999;opacity:0.6;' +
+        'box-shadow:0 4px 12px rgba(0,0,0,0.25);border-radius:4px;' +
+        'transform:rotate(-1deg) scale(0.95);'
+
+      const img = dragContainer.querySelector('.image-block-img') as HTMLImageElement
+      if (img) {
+        const ghostImg = img.cloneNode() as HTMLImageElement
+        ghostImg.style.cssText =
+          'display:block;max-width:160px;max-height:120px;object-fit:cover;border-radius:4px;'
+        dragGhost.appendChild(ghostImg)
+      }
+      document.body.appendChild(dragGhost)
+
+      dragCaret = document.createElement('div')
+      dragCaret.className = 'image-drop-caret'
+      document.body.appendChild(dragCaret)
+
+      dragContainer.setAttribute('data-dragging', 'true')
+      document.documentElement.style.cursor = 'grabbing'
+      hideOverlay()
+    }
+
+    dragGhost.style.left = `${e.clientX + 14}px`
+    dragGhost.style.top = `${e.clientY - 20}px`
+    updateDropCaret(e.clientX, e.clientY)
+  }
+
+  const handleImagePointerUp = (e: PointerEvent) => {
+    if (!isDraggingImage) return
+
+    if (dragPointerMoved && dragContainer) {
+      const range = caretRangeAt(e.clientX, e.clientY)
+      if (range && !dragContainer.contains(range.startContainer)) {
+        range.insertNode(dragContainer)
+
+        const next = dragContainer.nextSibling
+        if (!next || (next.nodeType === Node.TEXT_NODE && (next as Text).data.trim() === '')) {
+          const p = document.createElement('p')
+          p.appendChild(document.createElement('br'))
+          dragContainer.parentNode?.insertBefore(p, dragContainer.nextSibling)
+        }
+
+        onContentChange()
+      }
+    }
+
+    removeImageDragUI()
+    isDraggingImage = false
+    dragContainer = null
+    dragPointerMoved = false
+
+    document.removeEventListener('pointermove', handleImagePointerMove)
+    document.removeEventListener('pointerup', handleImagePointerUp)
+  }
+
+  const handleImagePointerDown = (e: PointerEvent) => {
+    if (e.button !== 0) return
+    if (isResizing) return
+
+    const target = e.target as HTMLElement
+    if (!target.closest('.image-block-container')) return
+    if (NON_DRAG_SELECTORS.some((sel) => target.closest(sel) !== null)) return
+
+    const container = target.closest('.image-block-container') as HTMLElement
+    if (!container) return
+
+    isDraggingImage = true
+    dragContainer = container
+    dragStartX = e.clientX
+    dragStartY = e.clientY
+    dragPointerMoved = false
+
+    document.addEventListener('pointermove', handleImagePointerMove)
+    document.addEventListener('pointerup', handleImagePointerUp)
+  }
+
+  // ─── Attach listeners ─────────────────────────────────────────────────────
   editorElement.addEventListener('click', handleDelete, true)
   editorElement.addEventListener('click', handleAlignment, true)
   editorElement.addEventListener('click', handleCropToggle, true)
-  editorElement.addEventListener('pointerdown', handlePointerDown, true)
+  editorElement.addEventListener('pointerenter', handlePointerEnter, true)
+  editorElement.addEventListener('pointerleave', handlePointerLeave, true)
+  editorElement.addEventListener('pointerdown', handleImagePointerDown, true)
+  editorElement.addEventListener('scroll', handleScroll, true)
+  window.addEventListener('scroll', handleScroll, true)
+  window.addEventListener('resize', handleScroll)
 
-  // Return cleanup function
+  // Start hidden
+  overlay.style.display = 'none'
+
+  // ─── Cleanup ───────────────────────────────────────────────────────────────
   return () => {
     editorElement.removeEventListener('click', handleDelete, true)
     editorElement.removeEventListener('click', handleAlignment, true)
     editorElement.removeEventListener('click', handleCropToggle, true)
-    editorElement.removeEventListener('pointerdown', handlePointerDown, true)
-    
-    // Ensure we clean up any active resize operation
-    document.removeEventListener('pointermove', handlePointerMove)
-    document.removeEventListener('pointerup', handlePointerUp)
+    editorElement.removeEventListener('pointerenter', handlePointerEnter, true)
+    editorElement.removeEventListener('pointerleave', handlePointerLeave, true)
+    editorElement.removeEventListener('pointerdown', handleImagePointerDown, true)
+    editorElement.removeEventListener('scroll', handleScroll, true)
+    window.removeEventListener('scroll', handleScroll, true)
+    window.removeEventListener('resize', handleScroll)
+    overlay.removeEventListener('pointerleave', handleOverlayLeave)
+
+    document.removeEventListener('pointermove', handleResizePointerMove)
+    document.removeEventListener('pointerup', handleResizePointerUp)
+    document.removeEventListener('pointermove', handleImagePointerMove)
+    document.removeEventListener('pointerup', handleImagePointerUp)
+
+    removeImageDragUI()
+    removeResizeTooltip()
+    overlay.remove()
   }
 }
 

@@ -22,12 +22,14 @@ import {
   Download,
   type LucideIcon,
 } from 'lucide-react'
+import type { NoteType } from '@/lib/notes'
+import { getNoteTypePresentation, type NoteTypeIconKey } from '@/lib/note-types'
 
 export interface NoteDetailsSidebarProps {
   // Note identity
   noteId?: string
   isNewNote: boolean
-  noteType: 'rich-text' | 'drawing' | 'mindmap' | 'bullet-journal' | 'data-sheet'
+  noteType: NoteType
   
   // Title
   title: string
@@ -76,12 +78,12 @@ export interface NoteDetailsSidebarProps {
   onToggleCollapsed: () => void
 }
 
-const noteTypeConfig: Record<string, { label: string; icon: LucideIcon; color: string }> = {
-  'rich-text': { label: 'Rich Text', icon: FileText, color: 'text-alpine-500' },
-  'drawing': { label: 'Drawing', icon: PenTool, color: 'text-purple-500' },
-  'mindmap': { label: 'Mind Map', icon: Network, color: 'text-green-500' },
-  'bullet-journal': { label: 'Journal', icon: BookOpen, color: 'text-amber-500' },
-  'data-sheet': { label: 'Data Sheet', icon: Table2, color: 'text-cyan-500' },
+const NOTE_TYPE_ICON_MAP: Record<NoteTypeIconKey, LucideIcon> = {
+  'file-text': FileText,
+  'pen-tool': PenTool,
+  network: Network,
+  'book-open': BookOpen,
+  'table-2': Table2,
 }
 
 export default function NoteDetailsSidebar({
@@ -140,8 +142,8 @@ export default function NoteDetailsSidebar({
     setShowWordGoalInput(false)
   }, [wordGoalValue, onSetWordGoal])
 
-  const typeConfig = noteTypeConfig[noteType] ?? noteTypeConfig['rich-text']
-  const TypeIcon = typeConfig.icon
+  const typePresentation = getNoteTypePresentation(noteType)
+  const TypeIcon = NOTE_TYPE_ICON_MAP[typePresentation.iconKey]
   const displayName = title.trim() || 'Untitled note'
 
   // ---- COLLAPSED VIEW ----
@@ -179,7 +181,7 @@ export default function NoteDetailsSidebar({
             </div>
           ) : null}
           {/* Note type icon */}
-          <div className={`p-1.5 ${typeConfig.color}`} title={typeConfig.label}>
+          <div className={`p-1.5 ${typePresentation.iconClassName}`} title={typePresentation.label}>
             <TypeIcon size={16} />
           </div>
           {/* TOC icon - only for rich-text */}
@@ -337,8 +339,8 @@ export default function NoteDetailsSidebar({
           
           {/* Note Type */}
           <div className="flex items-center gap-2 text-xs">
-            <TypeIcon size={13} className={typeConfig.color} />
-            <span className="text-foreground/80">{typeConfig.label}</span>
+            <TypeIcon size={13} className={typePresentation.iconClassName} />
+            <span className="text-foreground/80">{typePresentation.label}</span>
           </div>
 
           {/* Folder Path */}

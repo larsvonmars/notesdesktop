@@ -33,6 +33,54 @@ export interface UpdateNoteInput {
   note_type?: NoteType
 }
 
+export type NoteAttachmentKind = 'image' | 'file'
+export type NoteAttachmentSourceType = 'insert' | 'paste' | 'drop' | 'migration'
+
+export interface NoteAttachment {
+  id: string
+  note_id: string | null
+  user_id: string
+  kind: NoteAttachmentKind
+  storage_path: string
+  url: string | null
+  mime_type: string | null
+  size_bytes: number | null
+  width: number | null
+  height: number | null
+  alt_text: string | null
+  source_type: NoteAttachmentSourceType
+  metadata: Record<string, any> | null
+  created_at: string
+  updated_at: string
+}
+
+export interface CreateNoteAttachmentInput {
+  note_id?: string | null
+  kind: NoteAttachmentKind
+  storage_path: string
+  url?: string | null
+  mime_type?: string | null
+  size_bytes?: number | null
+  width?: number | null
+  height?: number | null
+  alt_text?: string | null
+  source_type?: NoteAttachmentSourceType
+  metadata?: Record<string, any> | null
+}
+
+export interface UpdateNoteAttachmentInput {
+  note_id?: string | null
+  storage_path?: string
+  url?: string | null
+  mime_type?: string | null
+  size_bytes?: number | null
+  width?: number | null
+  height?: number | null
+  alt_text?: string | null
+  source_type?: NoteAttachmentSourceType
+  metadata?: Record<string, any> | null
+}
+
 /**
  * Fetch all notes for the current user
  */
@@ -322,4 +370,111 @@ export function subscribeToNotes(
   return () => {
     supabase.removeChannel(channel)
   }
+}
+
+/**
+ * Create an attachment record for a note.
+ */
+export async function createNoteAttachment(input: CreateNoteAttachmentInput): Promise<NoteAttachment> {
+  const { data: { user } } = await supabase.auth.getUser()
+  if (!user) throw new Error('Not authenticated')
+
+  const { data, error } = await supabase
+    .from('note_attachments')
+    .insert({
+      note_id: input.note_id ?? null,
+      user_id: user.id,
+      kind: input.kind,
+      storage_path: input.storage_path,
+      url: input.url ?? null,
+      mime_type: input.mime_type ?? null,
+      size_bytes: input.size_bytes ?? null,
+      width: input.width ?? null,
+      height: input.height ?? null,
+      alt_text: input.alt_text ?? null,
+      source_type: input.source_type ?? 'insert',
+      metadata: input.metadata ?? null,
+    })
+    .select('*')
+    .single()
+
+  if (error) throw error
+  return data
+}
+
+/**
+ * Create multiple attachment records in one request.
+ */
+export async function createNoteAttachments(inputs: CreateNoteAttachmentInput[]): Promise<NoteAttachment[]> {
+  if (inputs.length === 0) return []
+
+  const { data: { user } } = await supabase.auth.getUser()
+  if (!user) throw new Error('Not authenticated')
+
+  const payload = inputs.map((input) => ({
+    note_id: input.note_id ?? null,
+    user_id: user.id,
+    kind: input.kind,
+    storage_path: input.storage_path,
+    url: input.url ?? null,
+    mime_type: input.mime_type ?? null,
+    size_bytes: input.size_bytes ?? null,
+    width: input.width ?? null,
+    height: input.height ?? null,
+    alt_text: input.alt_text ?? null,
+    source_type: input.source_type ?? 'insert',
+    metadata: input.metadata ?? null,
+  }))
+
+  const { data, error } = await supabase
+    .from('note_attachments')
+    .insert(payload)
+    .select('*')
+
+  if (error) throw error
+  return data || []
+}
+
+/**
+ * Fetch attachments for a note.
+ */
+export async function getNoteAttachments(noteId: string): Promise<NoteAttachment[]> {
+  const { data, error } = await supabase
+    .from('note_attachments')
+    .select('*')
+    .eq('note_id', noteId)
+    .order('created_at', { ascending: true })
+
+  if (error) throw error
+  return data || []
+}
+
+/**
+ * Update an attachment.
+ */
+export async function updateNoteAttachment(id: string, input: UpdateNoteAttachmentInput): Promise<NoteAttachment> {
+  const { data, error } = await supabase
+    .from('note_attachments')
+    .update({
+      ...input,
+      updated_at: new Date().toISOString(),
+    })
+    .eq('id', id)
+    .select('*')
+    .single()
+
+  if (error) throw error
+  return data
+}
+
+/**
+ * Delete an attachment record.
+ */
+export async function deleteNoteAttachment(id: string): Promise<void> {
+  const { error } = await supabase
+    .from('note_attachments')
+    .delete()
+    .eq('id', id)
+
+  if (error) throw error
 }

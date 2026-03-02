@@ -9,6 +9,8 @@
  * - Calendar event suggestions
  */
 
+import type { NoteType } from './notes'
+
 // ============================================================================
 // TYPES
 // ============================================================================
@@ -61,7 +63,7 @@ export interface AIContext {
     id: string
     title: string
     content: string
-    type: 'rich-text' | 'drawing' | 'mindmap' | 'bullet-journal'
+    type: NoteType
   }
   // Selected text from the editor - for context-aware AI interactions
   selectedText?: string

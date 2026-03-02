@@ -622,6 +622,52 @@
     display: none !important;
   }
 
+  /* Image drag-to-reposition ghost & caret */
+  .image-drop-caret {
+    position: absolute;
+    width: 2px;
+    background: #6366f1;
+    border-radius: 1px;
+    pointer-events: none;
+    z-index: 9999;
+    box-shadow: 0 0 0 1px rgba(99, 102, 241, 0.25);
+  }
+
+  .image-drag-ghost {
+    position: fixed;
+    pointer-events: none;
+    z-index: 9999;
+  }
+
+  .image-block-container[data-dragging] {
+    opacity: 0.35;
+  }
+
+  /* Resize dimension tooltip (fixed positioning, outside editor) */
+  .image-resize-tooltip {
+    position: fixed;
+    transform: translateX(-50%);
+    background: rgba(0, 0, 0, 0.72);
+    color: #fff;
+    font-size: 11px;
+    line-height: 1;
+    padding: 3px 7px;
+    border-radius: 4px;
+    white-space: nowrap;
+    pointer-events: none;
+    z-index: 10001;
+    user-select: none;
+  }
+
+  /* Grab cursor on the image body when not in resize/crop mode */
+  .image-block-container:not(.resizing):not(.cropping) .image-block-wrapper {
+    cursor: grab;
+  }
+
+  .image-block-container:not(.resizing):not(.cropping) .image-block-wrapper:active {
+    cursor: grabbing;
+  }
+
   /* Image block custom UI styles */
   .image-block-container {
     position: relative;
@@ -636,6 +682,7 @@
   .image-block-wrapper {
     position: relative;
     display: inline-flex; /* Inline-flex to wrap tightly around image */
+    flex-direction: column;
     max-width: 100%;
     /* Prevent selection but allow cursor positioning around it */
     user-select: none;
@@ -645,6 +692,7 @@
     position: relative;
     z-index: 1;
     display: block;
+    width: 100%;
     max-width: 100%;
     height: auto;
     /* Image itself doesn't capture pointer events except for drag handles */
@@ -662,33 +710,24 @@
     z-index: 30;
     cursor: pointer;
     user-select: none;
-    /* Only capture pointer events for the button itself */
     pointer-events: auto;
   }
 
-  .image-resize-handle {
-    position: absolute;
-    user-select: none;
-    z-index: 20;
-    /* Only capture pointer events for the handles themselves */
-    pointer-events: auto;
-  }
+  /* Resize handles now live in a fixed overlay outside the editor.
+     The old in-editor .image-resize-handle block has been removed.
+     See .image-resize-overlay styles below. */
 
   .image-block-container.resizing {
     cursor: inherit;
   }
 
   /* Smooth transition for opacity changes */
-  .image-delete-btn,
-  .image-resize-handle {
+  .image-delete-btn {
     transition: opacity 0.2s ease-in-out;
   }
 
-  /* Show UI elements when hovering over the container or when resizing */
-  .image-block-container:hover .image-delete-btn,
-  .image-block-container:hover .image-resize-handle,
-  .image-block-container.resizing .image-delete-btn,
-  .image-block-container.resizing .image-resize-handle {
+  /* Show delete button when hovering over the container */
+  .image-block-container:hover .image-delete-btn {
     opacity: 1 !important;
   }
   
@@ -781,9 +820,8 @@
 
 /* ─── Mobile-specific overrides ─── */
 @media (max-width: 767px) {
-  /* Always show image controls on touch devices (no hover) */
-  .image-block-container .image-delete-btn,
-  .image-block-container .image-resize-handle {
+  /* Always show image delete button on touch devices (no hover) */
+  .image-block-container .image-delete-btn {
     opacity: 1 !important;
   }
 

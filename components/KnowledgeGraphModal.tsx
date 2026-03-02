@@ -5,6 +5,7 @@ import { X, ZoomIn, ZoomOut, Maximize2, FolderTree, Loader2, RefreshCw, Crosshai
 import type { Note } from '@/lib/notes'
 import { getNotes } from '@/lib/notes'
 import type { FolderNode } from '@/lib/folders'
+import { getNoteTypePresentation, getOrderedNoteTypePresentations } from '@/lib/note-types'
 
 interface KnowledgeGraphModalProps {
   isOpen: boolean
@@ -41,6 +42,7 @@ const LABEL_FONT = '500 10px "Inter", "SF Pro Text", system-ui, sans-serif'
 const STATS_FONT = '600 12px "Inter", "SF Pro Text", system-ui, sans-serif'
 const TEXT_COLOR = '#1f2937'
 const GRID_COLOR = 'rgba(148, 163, 184, 0.13)'
+const NOTE_TYPE_LEGEND = getOrderedNoteTypePresentations()
 
 function getNodeRadius(node: GraphNode): number {
   const c = Math.max(0, node.connections)
@@ -471,19 +473,14 @@ export default function KnowledgeGraphModal({
         const isCurrent = currentNoteId === node.id
         const radius = getNodeRadius(node)
 
-        // Determine node color based on note type
-        let nodeColor = '#e0f2fe'
-        let strokeColor = '#2563eb'
+        let nodeColor = getNoteTypePresentation('rich-text').graphFill
+        let strokeColor = getNoteTypePresentation('rich-text').graphStroke
         
         const note = allNotes.find((n: Note) => n.id === node.id)
         if (note) {
-          if (note.note_type === 'drawing') {
-            nodeColor = '#f3e8ff'
-            strokeColor = '#9333ea'
-          } else if (note.note_type === 'mindmap') {
-            nodeColor = '#dcfce7'
-            strokeColor = '#16a34a'
-          }
+          const notePresentation = getNoteTypePresentation(note.note_type)
+          nodeColor = notePresentation.graphFill
+          strokeColor = notePresentation.graphStroke
         }
 
         if (isCurrent) {
@@ -851,18 +848,18 @@ export default function KnowledgeGraphModal({
                   <div className="w-2.5 h-2.5 rounded-full bg-yellow-100 border-[1.5px] border-orange-500 flex-shrink-0"></div>
                   <span className="text-gray-600">Current Note</span>
                 </div>
-                <div className="flex items-center gap-1.5">
-                  <div className="w-2.5 h-2.5 rounded-full bg-alpine-100 border-[1.5px] border-alpine-500 flex-shrink-0"></div>
-                  <span className="text-gray-600">Text Note</span>
-                </div>
-                <div className="flex items-center gap-1.5">
-                  <div className="w-2.5 h-2.5 rounded-full bg-purple-100 border-[1.5px] border-purple-500 flex-shrink-0"></div>
-                  <span className="text-gray-600">Drawing Note</span>
-                </div>
-                <div className="flex items-center gap-1.5">
-                  <div className="w-2.5 h-2.5 rounded-full bg-green-100 border-[1.5px] border-green-500 flex-shrink-0"></div>
-                  <span className="text-gray-600">Mindmap Note</span>
-                </div>
+                {NOTE_TYPE_LEGEND.map((noteTypePresentation) => (
+                  <div key={noteTypePresentation.id} className="flex items-center gap-1.5">
+                    <div
+                      className="w-2.5 h-2.5 rounded-full flex-shrink-0"
+                      style={{
+                        backgroundColor: noteTypePresentation.graphFill,
+                        border: `1.5px solid ${noteTypePresentation.graphStroke}`,
+                      }}
+                    ></div>
+                    <span className="text-gray-600">{noteTypePresentation.pickerLabel}</span>
+                  </div>
+                ))}
               </div>
               <div className="mt-2 pt-2 border-t border-gray-200 text-[10px] text-gray-500">
                 <div>Larger nodes = more connections</div>

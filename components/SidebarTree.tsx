@@ -22,10 +22,21 @@ import {
   X,
   Palette,
   ArrowRightLeft,
+  type LucideIcon,
 } from 'lucide-react'
 import type { Note } from './NoteEditor'
 import type { FolderNode } from '@/lib/folders'
 import type { Project } from '@/lib/projects'
+import type { NoteType } from '@/lib/notes'
+import { getNoteTypePresentation, type NoteTypeIconKey } from '@/lib/note-types'
+
+const NOTE_TYPE_ICON_MAP: Record<NoteTypeIconKey, LucideIcon> = {
+  'file-text': FileText,
+  'pen-tool': PenTool,
+  network: Network,
+  'book-open': BookOpen,
+  'table-2': Table2,
+}
 
 // A combined tree node representing projects as top-level groupings
 export interface ProjectTreeNode {
@@ -368,26 +379,30 @@ export default function SidebarTree({
   }, [showRenameModal])
 
   // Note type icon helper
-  const NoteIcon = ({ noteType, size = 12 }: { noteType: string; size?: number }) => {
-    switch (noteType) {
-      case 'drawing': return <PenTool size={size} className="text-purple-500 flex-shrink-0" />
-      case 'mindmap': return <Network size={size} className="text-green-500 flex-shrink-0" />
-      case 'bullet-journal': return <BookOpen size={size} className="text-amber-500 flex-shrink-0" />
-      case 'data-sheet': return <Table2 size={size} className="text-cyan-500 flex-shrink-0" />
-      default: return <FileText size={size} className="text-alpine-500 flex-shrink-0" />
-    }
+  const NoteIcon = ({ noteType, size = 12 }: { noteType?: NoteType; size?: number }) => {
+    const presentation = getNoteTypePresentation(noteType)
+    const Icon = NOTE_TYPE_ICON_MAP[presentation.iconKey]
+    return <Icon size={size} className={`${presentation.iconClassName} flex-shrink-0`} />
   }
 
   // Render a single note item
   const renderNoteItem = (n: Note) => {
     if (!matchesSearch(n.title || 'Untitled')) return null
     return (
-      <button
+      <div
+        role="button"
+        tabIndex={0}
         key={n.id}
         draggable
         onDragStart={(e) => handleNoteDragStart(e, n.id)}
         onDragEnd={handleNoteDragEnd}
         onClick={() => onSelectNote(n)}
+        onKeyDown={(e) => {
+          if (e.key === 'Enter' || e.key === ' ') {
+            e.preventDefault()
+            onSelectNote(n)
+          }
+        }}
         onContextMenu={(e) => handleNoteContextMenu(e, n)}
         className={`group w-full text-left px-2 py-1.5 rounded-md transition-all duration-150 flex items-start justify-between ${
           selectedNoteId === n.id
@@ -412,7 +427,7 @@ export default function SidebarTree({
         >
           <MoreVertical size={11} />
         </button>
-      </button>
+      </div>
     )
   }
 

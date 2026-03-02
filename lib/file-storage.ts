@@ -6,6 +6,8 @@ import { supabase } from './supabase'
 
 const BUCKET_NAME = 'user_docs'
 const MAX_FILE_SIZE_BYTES = 10 * 1024 * 1024 // 10 MB
+const MAX_IMAGE_SIZE_BYTES = 10 * 1024 * 1024 // 10 MB
+const LONG_LIVED_URL_EXPIRY_SECONDS = 60 * 60 * 24 * 30 // 30 days
 
 // File types that can be previewed inline
 export const PREVIEWABLE_IMAGE_TYPES = [
@@ -57,6 +59,12 @@ export interface StorageItem {
 
 export interface UploadResult {
   path: string
+  file: StorageFile
+}
+
+export interface UploadImageResult {
+  path: string
+  url: string
   file: StorageFile
 }
 
@@ -113,6 +121,33 @@ function guessMimeType(fileName: string): string {
     wav: 'audio/wav',
   }
   return mimeMap[ext] || 'application/octet-stream'
+}
+
+function isImageMimeType(mimeType: string): boolean {
+  return mimeType.toLowerCase().startsWith('image/')
+}
+
+function sanitizeFileName(fileName: string): string {
+  const parts = fileName.split('.')
+  const ext = parts.length > 1 ? parts.pop() || '' : ''
+  const base = (parts.join('.') || 'image')
+    .replace(/[^a-zA-Z0-9._-]/g, '-')
+    .replace(/-+/g, '-')
+    .replace(/^[-._]+|[-._]+$/g, '')
+  const safeBase = base || 'image'
+  const safeExt = ext.replace(/[^a-zA-Z0-9]/g, '').toLowerCase()
+  return safeExt ? `${safeBase}.${safeExt}` : safeBase
+}
+
+function buildUniqueFileName(fileName: string): string {
+  const safeName = sanitizeFileName(fileName)
+  const parts = safeName.split('.')
+  const extension = parts.length > 1 ? parts.pop() || '' : ''
+  const base = parts.join('.') || 'image'
+  const timestamp = Date.now()
+  const randomSuffix = Math.random().toString(36).slice(2, 8)
+  const uniqueBase = `${base}-${timestamp}-${randomSuffix}`
+  return extension ? `${uniqueBase}.${extension}` : uniqueBase
 }
 
 /** Check whether a MIME type is previewable as an image */
@@ -289,15 +324,51 @@ export async function uploadFiles(
  * @param relativePath - Path relative to user root (e.g. 'documents/report.pdf')
  */
 export async function getFileUrl(relativePath: string): Promise<string> {
+  return getFileSignedUrl(relativePath, 3600)
+}
+
+/**
+ * Get a signed URL for a file.
+ */
+export async function getFileSignedUrl(relativePath: string, expiresInSeconds: number): Promise<string> {
   const userId = await getUserId()
   const fullPath = buildFullPath(userId, relativePath)
 
   const { data, error } = await supabase.storage
     .from(BUCKET_NAME)
-    .createSignedUrl(fullPath, 3600) // 1 hour
+    .createSignedUrl(fullPath, expiresInSeconds)
 
   if (error) throw error
   return data.signedUrl
+}
+
+/**
+ * Upload an image file to user storage and return a signed URL.
+ */
+export async function uploadImageFile(file: File, folderPath: string = ''): Promise<UploadImageResult> {
+  const inferredType = file.type || guessMimeType(file.name)
+  if (!isImageMimeType(inferredType)) {
+    throw new Error(`File "${file.name}" is not a supported image type`)
+  }
+
+  if (file.size > MAX_IMAGE_SIZE_BYTES) {
+    throw new Error(`Image "${file.name}" exceeds the 10 MB size limit (${formatFileSize(file.size)})`)
+  }
+
+  const uniqueName = buildUniqueFileName(file.name)
+  const normalizedFile = new File([file], uniqueName, {
+    type: inferredType,
+    lastModified: file.lastModified,
+  })
+
+  const upload = await uploadFile(normalizedFile, folderPath)
+  const url = await getFileSignedUrl(upload.path, LONG_LIVED_URL_EXPIRY_SECONDS)
+
+  return {
+    path: upload.path,
+    url,
+    file: upload.file,
+  }
 }
 
 /**

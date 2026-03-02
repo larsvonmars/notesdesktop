@@ -10,6 +10,7 @@ import {
 } from 'react'
 import type {
   ClipboardEvent as ReactClipboardEvent,
+  DragEvent as ReactDragEvent,
   KeyboardEvent as ReactKeyboardEvent
 } from 'react'
 import DOMPurify from 'dompurify'
@@ -132,6 +133,8 @@ interface RichTextEditorProps {
   onCustomCommand?: (commandId: string) => void
   /** Called when an image is pasted from clipboard. The callback should handle upload and return the image URL. */
   onImagePaste?: (file: File) => Promise<{ src: string; alt: string } | null>
+  /** Called when an image file is dropped into the editor. Falls back to onImagePaste when omitted. */
+  onImageDrop?: (file: File) => Promise<{ src: string; alt: string } | null>
 }
 
 const SANITIZE_CONFIG: Config = {
@@ -329,7 +332,7 @@ const ensureEditorHasContent = (editor: HTMLDivElement) => {
 }
 
 const RichTextEditor = forwardRef<RichTextEditorHandle, RichTextEditorProps>(
-  ({ value, onChange, disabled, placeholder, customBlocks, onCustomCommand, onImagePaste }, ref) => {
+  ({ value, onChange, disabled, placeholder, customBlocks, onCustomCommand, onImagePaste, onImageDrop }, ref) => {
     const customBlocksRef = useRef<CustomBlockDescriptor[] | undefined>(undefined)
       const editorRef = useRef<HTMLDivElement | null>(null)
     const historyManagerRef = useRef<HistoryManager | null>(null)
@@ -827,6 +830,11 @@ const RichTextEditor = forwardRef<RichTextEditorHandle, RichTextEditorProps>(
             // parsing failed - ignore
           }
         }
+      })
+      // Restore image wrapper widths from data-width (inline style is wiped by the DOMPurify sanitizer)
+      editorRef.current.querySelectorAll<HTMLElement>('.image-block-wrapper[data-width]').forEach((wrapper) => {
+        const dw = wrapper.getAttribute('data-width')
+        if (dw) wrapper.style.width = `${dw}px`
       })
     }, [])
 
@@ -2471,6 +2479,57 @@ const RichTextEditor = forwardRef<RichTextEditorHandle, RichTextEditorProps>(
       }
     }
 
+    const handleAsyncImageInsertion = (
+      file: File,
+      kind: 'paste' | 'drop',
+      placeholderText: string = 'Uploading image...'
+    ): boolean => {
+      const callback = kind === 'drop' ? (onImageDrop || onImagePaste) : onImagePaste
+      if (!callback || !editorRef.current) {
+        return false
+      }
+
+      const placeholderId = `image-placeholder-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`
+      const placeholderHtml = `<div id="${placeholderId}" class="inline-flex items-center gap-2 px-3 py-2 text-sm bg-gray-100 text-gray-500 rounded border border-gray-300 animate-pulse" contenteditable="false">${placeholderText}</div>`
+
+      insertHTMLAtSelection(placeholderHtml)
+      emitChange()
+
+      callback(file)
+        .then((result) => {
+          const placeholder = editorRef.current?.querySelector(`#${placeholderId}`)
+          if (placeholder && result) {
+            const blockDescriptor = customBlocks?.find((b) => b.type === 'image')
+            if (blockDescriptor) {
+              const blockHtml = blockDescriptor.render(result)
+              const wrapper = document.createElement('div')
+              wrapper.innerHTML = blockHtml
+              const blockEl = wrapper.firstElementChild
+              if (blockEl) {
+                placeholder.replaceWith(blockEl)
+                emitChange()
+                return
+              }
+            }
+          }
+
+          if (placeholder) {
+            placeholder.remove()
+            emitChange()
+          }
+        })
+        .catch((err) => {
+          console.error('Image upload failed:', err)
+          const placeholder = editorRef.current?.querySelector(`#${placeholderId}`)
+          if (placeholder) {
+            placeholder.remove()
+            emitChange()
+          }
+        })
+
+      return true
+    }
+
     const handlePaste = (event: ReactClipboardEvent<HTMLDivElement>) => {
       if (disabled) return
       event.preventDefault()
@@ -2543,44 +2602,9 @@ const RichTextEditor = forwardRef<RichTextEditorHandle, RichTextEditorProps>(
             if (item.type.startsWith('image/')) {
               const file = item.getAsFile()
               if (file) {
-                // Insert a placeholder while uploading
-                const placeholderId = `paste-placeholder-${Date.now()}`
-                const placeholderHtml = `<div id="${placeholderId}" class="inline-flex items-center gap-2 px-3 py-2 text-sm bg-gray-100 text-gray-500 rounded border border-gray-300 animate-pulse" contenteditable="false">Uploading image...</div>`
-                insertHTMLAtSelection(placeholderHtml)
-                emitChange()
-
-                // Handle the async upload
-                onImagePaste(file)
-                  .then((result) => {
-                    const placeholder = editorRef.current?.querySelector(`#${placeholderId}`)
-                    if (placeholder && result) {
-                      // Replace placeholder with actual image block
-                      const blockDescriptor = customBlocks?.find(b => b.type === 'image')
-                      if (blockDescriptor) {
-                        const blockHtml = blockDescriptor.render(result)
-                        const wrapper = document.createElement('div')
-                        wrapper.innerHTML = blockHtml
-                        const blockEl = wrapper.firstElementChild
-                        if (blockEl) {
-                          placeholder.replaceWith(blockEl)
-                          emitChange()
-                        }
-                      }
-                    } else if (placeholder) {
-                      // Upload failed or was cancelled — remove placeholder
-                      placeholder.remove()
-                      emitChange()
-                    }
-                  })
-                  .catch((err) => {
-                    console.error('Image paste upload failed:', err)
-                    const placeholder = editorRef.current?.querySelector(`#${placeholderId}`)
-                    if (placeholder) {
-                      placeholder.remove()
-                      emitChange()
-                    }
-                  })
-                return // Don't process further — image paste handled
+                if (handleAsyncImageInsertion(file, 'paste', 'Uploading pasted image...')) {
+                  return // Don't process further — image paste handled
+                }
               }
             }
           }
@@ -2709,6 +2733,55 @@ const RichTextEditor = forwardRef<RichTextEditorHandle, RichTextEditorProps>(
       }
     }
 
+    const handleDragOver = (event: ReactDragEvent<HTMLDivElement>) => {
+      if (disabled) return
+      const hasImage = Array.from(event.dataTransfer?.items || []).some((item) => item.type.startsWith('image/'))
+      if (hasImage) {
+        event.preventDefault()
+        event.dataTransfer.dropEffect = 'copy'
+      }
+    }
+
+    const handleDrop = (event: ReactDragEvent<HTMLDivElement>) => {
+      if (disabled) return
+
+      const imageFile = Array.from(event.dataTransfer?.files || []).find((file) => file.type.startsWith('image/'))
+      if (!imageFile) return
+
+      event.preventDefault()
+
+      if (event.currentTarget) {
+        event.currentTarget.focus()
+      }
+
+      const selection = window.getSelection()
+      const caretRangeFromPoint = (document as any).caretRangeFromPoint as
+        | ((x: number, y: number) => Range | null)
+        | undefined
+      const caretPositionFromPoint = (document as any).caretPositionFromPoint as
+        | ((x: number, y: number) => { offsetNode: Node; offset: number } | null)
+        | undefined
+
+      if (selection && caretRangeFromPoint) {
+        const range = caretRangeFromPoint(event.clientX, event.clientY)
+        if (range) {
+          selection.removeAllRanges()
+          selection.addRange(range)
+        }
+      } else if (selection && caretPositionFromPoint) {
+        const position = caretPositionFromPoint(event.clientX, event.clientY)
+        if (position) {
+          const range = document.createRange()
+          range.setStart(position.offsetNode, position.offset)
+          range.collapse(true)
+          selection.removeAllRanges()
+          selection.addRange(range)
+        }
+      }
+
+      handleAsyncImageInsertion(imageFile, 'drop', 'Uploading dropped image...')
+    }
+
     // Determine outlines visibility for the currently selected table (per-table)
     const currentTable = typeof window !== 'undefined' ? getClosestFromSelection('table', editorRef.current) as HTMLElement | null : null
     const outlinesVisibleForToolbar = currentTable ? currentTable.getAttribute('data-no-outline') !== 'true' : true
@@ -2759,6 +2832,8 @@ const RichTextEditor = forwardRef<RichTextEditorHandle, RichTextEditorProps>(
             onInput={handleInput}
             onKeyDown={handleKeyDown}
             onPaste={handlePaste}
+            onDragOver={handleDragOver}
+            onDrop={handleDrop}
             onBlur={handleEditorBlur}
             suppressContentEditableWarning
             spellCheck

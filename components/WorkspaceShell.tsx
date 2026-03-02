@@ -4,22 +4,21 @@ import { useAuth } from '@/lib/auth-context'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { useEffect, useState, useRef, useCallback, Suspense } from 'react'
 import NoteEditor, { Note } from '@/components/NoteEditor'
-import TaskCalendarModal from '@/components/TaskCalendarModal'
 import WelcomeBackModal from '@/components/WelcomeBackModal'
 import FileExplorerModal from '@/components/FileExplorerModal'
 import SidebarTree from '@/components/SidebarTree'
-import { Loader2, FileEdit, Sparkles, FileText, PenTool, Network, BookOpen, Table2, X, Menu, ChevronLeft, ChevronRight, CheckSquare, FolderOpen, Home, LogOut, Target } from 'lucide-react'
+import { Loader2, FileEdit, Sparkles, FileText, PenTool, Network, BookOpen, Table2, X, Menu, ChevronLeft, ChevronRight, FolderOpen, Home, LogOut } from 'lucide-react'
+import type { LucideIcon } from 'lucide-react'
 import { useIsMobile } from '@/lib/useIsMobile'
 import type { NoteType } from '@/lib/notes'
-import { ToastContainer } from '@/components/NotificationCenter'
-import { initNotifications, destroyNotifications, type AppNotification } from '@/lib/notifications'
+import { getOrderedNoteTypePresentations, type NoteTypeIconKey } from '@/lib/note-types'
 import { ErrorBoundary } from '@/components/ErrorBoundary'
 
 type NoteCreationContext = {
   folderArg?: string | null
   projectArg?: string | null
 }
-type WorkspaceView = 'welcome' | 'notes' | 'tasks' | 'files' | 'projects'
+type WorkspaceView = 'welcome' | 'notes' | 'files' | 'projects'
 import { useToast } from '@/components/ToastProvider'
 import {
   getNotes,
@@ -51,6 +50,14 @@ import {
   moveNoteToProject,
   type Project,
 } from '@/lib/projects'
+
+const NOTE_TYPE_ICON_MAP: Record<NoteTypeIconKey, LucideIcon> = {
+  'file-text': FileText,
+  'pen-tool': PenTool,
+  network: Network,
+  'book-open': BookOpen,
+  'table-2': Table2,
+}
 
 function WorkspaceContent() {
   const { user, loading, signOut } = useAuth()
@@ -90,46 +97,11 @@ function WorkspaceContent() {
   const [workspaceNavCollapsed, setWorkspaceNavCollapsed] = useState(false)
   const [workspaceNavOpen, setWorkspaceNavOpen] = useState(false)
   
-  // Task Calendar view state
-  const [taskCalendarInitialView, setTaskCalendarInitialView] = useState<'tasks' | 'calendar' | 'timeline' | 'kanban' | 'timetable'>('tasks')
-  
   // Welcome Back modal state
   const [showWelcomeBack, setShowWelcomeBack] = useState(false)
   const hasShownWelcomeBackRef = useRef(false)
 
 
-
-  // Initialize notification system when user is authenticated
-  useEffect(() => {
-    if (user && !loading) {
-      initNotifications()
-      return () => destroyNotifications()
-    }
-  }, [user, loading])
-
-  const handleNotificationAction = (notification: AppNotification) => {
-    if (notification.action) {
-      switch (notification.action.type) {
-        case 'open_task':
-          setTaskCalendarInitialView('tasks')
-          setActiveView('tasks')
-          break
-        case 'open_event':
-          setTaskCalendarInitialView('calendar')
-          setActiveView('tasks')
-          break
-        case 'open_note':
-          if (notification.action.payload) {
-            const note = allNotes.find(n => n.id === notification.action!.payload)
-            if (note) {
-              activateExistingNote(note)
-              setActiveView('notes')
-            }
-          }
-          break
-      }
-    }
-  }
 
   const updateNavigationParams = useCallback((folderId: string | null, noteId: string | null) => {
     if (typeof window === 'undefined') return
@@ -180,6 +152,33 @@ function WorkspaceContent() {
     })
   }, [applyFolderSelection])
 
+  // ---- Refs for URL→state sync (break circular dependency) ----
+  // These refs let the URL sync effect read the latest state/callbacks
+  // without including them in its dependency array, preventing the
+  // stale-noteParam flip-flop that occurs when useSearchParams doesn't
+  // reflect the replaceState update on the same render cycle.
+  const allNotesRef = useRef<Note[]>(allNotes)
+  const notesRef = useRef<Note[]>(notes)
+  const selectedNoteIdRef = useRef<string | undefined>(selectedNote?.id)
+  const selectedFolderIdRef = useRef<string | null>(selectedFolderId)
+  const selectedProjectIdRef = useRef<string | null>(selectedProjectId)
+  const isCreatingNewRef = useRef(isCreatingNew)
+  const activateExistingNoteRef = useRef(activateExistingNote)
+  const applyFolderSelectionRef = useRef(applyFolderSelection)
+  const updateNavigationParamsRef = useRef(updateNavigationParams)
+  const urlSyncSucceededRef = useRef(false)
+
+  // Keep refs in sync (updated every render, before effects run)
+  allNotesRef.current = allNotes
+  notesRef.current = notes
+  selectedNoteIdRef.current = selectedNote?.id
+  selectedFolderIdRef.current = selectedFolderId
+  selectedProjectIdRef.current = selectedProjectId
+  isCreatingNewRef.current = isCreatingNew
+  activateExistingNoteRef.current = activateExistingNote
+  applyFolderSelectionRef.current = applyFolderSelection
+  updateNavigationParamsRef.current = updateNavigationParams
+
   useEffect(() => {
     if (!loading && !user) {
       router.push('/login')
@@ -189,23 +188,27 @@ function WorkspaceContent() {
   const folderParam = searchParams.get('folder')
   const noteParam = searchParams.get('note')
 
+  // URL → state sync: only re-runs when URL params actually change
+  // (initial load, browser back/forward). Internal state changes no
+  // longer trigger this effect, preventing the flip-flop loop.
   useEffect(() => {
     if (!user) return
 
     let cancelled = false
+    urlSyncSucceededRef.current = false
 
     const syncStateFromUrl = async () => {
       isApplyingUrlRef.current = true
 
       try {
-        if (isCreatingNew && selectedNote === null && noteParam) {
+        if (isCreatingNewRef.current && !selectedNoteIdRef.current && noteParam) {
           return
         }
 
         if (noteParam) {
           let targetNote =
-            allNotes.find((note) => note.id === noteParam) ??
-            notes.find((note) => note.id === noteParam) ??
+            allNotesRef.current.find((n) => n.id === noteParam) ??
+            notesRef.current.find((n) => n.id === noteParam) ??
             null
 
           if (!targetNote) {
@@ -219,25 +222,28 @@ function WorkspaceContent() {
           if (cancelled) return
 
           if (!targetNote) {
-            updateNavigationParams(folderParam ?? null, null)
+            updateNavigationParamsRef.current(folderParam ?? null, null)
             return
           }
 
+          urlSyncSucceededRef.current = true
+
           if (
-            selectedNote?.id !== targetNote.id ||
-            selectedFolderId !== (targetNote.folder_id ?? null) ||
-            selectedProjectId !== (targetNote.project_id ?? null) ||
-            isCreatingNew
+            selectedNoteIdRef.current !== targetNote.id ||
+            selectedFolderIdRef.current !== (targetNote.folder_id ?? null) ||
+            selectedProjectIdRef.current !== (targetNote.project_id ?? null) ||
+            isCreatingNewRef.current
           ) {
-            activateExistingNote(targetNote)
+            activateExistingNoteRef.current(targetNote)
           }
 
           return
         }
 
+        urlSyncSucceededRef.current = true
         const targetFolderId = folderParam ?? null
-        if (selectedFolderId !== targetFolderId) {
-          applyFolderSelection(targetFolderId)
+        if (selectedFolderIdRef.current !== targetFolderId) {
+          applyFolderSelectionRef.current(targetFolderId)
         }
       } finally {
         isApplyingUrlRef.current = false
@@ -249,20 +255,22 @@ function WorkspaceContent() {
     return () => {
       cancelled = true
     }
-  }, [
-    user,
-    folderParam,
-    noteParam,
-    allNotes,
-    notes,
-    selectedFolderId,
-    selectedProjectId,
-    selectedNote,
-    isCreatingNew,
-    activateExistingNote,
-    applyFolderSelection,
-    updateNavigationParams,
-  ])
+  }, [user, folderParam, noteParam])
+
+  // Fallback: if the initial URL sync failed to find the note (e.g.
+  // allNotes hadn't loaded yet and getNote also failed), retry once
+  // allNotes becomes available.
+  useEffect(() => {
+    if (!noteParam || urlSyncSucceededRef.current || allNotes.length === 0) return
+
+    const targetNote = allNotes.find((n) => n.id === noteParam)
+    if (targetNote && selectedNoteIdRef.current !== targetNote.id) {
+      urlSyncSucceededRef.current = true
+      isApplyingUrlRef.current = true
+      activateExistingNoteRef.current(targetNote)
+      isApplyingUrlRef.current = false
+    }
+  }, [allNotes, noteParam])
 
   useEffect(() => {
     if (isApplyingUrlRef.current) return
@@ -468,7 +476,7 @@ function WorkspaceContent() {
   }, [user])
 
   const handleSaveNote = async (
-    noteData: { title: string; content: string; note_type?: 'rich-text' | 'drawing' | 'mindmap' | 'bullet-journal' | 'data-sheet' },
+    noteData: { title: string; content: string; note_type?: NoteType },
     isAuto = false
   ) => {
     try {
@@ -483,7 +491,11 @@ function WorkspaceContent() {
 
         setNotes((prev) => prev.map((note) => (note.id === updated.id ? updated : note)))
         setAllNotes((prev) => prev.map((note) => (note.id === updated.id ? updated : note)))
-        activateExistingNote(updated)
+        // Update the selected note reference without re-activating
+        // (folder/project don't change during save). Using
+        // activateExistingNote here would re-trigger applyFolderSelection
+        // and feed into the URL sync cycle unnecessarily.
+        setSelectedNote(updated)
 
         if (!isAuto) {
           toast.push({
@@ -926,43 +938,13 @@ function WorkspaceContent() {
     notes.length > 0 ||
     folders.length > 0
 
-  const noteTypeOptions = [
-    {
-      type: 'rich-text' as NoteType,
-      label: 'Text Note',
-      description: 'Write with rich formatting, tables, and note links.',
-      icon: FileText,
-      iconBg: 'bg-alpine-100 text-alpine-600',
-    },
-    {
-      type: 'drawing' as NoteType,
-      label: 'Drawing Note',
-      description: 'Sketch ideas with multi-page canvas tools.',
-      icon: PenTool,
-      iconBg: 'bg-purple-100 text-purple-600',
-    },
-    {
-      type: 'mindmap' as NoteType,
-      label: 'Mind Map',
-      description: 'Visualize concepts and relationships quickly.',
-      icon: Network,
-      iconBg: 'bg-green-100 text-green-600',
-    },
-    {
-      type: 'bullet-journal' as NoteType,
-      label: 'Bullet Journal',
-      description: 'Rapid-log tasks, events, and notes with signifiers.',
-      icon: BookOpen,
-      iconBg: 'bg-amber-100 text-amber-600',
-    },
-    {
-      type: 'data-sheet' as NoteType,
-      label: 'Data Sheet',
-      description: 'Create and edit spreadsheet data with formulas and CSV import/export.',
-      icon: Table2,
-      iconBg: 'bg-cyan-100 text-cyan-600',
-    },
-  ]
+  const noteTypeOptions = getOrderedNoteTypePresentations().map((noteTypePresentation) => ({
+    type: noteTypePresentation.id,
+    label: noteTypePresentation.pickerLabel,
+    description: noteTypePresentation.description,
+    icon: NOTE_TYPE_ICON_MAP[noteTypePresentation.iconKey],
+    iconBg: noteTypePresentation.iconBgClassName,
+  }))
 
   const renderNotesView = () => {
     if (shouldShowEditor) {
@@ -990,13 +972,8 @@ function WorkspaceContent() {
           currentFolderName={getCurrentFolderName()}
           onSignOut={handleSignOut}
           userEmail={user.email}
-          onOpenTaskCalendar={() => {
-            setTaskCalendarInitialView('tasks')
-            setActiveView('tasks')
-          }}
           onOpenFileExplorer={() => setActiveView('files')}
           onOpenProjectsView={() => setActiveView('projects')}
-          onNotificationAction={handleNotificationAction}
         />
       )
     }
@@ -1029,9 +1006,6 @@ function WorkspaceContent() {
 
   return (
     <div className="min-h-screen flex flex-col">
-      {/* Notification Toasts */}
-      <ToastContainer onAction={handleNotificationAction} />
-
       {/* Unified Sidebar — always visible on desktop, regardless of activeView */}
       {!isMobile && (
         <SidebarTree
@@ -1112,7 +1086,6 @@ function WorkspaceContent() {
             <div className="border-b border-border px-2 py-2 flex gap-1">
               {([
                 { key: 'notes' as WorkspaceView, label: 'Notes', icon: FileText },
-                { key: 'tasks' as WorkspaceView, label: 'Tasks', icon: CheckSquare },
                 { key: 'files' as WorkspaceView, label: 'Files', icon: FolderOpen },
               ]).map(({ key, label, icon: Icon }) => (
                 <button
@@ -1191,31 +1164,10 @@ function WorkspaceContent() {
               activateExistingNote(note)
               closeWelcomeView()
             }}
-            onSelectTask={() => {
-              setTaskCalendarInitialView('tasks')
-              setShowWelcomeBack(false)
-              setActiveView('tasks')
-            }}
-            onOpenTimetable={() => {
-              setTaskCalendarInitialView('timetable')
-              setShowWelcomeBack(false)
-              setActiveView('tasks')
-            }}
           />
         )}
 
         {activeView === 'notes' && renderNotesView()}
-
-        {activeView === 'tasks' && (
-          <TaskCalendarModal
-            isOpen
-            asView
-            onClose={() => setActiveView('notes')}
-            initialView={taskCalendarInitialView}
-            linkedNoteId={selectedNote?.id}
-            linkedProjectId={selectedProjectId || undefined}
-          />
-        )}
 
         {activeView === 'files' && (
           <FileExplorerModal
