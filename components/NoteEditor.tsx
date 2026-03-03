@@ -52,6 +52,7 @@ import MindmapEditor, {
   type MindmapEditorHandle,
   type MindmapData
 } from './MindmapEditor'
+import { getMindmapTemplate } from '../lib/mindmap-templates'
 import BulletJournalEditor, {
   type BulletJournalEditorHandle,
   type BulletJournalData
@@ -96,6 +97,8 @@ interface NoteEditorProps {
   onCancel?: () => void
   onDelete?: (id: string) => Promise<void>
   initialNoteType?: NoteType
+  /** When set, the new mindmap uses this template's data instead of the single-root default */
+  mindmapTemplateId?: string
 }
 
 const stripHtml = (html: string) => html.replace(/<[^>]*>/g, ' ').replace(/&nbsp;/g, ' ').trim()
@@ -332,6 +335,7 @@ export default function NoteEditor({
   onCancel, 
   onDelete,
   initialNoteType = 'rich-text',
+  mindmapTemplateId,
   folders = [],
   selectedFolderId = null,
   onSelectFolder = () => {},
@@ -655,23 +659,9 @@ export default function NoteEditor({
       setTitle('')
       setContent('')
       setDrawingData(initialNoteType === 'drawing' ? { pages: [{ strokes: [], background: 'none' }], width: 800, height: 600, currentPage: 0 } : null)
-      setMindmapData(initialNoteType === 'mindmap' ? {
-        rootId: 'root',
-        nodes: {
-          root: {
-            id: 'root',
-            text: 'Central Idea',
-            x: 400,
-            y: 300,
-            parentId: null,
-            children: [],
-            collapsed: false,
-            color: '#3B82F6',
-            description: '',
-            attachments: [],
-          },
-        },
-      } : null)
+      setMindmapData(initialNoteType === 'mindmap'
+        ? getMindmapTemplate(mindmapTemplateId ?? 'blank').createData()
+        : null)
       setBulletJournalData(initialNoteType === 'bullet-journal' ? { entries: [], activeDate: new Date().toISOString().slice(0, 10), view: 'daily' as const } : null)
       setDataSheetData(null) // null triggers the size picker in DataSheetEditor
       setDataSheetKey(k => k + 1) // force remount of DataSheetEditor
@@ -688,7 +678,7 @@ export default function NoteEditor({
     // key on note?.id (not the full object) so same-note saves don't cause
     // a full editor reset. The note-loading effect should only run when the
     // actual note changes or when creating a new note.
-  }, [note?.id, initialNoteType, scheduleHeadingsUpdate])
+  }, [note?.id, initialNoteType, mindmapTemplateId, scheduleHeadingsUpdate])
 
   useEffect(() => {
     // Skip hasChanges computation while a note is being loaded (prevents brief flicker)

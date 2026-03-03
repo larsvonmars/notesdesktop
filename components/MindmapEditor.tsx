@@ -16,6 +16,11 @@ import {
   Download,
   LayoutTemplate,
   MapIcon,
+  Type,
+  ChevronRight,
+  FoldVertical,
+  UnfoldVertical,
+  Info,
 } from 'lucide-react'
 import { useTheme } from '../lib/theme-context'
 import { useIsMobile } from '../lib/useIsMobile'
@@ -818,6 +823,14 @@ const MindmapEditor = forwardRef<MindmapEditorHandle, MindmapEditorProps>(
     // Minimap visibility toggle (default hidden on mobile)
     const [showMinimap, setShowMinimap] = React.useState(!isMobile)
 
+    // Context menu state
+    const [contextMenu, setContextMenu] = React.useState<{ nodeId: string; x: number; y: number } | null>(null)
+
+    // Inline rename state
+    const [inlineEditNodeId, setInlineEditNodeId] = React.useState<string | null>(null)
+    const [inlineEditText, setInlineEditText] = React.useState('')
+    const inlineEditRef = useRef<HTMLInputElement>(null)
+
     // Refs for values that don't need to trigger re-renders
     const skipOnChangeRef = useRef(false)
     const mindmapDataRef = useRef<MindmapData>(mindmapData)
@@ -1352,9 +1365,80 @@ const MindmapEditor = forwardRef<MindmapEditorHandle, MindmapEditorProps>(
 
       const hit = hitTestNodes(coordinates.worldX, coordinates.worldY)
       if (hit?.area === 'body') {
-        openNodeDetail(hit.nodeId)
+        startInlineEdit(hit.nodeId)
       }
     }
+
+    // ── Right-click context menu ──
+
+    const handleCanvasContextMenu = (e: React.MouseEvent<HTMLCanvasElement>) => {
+      e.preventDefault()
+      if (readOnly) return
+
+      const coordinates = mapClientToWorld(e.clientX, e.clientY)
+      if (!coordinates) return
+
+      const hit = hitTestNodes(coordinates.worldX, coordinates.worldY)
+      if (hit?.area === 'body') {
+        dispatch({ type: 'SET_SELECTED_NODE_ID', payload: hit.nodeId })
+        const rect = containerRef.current?.getBoundingClientRect()
+        const menuX = rect ? e.clientX - rect.left : e.clientX
+        const menuY = rect ? e.clientY - rect.top : e.clientY
+        setContextMenu({ nodeId: hit.nodeId, x: menuX, y: menuY })
+      } else {
+        setContextMenu(null)
+      }
+    }
+
+    // ── Inline rename ──
+
+    const startInlineEdit = useCallback((nodeId: string) => {
+      const node = mindmapData.nodes[nodeId]
+      if (!node || readOnly) return
+      setContextMenu(null)
+      setInlineEditNodeId(nodeId)
+      setInlineEditText(node.text)
+      // Focus will happen via useEffect when the input mounts
+    }, [mindmapData.nodes, readOnly])
+
+    const commitInlineEdit = useCallback(() => {
+      if (!inlineEditNodeId) return
+      const trimmed = inlineEditText.trim() || 'Untitled Node'
+      dispatch({
+        type: 'UPDATE_NODE',
+        payload: { nodeId: inlineEditNodeId, updates: { text: trimmed } },
+      })
+      setInlineEditNodeId(null)
+      setInlineEditText('')
+    }, [inlineEditNodeId, inlineEditText])
+
+    const cancelInlineEdit = useCallback(() => {
+      setInlineEditNodeId(null)
+      setInlineEditText('')
+    }, [])
+
+    // Focus the inline edit input when it appears
+    useEffect(() => {
+      if (inlineEditNodeId && inlineEditRef.current) {
+        inlineEditRef.current.focus()
+        inlineEditRef.current.select()
+      }
+    }, [inlineEditNodeId])
+
+    // Close context menu on any click outside
+    useEffect(() => {
+      if (!contextMenu) return
+      const handleClickOutside = () => setContextMenu(null)
+      const handleKeyDown = (e: KeyboardEvent) => {
+        if (e.key === 'Escape') setContextMenu(null)
+      }
+      window.addEventListener('click', handleClickOutside)
+      window.addEventListener('keydown', handleKeyDown)
+      return () => {
+        window.removeEventListener('click', handleClickOutside)
+        window.removeEventListener('keydown', handleKeyDown)
+      }
+    }, [contextMenu])
 
     // ── Long-press helpers (open detail on touch) ──
 
@@ -1720,7 +1804,7 @@ const MindmapEditor = forwardRef<MindmapEditorHandle, MindmapEditorProps>(
       setTextNoteActionError(null)
     }, [detailNodeId, detailDraft])
 
-    const addChildNode = () => {
+    const addChildNode = useCallback(() => {
       if (!selectedNodeId || readOnly) return
 
       const parentNode = mindmapData.nodes[selectedNodeId]
@@ -1767,16 +1851,16 @@ const MindmapEditor = forwardRef<MindmapEditorHandle, MindmapEditorProps>(
       }
 
       dispatch({ type: 'SET_SELECTED_NODE_ID', payload: newNodeId })
-    }
+    }, [selectedNodeId, readOnly, mindmapData, renderMindmap])
 
-    const deleteNode = () => {
+    const deleteNode = useCallback(() => {
       if (!selectedNodeId || selectedNodeId === mindmapData.rootId || readOnly) return
 
       const nodeToDelete = mindmapData.nodes[selectedNodeId]
       if (!nodeToDelete?.parentId) return
 
       dispatch({ type: 'DELETE_NODE', payload: { nodeId: selectedNodeId, parentId: nodeToDelete.parentId } })
-    }
+    }, [selectedNodeId, mindmapData, readOnly])
 
     const toggleCollapse = useCallback(
       (nodeId?: string) => {
@@ -1817,14 +1901,15 @@ const MindmapEditor = forwardRef<MindmapEditorHandle, MindmapEditorProps>(
           return
         }
 
+        // Ignore if inline editing is active
+        if (inlineEditNodeId) return
+
         const currentNode = selectedNodeId ? mindmapData.nodes[selectedNodeId] : null
 
         switch (event.key) {
-          case 'ArrowUp':
           case 'ArrowLeft': {
             event.preventDefault()
             if (!currentNode) {
-              // No selection - select root
               dispatch({ type: 'SET_SELECTED_NODE_ID', payload: mindmapData.rootId })
               return
             }
@@ -1834,16 +1919,60 @@ const MindmapEditor = forwardRef<MindmapEditorHandle, MindmapEditorProps>(
             }
             break
           }
-          case 'ArrowDown':
           case 'ArrowRight': {
             event.preventDefault()
             if (!currentNode) {
-              // No selection - select root
               dispatch({ type: 'SET_SELECTED_NODE_ID', payload: mindmapData.rootId })
               return
             }
-            // Navigate to first visible child
-            if (currentNode.children.length > 0 && !currentNode.collapsed) {
+            // Navigate to first visible child (auto-expand if collapsed)
+            if (currentNode.children.length > 0) {
+              if (currentNode.collapsed) {
+                toggleCollapse(currentNode.id)
+              }
+              dispatch({ type: 'SET_SELECTED_NODE_ID', payload: currentNode.children[0] })
+            }
+            break
+          }
+          case 'ArrowUp': {
+            event.preventDefault()
+            if (!currentNode) {
+              dispatch({ type: 'SET_SELECTED_NODE_ID', payload: mindmapData.rootId })
+              return
+            }
+            // Navigate to previous sibling
+            const parentUp = currentNode.parentId ? mindmapData.nodes[currentNode.parentId] : null
+            if (parentUp) {
+              const siblings = parentUp.children
+              const idx = siblings.indexOf(currentNode.id)
+              if (idx > 0) {
+                dispatch({ type: 'SET_SELECTED_NODE_ID', payload: siblings[idx - 1] })
+              } else {
+                // Already first sibling — go to parent
+                dispatch({ type: 'SET_SELECTED_NODE_ID', payload: parentUp.id })
+              }
+            }
+            break
+          }
+          case 'ArrowDown': {
+            event.preventDefault()
+            if (!currentNode) {
+              dispatch({ type: 'SET_SELECTED_NODE_ID', payload: mindmapData.rootId })
+              return
+            }
+            // Navigate to next sibling
+            const parentDown = currentNode.parentId ? mindmapData.nodes[currentNode.parentId] : null
+            if (parentDown) {
+              const siblings = parentDown.children
+              const idx = siblings.indexOf(currentNode.id)
+              if (idx < siblings.length - 1) {
+                dispatch({ type: 'SET_SELECTED_NODE_ID', payload: siblings[idx + 1] })
+              } else if (currentNode.children.length > 0 && !currentNode.collapsed) {
+                // Last sibling — go to first child
+                dispatch({ type: 'SET_SELECTED_NODE_ID', payload: currentNode.children[0] })
+              }
+            } else if (currentNode.children.length > 0 && !currentNode.collapsed) {
+              // Root node — go to first child
               dispatch({ type: 'SET_SELECTED_NODE_ID', payload: currentNode.children[0] })
             }
             break
@@ -1854,16 +1983,15 @@ const MindmapEditor = forwardRef<MindmapEditorHandle, MindmapEditorProps>(
               dispatch({ type: 'SET_SELECTED_NODE_ID', payload: mindmapData.rootId })
               return
             }
-            // Navigate to next sibling (or wrap to first)
-            const parentNode = currentNode.parentId ? mindmapData.nodes[currentNode.parentId] : null
-            if (parentNode) {
-              const siblings = parentNode.children
+            // Navigate to next/previous sibling (wrap)
+            const parentTab = currentNode.parentId ? mindmapData.nodes[currentNode.parentId] : null
+            if (parentTab) {
+              const siblings = parentTab.children
               const currentIndex = siblings.indexOf(currentNode.id)
               const direction = event.shiftKey ? -1 : 1
               const nextIndex = (currentIndex + direction + siblings.length) % siblings.length
               dispatch({ type: 'SET_SELECTED_NODE_ID', payload: siblings[nextIndex] })
             } else if (currentNode.children.length > 0 && !currentNode.collapsed) {
-              // Root node - go to first child
               dispatch({ type: 'SET_SELECTED_NODE_ID', payload: currentNode.children[0] })
             }
             break
@@ -1875,7 +2003,29 @@ const MindmapEditor = forwardRef<MindmapEditorHandle, MindmapEditorProps>(
             }
             break
           }
-          case ' ': { // Space bar to toggle collapse
+          case 'F2': {
+            event.preventDefault()
+            if (currentNode) {
+              startInlineEdit(currentNode.id)
+            }
+            break
+          }
+          case '+': 
+          case '=': {
+            // + key to add child node (= is the unshifted key on most keyboards)
+            if (!event.ctrlKey && !event.metaKey) {
+              event.preventDefault()
+              addChildNode()
+            }
+            break
+          }
+          case 'Delete':
+          case 'Backspace': {
+            event.preventDefault()
+            deleteNode()
+            break
+          }
+          case ' ': {
             event.preventDefault()
             if (currentNode && currentNode.children.length > 0) {
               toggleCollapse(currentNode.id)
@@ -1884,13 +2034,13 @@ const MindmapEditor = forwardRef<MindmapEditorHandle, MindmapEditorProps>(
           }
           case 'Escape': {
             event.preventDefault()
+            setContextMenu(null)
             dispatch({ type: 'SET_SELECTED_NODE_ID', payload: null })
             break
           }
           case 'Home': {
             event.preventDefault()
             dispatch({ type: 'SET_SELECTED_NODE_ID', payload: mindmapData.rootId })
-            // Center on root node
             const rootNode = mindmapData.nodes[mindmapData.rootId]
             if (rootNode && canvasRef.current) {
               dispatch({
@@ -1908,7 +2058,7 @@ const MindmapEditor = forwardRef<MindmapEditorHandle, MindmapEditorProps>(
 
       window.addEventListener('keydown', handleKeyDown)
       return () => window.removeEventListener('keydown', handleKeyDown)
-    }, [detailNodeId, readOnly, selectedNodeId, mindmapData, scale, toggleCollapse, openNodeDetail])
+    }, [detailNodeId, readOnly, selectedNodeId, mindmapData, scale, toggleCollapse, openNodeDetail, startInlineEdit, addChildNode, deleteNode, inlineEditNodeId])
 
     const zoomIn = () => {
       dispatch({ type: 'SET_SCALE', payload: Math.min(3, scale * 1.2) })
@@ -2113,7 +2263,7 @@ const MindmapEditor = forwardRef<MindmapEditorHandle, MindmapEditorProps>(
           onPointerMove={handleCanvasPointerMove}
           onPointerUp={handleCanvasPointerUp}
           onPointerCancel={handleCanvasPointerCancel}
-          onContextMenu={(e) => e.preventDefault()}
+          onContextMenu={handleCanvasContextMenu}
           onWheel={handleWheel}
           className="w-full h-full touch-none"
           style={{ 
@@ -2630,6 +2780,145 @@ const MindmapEditor = forwardRef<MindmapEditorHandle, MindmapEditorProps>(
           </div>
         )}
 
+        {/* Inline rename overlay */}
+        {inlineEditNodeId && mindmapData.nodes[inlineEditNodeId] && (() => {
+          const editNode = mindmapData.nodes[inlineEditNodeId]
+          const screenX = editNode.x * scale + offset.x
+          const screenY = editNode.y * scale + offset.y
+          const isRoot = inlineEditNodeId === mindmapData.rootId
+          const fontSize = isRoot ? 16 * scale : 14 * scale
+          const inputWidth = Math.max(MIN_NODE_WIDTH * scale, 160)
+          return (
+            <>
+              {/* Click-away backdrop */}
+              <div
+                className="absolute inset-0 z-30"
+                onClick={(e) => {
+                  e.stopPropagation()
+                  commitInlineEdit()
+                }}
+              />
+              <input
+                ref={inlineEditRef}
+                type="text"
+                value={inlineEditText}
+                onChange={(e) => setInlineEditText(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') {
+                    e.preventDefault()
+                    commitInlineEdit()
+                  } else if (e.key === 'Escape') {
+                    e.preventDefault()
+                    cancelInlineEdit()
+                  }
+                  e.stopPropagation()
+                }}
+                onBlur={commitInlineEdit}
+                className="absolute z-40 rounded-lg border-2 border-alpine-500 bg-white dark:bg-slate-800 text-slate-900 dark:text-slate-100 px-2 py-1 shadow-xl outline-none ring-2 ring-alpine-300 dark:ring-alpine-600"
+                style={{
+                  left: screenX - inputWidth / 2,
+                  top: screenY - (NODE_HEIGHT * scale) / 2,
+                  width: inputWidth,
+                  height: NODE_HEIGHT * scale,
+                  fontSize: Math.max(fontSize, 12),
+                  textAlign: 'center',
+                  fontWeight: isRoot ? 'bold' : 'normal',
+                }}
+              />
+            </>
+          )
+        })()}
+
+        {/* Right-click context menu */}
+        {contextMenu && mindmapData.nodes[contextMenu.nodeId] && (() => {
+          const ctxNode = mindmapData.nodes[contextMenu.nodeId]
+          const isRoot = contextMenu.nodeId === mindmapData.rootId
+          const hasChildren = ctxNode.children.length > 0
+          return (
+            <div
+              className="absolute z-50 min-w-[180px] rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 shadow-2xl py-1 text-sm text-slate-700 dark:text-slate-200 overflow-hidden"
+              style={{ left: contextMenu.x, top: contextMenu.y }}
+              onClick={(e) => e.stopPropagation()}
+            >
+              <button
+                type="button"
+                className="flex w-full items-center gap-3 px-3 py-2 hover:bg-slate-100 dark:hover:bg-slate-700 transition-colors"
+                onClick={() => { addChildNode(); setContextMenu(null) }}
+              >
+                <Plus size={15} className="text-slate-400" />
+                <span className="flex-1 text-left">Add child</span>
+                <kbd className="text-xs text-slate-400">+</kbd>
+              </button>
+              <button
+                type="button"
+                className="flex w-full items-center gap-3 px-3 py-2 hover:bg-slate-100 dark:hover:bg-slate-700 transition-colors"
+                onClick={() => { startInlineEdit(contextMenu.nodeId); setContextMenu(null) }}
+              >
+                <Type size={15} className="text-slate-400" />
+                <span className="flex-1 text-left">Rename</span>
+                <kbd className="text-xs text-slate-400">F2</kbd>
+              </button>
+              <button
+                type="button"
+                className="flex w-full items-center gap-3 px-3 py-2 hover:bg-slate-100 dark:hover:bg-slate-700 transition-colors"
+                onClick={() => { openNodeDetail(contextMenu.nodeId); setContextMenu(null) }}
+              >
+                <Info size={15} className="text-slate-400" />
+                <span className="flex-1 text-left">Edit details</span>
+                <kbd className="text-xs text-slate-400">Enter</kbd>
+              </button>
+              {hasChildren && (
+                <button
+                  type="button"
+                  className="flex w-full items-center gap-3 px-3 py-2 hover:bg-slate-100 dark:hover:bg-slate-700 transition-colors"
+                  onClick={() => { toggleCollapse(contextMenu.nodeId); setContextMenu(null) }}
+                >
+                  {ctxNode.collapsed
+                    ? <UnfoldVertical size={15} className="text-slate-400" />
+                    : <FoldVertical size={15} className="text-slate-400" />
+                  }
+                  <span className="flex-1 text-left">{ctxNode.collapsed ? 'Expand' : 'Collapse'}</span>
+                  <kbd className="text-xs text-slate-400">Space</kbd>
+                </button>
+              )}
+              <div className="h-px bg-slate-200 dark:bg-slate-700 my-1" />
+              <div className="px-3 py-1.5">
+                <span className="text-xs font-medium text-slate-400 dark:text-slate-500">Color</span>
+                <div className="flex gap-1.5 mt-1.5">
+                  {DEFAULT_COLORS.map((color) => (
+                    <button
+                      key={color}
+                      type="button"
+                      className={`h-5 w-5 rounded-full border-2 transition-transform hover:scale-110 ${
+                        ctxNode.color === color ? 'border-slate-900 dark:border-white scale-110' : 'border-transparent'
+                      }`}
+                      style={{ backgroundColor: color }}
+                      onClick={() => {
+                        dispatch({ type: 'UPDATE_NODE', payload: { nodeId: contextMenu.nodeId, updates: { color } } })
+                        setContextMenu(null)
+                      }}
+                    />
+                  ))}
+                </div>
+              </div>
+              {!isRoot && (
+                <>
+                  <div className="h-px bg-slate-200 dark:bg-slate-700 my-1" />
+                  <button
+                    type="button"
+                    className="flex w-full items-center gap-3 px-3 py-2 hover:bg-red-50 dark:hover:bg-red-900/20 text-red-600 dark:text-red-400 transition-colors"
+                    onClick={() => { deleteNode(); setContextMenu(null) }}
+                  >
+                    <Trash2 size={15} />
+                    <span className="flex-1 text-left">Delete</span>
+                    <kbd className="text-xs text-red-400">Del</kbd>
+                  </button>
+                </>
+              )}
+            </div>
+          )
+        })()}
+
         {/* Info overlay */}
         <div className="absolute bottom-4 right-4 bg-white/90 dark:bg-slate-900/90 backdrop-blur-sm rounded-lg shadow-lg p-3 border border-gray-200 dark:border-slate-700 text-sm">
           <div className="text-gray-600 dark:text-slate-400">
@@ -2642,8 +2931,9 @@ const MindmapEditor = forwardRef<MindmapEditorHandle, MindmapEditorProps>(
             {!isMobile && (
               <div className="mt-2 pt-2 border-t border-gray-200 dark:border-slate-700 text-xs text-gray-500 dark:text-slate-500 space-y-0.5">
                 <div>Drag canvas to pan · Scroll to zoom</div>
-                <div>←↑ Parent · →↓ Child · Tab: Sibling</div>
-                <div>Enter: Edit · Space: Collapse · Home: Root</div>
+                <div>← Parent · → Child · ↑↓ Siblings · Tab: Cycle</div>
+                <div>F2: Rename · Enter: Details · +: Add child</div>
+                <div>Del: Delete · Space: Collapse · Home: Root</div>
               </div>
             )}
             {isMobile && (

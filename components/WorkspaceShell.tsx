@@ -7,11 +7,12 @@ import NoteEditor, { Note } from '@/components/NoteEditor'
 import WelcomeBackModal from '@/components/WelcomeBackModal'
 import FileExplorerModal from '@/components/FileExplorerModal'
 import SidebarTree from '@/components/SidebarTree'
-import { Loader2, FileEdit, Sparkles, FileText, PenTool, Network, BookOpen, Table2, X, Menu, ChevronLeft, ChevronRight, FolderOpen, Home, LogOut } from 'lucide-react'
+import { Loader2, FileEdit, Sparkles, FileText, PenTool, Network, BookOpen, Table2, X, Menu, ChevronLeft, ChevronRight, FolderOpen, Home, LogOut, FileQuestion, Target, Lightbulb, Scale, LayoutGrid } from 'lucide-react'
 import type { LucideIcon } from 'lucide-react'
 import { useIsMobile } from '@/lib/useIsMobile'
 import type { NoteType } from '@/lib/notes'
 import { getOrderedNoteTypePresentations, type NoteTypeIconKey } from '@/lib/note-types'
+import { MINDMAP_TEMPLATES, type MindmapTemplate } from '@/lib/mindmap-templates'
 import { ErrorBoundary } from '@/components/ErrorBoundary'
 
 type NoteCreationContext = {
@@ -79,6 +80,9 @@ function WorkspaceContent() {
   const isCreatingNewSaveRef = useRef(false)
   const [newNoteType, setNewNoteType] = useState<NoteType>('rich-text')
   const [pendingNoteContext, setPendingNoteContext] = useState<NoteCreationContext | null>(null)
+  // Mindmap template picker state
+  const [pendingMindmapTemplateContext, setPendingMindmapTemplateContext] = useState<NoteCreationContext | null>(null)
+  const [selectedMindmapTemplateId, setSelectedMindmapTemplateId] = useState<string | undefined>(undefined)
   // Create-folder modal state (replace window.prompt for Tauri compatibility)
   const suppressRealtimeRef = useRef(false)
   const [showCreateFolderModal, setShowCreateFolderModal] = useState(false)
@@ -631,14 +635,32 @@ function WorkspaceContent() {
   }
 
   const handleSelectNoteType = (type: NoteType) => {
-    if (!pendingNoteContext) {
-      startNewNote(type)
+    const context = pendingNoteContext ?? {}
+    setPendingNoteContext(null)
+
+    // For mindmaps, show the template picker instead of jumping straight to the editor
+    if (type === 'mindmap') {
+      setPendingMindmapTemplateContext(context)
       return
     }
 
-    const context = pendingNoteContext
-    setPendingNoteContext(null)
     startNewNote(type, context)
+  }
+
+  const handleSelectMindmapTemplate = (templateId: string) => {
+    const context = pendingMindmapTemplateContext ?? {}
+    setPendingMindmapTemplateContext(null)
+    setSelectedMindmapTemplateId(templateId)
+    startNewNote('mindmap', context)
+  }
+
+  const handleCancelMindmapTemplatePicker = () => {
+    // Go back to the note type picker
+    const context = pendingMindmapTemplateContext
+    setPendingMindmapTemplateContext(null)
+    if (context) {
+      setPendingNoteContext(context)
+    }
   }
 
   const handleCancelNoteTypePrompt = () => {
@@ -991,6 +1013,7 @@ function WorkspaceContent() {
         <NoteEditor
           note={isCreatingNew ? null : selectedNote}
           initialNoteType={newNoteType}
+          mindmapTemplateId={selectedMindmapTemplateId}
           onSave={handleSaveNote}
           onCancel={handleCancel}
           onDelete={selectedNote ? handleDeleteNote : undefined}
@@ -1270,6 +1293,76 @@ function WorkspaceContent() {
                 className="rounded-lg border border-gray-300 px-4 py-2 text-sm font-medium text-gray-600 transition hover:bg-gray-50"
               >
                 Cancel
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Mindmap Template Picker Modal */}
+      {pendingMindmapTemplateContext !== null && (
+        <div
+          className="fixed inset-0 z-[60] flex items-center justify-center bg-black/50 p-4"
+          onClick={(event) => {
+            if (event.target === event.currentTarget) {
+              handleCancelMindmapTemplatePicker()
+            }
+          }}
+        >
+          <div
+            className={`bg-white p-6 ${
+              isMobile
+                ? 'fixed inset-0 overflow-y-auto safe-top safe-bottom'
+                : 'w-full max-w-2xl rounded-2xl border border-gray-200 shadow-2xl'
+            }`}
+            onClick={(event) => event.stopPropagation()}
+          >
+            <div className="flex items-start justify-between gap-4">
+              <div>
+                <h3 className="text-lg font-semibold text-gray-900">Choose a template</h3>
+                <p className="mt-1 text-sm text-gray-600">Pick a starting structure for your mind map.</p>
+              </div>
+              <button
+                onClick={handleCancelMindmapTemplatePicker}
+                className="rounded-full p-2 text-gray-500 transition hover:bg-gray-100 hover:text-gray-900"
+                aria-label="Close template picker"
+              >
+                <X size={18} />
+              </button>
+            </div>
+            <div className={`mt-6 grid gap-3 ${isMobile ? 'grid-cols-1' : 'sm:grid-cols-2 lg:grid-cols-3'}`}>
+              {MINDMAP_TEMPLATES.map((template) => {
+                const iconMap: Record<MindmapTemplate['iconKey'], React.ReactNode> = {
+                  blank: <FileQuestion size={20} />,
+                  project: <Target size={20} />,
+                  swot: <LayoutGrid size={20} />,
+                  brainstorm: <Lightbulb size={20} />,
+                  proscons: <Scale size={20} />,
+                }
+                return (
+                  <button
+                    key={template.id}
+                    onClick={() => handleSelectMindmapTemplate(template.id)}
+                    className="flex h-full flex-col gap-3 rounded-xl border border-gray-200 bg-white p-4 text-left transition hover:border-alpine-300 hover:shadow active:scale-[0.98] touch-target"
+                  >
+                    <span className="inline-flex h-10 w-10 items-center justify-center rounded-full bg-alpine-50 text-alpine-600">
+                      {iconMap[template.iconKey]}
+                    </span>
+                    <div>
+                      <div className="text-sm font-semibold text-gray-900">{template.label}</div>
+                      <p className="mt-1 text-xs text-gray-500">{template.description}</p>
+                    </div>
+                  </button>
+                )
+              })}
+            </div>
+            <div className="mt-6 flex justify-between">
+              <button
+                onClick={handleCancelMindmapTemplatePicker}
+                className="rounded-lg border border-gray-300 px-4 py-2 text-sm font-medium text-gray-600 transition hover:bg-gray-50 inline-flex items-center gap-2"
+              >
+                <ChevronLeft size={16} />
+                Back
               </button>
             </div>
           </div>
