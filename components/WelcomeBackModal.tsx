@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import { FileText, Clock, PenTool, Network, BookOpen, Table2, type LucideIcon } from 'lucide-react'
+import { FileText, Clock, PenTool, Network, BookOpen, Table2, FilePenLine, type LucideIcon } from 'lucide-react'
 import ModalCloseButton from './ModalCloseButton'
 import { getNotes, type Note, type NoteType } from '@/lib/notes'
 import { getNoteTypePresentation, type NoteTypeIconKey } from '@/lib/note-types'
@@ -19,6 +19,7 @@ const NOTE_TYPE_ICON_MAP: Record<NoteTypeIconKey, LucideIcon> = {
   network: Network,
   'book-open': BookOpen,
   'table-2': Table2,
+  'file-pen-line': FilePenLine,
 }
 
 const noteTypeIcon = (type: NoteType) => {

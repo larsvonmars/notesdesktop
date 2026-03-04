@@ -61,6 +61,10 @@ import DataSheetEditor, {
   type DataSheetEditorHandle,
   type DataSheetData
 } from './DataSheetEditor'
+import PdfAnnotationEditor, {
+  type PdfAnnotationEditorHandle,
+  type PdfAnnotationData
+} from './PdfAnnotationEditor'
 import ProjectsWorkspaceModal from './ProjectsWorkspaceModal'
 import { useToast } from './ToastProvider'
 import { Note as LibNote, createNote, createNoteAttachment, deleteNoteAttachment, getNote, getNoteAttachments } from '../lib/notes'
@@ -364,6 +368,7 @@ export default function NoteEditor({
   const [mindmapData, setMindmapData] = useState<MindmapData | null>(null)
   const [bulletJournalData, setBulletJournalData] = useState<BulletJournalData | null>(null)
   const [dataSheetData, setDataSheetData] = useState<DataSheetData | null>(null)
+  const [pdfAnnotationData, setPdfAnnotationData] = useState<PdfAnnotationData | null>(null)
   const [dataSheetKey, setDataSheetKey] = useState(0)
   const [noteType, setNoteType] = useState<NoteType>('rich-text')
   const [isSaving, setIsSaving] = useState(false)
@@ -378,6 +383,7 @@ export default function NoteEditor({
   const mindmapEditorRef = useRef<MindmapEditorHandle | null>(null)
   const bulletJournalRef = useRef<BulletJournalEditorHandle | null>(null)
   const dataSheetRef = useRef<DataSheetEditorHandle | null>(null)
+  const pdfAnnotationRef = useRef<PdfAnnotationEditorHandle | null>(null)
   const headingUpdateTimeoutRef = useRef<number | null>(null)
   const autosaveTimeoutRef = useRef<number | null>(null)
   const isAutosavingRef = useRef(false)
@@ -634,12 +640,26 @@ export default function NoteEditor({
         setDrawingData(null)
         setMindmapData(null)
         setBulletJournalData(null)
+        setPdfAnnotationData(null)
+      } else if (note.note_type === 'pdf-annotation') {
+        try {
+          const data = JSON.parse(note.content || '{}')
+          setPdfAnnotationData(data)
+        } catch {
+          setPdfAnnotationData(null)
+        }
+        setContent('')
+        setDrawingData(null)
+        setMindmapData(null)
+        setBulletJournalData(null)
+        setDataSheetData(null)
       } else {
         setContent(note.content || '')
         setDrawingData(null)
         setMindmapData(null)
         setBulletJournalData(null)
         setDataSheetData(null)
+        setPdfAnnotationData(null)
       }
       
       setHasChanges(false)
@@ -664,6 +684,7 @@ export default function NoteEditor({
         : null)
       setBulletJournalData(initialNoteType === 'bullet-journal' ? { entries: [], activeDate: new Date().toISOString().slice(0, 10), view: 'daily' as const } : null)
       setDataSheetData(null) // null triggers the size picker in DataSheetEditor
+      setPdfAnnotationData(initialNoteType === 'pdf-annotation' ? null : null)
       setDataSheetKey(k => k + 1) // force remount of DataSheetEditor
       setNoteType(initialNoteType)
       setHasChanges(false)
@@ -700,6 +721,10 @@ export default function NoteEditor({
         const currentDSStr = JSON.stringify(dataSheetData)
         const noteDSStr = note.content || '{}'
         setHasChanges(title !== note.title || currentDSStr !== noteDSStr)
+      } else if (noteType === 'pdf-annotation') {
+        const currentPAStr = JSON.stringify(pdfAnnotationData)
+        const notePAStr = note.content || '{}'
+        setHasChanges(title !== note.title || currentPAStr !== notePAStr)
       } else {
         setHasChanges(title !== note.title || content !== (note.content || ''))
       }
@@ -716,11 +741,13 @@ export default function NoteEditor({
       } else if (noteType === 'data-sheet') {
         const cellCount = dataSheetData?.rows.reduce((sum, r) => sum + r.filter(c => c.trim() !== '').length, 0) ?? 0
         setHasChanges(title.trim() !== '' || cellCount > 0)
+      } else if (noteType === 'pdf-annotation') {
+        setHasChanges(title.trim() !== '' || !!pdfAnnotationData?.pdfStoragePath)
       } else {
         setHasChanges(title.trim() !== '' || plainContent !== '')
       }
     }
-  }, [title, content, drawingData, mindmapData, bulletJournalData, dataSheetData, note, plainContent, noteType])
+  }, [title, content, drawingData, mindmapData, bulletJournalData, dataSheetData, pdfAnnotationData, note, plainContent, noteType])
 
   useEffect(() => {
     return () => {
@@ -1625,6 +1652,13 @@ export default function NoteEditor({
           content: dsContent,
           note_type: 'data-sheet',
         }, isAuto)
+      } else if (noteType === 'pdf-annotation') {
+        const paContent = JSON.stringify(pdfAnnotationData)
+        await onSave({
+          title: effectiveTitle,
+          content: paContent,
+          note_type: 'pdf-annotation',
+        }, isAuto)
       } else {
         let contentToSave = content
         if (containsLegacyImageSources(contentToSave)) {
@@ -2073,8 +2107,11 @@ export default function NoteEditor({
     if (noteType === 'data-sheet') {
       return JSON.stringify(dataSheetData || { rows: [] }, null, 2)
     }
+    if (noteType === 'pdf-annotation') {
+      return JSON.stringify(pdfAnnotationData || {}, null, 2)
+    }
     return content
-  }, [noteType, drawingData, mindmapData, bulletJournalData, dataSheetData, content])
+  }, [noteType, drawingData, mindmapData, bulletJournalData, dataSheetData, pdfAnnotationData, content])
 
   const handleExportMarkdown = useCallback(() => {
     const fileBase = sanitizePathSegment(title || note?.title || '', 'untitled-note')
@@ -2524,6 +2561,16 @@ export default function NoteEditor({
                     initialData={dataSheetData}
                     onChange={setDataSheetData}
                     disabled={isSaving || isDeleting}
+                  />
+                </ErrorBoundary>
+              ) : noteType === 'pdf-annotation' ? (
+                <ErrorBoundary label="PDF Annotation" inline>
+                  <PdfAnnotationEditor
+                    ref={pdfAnnotationRef}
+                    value={pdfAnnotationData}
+                    onChange={setPdfAnnotationData}
+                    disabled={isSaving || isDeleting}
+                    noteId={note?.id ?? null}
                   />
                 </ErrorBoundary>
               ) : (

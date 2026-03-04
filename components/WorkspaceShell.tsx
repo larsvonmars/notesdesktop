@@ -7,7 +7,7 @@ import NoteEditor, { Note } from '@/components/NoteEditor'
 import WelcomeBackModal from '@/components/WelcomeBackModal'
 import FileExplorerModal from '@/components/FileExplorerModal'
 import SidebarTree from '@/components/SidebarTree'
-import { Loader2, FileEdit, Sparkles, FileText, PenTool, Network, BookOpen, Table2, X, Menu, ChevronLeft, ChevronRight, FolderOpen, Home, LogOut, FileQuestion, Target, Lightbulb, Scale, LayoutGrid } from 'lucide-react'
+import { Loader2, FileEdit, Sparkles, FileText, PenTool, Network, BookOpen, Table2, FilePenLine, X, Menu, ChevronLeft, ChevronRight, FolderOpen, Home, LogOut, FileQuestion, Target, Lightbulb, Scale, LayoutGrid } from 'lucide-react'
 import type { LucideIcon } from 'lucide-react'
 import { useIsMobile } from '@/lib/useIsMobile'
 import type { NoteType } from '@/lib/notes'
@@ -58,6 +58,7 @@ const NOTE_TYPE_ICON_MAP: Record<NoteTypeIconKey, LucideIcon> = {
   network: Network,
   'book-open': BookOpen,
   'table-2': Table2,
+  'file-pen-line': FilePenLine,
 }
 
 function WorkspaceContent() {

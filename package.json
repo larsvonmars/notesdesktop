@@ -35,6 +35,7 @@
     "marked": "^16.4.0",
     "next": "^16.1.6",
     "papaparse": "^5.5.3",
+    "pdfjs-dist": "^4.9.155",
     "perfect-freehand": "^1.2.2",
     "react": "^18.2.0",
     "react-dom": "^18.2.0"

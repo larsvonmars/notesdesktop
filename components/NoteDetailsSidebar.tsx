@@ -17,6 +17,7 @@ import {
   Network,
   BookOpen,
   Table2,
+  FilePenLine,
   Settings,
   X,
   Download,
@@ -84,6 +85,7 @@ const NOTE_TYPE_ICON_MAP: Record<NoteTypeIconKey, LucideIcon> = {
   network: Network,
   'book-open': BookOpen,
   'table-2': Table2,
+  'file-pen-line': FilePenLine,
 }
 
 export default function NoteDetailsSidebar({

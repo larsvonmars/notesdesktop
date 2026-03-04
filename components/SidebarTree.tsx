@@ -11,6 +11,7 @@ import {
   Network,
   BookOpen,
   Table2,
+  FilePenLine,
   Plus,
   MoreVertical,
   Search,
@@ -36,6 +37,7 @@ const NOTE_TYPE_ICON_MAP: Record<NoteTypeIconKey, LucideIcon> = {
   network: Network,
   'book-open': BookOpen,
   'table-2': Table2,
+  'file-pen-line': FilePenLine,
 }
 
 // A combined tree node representing projects as top-level groupings

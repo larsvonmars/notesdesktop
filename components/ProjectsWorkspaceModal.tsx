@@ -24,6 +24,7 @@ import {
   XCircle,
   BookOpen,
   Table2,
+  FilePenLine,
   type LucideIcon,
 } from 'lucide-react'
 import { useToast } from './ToastProvider'
@@ -86,6 +87,7 @@ const NOTE_TYPE_ICON_MAP: Record<NoteTypeIconKey, LucideIcon> = {
   network: Network,
   'book-open': BookOpen,
   'table-2': Table2,
+  'file-pen-line': FilePenLine,
 }
 
 /* ─── Helpers ─────────────────────────────────────────────────── */

@@ -1,6 +1,6 @@
 import type { NoteType } from './notes'
 
-export type NoteTypeIconKey = 'file-text' | 'pen-tool' | 'network' | 'book-open' | 'table-2'
+export type NoteTypeIconKey = 'file-text' | 'pen-tool' | 'network' | 'book-open' | 'table-2' | 'file-pen-line'
 
 export interface NoteTypePresentation {
   id: NoteType
@@ -14,7 +14,7 @@ export interface NoteTypePresentation {
   graphStroke: string
 }
 
-const NOTE_TYPE_ORDER: NoteType[] = ['rich-text', 'drawing', 'mindmap', 'bullet-journal', 'data-sheet']
+const NOTE_TYPE_ORDER: NoteType[] = ['rich-text', 'drawing', 'mindmap', 'bullet-journal', 'data-sheet', 'pdf-annotation']
 
 const NOTE_TYPE_PRESENTATIONS: Record<NoteType, NoteTypePresentation> = {
   'rich-text': {
@@ -71,6 +71,17 @@ const NOTE_TYPE_PRESENTATIONS: Record<NoteType, NoteTypePresentation> = {
     iconBgClassName: 'bg-cyan-100 text-cyan-600',
     graphFill: '#cffafe',
     graphStroke: '#0891b2',
+  },
+  'pdf-annotation': {
+    id: 'pdf-annotation',
+    label: 'PDF Annotation',
+    pickerLabel: 'PDF Annotation',
+    description: 'Upload a PDF and annotate with drawings, highlights, text, and shapes.',
+    iconKey: 'file-pen-line',
+    iconClassName: 'text-rose-500',
+    iconBgClassName: 'bg-rose-100 text-rose-600',
+    graphFill: '#ffe4e6',
+    graphStroke: '#e11d48',
   },
 }
 

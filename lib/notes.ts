@@ -1,6 +1,6 @@
 import { supabase } from './supabase'
 
-export type NoteType = 'rich-text' | 'drawing' | 'mindmap' | 'bullet-journal' | 'data-sheet'
+export type NoteType = 'rich-text' | 'drawing' | 'mindmap' | 'bullet-journal' | 'data-sheet' | 'pdf-annotation'
 
 export interface Note {
   id: string
