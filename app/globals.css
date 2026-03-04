@@ -741,6 +741,30 @@
     width: 0;
   }
 
+  /* Default table styles: Tailwind Preflight resets all native borders, so
+     tables (including those from pasted markdown) need explicit borders. */
+  [contenteditable='true'] table {
+    border-collapse: collapse;
+    min-width: 100%;
+    table-layout: fixed;
+  }
+
+  [contenteditable='true'] table th,
+  [contenteditable='true'] table td {
+    border: 1px solid var(--border-color, #e5e7eb);
+    padding: 0.25rem 0.5rem;
+    vertical-align: top;
+  }
+
+  [contenteditable='true'] table th {
+    font-weight: 600;
+  }
+
+  :is(.dark, [data-theme='dark']) [contenteditable='true'] table th,
+  :is(.dark, [data-theme='dark']) [contenteditable='true'] table td {
+    border-color: #374151;
+  }
+
   /* Table outline visibility toggle: when the root has .hide-table-outlines,
      remove visible table borders/outlines for a cleaner look. This is a UI
      preference and is applied at runtime (not persisted to sanitized HTML). */
