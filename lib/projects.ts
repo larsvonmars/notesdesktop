@@ -1,5 +1,12 @@
 import { supabase } from './supabase'
 
+export interface QuickLink {
+  id: string
+  label: string
+  url: string
+  icon?: string | null
+}
+
 export interface Project {
   id: string
   user_id: string
@@ -7,6 +14,7 @@ export interface Project {
   description: string | null
   color: string
   position: number
+  quick_links: QuickLink[]
   created_at: string
   updated_at: string
 }
@@ -23,6 +31,7 @@ export interface UpdateProjectInput {
   description?: string | null
   color?: string
   position?: number
+  quick_links?: QuickLink[]
 }
 
 /**
@@ -100,6 +109,7 @@ export async function updateProject(
   if (input.description !== undefined) updates.description = input.description
   if (input.color !== undefined) updates.color = input.color
   if (input.position !== undefined) updates.position = input.position
+  if (input.quick_links !== undefined) updates.quick_links = input.quick_links
 
   const { data, error } = await supabase
     .from('projects')
@@ -225,4 +235,22 @@ export function subscribeToProjects(
   return () => {
     supabase.removeChannel(channel)
   }
+}
+
+/**
+ * Update only the quick_links for a project
+ */
+export async function updateProjectQuickLinks(
+  projectId: string,
+  quickLinks: QuickLink[]
+): Promise<Project> {
+  const { data, error } = await supabase
+    .from('projects')
+    .update({ quick_links: quickLinks })
+    .eq('id', projectId)
+    .select()
+    .single()
+
+  if (error) throw error
+  return data
 }

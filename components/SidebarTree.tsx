@@ -23,6 +23,7 @@ import {
   X,
   Palette,
   ArrowRightLeft,
+  LayoutDashboard,
   type LucideIcon,
 } from 'lucide-react'
 import type { Note } from './NoteEditor'
@@ -69,6 +70,7 @@ export interface SidebarTreeProps {
   onUpdateProjectColor?: (projectId: string, color: string) => void
   onCreateProject?: () => void
   onMoveNoteToProject?: (noteId: string, projectId: string | null) => Promise<void>
+  onOpenProjectDashboard?: (projectId: string) => void
   collapsed: boolean
   onToggleCollapsed: () => void
 }
@@ -95,6 +97,7 @@ export default function SidebarTree({
   onUpdateProjectColor,
   onCreateProject,
   onMoveNoteToProject,
+  onOpenProjectDashboard,
   collapsed,
   onToggleCollapsed,
 }: SidebarTreeProps) {
@@ -587,6 +590,18 @@ export default function SidebarTree({
           <div className="hidden group-hover:flex items-center gap-0.5 flex-shrink-0">
             {node.project && (
               <>
+                {onOpenProjectDashboard && (
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation()
+                      onOpenProjectDashboard(node.project!.id)
+                    }}
+                    className="p-0.5 hover:bg-surface-hover rounded transition-colors"
+                    title={`Open ${projectName} dashboard`}
+                  >
+                    <LayoutDashboard size={12} />
+                  </button>
+                )}
                 <button
                   onClick={(e) => {
                     e.stopPropagation()

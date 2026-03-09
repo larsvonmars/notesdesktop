@@ -6,6 +6,7 @@ import { useEffect, useState, useRef, useCallback, Suspense } from 'react'
 import NoteEditor, { Note } from '@/components/NoteEditor'
 import WelcomeBackModal from '@/components/WelcomeBackModal'
 import FileExplorerModal from '@/components/FileExplorerModal'
+import ProjectDashboard from '@/components/ProjectDashboard'
 import SidebarTree from '@/components/SidebarTree'
 import { Loader2, FileEdit, Sparkles, FileText, PenTool, Network, BookOpen, Table2, FilePenLine, X, Menu, ChevronLeft, ChevronRight, FolderOpen, Home, LogOut, FileQuestion, Target, Lightbulb, Scale, LayoutGrid } from 'lucide-react'
 import type { LucideIcon } from 'lucide-react'
@@ -1099,6 +1100,10 @@ function WorkspaceContent() {
           onUpdateProjectColor={handleUpdateProjectColor}
           onCreateProject={handleCreateProject}
           onMoveNoteToProject={handleMoveNoteToProject}
+          onOpenProjectDashboard={(projectId) => {
+            setSelectedProjectId(projectId)
+            setActiveView('projects')
+          }}
           collapsed={sidebarCollapsed}
           onToggleCollapsed={() => setSidebarCollapsed(prev => !prev)}
         />
@@ -1198,6 +1203,11 @@ function WorkspaceContent() {
                 onUpdateProjectColor={handleUpdateProjectColor}
                 onCreateProject={handleCreateProject}
                 onMoveNoteToProject={handleMoveNoteToProject}
+                onOpenProjectDashboard={(projectId) => {
+                  setSelectedProjectId(projectId)
+                  setActiveView('projects')
+                  setWorkspaceNavOpen(false)
+                }}
                 collapsed={false}
                 onToggleCollapsed={() => {}}
               />
@@ -1239,6 +1249,26 @@ function WorkspaceContent() {
             onClose={() => setActiveView('notes')}
           />
         )}
+
+        {activeView === 'projects' && selectedProjectId && (() => {
+          const dashboardProject = projects.find(p => p.id === selectedProjectId)
+          if (!dashboardProject) return null
+          return (
+            <ProjectDashboard
+              project={dashboardProject}
+              allNotes={allNotes}
+              folders={folders}
+              onSelectNote={(note) => {
+                handleSelectNote(note)
+                setActiveView('notes')
+              }}
+              onUpdateProject={(id, updates) => {
+                setProjects(prev => prev.map(p => p.id === id ? { ...p, ...updates } : p))
+              }}
+              onClose={() => setActiveView('notes')}
+            />
+          )
+        })()}
       </main>
 
       {pendingNoteContext !== null && (
