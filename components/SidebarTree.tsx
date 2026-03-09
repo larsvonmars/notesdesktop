@@ -58,7 +58,7 @@ export interface SidebarTreeProps {
   onSelectNote: (note: Note) => void
   onSelectFolder: (folderId: string | null) => void
   onNewNote: (noteType?: string, folderId?: string | null, projectId?: string | null) => void
-  onCreateFolder: (parentId: string | null) => void
+  onCreateFolder: (parentId: string | null, projectId?: string | null) => void
   onRenameFolder: (folderId: string, newName: string) => void
   onDeleteFolder: (folderId: string) => void
   onMoveFolder?: (folderId: string, newParentId: string | null) => void
@@ -815,7 +815,7 @@ export default function SidebarTree({
                 <div className="border-t border-border my-1" />
                 <button
                   onClick={() => {
-                    onCreateFolder(null) // TODO: associate with project
+                    onCreateFolder(null, contextMenu.id)
                     setContextMenu(null)
                   }}
                   className="w-full px-3 py-2 text-xs text-left hover:bg-surface-hover flex items-center gap-2 text-foreground/80 transition-colors"
@@ -875,7 +875,7 @@ export default function SidebarTree({
                 </button>
                 <button
                   onClick={() => {
-                    onCreateFolder(contextMenu.id)
+                    onCreateFolder(contextMenu.id, contextMenu.projectId)
                     setContextMenu(null)
                   }}
                   className="w-full px-3 py-2 text-xs text-left hover:bg-surface-hover flex items-center gap-2 text-foreground/80 transition-colors"

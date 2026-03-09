@@ -89,6 +89,7 @@ function WorkspaceContent() {
   const suppressRealtimeRef = useRef(false)
   const [showCreateFolderModal, setShowCreateFolderModal] = useState(false)
   const [createFolderParentId, setCreateFolderParentId] = useState<string | null>(null)
+  const [createFolderProjectId, setCreateFolderProjectId] = useState<string | null>(null)
   const [newFolderName, setNewFolderName] = useState('')
   const createFolderInputRef = useRef<HTMLInputElement | null>(null)
   const isApplyingUrlRef = useRef(false)
@@ -679,8 +680,9 @@ function WorkspaceContent() {
 
   // Open an in-app modal to create a folder. This replaces window.prompt which
   // doesn't appear in some WebViews (notably Tauri on macOS).
-  const handleCreateFolder = async (parentId: string | null) => {
+  const handleCreateFolder = async (parentId: string | null, projectId?: string | null) => {
     setCreateFolderParentId(parentId)
+    setCreateFolderProjectId(projectId ?? null)
     setNewFolderName('')
     setShowCreateFolderModal(true)
     // focus the input on next tick when modal is rendered
@@ -708,10 +710,11 @@ function WorkspaceContent() {
     }
 
     try {
-      await createFolder({ name, parent_id: createFolderParentId })
+      await createFolder({ name, parent_id: createFolderParentId, project_id: createFolderProjectId })
       setShowCreateFolderModal(false)
       setNewFolderName('')
       setCreateFolderParentId(null)
+      setCreateFolderProjectId(null)
       loadFolders()
     } catch (error) {
       console.error('Error creating folder:', error)
@@ -724,6 +727,7 @@ function WorkspaceContent() {
     setShowCreateFolderModal(false)
     setNewFolderName('')
     setCreateFolderParentId(null)
+    setCreateFolderProjectId(null)
   }
 
   const handleRenameFolder = async (folderId: string, newName: string) => {

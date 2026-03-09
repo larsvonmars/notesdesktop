@@ -321,7 +321,7 @@ interface NoteEditorWithPanelProps extends NoteEditorProps {
   folders?: any[]
   selectedFolderId?: string | null
   onSelectFolder?: (folderId: string | null) => void
-  onCreateFolder?: (parentId: string | null) => void
+  onCreateFolder?: (parentId: string | null, projectId?: string | null) => void
   onRenameFolder?: (folderId: string, newName: string) => void
   onDeleteFolder?: (folderId: string) => void
   onMoveFolder?: (folderId: string, newParentId: string | null) => void
