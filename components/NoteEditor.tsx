@@ -83,6 +83,7 @@ import { dataSheetTableBlock, type DataSheetTablePayload } from '../lib/editor/d
 import { fileBlock, type FileBlockPayload, initializeFileBlockInteractions } from '../lib/editor/fileBlock'
 import FileExplorerModal from './FileExplorerModal'
 import SettingsModal from './SettingsModal'
+import AIAssistant from './AIAssistant'
 import NoteDetailsSidebar from './NoteDetailsSidebar'
 import { Settings } from 'lucide-react'
 import { htmlToMarkdown } from '@/lib/editor/markdownHelpers'
@@ -420,6 +421,7 @@ export default function NoteEditor({
   const [showProjectsModal, setShowProjectsModal] = useState(false)
   const [showFilePicker, setShowFilePicker] = useState(false)
   const [showSettings, setShowSettings] = useState(false)
+  const [showAIAssistant, setShowAIAssistant] = useState(false)
   const [rightSidebarCollapsed, setRightSidebarCollapsed] = useState(false)
   const [projects, setProjects] = useState<Project[]>([])
   const rightSidebarOffset = rightSidebarCollapsed ? '48px' : '280px'
@@ -2509,6 +2511,7 @@ export default function NoteEditor({
           wordGoalProgress={wordGoalProgress}
           onSetWordGoal={handleSetWordGoal}
           onOpenSettings={() => setShowSettings(true)}
+          onOpenAIAssistant={() => setShowAIAssistant(true)}
           onExportMarkdown={handleExportMarkdown}
           onExportPdf={handleExportPdf}
           onOpenConnections={() => setShowKnowledgeGraph(true)}
@@ -2980,6 +2983,33 @@ export default function NoteEditor({
       )}
       {/* Settings Modal */}
       <SettingsModal isOpen={showSettings} onClose={() => setShowSettings(false)} />
+
+      {/* AI Assistant Popup */}
+      {showAIAssistant && (
+        <div className="fixed inset-0 z-50 flex items-end justify-end p-4 pointer-events-none">
+          <div className="pointer-events-auto flex flex-col w-[420px] h-[600px] max-h-[90vh] rounded-xl border border-border bg-surface shadow-2xl overflow-hidden">
+            <div className="flex items-center justify-between border-b border-border px-4 py-3 shrink-0">
+              <div className="flex items-center gap-2">
+                <span className="text-sm font-semibold text-foreground">AI Assistant</span>
+              </div>
+              <button
+                onClick={() => setShowAIAssistant(false)}
+                className="rounded-lg p-1 text-muted transition-colors hover:bg-surface-hover hover:text-foreground"
+                aria-label="Close AI Assistant"
+              >
+                <X size={16} />
+              </button>
+            </div>
+            <div className="flex-1 min-h-0">
+              <AIAssistant
+                note={note ?? null}
+                noteContent={content}
+                allNotes={allNotes}
+              />
+            </div>
+          </div>
+        </div>
+      )}
     </>
   )
 }

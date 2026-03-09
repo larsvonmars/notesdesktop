@@ -21,6 +21,7 @@ import {
   Settings,
   X,
   Download,
+  Sparkles,
   type LucideIcon,
 } from 'lucide-react'
 import type { NoteType } from '@/lib/notes'
@@ -74,6 +75,9 @@ export interface NoteDetailsSidebarProps {
   outgoingLinks?: Array<{ id: string; title: string; folderPath?: string }>
   onSelectOutgoing?: (noteId: string) => void
   
+  // AI Assistant
+  onOpenAIAssistant?: () => void
+
   // Visibility
   collapsed: boolean
   onToggleCollapsed: () => void
@@ -117,6 +121,7 @@ export default function NoteDetailsSidebar({
   onSelectBacklink,
   outgoingLinks = [],
   onSelectOutgoing,
+  onOpenAIAssistant,
   collapsed,
   onToggleCollapsed,
 }: NoteDetailsSidebarProps) {
@@ -194,6 +199,16 @@ export default function NoteDetailsSidebar({
               title={`${headings.length} headings`}
             >
               <ListTree size={16} />
+            </button>
+          )}
+          {/* AI Assistant */}
+          {onOpenAIAssistant && (
+            <button
+              onClick={onOpenAIAssistant}
+              className="p-1.5 rounded-lg text-muted hover:bg-surface-hover hover:text-alpine-500 transition-colors"
+              title="Open AI Assistant"
+            >
+              <Sparkles size={14} />
             </button>
           )}
           {/* Settings */}
@@ -586,7 +601,16 @@ export default function NoteDetailsSidebar({
       </div>
 
       {/* Footer */}
-      <div className="border-t border-border px-3 py-2">
+      <div className="border-t border-border px-3 py-2 space-y-1">
+        {onOpenAIAssistant && (
+          <button
+            onClick={onOpenAIAssistant}
+            className="group flex w-full items-center gap-2 rounded-lg px-2 py-1.5 text-xs font-medium text-muted transition-all hover:bg-surface-hover hover:text-alpine-500"
+          >
+            <Sparkles className="h-3.5 w-3.5 shrink-0" />
+            <span>AI Assistant</span>
+          </button>
+        )}
         <button
           onClick={onOpenSettings}
           className="group flex w-full items-center gap-2 rounded-lg px-2 py-1.5 text-xs font-medium text-muted transition-all hover:bg-surface-hover hover:text-foreground"
