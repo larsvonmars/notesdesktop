@@ -36,6 +36,8 @@ import {
   Bold,
   Italic,
   PanelLeft,
+  RotateCw,
+  RotateCcw,
 } from 'lucide-react'
 import { uploadFile, getFileSignedUrl, downloadFile } from '@/lib/file-storage'
 
@@ -256,6 +258,9 @@ const PdfAnnotationEditor = forwardRef<PdfAnnotationEditorHandle, PdfAnnotationE
     // Natural (unscaled) page dimensions — used for fit-to-width/page and blank page sizing
     const [naturalWidth, setNaturalWidth] = useState(0)
     const [naturalHeight, setNaturalHeight] = useState(0)
+
+    // Rotation (view-only, 0 | 90 | 180 | 270)
+    const [viewRotation, setViewRotation] = useState<0 | 90 | 180 | 270>(0)
 
     // UI / thumbnail state
     const [showThumbnails, setShowThumbnails] = useState(false)
@@ -837,11 +842,28 @@ const PdfAnnotationEditor = forwardRef<PdfAnnotationEditorHandle, PdfAnnotationE
     // ────────────────────────────────────────────────────────
     function getPointerPos(e: ReactPointerEvent<HTMLCanvasElement>): PdfPoint {
       const rect = annotCanvasRef.current!.getBoundingClientRect()
-      return {
-        x: (e.clientX - rect.left) / zoom,
-        y: (e.clientY - rect.top) / zoom,
-        pressure: e.pressure,
+      const vx = e.clientX - rect.left
+      const vy = e.clientY - rect.top
+      let cx: number, cy: number
+      // Undo CSS rotation to map visual pointer coords back to canvas logical coords
+      switch (viewRotation) {
+        case 90:
+          cx = (canvasWidth - vy) / zoom
+          cy = vx / zoom
+          break
+        case 180:
+          cx = (canvasWidth - vx) / zoom
+          cy = (canvasHeight - vy) / zoom
+          break
+        case 270:
+          cx = vy / zoom
+          cy = (canvasHeight - vx) / zoom
+          break
+        default:
+          cx = vx / zoom
+          cy = vy / zoom
       }
+      return { x: cx, y: cy, pressure: e.pressure }
     }
 
     // ────────────────────────────────────────────────────────
@@ -1562,6 +1584,35 @@ const PdfAnnotationEditor = forwardRef<PdfAnnotationEditorHandle, PdfAnnotationE
 
           <div className="mx-1 h-5 w-px bg-border" />
 
+          {/* Rotate */}
+          <button
+            title="Rotate 90° counter-clockwise"
+            onClick={() => setViewRotation(r => ((r + 270) % 360) as 0 | 90 | 180 | 270)}
+            className="rounded p-1.5 text-muted-foreground transition-colors hover:bg-surface-hover"
+          >
+            <RotateCcw size={15} />
+          </button>
+          <select
+            value={viewRotation}
+            onChange={e => setViewRotation(Number(e.target.value) as 0 | 90 | 180 | 270)}
+            title="Page rotation"
+            className="rounded border border-border bg-surface px-1 py-0.5 text-xs text-muted-foreground focus:outline-none"
+          >
+            <option value={0}>0°</option>
+            <option value={90}>90° CW</option>
+            <option value={180}>180°</option>
+            <option value={270}>90° CCW</option>
+          </select>
+          <button
+            title="Rotate 90° clockwise"
+            onClick={() => setViewRotation(r => ((r + 90) % 360) as 0 | 90 | 180 | 270)}
+            className="rounded p-1.5 text-muted-foreground transition-colors hover:bg-surface-hover"
+          >
+            <RotateCw size={15} />
+          </button>
+
+          <div className="mx-1 h-5 w-px bg-border" />
+
           {/* Page navigation */}
           <button
             title="Toggle page thumbnails"
@@ -1702,10 +1753,26 @@ const PdfAnnotationEditor = forwardRef<PdfAnnotationEditorHandle, PdfAnnotationE
               </div>
             )}
 
+            {/* Outer div reserves the correct bounding-box size in the scroll area */}
             <div
               className="relative mx-auto my-4"
-              style={{ width: canvasWidth, height: canvasHeight }}
+              style={{
+                width:  (viewRotation === 90 || viewRotation === 270) ? canvasHeight : canvasWidth,
+                height: (viewRotation === 90 || viewRotation === 270) ? canvasWidth  : canvasHeight,
+              }}
             >
+              {/* Inner wrapper applies the visual rotation around its own center */}
+              <div
+                style={{
+                  position: 'absolute',
+                  top: '50%',
+                  left: '50%',
+                  width: canvasWidth,
+                  height: canvasHeight,
+                  transform: `translate(-50%, -50%) rotate(${viewRotation}deg)`,
+                  transformOrigin: 'center center',
+                }}
+              >
               {/* PDF render layer */}
               <canvas
                 ref={pdfCanvasRef}
@@ -1905,6 +1972,7 @@ const PdfAnnotationEditor = forwardRef<PdfAnnotationEditorHandle, PdfAnnotationE
                   }}
                 />
               )}
+              </div>{/* end rotation wrapper */}
             </div>
           </div>
         </div>

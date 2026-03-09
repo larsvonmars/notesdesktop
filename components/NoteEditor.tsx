@@ -473,25 +473,25 @@ export default function NoteEditor({
   // Content blocks configuration
   const contentBlocks = useMemo(() => [
     // Headings
-    { id: 'heading1', label: 'Heading 1', description: 'Large section heading', icon: Heading1, color: 'indigo', category: 'Headings', command: 'heading1' as RichTextCommand },
-    { id: 'heading2', label: 'Heading 2', description: 'Medium section heading', icon: Heading2, color: 'indigo', category: 'Headings', command: 'heading2' as RichTextCommand },
-    { id: 'heading3', label: 'Heading 3', description: 'Small section heading', icon: Heading3, color: 'indigo', category: 'Headings', command: 'heading3' as RichTextCommand },
-    { id: 'heading4', label: 'Heading 4', description: 'Sub-section heading', icon: Heading4, color: 'indigo', category: 'Headings', command: 'heading4' as RichTextCommand },
-    { id: 'heading5', label: 'Heading 5', description: 'Minor heading', icon: Heading5, color: 'indigo', category: 'Headings', command: 'heading5' as RichTextCommand },
-    { id: 'heading6', label: 'Heading 6', description: 'Smallest heading', icon: Heading6, color: 'indigo', category: 'Headings', command: 'heading6' as RichTextCommand },
+    { id: 'heading1', label: 'Heading 1', description: 'Large section heading', icon: Heading1, color: 'indigo', category: 'Headings', command: 'heading1' as RichTextCommand, keywords: ['h1', 'title', 'big'] },
+    { id: 'heading2', label: 'Heading 2', description: 'Medium section heading', icon: Heading2, color: 'indigo', category: 'Headings', command: 'heading2' as RichTextCommand, keywords: ['h2', 'subtitle'] },
+    { id: 'heading3', label: 'Heading 3', description: 'Small section heading', icon: Heading3, color: 'indigo', category: 'Headings', command: 'heading3' as RichTextCommand, keywords: ['h3'] },
+    { id: 'heading4', label: 'Heading 4', description: 'Sub-section heading', icon: Heading4, color: 'indigo', category: 'Headings', command: 'heading4' as RichTextCommand, keywords: ['h4'] },
+    { id: 'heading5', label: 'Heading 5', description: 'Minor heading', icon: Heading5, color: 'indigo', category: 'Headings', command: 'heading5' as RichTextCommand, keywords: ['h5'] },
+    { id: 'heading6', label: 'Heading 6', description: 'Smallest heading', icon: Heading6, color: 'indigo', category: 'Headings', command: 'heading6' as RichTextCommand, keywords: ['h6'] },
     // Lists
-    { id: 'unordered-list', label: 'Bullet List', description: 'Create an unordered list', icon: List, color: 'green', category: 'Lists', command: 'unordered-list' as RichTextCommand },
-    { id: 'ordered-list', label: 'Numbered List', description: 'Create an ordered list', icon: OrderedListIcon, color: 'green', category: 'Lists', command: 'ordered-list' as RichTextCommand },
-    { id: 'checklist', label: 'Checklist', description: 'Task list with checkboxes', icon: CheckSquare, color: 'green', category: 'Lists', command: 'checklist' as RichTextCommand },
+    { id: 'unordered-list', label: 'Bullet List', description: 'Create an unordered list', icon: List, color: 'green', category: 'Lists', command: 'unordered-list' as RichTextCommand, keywords: ['ul', 'bullet', 'unordered'] },
+    { id: 'ordered-list', label: 'Numbered List', description: 'Create an ordered list', icon: OrderedListIcon, color: 'green', category: 'Lists', command: 'ordered-list' as RichTextCommand, keywords: ['ol', 'numbered', 'ordered'] },
+    { id: 'checklist', label: 'Checklist', description: 'Task list with checkboxes', icon: CheckSquare, color: 'green', category: 'Lists', command: 'checklist' as RichTextCommand, keywords: ['cl', 'todo', 'tasks', 'check', 'checkbox'] },
     // Content
-    { id: 'blockquote', label: 'Quote', description: 'Insert a blockquote', icon: Quote, color: 'amber', category: 'Content', command: 'blockquote' as RichTextCommand },
-    { id: 'horizontal-rule', label: 'Divider', description: 'Add a horizontal rule', icon: HorizontalRule, color: 'gray', category: 'Content', command: 'horizontal-rule' as RichTextCommand },
-    { id: 'hyperlink', label: 'Hyperlink', description: 'Insert a web link', icon: LinkIcon, color: 'blue', category: 'Content', command: 'link' as RichTextCommand },
-    { id: 'table', label: 'Table', description: 'Insert a customizable table', icon: TableIcon, color: 'blue', category: 'Content', command: null },
-    { id: 'note-link', label: 'Note Link', description: 'Link to another note', icon: FileText, color: 'purple', category: 'Content', command: null },
-    { id: 'data-sheet-table', label: 'Data Sheet Table', description: 'Insert table from a data sheet', icon: Table2Icon, color: 'emerald', category: 'Content', command: null },
-    { id: 'image', label: 'Image', description: 'Insert an image', icon: ImageIcon, color: 'pink', category: 'Media', command: null },
-    { id: 'file', label: 'File', description: 'Attach a file from your storage', icon: Paperclip, color: 'alpine', category: 'Media', command: null },
+    { id: 'blockquote', label: 'Quote', description: 'Insert a blockquote', icon: Quote, color: 'amber', category: 'Content', command: 'blockquote' as RichTextCommand, keywords: ['bq', 'blockquote', 'cite'] },
+    { id: 'horizontal-rule', label: 'Divider', description: 'Add a horizontal rule', icon: HorizontalRule, color: 'gray', category: 'Content', command: 'horizontal-rule' as RichTextCommand, keywords: ['hr', 'rule', 'separator', 'line'] },
+    { id: 'hyperlink', label: 'Hyperlink', description: 'Insert a web link', icon: LinkIcon, color: 'blue', category: 'Content', command: 'link' as RichTextCommand, keywords: ['url', 'link', 'a', 'web', 'href'] },
+    { id: 'table', label: 'Table', description: 'Insert a customizable table', icon: TableIcon, color: 'blue', category: 'Content', command: null, keywords: ['tbl', 'grid', 'spreadsheet'] },
+    { id: 'note-link', label: 'Note Link', description: 'Link to another note', icon: FileText, color: 'purple', category: 'Content', command: null, keywords: ['nl', 'notelink', 'internal'] },
+    { id: 'data-sheet-table', label: 'Data Sheet Table', description: 'Insert table from a data sheet', icon: Table2Icon, color: 'emerald', category: 'Content', command: null, keywords: ['dst', 'data', 'sheet'] },
+    { id: 'image', label: 'Image', description: 'Insert an image', icon: ImageIcon, color: 'pink', category: 'Media', command: null, keywords: ['img', 'picture', 'photo', 'pic'] },
+    { id: 'file', label: 'File', description: 'Attach a file from your storage', icon: Paperclip, color: 'alpine', category: 'Media', command: null, keywords: ['attachment', 'attach', 'upload', 'doc'] },
   ], [])
 
   // Filter content blocks based on search query
@@ -502,7 +502,8 @@ export default function NoteEditor({
     return contentBlocks.filter(block => 
       block.label.toLowerCase().includes(query) ||
       block.description.toLowerCase().includes(query) ||
-      block.category.toLowerCase().includes(query)
+      block.category.toLowerCase().includes(query) ||
+      (block.keywords && block.keywords.some(kw => kw.toLowerCase().includes(query)))
     )
   }, [blockSearchQuery, contentBlocks])
 
