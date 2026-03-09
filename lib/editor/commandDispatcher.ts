@@ -381,7 +381,7 @@ export function getBlockAncestor(node: Node | null): HTMLElement | null {
  * Improved cursor positioning with WebView compatibility and better error handling
  */
 export function applyBlockFormat(
-  tagName: 'p' | 'h1' | 'h2' | 'h3' | 'blockquote',
+  tagName: 'p' | 'h1' | 'h2' | 'h3' | 'h4' | 'h5' | 'h6' | 'blockquote',
   editorElement?: HTMLElement | null
 ): void {
   try {

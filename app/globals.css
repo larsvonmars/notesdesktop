@@ -441,6 +441,36 @@
     display: block !important;
   }
 
+  [contenteditable='true'] h4 {
+    font-size: 1.25rem !important;
+    @apply font-semibold text-gray-700;
+    margin-top: 1em !important;
+    margin-bottom: 0.75em !important;
+    line-height: 1.4 !important;
+    scroll-margin-top: 2rem !important;
+    display: block !important;
+  }
+
+  [contenteditable='true'] h5 {
+    font-size: 1.1rem !important;
+    @apply font-semibold text-gray-600;
+    margin-top: 1em !important;
+    margin-bottom: 0.5em !important;
+    line-height: 1.5 !important;
+    scroll-margin-top: 2rem !important;
+    display: block !important;
+  }
+
+  [contenteditable='true'] h6 {
+    font-size: 1rem !important;
+    @apply font-semibold text-gray-500;
+    margin-top: 1em !important;
+    margin-bottom: 0.5em !important;
+    line-height: 1.5 !important;
+    scroll-margin-top: 2rem !important;
+    display: block !important;
+  }
+
   /* Blockquote styling */
   [contenteditable='true'] blockquote {
     @apply border-l-4 border-gray-200 pl-4 ml-0 text-gray-500 italic;
@@ -507,6 +537,9 @@
   .show-block-outlines [contenteditable='true'] h1,
   .show-block-outlines [contenteditable='true'] h2,
   .show-block-outlines [contenteditable='true'] h3,
+  .show-block-outlines [contenteditable='true'] h4,
+  .show-block-outlines [contenteditable='true'] h5,
+  .show-block-outlines [contenteditable='true'] h6,
   .show-block-outlines [contenteditable='true'] ul,
   .show-block-outlines [contenteditable='true'] ol,
   .show-block-outlines [contenteditable='true'] blockquote,
@@ -526,6 +559,9 @@
   .show-block-outlines [contenteditable='true'] h1:hover,
   .show-block-outlines [contenteditable='true'] h2:hover,
   .show-block-outlines [contenteditable='true'] h3:hover,
+  .show-block-outlines [contenteditable='true'] h4:hover,
+  .show-block-outlines [contenteditable='true'] h5:hover,
+  .show-block-outlines [contenteditable='true'] h6:hover,
   .show-block-outlines [contenteditable='true'] ul:hover,
   .show-block-outlines [contenteditable='true'] ol:hover,
   .show-block-outlines [contenteditable='true'] blockquote:hover,
@@ -541,6 +577,9 @@
   .show-block-outlines [contenteditable='true'] h1::before,
   .show-block-outlines [contenteditable='true'] h2::before,
   .show-block-outlines [contenteditable='true'] h3::before,
+  .show-block-outlines [contenteditable='true'] h4::before,
+  .show-block-outlines [contenteditable='true'] h5::before,
+  .show-block-outlines [contenteditable='true'] h6::before,
   .show-block-outlines [contenteditable='true'] ul::before,
   .show-block-outlines [contenteditable='true'] ol::before,
   .show-block-outlines [contenteditable='true'] blockquote::before,
@@ -582,6 +621,21 @@
   .show-block-outlines [contenteditable='true'] h3::before {
     content: 'H3';
     background: linear-gradient(135deg, #10B981 0%, #059669 100%);
+  }
+
+  .show-block-outlines [contenteditable='true'] h4::before {
+    content: 'H4';
+    background: linear-gradient(135deg, #06B6D4 0%, #0891B2 100%);
+  }
+
+  .show-block-outlines [contenteditable='true'] h5::before {
+    content: 'H5';
+    background: linear-gradient(135deg, #8B5CF6 0%, #7C3AED 100%);
+  }
+
+  .show-block-outlines [contenteditable='true'] h6::before {
+    content: 'H6';
+    background: linear-gradient(135deg, #EC4899 0%, #DB2777 100%);
   }
 
   .show-block-outlines [contenteditable='true'] ul::before {
@@ -1097,6 +1151,18 @@
 
 .dark [contenteditable='true'] h3 {
   color: #cbd5e1;
+}
+
+.dark [contenteditable='true'] h4 {
+  color: #b8c5d6;
+}
+
+.dark [contenteditable='true'] h5 {
+  color: #a8b8cc;
+}
+
+.dark [contenteditable='true'] h6 {
+  color: #94a3b8;
 }
 
 .dark [contenteditable='true'] blockquote {

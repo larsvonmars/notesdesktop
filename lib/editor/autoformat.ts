@@ -141,6 +141,18 @@ export const LIST_PREFIX_PATTERNS = [
     pattern: /^###\s$/,
     action: 'heading3' as const
   },
+  {
+    pattern: /^####\s$/,
+    action: 'heading4' as const
+  },
+  {
+    pattern: /^#####\s$/,
+    action: 'heading5' as const
+  },
+  {
+    pattern: /^######\s$/,
+    action: 'heading6' as const
+  },
   // Blockquote with >
   {
     pattern: /^>\s$/,

@@ -97,6 +97,9 @@ export type RichTextCommand =
   | 'heading1'
   | 'heading2'
   | 'heading3'
+  | 'heading4'
+  | 'heading5'
+  | 'heading6'
   | 'undo'
   | 'redo'
   | 'link'
@@ -141,7 +144,7 @@ const SANITIZE_CONFIG: Config = {
   ALLOWED_TAGS: [
     'a', 'b', 'strong', 'i', 'em', 'u', 's', 'code', 'pre', 'p', 'br',
     'div', 'span', 'blockquote', 'ul', 'ol', 'li', 'hr', 'input',
-    'h1', 'h2', 'h3', 'mark', 'img', 'button', 'svg', 'path', 'table',
+    'h1', 'h2', 'h3', 'h4', 'h5', 'h6', 'mark', 'img', 'button', 'svg', 'path', 'table',
     'thead', 'tbody', 'tr', 'td', 'th'
   ],
   ALLOWED_ATTR: [
@@ -323,7 +326,7 @@ const shouldPreferPlainTextOverHtml = (html: string, plainText: string): boolean
  */
 const ensureEditorHasContent = (editor: HTMLDivElement) => {
   if (editor.childNodes.length === 0 || (editor.textContent || '').trim() === '') {
-    if (!editor.querySelector('p, h1, h2, h3, ul, ol, blockquote, hr, table, div[data-block]')) {
+    if (!editor.querySelector('p, h1, h2, h3, h4, h5, h6, ul, ol, blockquote, hr, table, div[data-block]')) {
       const p = document.createElement('p')
       p.appendChild(document.createElement('br'))
       editor.appendChild(p)
@@ -435,6 +438,12 @@ const RichTextEditor = forwardRef<RichTextEditorHandle, RichTextEditorProps>(
             return !!element?.closest('h2')
           case 'heading3':
             return !!element?.closest('h3')
+          case 'heading4':
+            return !!element?.closest('h4')
+          case 'heading5':
+            return !!element?.closest('h5')
+          case 'heading6':
+            return !!element?.closest('h6')
           case 'blockquote':
             return !!element?.closest('blockquote')
           case 'align-left':
@@ -498,6 +507,9 @@ const RichTextEditor = forwardRef<RichTextEditorHandle, RichTextEditorProps>(
         if (element.closest('h1')) formats.add('heading1')
         if (element.closest('h2')) formats.add('heading2')
         if (element.closest('h3')) formats.add('heading3')
+        if (element.closest('h4')) formats.add('heading4')
+        if (element.closest('h5')) formats.add('heading5')
+        if (element.closest('h6')) formats.add('heading6')
         if (element.closest('blockquote')) formats.add('blockquote')
 
         // Detect text alignment
@@ -992,8 +1004,8 @@ const RichTextEditor = forwardRef<RichTextEditorHandle, RichTextEditorProps>(
             case 'formatBlock':
               if (valueArg) {
                 const tag = valueArg.toLowerCase().replace(/[<>]/g, '')
-                if (['p', 'h1', 'h2', 'h3', 'blockquote'].includes(tag)) {
-                  applyBlockFormat(tag as 'p' | 'h1' | 'h2' | 'h3' | 'blockquote', editor)
+                if (['p', 'h1', 'h2', 'h3', 'h4', 'h5', 'h6', 'blockquote'].includes(tag)) {
+                  applyBlockFormat(tag as 'p' | 'h1' | 'h2' | 'h3' | 'h4' | 'h5' | 'h6' | 'blockquote', editor)
                 }
               }
               break
@@ -1273,7 +1285,7 @@ const RichTextEditor = forwardRef<RichTextEditorHandle, RichTextEditorProps>(
     }, [disabled, emitChange])
 
     const applyHeading = useCallback(
-      (level: 1 | 2 | 3) => {
+      (level: 1 | 2 | 3 | 4 | 5 | 6) => {
         if (disabled || !editorRef.current || !editorRef.current.isConnected) return
 
         const editor = editorRef.current
@@ -1286,7 +1298,7 @@ const RichTextEditor = forwardRef<RichTextEditorHandle, RichTextEditorProps>(
         }
 
         try {
-          applyBlockFormat(`h${level}` as 'h1' | 'h2' | 'h3', editor)
+          applyBlockFormat(`h${level}` as 'h1' | 'h2' | 'h3' | 'h4' | 'h5' | 'h6', editor)
 
           setTimeout(() => {
             try {
@@ -1369,7 +1381,7 @@ const RichTextEditor = forwardRef<RichTextEditorHandle, RichTextEditorProps>(
 
     const getHeadings = useCallback(() => {
       if (!editorRef.current) return []
-      const headings = editorRef.current.querySelectorAll('h1, h2, h3')
+      const headings = editorRef.current.querySelectorAll('h1, h2, h3, h4, h5, h6')
       return Array.from(headings).map((heading) => ({
         id: heading.id || '',
         level: parseInt(heading.tagName.substring(1)),
@@ -1896,6 +1908,15 @@ const RichTextEditor = forwardRef<RichTextEditorHandle, RichTextEditorProps>(
         case 'heading3':
           applyHeading(3)
           break
+        case 'heading4':
+          applyHeading(4)
+          break
+        case 'heading5':
+          applyHeading(5)
+          break
+        case 'heading6':
+          applyHeading(6)
+          break
         case 'horizontal-rule':
           insertHorizontalRule()
           break
@@ -1976,6 +1997,12 @@ const RichTextEditor = forwardRef<RichTextEditorHandle, RichTextEditorProps>(
                 return !!element?.closest('h2')
               case 'heading3':
                 return !!element?.closest('h3')
+              case 'heading4':
+                return !!element?.closest('h4')
+              case 'heading5':
+                return !!element?.closest('h5')
+              case 'heading6':
+                return !!element?.closest('h6')
               case 'blockquote':
                 return !!element?.closest('blockquote')
               default: {
@@ -2273,6 +2300,15 @@ const RichTextEditor = forwardRef<RichTextEditorHandle, RichTextEditorProps>(
                       case 'heading3':
                         applyHeading(3)
                         break
+                      case 'heading4':
+                        applyHeading(4)
+                        break
+                      case 'heading5':
+                        applyHeading(5)
+                        break
+                      case 'heading6':
+                        applyHeading(6)
+                        break
                       case 'blockquote':
                         execCommand('formatBlock', 'blockquote')
                         break
@@ -2454,6 +2490,15 @@ const RichTextEditor = forwardRef<RichTextEditorHandle, RichTextEditorProps>(
           } else if (event.altKey && key === '3') {
             event.preventDefault()
             applyHeading(3)
+          } else if (event.altKey && key === '4') {
+            event.preventDefault()
+            applyHeading(4)
+          } else if (event.altKey && key === '5') {
+            event.preventDefault()
+            applyHeading(5)
+          } else if (event.altKey && key === '6') {
+            event.preventDefault()
+            applyHeading(6)
           } else if (key === '`') {
             event.preventDefault()
             applyCode()
