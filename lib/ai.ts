@@ -128,50 +128,38 @@ const DEFAULT_MODEL = 'deepseek-chat'
 const DEFAULT_TEMPERATURE = 0.7
 const DEFAULT_MAX_TOKENS = 2048
 
-// Storage key for API key persistence
-const API_KEY_STORAGE_KEY = 'notesdesktop_deepseek_api_key'
+// Runtime override key (for advanced/dev usage only)
+let runtimeApiKey: string | null = null
 
-// API key with localStorage persistence
-let apiKey: string | null = null
-
-// Initialize from localStorage on module load (client-side only)
-if (typeof window !== 'undefined') {
-  try {
-    apiKey = localStorage.getItem(API_KEY_STORAGE_KEY)
-  } catch {
-    // localStorage not available
-  }
+/**
+ * Returns the active API key.
+ * Priority: runtime override → NEXT_PUBLIC_DEEPSEEK_API_KEY build-time env var.
+ * The key is embedded at build time via the env file and never requested from the user.
+ */
+function getApiKey(): string | null {
+  if (runtimeApiKey) return runtimeApiKey
+  const envKey = process.env.NEXT_PUBLIC_DEEPSEEK_API_KEY
+  return envKey && envKey.length > 0 ? envKey : null
 }
 
+/** @deprecated Key is now managed via NEXT_PUBLIC_DEEPSEEK_API_KEY in .env.local */
 export function setAIApiKey(key: string) {
-  apiKey = key
-  // Persist to localStorage
-  if (typeof window !== 'undefined') {
-    try {
-      localStorage.setItem(API_KEY_STORAGE_KEY, key)
-    } catch {
-      // localStorage not available
-    }
-  }
+  runtimeApiKey = key
 }
 
+/** Returns the active API key (env-based). */
 export function getAIApiKey(): string | null {
-  return apiKey
+  return getApiKey()
 }
 
+/** Returns true when an API key is available (from env or runtime override). */
 export function hasAIApiKey(): boolean {
-  return !!apiKey && apiKey.length > 0
+  return !!getApiKey()
 }
 
+/** Clears runtime override key. Env key is always available if set. */
 export function clearAIApiKey(): void {
-  apiKey = null
-  if (typeof window !== 'undefined') {
-    try {
-      localStorage.removeItem(API_KEY_STORAGE_KEY)
-    } catch {
-      // localStorage not available
-    }
-  }
+  runtimeApiKey = null
 }
 
 // ============================================================================
@@ -292,8 +280,9 @@ export async function sendAIRequest(
   messages: AIMessage[],
   options: AIRequestOptions = {}
 ): Promise<string> {
-  if (!apiKey) {
-    throw new Error('AI API key not configured. Please set your DeepSeek API key in settings.')
+  const key = getApiKey()
+  if (!key) {
+    throw new Error('AI API key not configured. Set NEXT_PUBLIC_DEEPSEEK_API_KEY in .env.local.')
   }
 
   const {
@@ -306,7 +295,7 @@ export async function sendAIRequest(
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
-      'Authorization': `Bearer ${apiKey}`,
+      'Authorization': `Bearer ${key}`,
     },
     body: JSON.stringify({
       model: DEFAULT_MODEL,
@@ -336,8 +325,9 @@ export async function sendAIRequestStream(
   callbacks: AIStreamCallbacks,
   options: AIRequestOptions = {}
 ): Promise<void> {
-  if (!apiKey) {
-    callbacks.onError?.(new Error('AI API key not configured. Please set your DeepSeek API key in settings.'))
+  const key = getApiKey()
+  if (!key) {
+    callbacks.onError?.(new Error('AI API key not configured. Set NEXT_PUBLIC_DEEPSEEK_API_KEY in .env.local.'))
     return
   }
 
@@ -351,7 +341,7 @@ export async function sendAIRequestStream(
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        'Authorization': `Bearer ${apiKey}`,
+        'Authorization': `Bearer ${key}`,
       },
       body: JSON.stringify({
         model: DEFAULT_MODEL,
@@ -461,8 +451,9 @@ async function chatWithTools(
   onStream?: (token: string) => void,
   maxIterations: number = 5
 ): Promise<string> {
-  if (!apiKey) {
-    throw new Error('AI API key not configured.')
+  const key = getApiKey()
+  if (!key) {
+    throw new Error('AI API key not configured. Set NEXT_PUBLIC_DEEPSEEK_API_KEY in .env.local.')
   }
 
   let currentMessages = [...messages]
@@ -473,7 +464,7 @@ async function chatWithTools(
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        'Authorization': `Bearer ${apiKey}`,
+        'Authorization': `Bearer ${key}`,
       },
       body: JSON.stringify({
         model: DEFAULT_MODEL,
