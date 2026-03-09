@@ -1167,6 +1167,30 @@ const PdfAnnotationEditor = forwardRef<PdfAnnotationEditorHandle, PdfAnnotationE
       emitChange(pages, currentPage, newZoom)
     }, [pages, currentPage, emitChange])
 
+    // ────────────────────────────────────────────────────────
+    // Rotation coordinate helpers
+    // ────────────────────────────────────────────────────────
+    // Convert unscaled logical canvas coords → visual coords relative to the outer bounding-box div
+    function logicalToVisual(lx: number, ly: number): { vx: number; vy: number } {
+      const px = lx * zoom
+      const py = ly * zoom
+      switch (viewRotation) {
+        case 90:  return { vx: py, vy: canvasWidth - px }
+        case 180: return { vx: canvasWidth - px, vy: canvasHeight - py }
+        case 270: return { vx: canvasHeight - py, vy: px }
+        default:  return { vx: px, vy: py }
+      }
+    }
+    // Convert a mouse-movement delta (screen pixels) → logical (unscaled) delta
+    function screenDeltaToLogical(dsx: number, dsy: number): { dx: number; dy: number } {
+      switch (viewRotation) {
+        case 90:  return { dx: -dsy / zoom, dy: dsx / zoom }
+        case 180: return { dx: -dsx / zoom, dy: -dsy / zoom }
+        case 270: return { dx: dsy / zoom, dy: -dsx / zoom }
+        default:  return { dx: dsx / zoom, dy: dsy / zoom }
+      }
+    }
+
     const handleFitWidth = useCallback(() => {
       if (!naturalWidth || !scrollAreaRef.current) return
       const available = scrollAreaRef.current.getBoundingClientRect().width - 48 // minus padding
@@ -1803,15 +1827,18 @@ const PdfAnnotationEditor = forwardRef<PdfAnnotationEditorHandle, PdfAnnotationE
                 onPointerMove={handlePointerMove}
                 onPointerUp={handlePointerUp}
               />
-              {/* Text formatting toolbar — shown when a text annotation is selected */}
+              </div>{/* end rotation wrapper */}
+
+              {/* Text formatting toolbar — rendered at 0° outside the rotation wrapper */}
               {tool === 'select' && selectedId && (() => {
                 const pageAnnot = getPageAnnotations(currentPage)
                 const ta = pageAnnot.textAnnotations.find(t => t.id === selectedId)
                 if (!ta) return null
+                const { vx, vy } = logicalToVisual(ta.x, ta.y)
                 return (
                   <div
                     className="absolute z-40 flex items-center gap-0.5 rounded-lg border border-border bg-surface px-1.5 py-1 shadow-md"
-                    style={{ left: ta.x * zoom, top: Math.max(0, ta.y * zoom - 40) }}
+                    style={{ left: vx, top: Math.max(0, vy - 40) }}
                   >
                     <button
                       onMouseDown={e => { e.preventDefault(); toggleTextBold(ta.id) }}
@@ -1850,14 +1877,17 @@ const PdfAnnotationEditor = forwardRef<PdfAnnotationEditorHandle, PdfAnnotationE
                   </div>
                 )
               })()}
-              {/* Sticky notes overlay */}
-              {getPageAnnotations(currentPage).stickyNotes?.map(sn => (
+
+              {/* Sticky notes overlay — rendered at 0° outside the rotation wrapper */}
+              {getPageAnnotations(currentPage).stickyNotes?.map(sn => {
+                const { vx, vy } = logicalToVisual(sn.x, sn.y)
+                return (
                 <div
                   key={sn.id}
                   className="absolute z-30 flex flex-col overflow-hidden rounded-md shadow-md"
                   style={{
-                    left: sn.x * zoom,
-                    top: sn.y * zoom,
+                    left: vx,
+                    top: vy,
                     width: sn.collapsed ? 32 : sn.width * zoom,
                     height: sn.collapsed ? 28 : sn.height * zoom,
                     backgroundColor: STICKY_COLORS[sn.color],
@@ -1877,8 +1907,7 @@ const PdfAnnotationEditor = forwardRef<PdfAnnotationEditorHandle, PdfAnnotationE
                       const origX = sn.x
                       const origY = sn.y
                       const onMove = (me: MouseEvent) => {
-                        const dx = (me.clientX - startX) / zoom
-                        const dy = (me.clientY - startY) / zoom
+                        const { dx, dy } = screenDeltaToLogical(me.clientX - startX, me.clientY - startY)
                         updateStickyNote(sn.id, { x: origX + dx, y: origY + dy })
                       }
                       const onUp = () => {
@@ -1939,40 +1968,44 @@ const PdfAnnotationEditor = forwardRef<PdfAnnotationEditorHandle, PdfAnnotationE
                     />
                   )}
                 </div>
-              ))}
-              {/* Text editing overlay */}
-              {editingText && (
-                <textarea
-                  ref={textAreaRef}
-                  autoFocus
-                  className="absolute rounded border border-blue-400 bg-white/80 p-1 text-black outline-none dark:bg-black/80 dark:text-white"
-                  style={{
-                    left: editingText.x * zoom,
-                    top: editingText.y * zoom,
-                    width: editingText.width * zoom,
-                    minHeight: editingText.height * zoom,
-                    fontSize: editingText.fontSize * zoom,
-                    color: editingText.color,
-                    resize: 'both',
-                  }}
-                  value={editingText.text}
-                  onChange={e =>
-                    setEditingText(prev =>
-                      prev ? { ...prev, text: e.target.value } : null
-                    )
-                  }
-                  onBlur={commitText}
-                  onKeyDown={e => {
-                    if (e.key === 'Escape') {
-                      setEditingText(null)
-                    } else if (e.key === 'Enter' && !e.shiftKey) {
-                      e.preventDefault()
-                      commitText()
+                )
+              })}
+
+              {/* Text editing overlay — rendered at 0° outside the rotation wrapper */}
+              {editingText && (() => {
+                const { vx, vy } = logicalToVisual(editingText.x, editingText.y)
+                return (
+                  <textarea
+                    ref={textAreaRef}
+                    autoFocus
+                    className="absolute rounded border border-blue-400 bg-white/80 p-1 text-black outline-none dark:bg-black/80 dark:text-white"
+                    style={{
+                      left: vx,
+                      top: vy,
+                      width: editingText.width * zoom,
+                      minHeight: editingText.height * zoom,
+                      fontSize: editingText.fontSize * zoom,
+                      color: editingText.color,
+                      resize: 'both',
+                    }}
+                    value={editingText.text}
+                    onChange={e =>
+                      setEditingText(prev =>
+                        prev ? { ...prev, text: e.target.value } : null
+                      )
                     }
-                  }}
-                />
-              )}
-              </div>{/* end rotation wrapper */}
+                    onBlur={commitText}
+                    onKeyDown={e => {
+                      if (e.key === 'Escape') {
+                        setEditingText(null)
+                      } else if (e.key === 'Enter' && !e.shiftKey) {
+                        e.preventDefault()
+                        commitText()
+                      }
+                    }}
+                  />
+                )
+              })()}
             </div>
           </div>
         </div>
