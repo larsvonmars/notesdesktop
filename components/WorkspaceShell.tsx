@@ -1053,9 +1053,9 @@ function WorkspaceContent() {
             <div className="absolute inset-0 bg-alpine-100 rounded-full blur-3xl opacity-40"></div>
             <FileEdit className={`relative text-alpine-500 mx-auto ${isMobile ? 'w-16 h-16' : 'w-24 h-24'}`} strokeWidth={1.5} />
           </div>
-          <h1 className={`font-bold text-gray-900 mb-3 ${isMobile ? 'text-2xl' : 'text-3xl'}`}>Welcome to Saentis Notes</h1>
+          <h1 className={`font-bold text-gray-900 mb-3 ${isMobile ? 'text-2xl' : 'text-3xl'}`}>Welcome to MindViz Notes</h1>
           <p className={`text-gray-600 mb-8 ${isMobile ? 'text-base' : 'text-lg'}`}>
-            A distraction-free writing space, inspired by the Alps
+            Capture ideas, build mind maps, and organize your thoughts
           </p>
           <div className="space-y-3">
             <button
@@ -1125,9 +1125,9 @@ function WorkspaceContent() {
               >
                 <Menu size={20} />
               </button>
-              <h2 className="text-sm font-semibold text-foreground">Notes Desktop</h2>
+              <h2 className="text-sm font-semibold text-foreground">MindViz Notes</h2>
             </div>
-            <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-accent text-xs font-bold text-accent-foreground">N</div>
+            <img src="/logo.svg" alt="MindViz Notes" className="h-8 w-8 rounded-lg" />
           </div>
         </header>
       )}
@@ -1142,8 +1142,8 @@ function WorkspaceContent() {
           <aside className="fixed inset-y-0 left-0 z-50 w-[280px] border-r border-border bg-surface flex flex-col">
             <div className="flex items-center justify-between border-b border-border px-3 py-3">
               <div className="flex items-center gap-3">
-                <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-accent text-sm font-bold text-accent-foreground">N</div>
-                <span className="text-sm font-semibold text-foreground">Notes Desktop</span>
+                <img src="/logo.svg" alt="MindViz Notes" className="h-8 w-8 rounded-lg" />
+                <span className="text-sm font-semibold text-foreground">MindViz Notes</span>
               </div>
               <button
                 onClick={() => setWorkspaceNavOpen(false)}

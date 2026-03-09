@@ -1,4 +1,34 @@
-<svg width="1024" height="1024" xmlns="http://www.w3.org/2000/svg">
-  <rect width="1024" height="1024" fill="#3B82F6"/>
-  <text x="512" y="650" font-family="Arial" font-size="600" fill="white" text-anchor="middle" font-weight="bold">N</text>
+<svg width="1024" height="1024" viewBox="0 0 1024 1024" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <linearGradient id="bgGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#6366f1"/>
+      <stop offset="100%" stop-color="#3b82f6"/>
+    </linearGradient>
+  </defs>
+  <!-- Background -->
+  <rect width="1024" height="1024" rx="224" fill="url(#bgGrad)"/>
+
+  <!-- Mind map: connection lines -->
+  <line x1="444" y1="356" x2="284" y2="236" stroke="white" stroke-width="28" stroke-linecap="round" opacity="0.85"/>
+  <line x1="580" y1="356" x2="740" y2="236" stroke="white" stroke-width="28" stroke-linecap="round" opacity="0.85"/>
+  <line x1="440" y1="480" x2="260" y2="620" stroke="white" stroke-width="28" stroke-linecap="round" opacity="0.75"/>
+  <line x1="584" y1="480" x2="764" y2="620" stroke="white" stroke-width="28" stroke-linecap="round" opacity="0.75"/>
+
+  <!-- Central node -->
+  <circle cx="512" cy="420" r="84" fill="white"/>
+  <!-- Satellite nodes -->
+  <circle cx="248" cy="200" r="64" fill="white" opacity="0.92"/>
+  <circle cx="776" cy="200" r="64" fill="white" opacity="0.92"/>
+  <circle cx="220" cy="652" r="52" fill="white" opacity="0.80"/>
+  <circle cx="804" cy="652" r="52" fill="white" opacity="0.80"/>
+
+  <!-- Note document shape -->
+  <rect x="392" y="570" width="240" height="290" rx="28" fill="white" opacity="0.95"/>
+  <!-- Note lines -->
+  <line x1="436" y1="636" x2="588" y2="636" stroke="#6366f1" stroke-width="14" stroke-linecap="round"/>
+  <line x1="436" y1="684" x2="588" y2="684" stroke="#6366f1" stroke-width="14" stroke-linecap="round"/>
+  <line x1="436" y1="732" x2="536" y2="732" stroke="#6366f1" stroke-width="14" stroke-linecap="round"/>
+  <!-- Pencil tip -->
+  <polygon points="588,780 632,736 608,764" fill="#818cf8" opacity="0.9"/>
 </svg>
+

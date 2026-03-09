@@ -17,8 +17,8 @@ const geistMono = Geist_Mono({
 })
 
 export const metadata: Metadata = {
-  title: 'Saentis Notes',
-  description: 'A beautifully crafted Alpine-themed desktop notes app',
+  title: 'MindViz Notes',
+  description: 'A powerful mind-mapping and note-taking desktop app',
   icons: {
     icon: '/favicon.ico',
     apple: '/apple-touch-icon.png',
@@ -26,7 +26,7 @@ export const metadata: Metadata = {
   appleWebApp: {
     capable: true,
     statusBarStyle: 'default',
-    title: 'Saentis Notes',
+    title: 'MindViz Notes',
   },
 }
 

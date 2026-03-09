@@ -1,7 +1,7 @@
 {
-  "productName": "Saentis Notes",
+  "productName": "MindViz Notes",
   "version": "0.1.0",
-  "identifier": "com.saentis-notes.app",
+  "identifier": "com.mindviz-notes.app",
   "build": {
     "beforeDevCommand": "npm run dev",
     "beforeBuildCommand": "npm run build",
@@ -16,7 +16,7 @@
       {
         "fullscreen": false,
         "resizable": true,
-        "title": "Saentis Notes",
+        "title": "MindViz Notes",
         "width": 1200,
         "height": 800,
         "center": true,
@@ -37,7 +37,7 @@
       "icons/icon.ico"
     ],
     "category": "Productivity",
-    "shortDescription": "An Alpine-themed desktop notes application",
+    "shortDescription": "A powerful mind-mapping and note-taking desktop app",
     "iOS": {
       "minimumSystemVersion": "15.0"
     },

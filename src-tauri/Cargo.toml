@@ -1,7 +1,7 @@
 [package]
 name = "notesdesktop"
 version = "0.1.0"
-description = "A Notes Desktop app with Supabase auth"
+description = "MindViz Notes – a powerful mind-mapping and note-taking desktop app"
 authors = ["you"]
 license = "MIT"
 repository = ""

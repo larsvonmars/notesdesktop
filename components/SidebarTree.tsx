@@ -702,10 +702,8 @@ export default function SidebarTree({
         {/* Header */}
         <div className="flex items-center justify-between border-b border-border px-3 py-3">
           <div className="flex items-center gap-3 overflow-hidden">
-            <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-accent text-sm font-bold text-accent-foreground">
-              N
-            </div>
-            <span className="truncate text-sm font-semibold text-foreground">Notes Desktop</span>
+            <img src="/logo.svg" alt="MindViz Notes" className="h-8 w-8 rounded-lg flex-shrink-0" />
+            <span className="truncate text-sm font-semibold text-foreground">MindViz Notes</span>
           </div>
           <button
             onClick={onToggleCollapsed}

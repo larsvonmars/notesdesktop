@@ -1,0 +1,40 @@
+<svg width="512" height="512" viewBox="0 0 512 512" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <linearGradient id="bgGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#6366f1"/>
+      <stop offset="100%" stop-color="#3b82f6"/>
+    </linearGradient>
+    <linearGradient id="bgGradDark" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#4f46e5"/>
+      <stop offset="100%" stop-color="#2563eb"/>
+    </linearGradient>
+  </defs>
+
+  <!-- Background rounded square -->
+  <rect width="512" height="512" rx="112" fill="url(#bgGrad)"/>
+
+  <!-- Mind map visualization -->
+  <!-- Central node -->
+  <circle cx="256" cy="210" r="42" fill="white"/>
+
+  <!-- Connection lines -->
+  <line x1="222" y1="178" x2="142" y2="118" stroke="white" stroke-width="14" stroke-linecap="round" opacity="0.85"/>
+  <line x1="290" y1="178" x2="370" y2="118" stroke="white" stroke-width="14" stroke-linecap="round" opacity="0.85"/>
+  <line x1="220" y1="240" x2="130" y2="310" stroke="white" stroke-width="14" stroke-linecap="round" opacity="0.75"/>
+  <line x1="292" y1="240" x2="382" y2="310" stroke="white" stroke-width="14" stroke-linecap="round" opacity="0.75"/>
+
+  <!-- Satellite nodes -->
+  <circle cx="124" cy="100" r="32" fill="white" opacity="0.92"/>
+  <circle cx="388" cy="100" r="32" fill="white" opacity="0.92"/>
+  <circle cx="110" cy="326" r="26" fill="white" opacity="0.80"/>
+  <circle cx="402" cy="326" r="26" fill="white" opacity="0.80"/>
+
+  <!-- Note / document shape at bottom -->
+  <rect x="196" y="285" width="120" height="145" rx="14" fill="white" opacity="0.95"/>
+  <!-- Note lines -->
+  <line x1="218" y1="318" x2="294" y2="318" stroke="#6366f1" stroke-width="7" stroke-linecap="round"/>
+  <line x1="218" y1="342" x2="294" y2="342" stroke="#6366f1" stroke-width="7" stroke-linecap="round"/>
+  <line x1="218" y1="366" x2="268" y2="366" stroke="#6366f1" stroke-width="7" stroke-linecap="round"/>
+  <!-- Small pencil tip at bottom-right of note -->
+  <polygon points="294,390 316,368 304,382" fill="#818cf8" opacity="0.9"/>
+</svg>
