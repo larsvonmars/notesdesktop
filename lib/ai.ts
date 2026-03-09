@@ -20,13 +20,17 @@ export interface AIMessage {
   content: string
 }
 
+export type DeepSeekModel = 'deepseek-chat' | 'deepseek-reasoner'
+
 export interface AIStreamCallbacks {
   onToken?: (token: string) => void
+  onReasoning?: (token: string) => void
   onComplete?: (fullResponse: string) => void
   onError?: (error: Error) => void
 }
 
 export interface AIRequestOptions {
+  model?: DeepSeekModel
   temperature?: number
   maxTokens?: number
   stream?: boolean
@@ -90,6 +94,12 @@ export interface AIContext {
   allNotes?: Array<{
     id: string
     title: string
+  }>
+  // Notes whose full content is injected directly into the system prompt
+  additionalNoteContents?: Array<{
+    id: string
+    title: string
+    content: string
   }>
 }
 
@@ -286,6 +296,7 @@ export async function sendAIRequest(
   }
 
   const {
+    model = DEFAULT_MODEL,
     temperature = DEFAULT_TEMPERATURE,
     maxTokens = DEFAULT_MAX_TOKENS,
     stream = false,
@@ -298,7 +309,7 @@ export async function sendAIRequest(
       'Authorization': `Bearer ${key}`,
     },
     body: JSON.stringify({
-      model: DEFAULT_MODEL,
+      model,
       messages,
       temperature,
       max_tokens: maxTokens,
@@ -332,6 +343,7 @@ export async function sendAIRequestStream(
   }
 
   const {
+    model = DEFAULT_MODEL,
     temperature = DEFAULT_TEMPERATURE,
     maxTokens = DEFAULT_MAX_TOKENS,
   } = options
@@ -344,7 +356,7 @@ export async function sendAIRequestStream(
         'Authorization': `Bearer ${key}`,
       },
       body: JSON.stringify({
-        model: DEFAULT_MODEL,
+        model,
         messages,
         temperature,
         max_tokens: maxTokens,
@@ -381,10 +393,15 @@ export async function sendAIRequestStream(
 
           try {
             const parsed = JSON.parse(data)
-            const token = parsed.choices?.[0]?.delta?.content || ''
-            if (token) {
-              fullResponse += token
-              callbacks.onToken?.(token)
+            const delta = parsed.choices?.[0]?.delta || {}
+            const reasoningToken: string = (delta as { reasoning_content?: string }).reasoning_content || ''
+            const contentToken: string = (delta as { content?: string }).content || ''
+            if (reasoningToken) {
+              callbacks.onReasoning?.(reasoningToken)
+            }
+            if (contentToken) {
+              fullResponse += contentToken
+              callbacks.onToken?.(contentToken)
             }
           } catch {
             // Skip invalid JSON lines
@@ -411,7 +428,9 @@ export async function chat(
   context?: AIContext,
   history: AIMessage[] = [],
   onStream?: (token: string) => void,
-  toolHandler?: ToolCallHandler
+  toolHandler?: ToolCallHandler,
+  model?: DeepSeekModel,
+  onReasoning?: (token: string) => void,
 ): Promise<string> {
   const systemMessage = buildSystemMessage(context)
   const messages: AIMessage[] = [
@@ -420,9 +439,11 @@ export async function chat(
     { role: 'user', content: userMessage },
   ]
 
-  // If we have tools and a handler, use tool-enabled chat
-  if (toolHandler && context?.allNotes) {
-    return chatWithTools(messages, toolHandler, onStream)
+  const resolvedModel = model || DEFAULT_MODEL
+
+  // deepseek-reasoner doesn't support tool calling
+  if (toolHandler && context?.allNotes && resolvedModel !== 'deepseek-reasoner') {
+    return chatWithTools(messages, toolHandler, onStream, 5, resolvedModel)
   }
 
   if (onStream) {
@@ -432,14 +453,15 @@ export async function chat(
         response += token
         onStream(token)
       },
+      onReasoning,
       onError: (error) => {
         throw error
       },
-    })
+    }, { model: resolvedModel })
     return response
   }
 
-  return sendAIRequest(messages)
+  return sendAIRequest(messages, { model: resolvedModel })
 }
 
 /**
@@ -449,7 +471,8 @@ async function chatWithTools(
   messages: AIMessage[],
   toolHandler: ToolCallHandler,
   onStream?: (token: string) => void,
-  maxIterations: number = 5
+  maxIterations: number = 5,
+  model: DeepSeekModel = 'deepseek-chat',
 ): Promise<string> {
   const key = getApiKey()
   if (!key) {
@@ -467,7 +490,7 @@ async function chatWithTools(
         'Authorization': `Bearer ${key}`,
       },
       body: JSON.stringify({
-        model: DEFAULT_MODEL,
+        model,
         messages: currentMessages,
         tools: AI_TOOLS,
         tool_choice: 'auto',
@@ -774,6 +797,17 @@ function buildSystemMessage(context?: AIContext): string {
 
     if (contextParts.length > 1) {
       message += contextParts.join('\n')
+    }
+
+    if (context.additionalNoteContents && context.additionalNoteContents.length > 0) {
+      message += '\n\n---\n## Notes in Context\n'
+      for (const n of context.additionalNoteContents) {
+        const truncated = n.content.length > 4000
+          ? n.content.slice(0, 4000) + '\n...(truncated)'
+          : n.content
+        message += `\n### "${n.title}"\n${truncated}\n`
+      }
+      message += '---'
     }
   }
 

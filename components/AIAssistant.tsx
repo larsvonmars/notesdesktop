@@ -33,6 +33,8 @@ import {
   MousePointerClick,
   Zap,
   AlertCircle,
+  Cpu,
+  BookOpen,
 } from 'lucide-react'
 import {
   chat,
@@ -46,6 +48,7 @@ import {
   textToHtml,
   type AIMessage,
   type AIContext,
+  type DeepSeekModel,
   type NoteSummary,
   type MindmapSuggestion,
   type TaskSuggestion,
@@ -85,6 +88,7 @@ interface Message {
   content: string
   timestamp: Date
   isStreaming?: boolean
+  reasoning?: string
 }
 
 interface AIAssistantProps {
@@ -226,6 +230,30 @@ function MarkdownContent({ content, className = '' }: { content: string; classNa
   )
 }
 
+/** Collapsible reasoning chain for deepseek-reasoner responses */
+function ThinkingSection({ reasoning }: { reasoning: string }) {
+  const [open, setOpen] = useState(false)
+  const wordCount = Math.round(reasoning.split(/\s+/).filter(Boolean).length)
+  return (
+    <div className="mb-2 pb-2 border-b border-border/50">
+      <button
+        onClick={() => setOpen(v => !v)}
+        className="flex items-center gap-1.5 text-[11px] font-medium text-muted hover:text-foreground transition-colors w-full text-left"
+      >
+        <Cpu size={11} />
+        <span>Reasoning chain</span>
+        <span className="text-[10px] opacity-60 ml-1">· {wordCount} words</span>
+        {open ? <ChevronUp size={10} className="ml-auto" /> : <ChevronDown size={10} className="ml-auto" />}
+      </button>
+      {open && (
+        <div className="mt-1.5 pl-3 border-l-2 border-border/60 text-[11px] text-muted leading-relaxed whitespace-pre-wrap">
+          {reasoning}
+        </div>
+      )}
+    </div>
+  )
+}
+
 // ============================================================================
 // MAIN COMPONENT
 // ============================================================================
@@ -269,13 +297,38 @@ export default function AIAssistant({
   const [currentChatId, setCurrentChatId] = useState<string | null>(null)
   const [isLoadingHistory, setIsLoadingHistory] = useState(false)
 
+  // Model and context settings
+  const [model, setModel] = useState<DeepSeekModel>('deepseek-chat')
+  const [includeCurrentNote, setIncludeCurrentNote] = useState(true)
+  const [selectedNoteIds, setSelectedNoteIds] = useState<string[]>([])
+  const [showNotePicker, setShowNotePicker] = useState(false)
+  const [streamingReasoning, setStreamingReasoning] = useState('')
+
   const messagesEndRef = useRef<HTMLDivElement>(null)
   const inputRef = useRef<HTMLTextAreaElement>(null)
   const chatHistoryRef = useRef<AIMessage[]>([])
+  const notePickerRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
     if (showChatHistory) loadChatHistory()
   }, [showChatHistory, note?.id])
+
+  useEffect(() => {
+    if (!showNotePicker) return
+    const handleClickOutside = (e: MouseEvent) => {
+      if (notePickerRef.current && !notePickerRef.current.contains(e.target as Node)) {
+        setShowNotePicker(false)
+      }
+    }
+    document.addEventListener('mousedown', handleClickOutside)
+    return () => document.removeEventListener('mousedown', handleClickOutside)
+  }, [showNotePicker])
+
+  // Reset note context when switching notes
+  useEffect(() => {
+    setSelectedNoteIds([])
+    setIncludeCurrentNote(true)
+  }, [note?.id])
 
   const loadChatHistory = useCallback(async () => {
     setIsLoadingHistory(true)
@@ -325,7 +378,7 @@ export default function AIAssistant({
 
   const aiContext = useMemo((): AIContext => {
     const context: AIContext = {}
-    if (note) {
+    if (note && includeCurrentNote) {
       const plainContent = noteContent
         ? stripHtmlForAI(noteContent)
         : note.content ? stripHtmlForAI(note.content) : ''
@@ -362,8 +415,17 @@ export default function AIAssistant({
     if (allNotes?.length) {
       context.allNotes = allNotes.map(n => ({ id: n.id, title: n.title || 'Untitled' }))
     }
+    if (selectedNoteIds.length > 0 && allNotes?.length) {
+      context.additionalNoteContents = allNotes
+        .filter(n => selectedNoteIds.includes(n.id))
+        .map(n => ({
+          id: n.id,
+          title: n.title || 'Untitled',
+          content: stripHtmlForAI(n.content || ''),
+        }))
+    }
     return context
-  }, [note, noteContent, selectedText, mindmapData, selectedMindmapNodeId, tasks, events, allNotes])
+  }, [note, noteContent, selectedText, mindmapData, selectedMindmapNodeId, tasks, events, allNotes, includeCurrentNote, selectedNoteIds])
 
   const handleToolCall: ToolCallHandler = useCallback(async (name, args) => {
     switch (name) {
@@ -417,6 +479,7 @@ export default function AIAssistant({
     setIsLoading(true)
     setError(null)
     setStreamingContent('')
+    setStreamingReasoning('')
 
     chatHistoryRef.current = [...chatHistoryRef.current, { role: 'user', content: userMessage.content }]
 
@@ -424,6 +487,7 @@ export default function AIAssistant({
 
     try {
       let fullResponse = ''
+      let reasoningContent = ''
 
       setMessages(prev => [...prev, {
         id: assistantMessageId, role: 'assistant', content: '', timestamp: new Date(), isStreaming: true,
@@ -434,11 +498,15 @@ export default function AIAssistant({
         aiContext,
         chatHistoryRef.current.slice(0, -1),
         (token) => { fullResponse += token; setStreamingContent(fullResponse) },
-        allNotes?.length ? handleToolCall : undefined
+        model === 'deepseek-reasoner' ? undefined : (allNotes?.length ? handleToolCall : undefined),
+        model,
+        (token) => { reasoningContent += token; setStreamingReasoning(prev => prev + token) },
       )
 
       setMessages(prev => prev.map(msg =>
-        msg.id === assistantMessageId ? { ...msg, content: fullResponse, isStreaming: false } : msg
+        msg.id === assistantMessageId
+          ? { ...msg, content: fullResponse, reasoning: reasoningContent || undefined, isStreaming: false }
+          : msg
       ))
 
       chatHistoryRef.current = [...chatHistoryRef.current, { role: 'assistant', content: fullResponse }]
@@ -464,8 +532,9 @@ export default function AIAssistant({
     } finally {
       setIsLoading(false)
       setStreamingContent('')
+      setStreamingReasoning('')
     }
-  }, [inputValue, isLoading, aiContext, allNotes, handleToolCall, currentChatId, note?.id])
+  }, [inputValue, isLoading, aiContext, allNotes, handleToolCall, currentChatId, note?.id, model])
 
   const handleQuickAction = useCallback(async (action: QuickAction) => {
     setIsLoading(true)
@@ -1006,17 +1075,38 @@ export default function AIAssistant({
                 }`}>
                   {message.isStreaming ? (
                     streamingContent ? (
-                      <MarkdownContent content={streamingContent} />
+                      <>
+                        {streamingReasoning && (
+                          <div className="mb-2 pb-2 border-b border-border/50">
+                            <div className="flex items-center gap-1 text-[10px] font-medium text-muted mb-1">
+                              <Cpu size={10} />
+                              <span>Reasoning…</span>
+                            </div>
+                            <p className="text-[11px] text-muted leading-relaxed italic line-clamp-3">
+                              {streamingReasoning.slice(-300)}
+                            </p>
+                          </div>
+                        )}
+                        <MarkdownContent content={streamingContent} />
+                      </>
                     ) : (
                       <div className="flex items-center gap-2">
                         <Loader2 size={12} className="animate-spin text-muted" />
-                        <span className="text-xs text-muted">Thinking…</span>
+                        <span className="text-xs text-muted">
+                          {streamingReasoning ? 'Reasoning…' : 'Thinking…'}
+                        </span>
                       </div>
                     )
                   ) : parsed ? (
-                    renderStructuredContent(parsed)
+                    <>
+                      {message.reasoning && <ThinkingSection reasoning={message.reasoning} />}
+                      {renderStructuredContent(parsed)}
+                    </>
                   ) : message.role === 'assistant' ? (
-                    <MarkdownContent content={message.content} />
+                    <>
+                      {message.reasoning && <ThinkingSection reasoning={message.reasoning} />}
+                      <MarkdownContent content={message.content} />
+                    </>
                   ) : (
                     <div className="whitespace-pre-wrap text-sm">{message.content}</div>
                   )}
@@ -1057,6 +1147,98 @@ export default function AIAssistant({
 
   const renderInput = () => (
     <div className="p-3 border-t border-border bg-surface shrink-0">
+      {/* Model + context bar */}
+      <div className="flex items-center justify-between mb-2.5 gap-2">
+        {/* Model toggle */}
+        <div className="flex items-center gap-0.5 bg-surface-hover rounded-lg p-0.5 flex-shrink-0">
+          <button
+            onClick={() => setModel('deepseek-chat')}
+            className={`px-2.5 py-1 text-xs font-medium rounded-md transition-colors ${
+              model === 'deepseek-chat'
+                ? 'bg-surface text-foreground shadow-sm border border-border'
+                : 'text-muted hover:text-foreground'
+            }`}
+          >
+            Chat
+          </button>
+          <button
+            onClick={() => setModel('deepseek-reasoner')}
+            className={`px-2.5 py-1 text-xs font-medium rounded-md transition-colors flex items-center gap-1 ${
+              model === 'deepseek-reasoner'
+                ? 'bg-surface text-foreground shadow-sm border border-border'
+                : 'text-muted hover:text-foreground'
+            }`}
+          >
+            <Cpu size={10} />
+            Reasoner
+          </button>
+        </div>
+        {/* Note context toggles */}
+        <div className="flex items-center gap-1 min-w-0">
+          {note && (
+            <button
+              onClick={() => setIncludeCurrentNote(v => !v)}
+              title={includeCurrentNote ? 'Remove current note from context' : 'Add current note to context'}
+              className={`px-2 py-1 text-xs font-medium rounded-lg transition-colors flex items-center gap-1 border flex-shrink-0 ${
+                includeCurrentNote
+                  ? 'bg-alpine-600/10 text-alpine-600 border-alpine-600/20'
+                  : 'bg-surface border-border text-muted hover:text-foreground'
+              }`}
+            >
+              <FileText size={11} />
+              <span className="max-w-[56px] truncate">{note.title || 'Note'}</span>
+              {includeCurrentNote && <Check size={9} />}
+            </button>
+          )}
+          {allNotes && allNotes.filter(n => n.id !== note?.id).length > 0 && (
+            <div className="relative flex-shrink-0" ref={notePickerRef}>
+              <button
+                onClick={() => setShowNotePicker(v => !v)}
+                className={`px-2 py-1 text-xs font-medium rounded-lg transition-colors flex items-center gap-1 border ${
+                  selectedNoteIds.length > 0
+                    ? 'bg-alpine-600/10 text-alpine-600 border-alpine-600/20'
+                    : 'bg-surface border-border text-muted hover:text-foreground hover:bg-surface-hover'
+                }`}
+              >
+                <BookOpen size={11} />
+                {selectedNoteIds.length > 0
+                  ? `${selectedNoteIds.length} note${selectedNoteIds.length !== 1 ? 's' : ''}`
+                  : 'Notes'}
+                <ChevronDown size={9} className={`transition-transform ${showNotePicker ? 'rotate-180' : ''}`} />
+              </button>
+              {showNotePicker && (
+                <div className="absolute bottom-full right-0 mb-1 w-60 max-h-52 overflow-y-auto bg-surface border border-border-strong rounded-xl shadow-lg z-50 py-1.5">
+                  <div className="text-[10px] font-semibold text-muted uppercase tracking-wider px-3 py-1.5">
+                    Add to context
+                  </div>
+                  {allNotes
+                    .filter(n => n.id !== note?.id)
+                    .map(n => (
+                      <button
+                        key={n.id}
+                        onClick={() => setSelectedNoteIds(prev =>
+                          prev.includes(n.id) ? prev.filter(id => id !== n.id) : [...prev, n.id]
+                        )}
+                        className="w-full flex items-center gap-2.5 px-3 py-1.5 hover:bg-surface-hover transition-colors text-left"
+                      >
+                        <div className={`w-3.5 h-3.5 rounded border-2 flex items-center justify-center flex-shrink-0 transition-colors ${
+                          selectedNoteIds.includes(n.id)
+                            ? 'border-alpine-600 bg-alpine-600'
+                            : 'border-border'
+                        }`}>
+                          {selectedNoteIds.includes(n.id) && <Check size={9} className="text-white" />}
+                        </div>
+                        <span className="text-xs text-foreground truncate">{n.title || 'Untitled'}</span>
+                      </button>
+                    ))
+                  }
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+      </div>
+
       {error && (
         <div className="mb-2 px-3 py-2 bg-danger-light border border-danger/20 rounded-xl text-xs text-danger flex items-start gap-2">
           <X size={12} className="flex-shrink-0 mt-0.5" />
