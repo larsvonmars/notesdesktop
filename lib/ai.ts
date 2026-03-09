@@ -133,16 +133,16 @@ let runtimeApiKey: string | null = null
 
 /**
  * Returns the active API key.
- * Priority: runtime override → NEXT_PUBLIC_DEEPSEEK_API_KEY build-time env var.
+ * Priority: runtime override → DEEPSEEK_API_KEY build-time env var (forwarded via next.config.js).
  * The key is embedded at build time via the env file and never requested from the user.
  */
 function getApiKey(): string | null {
   if (runtimeApiKey) return runtimeApiKey
-  const envKey = process.env.NEXT_PUBLIC_DEEPSEEK_API_KEY
+  const envKey = process.env.DEEPSEEK_API_KEY
   return envKey && envKey.length > 0 ? envKey : null
 }
 
-/** @deprecated Key is now managed via NEXT_PUBLIC_DEEPSEEK_API_KEY in .env.local */
+/** @deprecated Key is now managed via DEEPSEEK_API_KEY in .env.local */
 export function setAIApiKey(key: string) {
   runtimeApiKey = key
 }
@@ -282,7 +282,7 @@ export async function sendAIRequest(
 ): Promise<string> {
   const key = getApiKey()
   if (!key) {
-    throw new Error('AI API key not configured. Set NEXT_PUBLIC_DEEPSEEK_API_KEY in .env.local.')
+    throw new Error('AI API key not configured. Set DEEPSEEK_API_KEY in .env.local.')
   }
 
   const {
@@ -327,7 +327,7 @@ export async function sendAIRequestStream(
 ): Promise<void> {
   const key = getApiKey()
   if (!key) {
-    callbacks.onError?.(new Error('AI API key not configured. Set NEXT_PUBLIC_DEEPSEEK_API_KEY in .env.local.'))
+    callbacks.onError?.(new Error('AI API key not configured. Set DEEPSEEK_API_KEY in .env.local.'))
     return
   }
 
@@ -453,7 +453,7 @@ async function chatWithTools(
 ): Promise<string> {
   const key = getApiKey()
   if (!key) {
-    throw new Error('AI API key not configured. Set NEXT_PUBLIC_DEEPSEEK_API_KEY in .env.local.')
+    throw new Error('AI API key not configured. Set DEEPSEEK_API_KEY in .env.local.')
   }
 
   let currentMessages = [...messages]

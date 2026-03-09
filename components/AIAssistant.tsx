@@ -248,7 +248,7 @@ export default function AIAssistant({
   isExpanded = true,
   onToggleExpand,
 }: AIAssistantProps) {
-  // Key is configured via NEXT_PUBLIC_DEEPSEEK_API_KEY in .env.local
+  // Key is configured via DEEPSEEK_API_KEY in .env.local (forwarded at build time via next.config.js)
   const isConfigured = hasAIApiKey()
 
   const [messages, setMessages] = useState<Message[]>([])
@@ -974,7 +974,7 @@ export default function AIAssistant({
           <p className="text-xs text-muted mt-1 text-center max-w-[200px] leading-relaxed">
             {isConfigured
               ? 'Ask me anything about your notes, tasks, or ideas'
-              : 'Set NEXT_PUBLIC_DEEPSEEK_API_KEY in .env.local to enable AI'}
+              : 'Set DEEPSEEK_API_KEY in .env.local to enable AI'}
           </p>
         </div>
       ) : (
@@ -1070,7 +1070,7 @@ export default function AIAssistant({
       {!isConfigured && (
         <div className="mb-2 px-3 py-2 bg-warning-light border border-warning/20 rounded-xl text-xs text-foreground/70 flex items-start gap-2">
           <AlertCircle size={12} className="flex-shrink-0 mt-0.5 text-warning" />
-          <span>Set <code className="font-mono bg-surface-active px-1 rounded text-[10px]">NEXT_PUBLIC_DEEPSEEK_API_KEY</code> in .env.local to enable AI.</span>
+          <span>Set <code className="font-mono bg-surface-active px-1 rounded text-[10px]">DEEPSEEK_API_KEY</code> in .env.local to enable AI.</span>
         </div>
       )}
 
