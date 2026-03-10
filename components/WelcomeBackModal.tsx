@@ -1,7 +1,10 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import { FileText, Clock, PenTool, Network, BookOpen, Table2, FilePenLine, type LucideIcon } from 'lucide-react'
+import {
+  FileText, Clock, PenTool, Network, BookOpen, Table2, FilePenLine,
+  Zap, ArrowRight, type LucideIcon,
+} from 'lucide-react'
 import ModalCloseButton from './ModalCloseButton'
 import { getNotes, type Note, type NoteType } from '@/lib/notes'
 import { getNoteTypePresentation, type NoteTypeIconKey } from '@/lib/note-types'
@@ -10,6 +13,7 @@ interface WelcomeBackModalProps {
   isOpen: boolean
   onClose: () => void
   onSelectNote?: (note: Note) => void
+  onCreateNote?: (type: NoteType) => void
   asView?: boolean
 }
 
@@ -22,54 +26,67 @@ const NOTE_TYPE_ICON_MAP: Record<NoteTypeIconKey, LucideIcon> = {
   'file-pen-line': FilePenLine,
 }
 
-const noteTypeIcon = (type: NoteType) => {
-  const presentation = getNoteTypePresentation(type)
-  const Icon = NOTE_TYPE_ICON_MAP[presentation.iconKey]
-  return <Icon size={16} className={presentation.iconClassName} />
-}
+const ALL_NOTE_TYPES: NoteType[] = [
+  'rich-text', 'drawing', 'mindmap', 'bullet-journal', 'data-sheet', 'pdf-annotation',
+]
 
 const formatDate = (dateString: string) => {
   const date = new Date(dateString)
   const now = new Date()
-  const diffInMs = now.getTime() - date.getTime()
-  const diffInHours = diffInMs / (1000 * 60 * 60)
+  const diffInHours = (now.getTime() - date.getTime()) / (1000 * 60 * 60)
   const diffInDays = diffInHours / 24
+  if (diffInHours < 1) return 'Just now'
+  if (diffInHours < 24) return `${Math.floor(diffInHours)}h ago`
+  if (diffInDays < 7) return `${Math.floor(diffInDays)}d ago`
+  return date.toLocaleDateString('default', { month: 'short', day: 'numeric' })
+}
 
-  if (diffInHours < 1) {
-    return 'Just now'
-  } else if (diffInHours < 24) {
-    return `${Math.floor(diffInHours)} hours ago`
-  } else if (diffInDays < 7) {
-    return `${Math.floor(diffInDays)} days ago`
-  } else {
-    return date.toLocaleDateString('default', { month: 'short', day: 'numeric', year: 'numeric' })
-  }
+const getGreeting = () => {
+  const h = new Date().getHours()
+  if (h < 12) return { text: 'Good morning', emoji: '☀️' }
+  if (h < 17) return { text: 'Good afternoon', emoji: '🌤️' }
+  return { text: 'Good evening', emoji: '🌙' }
+}
+
+const getDateLabel = () =>
+  new Date().toLocaleDateString('default', { weekday: 'long', month: 'long', day: 'numeric' })
+
+function SkeletonRow() {
+  return (
+    <div className="flex items-center gap-3 px-5 py-3">
+      <div className="h-8 w-8 rounded-lg bg-surface-hover animate-pulse shrink-0" />
+      <div className="flex-1 space-y-1.5">
+        <div className="h-3 w-3/5 rounded bg-surface-hover animate-pulse" />
+        <div className="h-2.5 w-1/4 rounded bg-surface-hover animate-pulse" />
+      </div>
+    </div>
+  )
 }
 
 export default function WelcomeBackModal({
   isOpen,
   onClose,
   onSelectNote,
+  onCreateNote,
   asView = false,
 }: WelcomeBackModalProps) {
   const [recentNotes, setRecentNotes] = useState<Note[]>([])
   const [isLoading, setIsLoading] = useState(true)
+  const greeting = getGreeting()
 
   useEffect(() => {
-    if (isOpen) {
-      loadData()
-    }
-  }, [isOpen])
+    if (isOpen || asView) loadData()
+  }, [isOpen, asView])
 
   const loadData = async () => {
     setIsLoading(true)
     try {
       const notes = await getNotes()
-      const sortedNotes = notes
-        .sort((a, b) => new Date(b.updated_at).getTime() - new Date(a.updated_at).getTime())
-        .slice(0, 8)
-
-      setRecentNotes(sortedNotes)
+      setRecentNotes(
+        notes
+          .sort((a, b) => new Date(b.updated_at).getTime() - new Date(a.updated_at).getTime())
+          .slice(0, 10),
+      )
     } catch (error) {
       console.error('Error loading welcome back data:', error)
     } finally {
@@ -79,95 +96,162 @@ export default function WelcomeBackModal({
 
   if (!isOpen && !asView) return null
 
+  const containerCls = asView
+    ? 'h-full w-full flex flex-col overflow-hidden bg-background'
+    : 'fixed inset-0 z-[100] flex items-center justify-center bg-black/60 p-3 sm:p-6'
+
+  const cardCls = asView
+    ? 'flex h-full w-full flex-col overflow-hidden'
+    : 'flex w-full max-w-5xl max-h-[calc(100vh-2rem)] flex-col overflow-hidden rounded-2xl border border-border bg-surface/95 backdrop-blur-sm shadow-2xl sm:max-h-[calc(100vh-4rem)]'
+
   return (
-    <div className={asView ? 'h-full w-full' : 'fixed inset-0 z-[100] flex items-center justify-center bg-black/60 p-3 sm:p-6'}>
-      <div
-        className={
-          asView
-            ? 'flex h-full w-full flex-col overflow-hidden border border-alpine-100 bg-white dark:border-slate-700 dark:bg-slate-900'
-            : 'flex w-full max-w-4xl max-h-[calc(100vh-2rem)] flex-col overflow-hidden rounded-2xl border border-alpine-100 dark:border-slate-700 bg-white/95 dark:bg-slate-900/95 backdrop-blur-sm shadow-2xl sm:max-h-[calc(100vh-4rem)]'
-        }
-      >
-        <header className="flex flex-col gap-3 border-b border-alpine-100 dark:border-slate-700 bg-gradient-to-r from-alpine-50 to-peak-50 dark:from-slate-900 dark:to-slate-800 px-4 py-4 sm:flex-row sm:items-center sm:justify-between sm:px-6">
-          <div className="flex flex-col gap-1">
-            <h2 className="text-2xl font-bold text-gray-900 dark:text-slate-100">Welcome Back! 🏔️</h2>
-            <p className="text-sm text-gray-600 dark:text-slate-300">Pick up where you left off</p>
+    <div className={containerCls}>
+      <div className={cardCls}>
+
+        {/* ── Hero header ──────────────────────────────────────────────── */}
+        <header className="relative overflow-hidden shrink-0 border-b border-border bg-gradient-to-br from-alpine-600 via-alpine-500 to-peak-500 dark:from-slate-900 dark:via-slate-800 dark:to-slate-900 px-6 py-6 sm:px-8 sm:py-8">
+          <div className="pointer-events-none absolute -top-8 -right-8 h-40 w-40 rounded-full bg-white/10 blur-2xl" />
+          <div className="pointer-events-none absolute bottom-0 left-1/3 h-24 w-48 rounded-full bg-peak-400/20 blur-3xl" />
+          <div className="relative flex items-start justify-between gap-4">
+            <div>
+              <p className="text-xs font-medium uppercase tracking-widest text-white/60 mb-1">{getDateLabel()}</p>
+              <h1 className="text-2xl sm:text-3xl font-bold text-white leading-tight">
+                {greeting.text} {greeting.emoji}
+              </h1>
+              <p className="mt-1.5 text-sm text-white/70">Pick up where you left off</p>
+            </div>
+            {!asView && (
+              <ModalCloseButton
+                onClick={onClose}
+                ariaLabel="Close welcome modal"
+                className="shrink-0 bg-white/10 hover:bg-white/20 text-white border-white/20"
+              />
+            )}
           </div>
-          <ModalCloseButton
-            onClick={onClose}
-            ariaLabel="Close welcome modal"
-            className="self-end sm:self-auto bg-gray-100 dark:bg-slate-800 text-gray-600 dark:text-slate-300 hover:bg-gray-200 dark:hover:bg-slate-700"
-          />
         </header>
 
-        <div className="flex-1 overflow-y-auto px-4 py-4 sm:px-6 sm:py-6">
-          {isLoading ? (
-            <div className="flex items-center justify-center py-12">
-              <div className="text-center">
-                <div className="inline-block h-8 w-8 animate-spin rounded-full border-4 border-solid border-alpine-600 border-r-transparent"></div>
-                <p className="mt-3 text-sm text-gray-600 dark:text-slate-300">Loading your workspace...</p>
+        {/* ── Dashboard body ────────────────────────────────────────────── */}
+        <div className="flex-1 overflow-hidden">
+          <div className="h-full grid grid-cols-1 lg:grid-cols-[1fr_1.5fr] divide-y lg:divide-y-0 lg:divide-x divide-border overflow-hidden">
+
+            {/* ── Quick Actions panel ──────────────────────────────────── */}
+            <div className="flex flex-col overflow-hidden">
+              <div className="flex items-center gap-2 px-5 py-3.5 border-b border-border shrink-0">
+                <div className="flex items-center justify-center h-6 w-6 rounded-md bg-alpine-100 dark:bg-alpine-900/40">
+                  <Zap size={13} className="text-alpine-600 dark:text-alpine-400" />
+                </div>
+                <span className="text-xs font-semibold uppercase tracking-wider text-muted">Quick Start</span>
+              </div>
+              <div className="flex-1 p-4 overflow-y-auto">
+                <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-2 xl:grid-cols-3 gap-2.5">
+                  {ALL_NOTE_TYPES.map((type) => {
+                    const p = getNoteTypePresentation(type)
+                    const Icon = NOTE_TYPE_ICON_MAP[p.iconKey]
+                    return (
+                      <button
+                        key={type}
+                        type="button"
+                        onClick={() => {
+                          onCreateNote?.(type)
+                          onClose()
+                        }}
+                        className="group flex flex-col items-start gap-2 rounded-xl border border-border bg-surface p-3.5 text-left transition-all duration-150 hover:-translate-y-0.5 hover:shadow-md hover:border-alpine-400/60 hover:bg-alpine-50 dark:hover:bg-alpine-900/20 active:translate-y-0 active:shadow-none focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-alpine-500"
+                      >
+                        <div className={`flex items-center justify-center h-8 w-8 rounded-lg ${p.iconBgClassName}`}>
+                          <Icon size={15} />
+                        </div>
+                        <div>
+                          <p className="text-xs font-semibold text-foreground leading-tight">{p.label}</p>
+                          <p className="text-[10px] text-muted mt-0.5 leading-snug line-clamp-2">{p.description}</p>
+                        </div>
+                      </button>
+                    )
+                  })}
+                </div>
               </div>
             </div>
-          ) : (
-            <section className="flex flex-col rounded-2xl border border-peak-100 dark:border-slate-700 bg-peak-50/50 dark:bg-slate-800/40 h-full">
-              <div className="flex items-center justify-between border-b border-peak-100 dark:border-slate-700 px-4 py-3">
+
+            {/* ── Recent Notes panel ───────────────────────────────────── */}
+            <div className="flex flex-col overflow-hidden">
+              <div className="flex items-center justify-between px-5 py-3.5 border-b border-border shrink-0">
                 <div className="flex items-center gap-2">
-                  <Clock size={18} className="text-peak-600" />
-                  <h3 className="text-sm font-semibold text-gray-900 dark:text-slate-100">Recent Notes</h3>
+                  <div className="flex items-center justify-center h-6 w-6 rounded-md bg-peak-100 dark:bg-peak-900/40">
+                    <Clock size={13} className="text-peak-600 dark:text-peak-400" />
+                  </div>
+                  <span className="text-xs font-semibold uppercase tracking-wider text-muted">Recent Notes</span>
                 </div>
-                <span className="rounded-full bg-peak-100 dark:bg-slate-700 px-2 py-0.5 text-xs font-medium text-peak-700 dark:text-slate-200">
-                  {recentNotes.length}
-                </span>
+                {!isLoading && (
+                  <span className="rounded-full bg-surface-active px-2 py-0.5 text-[10px] font-semibold text-muted tabular-nums">
+                    {recentNotes.length}
+                  </span>
+                )}
               </div>
+
               <div className="flex-1 overflow-y-auto">
-                {recentNotes.length === 0 ? (
-                  <div className="flex flex-col items-center justify-center py-8 px-4 text-center">
-                    <FileText size={32} className="text-gray-400 mb-2" />
-                    <p className="text-sm font-medium text-gray-700 dark:text-slate-200">No notes yet</p>
-                    <p className="text-xs text-gray-500 dark:text-slate-400 mt-1">Create your first note to get started</p>
+                {isLoading ? (
+                  <div className="divide-y divide-border">
+                    {Array.from({ length: 6 }).map((_, i) => <SkeletonRow key={i} />)}
+                  </div>
+                ) : recentNotes.length === 0 ? (
+                  <div className="flex flex-col items-center justify-center h-full py-12 px-6 text-center">
+                    <div className="flex items-center justify-center h-14 w-14 rounded-2xl bg-surface-hover mb-4">
+                      <FileText size={26} className="text-muted" />
+                    </div>
+                    <p className="text-sm font-semibold text-foreground">No notes yet</p>
+                    <p className="text-xs text-muted mt-1">Create your first note using Quick Start</p>
                   </div>
                 ) : (
-                  <ul className="divide-y divide-gray-200 dark:divide-slate-700">
-                    {recentNotes.map((note) => (
-                      <li
-                        key={note.id}
-                        className="px-4 py-3 hover:bg-white/50 dark:hover:bg-slate-800/60 cursor-pointer transition-colors"
-                        onClick={() => onSelectNote?.(note)}
-                      >
-                        <div className="flex items-start gap-3">
-                          <div className="mt-0.5">
-                            {noteTypeIcon(note.note_type)}
+                  <ul className="divide-y divide-border">
+                    {recentNotes.map((note) => {
+                      const p = getNoteTypePresentation(note.note_type)
+                      const Icon = NOTE_TYPE_ICON_MAP[p.iconKey]
+                      return (
+                        <li
+                          key={note.id}
+                          className="group flex items-center gap-3 px-5 py-3 cursor-pointer transition-colors hover:bg-surface-hover"
+                          onClick={() => onSelectNote?.(note)}
+                        >
+                          <div className={`flex items-center justify-center h-8 w-8 rounded-lg shrink-0 ${p.iconBgClassName}`}>
+                            <Icon size={14} />
                           </div>
                           <div className="flex-1 min-w-0">
-                            <p className="text-sm font-medium text-gray-900 dark:text-slate-100 truncate">
+                            <p className="text-sm font-medium text-foreground truncate leading-tight">
                               {note.title || 'Untitled'}
                             </p>
-                            <div className="flex items-center gap-2 mt-1 text-xs text-gray-500 dark:text-slate-400">
-                              <Clock size={12} />
-                              <span>{formatDate(note.updated_at)}</span>
+                            <div className="flex items-center gap-1.5 mt-0.5">
+                              <span className="text-[10px] text-muted">{p.label}</span>
+                              <span className="text-[10px] text-muted/50">·</span>
+                              <span className="text-[10px] text-muted">{formatDate(note.updated_at)}</span>
                             </div>
                           </div>
-                        </div>
-                      </li>
-                    ))}
+                          <ArrowRight
+                            size={13}
+                            className="text-muted opacity-0 group-hover:opacity-100 transition-opacity shrink-0"
+                          />
+                        </li>
+                      )
+                    })}
                   </ul>
                 )}
               </div>
-            </section>
-          )}
+
+              {asView && (
+                <div className="shrink-0 border-t border-border px-5 py-3 bg-surface-hover/50">
+                  <button
+                    type="button"
+                    onClick={onClose}
+                    className="w-full inline-flex items-center justify-center gap-2 rounded-lg bg-alpine-600 hover:bg-alpine-700 active:bg-alpine-800 px-4 py-2 text-sm font-semibold text-white transition-colors shadow-sm"
+                  >
+                    Open Workspace
+                    <ArrowRight size={14} />
+                  </button>
+                </div>
+              )}
+            </div>
+
+          </div>
         </div>
 
-        <footer className="border-t border-alpine-100 dark:border-slate-700 px-4 py-3 sm:px-6 bg-gray-50/30 dark:bg-slate-800/40">
-          <div className="flex justify-end">
-            <button
-              type="button"
-              onClick={onClose}
-              className="inline-flex items-center gap-2 rounded-lg bg-alpine-600 px-4 py-2 text-sm font-medium text-white hover:bg-alpine-700 transition-colors shadow-sm"
-            >
-              Get Started 🏔️
-            </button>
-          </div>
-        </footer>
       </div>
     </div>
   )

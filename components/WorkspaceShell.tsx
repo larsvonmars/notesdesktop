@@ -1237,6 +1237,10 @@ function WorkspaceContent() {
             isOpen={showWelcomeBack}
             asView
             onClose={closeWelcomeView}
+            onCreateNote={(type) => {
+              handleNewNote(type)
+              closeWelcomeView()
+            }}
             onSelectNote={(note) => {
               activateExistingNote(note)
               closeWelcomeView()
