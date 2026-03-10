@@ -577,16 +577,18 @@ export async function summarizeNote(
 
   const response = await sendAIRequest(messages, { temperature: 0.5 })
 
+  // Strip ```json ... ``` or ``` ... ``` code fences that the model sometimes wraps around JSON
+  const stripped = stripJsonCodeFence(response)
+
   try {
-    // Try to parse as JSON
-    const parsed = JSON.parse(response)
+    const parsed = JSON.parse(stripped)
     return {
-      summary: parsed.summary || response,
+      summary: parsed.summary || stripped,
       keyPoints: parsed.keyPoints || [],
       suggestedTasks: parsed.suggestedTasks,
     }
   } catch {
-    // If not valid JSON, return the response as summary
+    // Not JSON at all — return the raw response as the summary text
     return {
       summary: response,
       keyPoints: [],
@@ -653,7 +655,7 @@ export async function suggestMindmapNodes(
   const response = await sendAIRequest(messages, { temperature: 0.8 })
 
   try {
-    return JSON.parse(response)
+    return JSON.parse(stripJsonCodeFence(response))
   } catch {
     // Parse as plain text suggestions
     const lines = response.split('\n').filter(line => line.trim())
@@ -695,7 +697,7 @@ export async function suggestTasks(
   const response = await sendAIRequest(messages, { temperature: 0.6 })
 
   try {
-    return JSON.parse(response)
+    return JSON.parse(stripJsonCodeFence(response))
   } catch {
     const lines = response.split('\n').filter(line => line.trim())
     return lines.slice(0, 4).map(line => ({
@@ -747,7 +749,7 @@ export async function suggestEvents(
   const response = await sendAIRequest(messages, { temperature: 0.6 })
 
   try {
-    return JSON.parse(response)
+    return JSON.parse(stripJsonCodeFence(response))
   } catch {
     return []
   }
@@ -878,6 +880,11 @@ export function extractDataSheetForAI(
 /**
  * Strip HTML tags for AI processing
  */
+/** Strip ```json / ``` code fences that models sometimes wrap around JSON responses */
+function stripJsonCodeFence(s: string): string {
+  return s.replace(/^```(?:json)?\s*/i, '').replace(/\s*```\s*$/, '').trim()
+}
+
 export function stripHtmlForAI(html: string): string {
   // Simple HTML tag removal - preserves text content
   return html
