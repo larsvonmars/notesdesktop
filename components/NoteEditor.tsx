@@ -2143,46 +2143,52 @@ export default function NoteEditor({
   }, [title, note?.title, noteType, content, getStructuredExportContent, downloadTextFile, toast])
 
   const handleExportPdf = useCallback(() => {
-    const printWindow = window.open('', '_blank', 'noopener,noreferrer,width=980,height=1200')
-    if (!printWindow) {
-      toast.push({ title: 'Could not open print dialog', description: 'Please allow pop-ups to export PDF.' })
-      return
-    }
-
     const printableTitle = escapeHtml(title || note?.title || 'Untitled note')
     const bodyHtml = noteType === 'rich-text'
       ? (editorRef.current?.getHTML() || content)
       : `<pre>${escapeHtml(getStructuredExportContent())}</pre>`
 
-    printWindow.document.write(`
-      <!doctype html>
-      <html>
-        <head>
-          <meta charset="utf-8" />
-          <title>${printableTitle}</title>
-          <style>
-            :root { color-scheme: light; }
-            body { font-family: Inter, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; margin: 32px; color: #111827; }
-            h1 { margin: 0 0 20px; font-size: 24px; }
-            pre { white-space: pre-wrap; word-break: break-word; background: #f8fafc; border: 1px solid #e5e7eb; border-radius: 8px; padding: 12px; }
-            img { max-width: 100%; height: auto; }
-            table { border-collapse: collapse; width: 100%; }
-            td, th { border: 1px solid #e5e7eb; padding: 6px; vertical-align: top; }
-          </style>
-        </head>
-        <body>
-          <h1>${printableTitle}</h1>
-          ${bodyHtml}
-        </body>
-      </html>
-    `)
-    printWindow.document.close()
-    printWindow.focus()
-    window.setTimeout(() => {
-      printWindow.print()
-    }, 150)
+    const htmlContent = `<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <title>${printableTitle}</title>
+    <style>
+      :root { color-scheme: light; }
+      body { font-family: Inter, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; margin: 32px; color: #111827; }
+      h1 { margin: 0 0 20px; font-size: 24px; }
+      pre { white-space: pre-wrap; word-break: break-word; background: #f8fafc; border: 1px solid #e5e7eb; border-radius: 8px; padding: 12px; }
+      img { max-width: 100%; height: auto; }
+      table { border-collapse: collapse; width: 100%; }
+      td, th { border: 1px solid #e5e7eb; padding: 6px; vertical-align: top; }
+    </style>
+  </head>
+  <body>
+    <h1>${printableTitle}</h1>
+    ${bodyHtml}
+  </body>
+</html>`
 
-    toast.push({ title: 'Print dialog opened', description: 'Choose “Save as PDF” to export.' })
+    const blob = new Blob([htmlContent], { type: 'text/html;charset=utf-8' })
+    const blobUrl = URL.createObjectURL(blob)
+
+    const printWindow = window.open(blobUrl, '_blank', 'width=980,height=1200')
+    if (!printWindow) {
+      URL.revokeObjectURL(blobUrl)
+      toast.push({ title: 'Could not open print dialog', description: 'Please allow pop-ups to export PDF.' })
+      return
+    }
+
+    printWindow.onload = () => {
+      URL.revokeObjectURL(blobUrl)
+      printWindow.focus()
+      printWindow.print()
+    }
+
+    // Fallback: revoke after 60 s in case onload never fires
+    window.setTimeout(() => URL.revokeObjectURL(blobUrl), 60_000)
+
+    toast.push({ title: 'Print dialog opened', description: 'Choose "Save as PDF" to export.' })
   }, [title, note?.title, noteType, content, getStructuredExportContent, toast])
 
   const handleSelectBacklink = useCallback(async (noteId: string) => {
