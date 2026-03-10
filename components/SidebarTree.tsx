@@ -201,6 +201,67 @@ export default function SidebarTree({
     }
   }, [selectedNoteId, allNotes, folderTree])
 
+  // ---- DERIVED: active note context ----
+
+  // The active note object
+  const activeNote = useMemo(
+    () => (selectedNoteId ? allNotes.find(n => n.id === selectedNoteId) : undefined),
+    [selectedNoteId, allNotes]
+  )
+
+  // Recursively collect all ancestor folder ids of a given folderId
+  const getAncestorFolderIds = useCallback((targetId: string, nodes: FolderNode[]): Set<string> => {
+    const findPath = (ns: FolderNode[], t: string): string[] | null => {
+      for (const n of ns) {
+        if (n.id === t) return [n.id]
+        const child = findPath(n.children, t)
+        if (child) return [n.id, ...child]
+      }
+      return null
+    }
+    const path = findPath(nodes, targetId)
+    return path ? new Set(path) : new Set()
+  }, [])
+
+  // Set of folder ids that are ancestors-of-or-equal-to the active note's folder
+  const activeFolderAncestors = useMemo((): Set<string> => {
+    if (!activeNote?.folder_id) return new Set()
+    return getAncestorFolderIds(activeNote.folder_id, folderTree)
+  }, [activeNote, folderTree, getAncestorFolderIds])
+
+  // The active project node (for breadcrumb / color)
+  const activeProject = useMemo(
+    () => projects.find(p => p.id === activeNote?.project_id),
+    [projects, activeNote]
+  )
+
+  // Breadcrumb: project > folder path > note
+  const breadcrumb = useMemo((): string[] => {
+    if (!activeNote) return []
+    const parts: string[] = []
+    if (activeProject) parts.push(activeProject.name)
+    if (activeNote.folder_id) {
+      const findPath = (ns: FolderNode[], t: string): FolderNode[] | null => {
+        for (const n of ns) {
+          if (n.id === t) return [n]
+          const child = findPath(n.children, t)
+          if (child) return [n, ...child]
+        }
+        return null
+      }
+      const path = findPath(folderTree, activeNote.folder_id)
+      if (path) path.forEach(f => parts.push(f.name))
+    }
+    return parts
+  }, [activeNote, activeProject, folderTree])
+
+  // Recursive total note count for a folder subtree
+  const countNotesRecursive = useCallback((folder: FolderNode): number => {
+    const direct = allNotes.filter(n => n.folder_id === folder.id).length
+    const childCount = folder.children.reduce((acc, c) => acc + countNotesRecursive(c), 0)
+    return direct + childCount
+  }, [allNotes])
+
   // Build the project tree structure
   const projectTree = useMemo((): ProjectTreeNode[] => {
     const result: ProjectTreeNode[] = []
@@ -393,6 +454,8 @@ export default function SidebarTree({
   // Render a single note item
   const renderNoteItem = (n: Note) => {
     if (!matchesSearch(n.title || 'Untitled')) return null
+    const isActive = selectedNoteId === n.id
+    const accentColor = activeProject?.color ?? '#6B7280'
     return (
       <div
         role="button"
@@ -410,10 +473,11 @@ export default function SidebarTree({
         }}
         onContextMenu={(e) => handleNoteContextMenu(e, n)}
         className={`group w-full text-left px-2 py-1.5 rounded-md transition-all duration-150 flex items-start justify-between ${
-          selectedNoteId === n.id
+          isActive
             ? 'bg-alpine-100 dark:bg-alpine-900/40 text-alpine-800 dark:text-alpine-200 font-medium ring-1 ring-alpine-300 dark:ring-alpine-700'
             : 'hover:bg-surface-hover text-foreground/80 hover:text-foreground'
         }`}
+        style={isActive ? { borderLeft: `3px solid ${accentColor}`, paddingLeft: '5px' } : {}}
         title={n.title || 'Untitled'}
       >
         <div className="flex-1 min-w-0">
@@ -446,7 +510,9 @@ export default function SidebarTree({
     const isSelected = selectedFolderId === folder.id
     const hasChildren = folder.children.length > 0
     const folderNotes = getNotesForFolder(folder.id)
-    const noteCount = folderNotes.length
+    const totalCount = countNotesRecursive(folder)
+    const isOnActivePath = activeFolderAncestors.has(folder.id)
+    const accentColor = activeProject?.color ?? '#6B7280'
 
     return (
       <div key={folder.id}>
@@ -471,17 +537,20 @@ export default function SidebarTree({
           className={`group flex items-center gap-1 px-2 py-1 rounded-md transition-all duration-150 ${
             isSelected ? 'bg-accent text-accent-foreground font-medium' : 'hover:bg-surface-hover text-foreground/80'
           } ${hoverFolderId === folder.id ? 'ring-1 ring-alpine-400' : ''}`}
-          style={{ paddingLeft: `${level * 12 + 8}px` }}
+          style={{
+            paddingLeft: `${level * 12 + 8}px`,
+            ...(isOnActivePath ? { borderLeft: `2px solid ${accentColor}`, paddingLeft: `${level * 12 + 6}px` } : {}),
+          }}
         >
           <ChevronRight
             size={12}
-            className={`flex-shrink-0 transition-transform duration-200 ${isExpanded ? 'rotate-90' : ''} ${hasChildren || noteCount > 0 ? 'text-muted' : 'text-transparent'}`}
+            className={`flex-shrink-0 transition-transform duration-200 ${isExpanded ? 'rotate-90' : ''} ${hasChildren || folderNotes.length > 0 ? 'text-muted' : 'text-transparent'}`}
           />
-          <FolderTreeIcon size={12} className={`flex-shrink-0 ${isExpanded ? 'text-alpine-500' : 'text-muted'}`} />
-          <span className="text-xs truncate flex-1">{folder.name}</span>
-          {noteCount > 0 && (
+          <FolderTreeIcon size={12} className={`flex-shrink-0 ${isOnActivePath ? 'text-alpine-500' : isExpanded ? 'text-alpine-500' : 'text-muted'}`} />
+          <span className={`text-xs truncate flex-1 ${isOnActivePath ? 'font-medium' : ''}`}>{folder.name}</span>
+          {totalCount > 0 && (
             <span className="text-[10px] bg-surface-hover text-muted px-1 py-0.5 rounded-full font-semibold flex-shrink-0">
-              {noteCount}
+              {totalCount}
             </span>
           )}
           {/* Hover actions */}
@@ -542,12 +611,18 @@ export default function SidebarTree({
     const projectColor = node.project?.color ?? '#6B7280'
     const isExpanded = expandedProjects.has(projectKey)
     const totalItems = node.folders.length + node.notes.length
+    const isActiveProject = node.project?.id === activeNote?.project_id
+    const totalNoteCount = node.notes.length + node.folders.reduce((acc, f) => acc + countNotesRecursive(f), 0)
 
     // Skip empty projects when searching
     if (searchQuery && totalItems === 0) return null
 
     return (
-      <div key={projectKey} className="mb-1">
+      <div
+        key={projectKey}
+        className="mb-0.5"
+        style={isActiveProject && node.project ? { borderLeft: `3px solid ${projectColor}`, marginLeft: '2px', paddingLeft: '2px', borderRadius: '0 4px 4px 0' } : {}}
+      >
         {/* Project Header */}
         <div
           role="button"
@@ -567,7 +642,7 @@ export default function SidebarTree({
             }
           }}
           className={`group flex items-center gap-1.5 px-2 py-1.5 rounded-md transition-all duration-150 hover:bg-surface-hover ${
-            selectedProjectId === node.project?.id ? 'bg-accent/50' : ''
+            isActiveProject ? 'bg-accent/30' : selectedProjectId === node.project?.id ? 'bg-accent/50' : ''
           }`}
         >
           <ChevronRight
@@ -576,15 +651,15 @@ export default function SidebarTree({
           />
           {node.project ? (
             <div
-              className="w-2.5 h-2.5 rounded-full flex-shrink-0"
-              style={{ backgroundColor: projectColor }}
+              className={`w-3 h-3 rounded-full flex-shrink-0 shadow-sm ${isActiveProject ? 'ring-2 ring-offset-1 ring-offset-surface' : ''}`}
+              style={{ backgroundColor: projectColor, ...(isActiveProject ? { ringColor: projectColor } : {}) }}
             />
           ) : (
             <Home size={12} className="text-muted flex-shrink-0" />
           )}
-          <span className="text-xs font-semibold truncate flex-1 text-foreground">{projectName}</span>
-          {totalItems > 0 && (
-            <span className="text-[10px] text-muted flex-shrink-0">{totalItems}</span>
+          <span className={`truncate flex-1 text-foreground ${isActiveProject ? 'text-sm font-bold' : 'text-xs font-semibold'}`}>{projectName}</span>
+          {totalNoteCount > 0 && (
+            <span className="text-[10px] text-muted flex-shrink-0">{totalNoteCount}</span>
           )}
           {/* Hover actions */}
           <div className="hidden group-hover:flex items-center gap-0.5 flex-shrink-0">
@@ -659,6 +734,8 @@ export default function SidebarTree({
             )}
           </div>
         )}
+        {/* Section separator between projects */}
+        <div className="border-b border-border/40 mx-1 mt-1" />
       </div>
     )
   }
@@ -666,19 +743,41 @@ export default function SidebarTree({
   // ---- COLLAPSED VIEW ----
   if (collapsed) {
     return (
-      <aside className="fixed inset-y-0 left-0 z-40 hidden w-16 border-r border-border bg-surface transition-all duration-200 lg:flex lg:flex-col">
+      <aside className="fixed inset-y-0 left-0 z-40 hidden w-14 border-r border-border bg-surface transition-all duration-200 lg:flex lg:flex-col">
         <div className="flex items-center justify-center border-b border-border px-3 py-3">
           <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-accent text-sm font-bold text-accent-foreground">
             N
           </div>
         </div>
-        <nav className="flex-1 flex flex-col items-center gap-1 px-2 py-3">
+        {/* Project dots */}
+        <nav className="flex-1 flex flex-col items-center gap-2 px-2 py-3 overflow-y-auto">
+          {projects.map(p => (
+            <button
+              key={p.id}
+              onClick={onToggleCollapsed}
+              title={p.name}
+              className={`w-8 h-8 rounded-full flex items-center justify-center transition-all hover:scale-110 flex-shrink-0 ${
+                p.id === activeNote?.project_id
+                  ? 'ring-2 ring-offset-2 ring-offset-surface shadow-md'
+                  : 'opacity-70 hover:opacity-100'
+              }`}
+              style={{
+                backgroundColor: p.color ?? '#6B7280',
+                ...(p.id === activeNote?.project_id ? { ringColor: p.color ?? '#6B7280' } : {}),
+              }}
+            >
+              <span className="text-[9px] font-bold text-white uppercase">
+                {p.name.slice(0, 2)}
+              </span>
+            </button>
+          ))}
+          {/* Unfiled dot */}
           <button
             onClick={onToggleCollapsed}
-            className="group flex w-full items-center justify-center rounded-lg px-3 py-2.5 text-sm font-medium text-muted transition-all hover:bg-surface-hover hover:text-foreground"
-            title="Expand sidebar"
+            title="Unfiled"
+            className="w-8 h-8 rounded-full flex items-center justify-center transition-all hover:scale-110 flex-shrink-0 bg-surface-hover border border-border opacity-70 hover:opacity-100"
           >
-            <FileText className="h-[18px] w-[18px] shrink-0" />
+            <Home size={13} className="text-muted" />
           </button>
         </nav>
         <div className="border-t border-border px-2 py-3 flex flex-col items-center gap-1">
@@ -737,6 +836,28 @@ export default function SidebarTree({
             )}
           </div>
         </div>
+
+        {/* Breadcrumb context strip */}
+        {activeNote && breadcrumb.length > 0 && (
+          <div
+            className="px-3 py-1.5 border-b border-border flex items-center gap-1 min-w-0 overflow-hidden"
+            style={{ borderLeftColor: activeProject?.color ?? '#6B7280', borderLeftWidth: '3px' }}
+          >
+            <div className="flex items-center gap-1 text-[10px] text-muted truncate flex-1 min-w-0">
+              {breadcrumb.map((part, i) => (
+                <span key={i} className="flex items-center gap-1 min-w-0">
+                  {i > 0 && <ChevronRight size={9} className="flex-shrink-0 text-muted/50" />}
+                  <span
+                    className={`truncate ${i === 0 ? 'font-semibold' : ''}`}
+                    style={i === 0 && activeProject?.color ? { color: activeProject.color } : {}}
+                  >
+                    {part}
+                  </span>
+                </span>
+              ))}
+            </div>
+          </div>
+        )}
 
         {/* Tree Content */}
         <div className="flex-1 overflow-y-auto px-2 py-2 space-y-0.5">
