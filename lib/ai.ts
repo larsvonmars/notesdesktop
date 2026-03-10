@@ -440,27 +440,6 @@ export async function chat(
   ]
 
   const resolvedModel = model || DEFAULT_MODEL
-
-  // deepseek-reasoner doesn't support tool calling
-  if (toolHandler && context?.allNotes && resolvedModel !== 'deepseek-reasoner') {
-    return chatWithTools(messages, toolHandler, onStream, 5, resolvedModel)
-  }
-
-  if (onStream) {
-    let response = ''
-    await sendAIRequestStream(messages, {
-      onToken: (token) => {
-        response += token
-        onStream(token)
-      },
-      onReasoning,
-      onError: (error) => {
-        throw error
-      },
-    }, { model: resolvedModel })
-    return response
-  }
-
   const resolvedMaxTokens = resolvedModel === 'deepseek-reasoner' ? 8192 : DEFAULT_MAX_TOKENS
 
   // deepseek-reasoner doesn't support tool calling
