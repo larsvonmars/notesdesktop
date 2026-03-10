@@ -461,7 +461,29 @@ export async function chat(
     return response
   }
 
-  return sendAIRequest(messages, { model: resolvedModel })
+  const resolvedMaxTokens = resolvedModel === 'deepseek-reasoner' ? 8192 : DEFAULT_MAX_TOKENS
+
+  // deepseek-reasoner doesn't support tool calling
+  if (toolHandler && context?.allNotes && resolvedModel !== 'deepseek-reasoner') {
+    return chatWithTools(messages, toolHandler, onStream, 5, resolvedModel)
+  }
+
+  if (onStream) {
+    let response = ''
+    await sendAIRequestStream(messages, {
+      onToken: (token) => {
+        response += token
+        onStream(token)
+      },
+      onReasoning,
+      onError: (error) => {
+        throw error
+      },
+    }, { model: resolvedModel, maxTokens: resolvedMaxTokens })
+    return response
+  }
+
+  return sendAIRequest(messages, { model: resolvedModel, maxTokens: resolvedMaxTokens })
 }
 
 /**
@@ -516,17 +538,18 @@ async function chatWithTools(
 
     // Check if there are tool calls
     if (assistantMessage.tool_calls && assistantMessage.tool_calls.length > 0) {
-      // Add assistant message with tool calls
+      // Add assistant message with tool_calls in proper format
       currentMessages.push({
         role: 'assistant',
         content: assistantMessage.content || '',
-      })
+        tool_calls: assistantMessage.tool_calls,
+      } as any)
 
       // Process each tool call
       for (const toolCall of assistantMessage.tool_calls) {
         const functionName = toolCall.function.name
         let functionArgs: Record<string, unknown> = {}
-        
+
         try {
           functionArgs = JSON.parse(toolCall.function.arguments || '{}')
         } catch {
@@ -536,30 +559,22 @@ async function chatWithTools(
         // Call the tool handler
         const toolResult = await toolHandler(functionName, functionArgs)
 
-        // Add tool result to messages
+        // Add tool result using the spec-compliant role: 'tool' format
         currentMessages.push({
-          role: 'user',
-          content: `[Tool Result for ${functionName}]: ${toolResult}`,
-        } as AIMessage)
+          role: 'tool',
+          tool_call_id: toolCall.id,
+          content: toolResult,
+        } as any)
       }
 
       // Continue to next iteration
       continue
     }
 
-    // No tool calls, return the final response
+    // No tool calls — deliver the final response
     const finalContent = assistantMessage.content || ''
-    
-    // Stream the final response if streaming is enabled
-    if (onStream && finalContent) {
-      // Simulate streaming for tool-call responses
-      const words = finalContent.split(' ')
-      for (const word of words) {
-        onStream(word + ' ')
-        await new Promise(resolve => setTimeout(resolve, 20))
-      }
-    }
-
+    // Deliver synchronously (no fake word-by-word delays)
+    if (onStream && finalContent) onStream(finalContent)
     return finalContent
   }
 
@@ -799,6 +814,14 @@ function buildSystemMessage(context?: AIContext): string {
       message += contextParts.join('\n')
     }
 
+    // Inject current note full content directly (avoids requiring a tool-call round-trip)
+    if (context.currentNote?.content) {
+      const body = context.currentNote.content.length > 4000
+        ? context.currentNote.content.slice(0, 4000) + '\n...(truncated)'
+        : context.currentNote.content
+      message += `\n\n---\n## Current Note: "${context.currentNote.title}"\n${body}\n---`
+    }
+
     if (context.additionalNoteContents && context.additionalNoteContents.length > 0) {
       message += '\n\n---\n## Notes in Context\n'
       for (const n of context.additionalNoteContents) {
@@ -812,6 +835,65 @@ function buildSystemMessage(context?: AIContext): string {
   }
 
   return message
+}
+
+// ============================================================================
+// NOTE TYPE CONTENT EXTRACTORS
+// ============================================================================
+
+/**
+ * Convert MindmapData nodes into a readable indented outline for AI context.
+ */
+export function extractMindmapForAI(
+  nodes: Record<string, { text: string; description: string; children: string[]; parentId: string | null }>,
+  rootId: string
+): string {
+  const buildTree = (nodeId: string, depth: number): string => {
+    const node = nodes[nodeId]
+    if (!node) return ''
+    const indent = '  '.repeat(depth)
+    const prefix = depth === 0 ? '' : `${indent}- `
+    const desc = node.description ? ` — ${node.description}` : ''
+    const childLines = node.children
+      .map(id => buildTree(id, depth + 1))
+      .filter(Boolean)
+      .join('\n')
+    return `${prefix}${node.text}${desc}${childLines ? '\n' + childLines : ''}`
+  }
+  return buildTree(rootId, 0)
+}
+
+/**
+ * Convert BulletJournal entries into readable text for AI context.
+ */
+export function extractBulletJournalForAI(
+  entries: Array<{ signifier: string; content: string; indent_level: number; entry_date: string | null }>
+): string {
+  return entries
+    .filter(e => e.content.trim())
+    .map(e => {
+      const indent = '  '.repeat(e.indent_level)
+      const date = e.entry_date ? ` [${e.entry_date}]` : ''
+      return `${indent}[${e.signifier}]${date} ${e.content}`
+    })
+    .join('\n')
+}
+
+/**
+ * Convert DataSheet columns+rows into a markdown table for AI context.
+ */
+export function extractDataSheetForAI(
+  columns: Array<{ name: string }>,
+  rows: string[][]
+): string {
+  if (!columns.length) return '(empty spreadsheet)'
+  const header = columns.map(c => c.name).join(' | ')
+  const separator = columns.map(() => '---').join(' | ')
+  const dataRows = rows.slice(0, 50).map(row =>
+    columns.map((_, i) => row[i] ?? '').join(' | ')
+  )
+  const suffix = rows.length > 50 ? `\n... (${rows.length - 50} more rows)` : ''
+  return [header, separator, ...dataRows].join('\n') + suffix
 }
 
 /**

@@ -2,6 +2,7 @@
 
 import { useState, useRef, useEffect, useCallback, useMemo } from 'react'
 import { marked } from 'marked'
+import DOMPurify from 'dompurify'
 import {
   Send,
   Sparkles,
@@ -62,6 +63,7 @@ import {
   createAIChat,
   updateAIChat,
   deleteAIChat,
+  generateChatTitle,
   type AIChat,
   type AIMessage as DBMessage,
 } from '@/lib/ai-chats'
@@ -206,7 +208,10 @@ function renderMarkdown(content: string): string {
 
 /** Theme-aware markdown renderer using CSS-variable utilities */
 function MarkdownContent({ content, className = '' }: { content: string; className?: string }) {
-  const html = useMemo(() => renderMarkdown(content), [content])
+  const html = useMemo(() => {
+    const raw = renderMarkdown(content)
+    return typeof window !== 'undefined' ? DOMPurify.sanitize(raw) : raw
+  }, [content])
   return (
     <div
       className={`text-sm leading-relaxed text-foreground
@@ -349,6 +354,7 @@ export default function AIAssistant({
       role: msg.role,
       content: msg.content,
       timestamp: new Date(msg.timestamp),
+      reasoning: msg.reasoning,
     })))
     chatHistoryRef.current = c.messages.map(msg => ({ role: msg.role, content: msg.content }))
     setShowChatHistory(false)
@@ -512,14 +518,24 @@ export default function AIAssistant({
       chatHistoryRef.current = [...chatHistoryRef.current, { role: 'assistant', content: fullResponse }]
 
       try {
+        // Build persisted messages, preserving reasoning chain and model used
         const chatMessages: DBMessage[] = chatHistoryRef.current
           .filter(msg => msg.role === 'user' || msg.role === 'assistant')
-          .map(msg => ({ role: msg.role as 'user' | 'assistant', content: msg.content, timestamp: new Date().toISOString() }))
+          .map((msg, i, arr) => {
+            const isLastAssistant = msg.role === 'assistant' && i === arr.length - 1
+            return {
+              role: msg.role as 'user' | 'assistant',
+              content: msg.content,
+              timestamp: new Date().toISOString(),
+              reasoning: isLastAssistant && reasoningContent ? reasoningContent : undefined,
+              model: isLastAssistant ? model : undefined,
+            }
+          })
 
         if (currentChatId) {
           await updateAIChat(currentChatId, { messages: chatMessages })
         } else {
-          const chatTitle = userMessage.content.slice(0, TEXT_TRUNCATION_SHORT) + (userMessage.content.length > TEXT_TRUNCATION_SHORT ? '...' : '')
+          const chatTitle = generateChatTitle(chatMessages)
           const newChat = await createAIChat({ note_id: note?.id || null, title: chatTitle, messages: chatMessages })
           if (newChat) setCurrentChatId(newChat.id)
         }

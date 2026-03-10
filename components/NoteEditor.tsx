@@ -84,6 +84,7 @@ import { fileBlock, type FileBlockPayload, initializeFileBlockInteractions } fro
 import FileExplorerModal from './FileExplorerModal'
 import SettingsModal from './SettingsModal'
 import AIAssistant from './AIAssistant'
+import { extractMindmapForAI, extractBulletJournalForAI, extractDataSheetForAI } from '@/lib/ai'
 import NoteDetailsSidebar from './NoteDetailsSidebar'
 import { Settings } from 'lucide-react'
 import { htmlToMarkdown } from '@/lib/editor/markdownHelpers'
@@ -2289,6 +2290,24 @@ export default function NoteEditor({
   ]
 
   // AI Assistant handlers
+  // Build a readable plain-text representation of the current note for the AI,
+  // based on note type (rich-text, mindmap, bullet-journal, data-sheet, etc.)
+  const aiNoteContent = useMemo(() => {
+    if (noteType === 'rich-text') return content
+    if (noteType === 'mindmap' && mindmapData) {
+      return extractMindmapForAI(mindmapData.nodes, mindmapData.rootId)
+    }
+    if (noteType === 'bullet-journal' && bulletJournalData) {
+      return extractBulletJournalForAI(bulletJournalData.entries)
+    }
+    if (noteType === 'data-sheet' && dataSheetData) {
+      return extractDataSheetForAI(dataSheetData.columns, dataSheetData.rows)
+    }
+    if (noteType === 'drawing') return '[This note contains a drawing — no text content is available for AI]'
+    if (noteType === 'pdf-annotation') return '[This note contains PDF annotations — no text content is available for AI]'
+    return content
+  }, [noteType, content, mindmapData, bulletJournalData, dataSheetData])
+
   const handleAIInsertText = useCallback((text: string) => {
     if (noteType === 'rich-text' && editorRef.current) {
       // Insert the HTML at the end of the current content
@@ -3003,8 +3022,15 @@ export default function NoteEditor({
             <div className="flex-1 min-h-0">
               <AIAssistant
                 note={note ?? null}
-                noteContent={content}
+                noteContent={aiNoteContent}
                 allNotes={allNotes}
+                selectedText={selectedText || undefined}
+                mindmapData={mindmapData}
+                selectedMindmapNodeId={selectedMindmapNodeId}
+                onInsertText={handleAIInsertText}
+                onReplaceSelection={handleAIReplaceSelection}
+                onInsertAtCursor={handleAIInsertAtCursor}
+                onAddMindmapNode={noteType === 'mindmap' ? handleAIAddMindmapNode : undefined}
               />
             </div>
           </div>
