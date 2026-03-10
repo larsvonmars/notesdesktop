@@ -15,6 +15,7 @@ import {
   Plus,
   MoreVertical,
   Search,
+  SlidersHorizontal,
   FolderPlus,
   Edit2,
   Trash2,
@@ -30,7 +31,7 @@ import type { Note } from './NoteEditor'
 import type { FolderNode } from '@/lib/folders'
 import type { Project } from '@/lib/projects'
 import type { NoteType } from '@/lib/notes'
-import { getNoteTypePresentation, type NoteTypeIconKey } from '@/lib/note-types'
+import { getNoteTypePresentation, getOrderedNoteTypePresentations, type NoteTypeIconKey } from '@/lib/note-types'
 
 const NOTE_TYPE_ICON_MAP: Record<NoteTypeIconKey, LucideIcon> = {
   'file-text': FileText,
@@ -105,6 +106,9 @@ export default function SidebarTree({
   const [expandedProjects, setExpandedProjects] = useState<Set<string>>(() => new Set(['__UNFILED__']))
   const [expandedFolders, setExpandedFolders] = useState<Set<string>>(() => new Set())
   const [searchQuery, setSearchQuery] = useState('')
+  const [filterNoteTypes, setFilterNoteTypes] = useState<Set<NoteType>>(() => new Set())
+  const [filterProjectIds, setFilterProjectIds] = useState<Set<string>>(() => new Set())
+  const [showFilterPanel, setShowFilterPanel] = useState(false)
   const [hoverFolderId, setHoverFolderId] = useState<string | null>(null)
   const [hoverProjectId, setHoverProjectId] = useState<string | null>(null)
   const searchInputRef = useRef<HTMLInputElement>(null)
@@ -407,11 +411,79 @@ export default function SidebarTree({
     setContextMenu(null)
   }, [onMoveNote])
 
-  // Filter notes/folders by search query
+  // ---- SEARCH & FILTER ----
+
+  // Basic text match used for tree folder/project label filtering
   const matchesSearch = useCallback((text: string) => {
     if (!searchQuery.trim()) return true
     return text.toLowerCase().includes(searchQuery.toLowerCase())
   }, [searchQuery])
+
+  // Full note filter: text + type + project
+  const noteMatchesFilters = useCallback((note: Note): boolean => {
+    if (searchQuery.trim() && !((note.title ?? 'Untitled').toLowerCase().includes(searchQuery.toLowerCase()))) return false
+    if (filterNoteTypes.size > 0 && !filterNoteTypes.has((note.note_type ?? 'rich-text') as NoteType)) return false
+    if (filterProjectIds.size > 0) {
+      const key = note.project_id ?? '__UNFILED__'
+      if (!filterProjectIds.has(key)) return false
+    }
+    return true
+  }, [searchQuery, filterNoteTypes, filterProjectIds])
+
+  const isFilterActive = searchQuery.trim() !== '' || filterNoteTypes.size > 0 || filterProjectIds.size > 0
+  const activeFilterCount = (searchQuery.trim() ? 1 : 0) + filterNoteTypes.size + filterProjectIds.size
+
+  const filteredNotes = useMemo(
+    () => isFilterActive ? allNotes.filter(noteMatchesFilters) : [],
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [allNotes, isFilterActive, searchQuery, filterNoteTypes, filterProjectIds]
+  )
+
+  // Get display path for a note (project › folder › ...)
+  const getNoteLocationMeta = useCallback((note: Note): { projectName: string; projectColor: string; folderPath: string } => {
+    const proj = projects.find(p => p.id === note.project_id)
+    const projectName = proj?.name ?? 'Unfiled'
+    const projectColor = proj?.color ?? '#6B7280'
+    let folderPath = ''
+    if (note.folder_id) {
+      const findPath = (ns: FolderNode[], t: string): string[] | null => {
+        for (const n of ns) {
+          if (n.id === t) return [n.name]
+          const child = findPath(n.children, t)
+          if (child) return [n.name, ...child]
+        }
+        return null
+      }
+      const path = findPath(folderTree, note.folder_id)
+      if (path) folderPath = path.join(' › ')
+    }
+    return { projectName, projectColor, folderPath }
+  }, [projects, folderTree])
+
+  const toggleNoteTypeFilter = useCallback((type: NoteType) => {
+    setFilterNoteTypes(prev => {
+      const next = new Set(prev)
+      if (next.has(type)) { next.delete(type) } else { next.add(type) }
+      return next
+    })
+  }, [])
+
+  const toggleProjectFilter = useCallback((id: string) => {
+    setFilterProjectIds(prev => {
+      const next = new Set(prev)
+      if (next.has(id)) { next.delete(id) } else { next.add(id) }
+      return next
+    })
+  }, [])
+
+  const clearAllFilters = useCallback(() => {
+    setSearchQuery('')
+    setFilterNoteTypes(new Set())
+    setFilterProjectIds(new Set())
+  }, [])
+
+  // All note types for the filter chips
+  const allNoteTypePresentations = useMemo(() => getOrderedNoteTypePresentations(), [])
 
   // Delete / rename handlers
   const handleConfirmDelete = useCallback(() => {
@@ -815,26 +887,125 @@ export default function SidebarTree({
         </div>
 
         {/* Search */}
-        <div className="px-3 py-2 border-b border-border">
-          <div className="relative">
-            <Search size={13} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-muted" />
-            <input
-              ref={searchInputRef}
-              type="text"
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              placeholder="Filter notes..."
-              className="w-full pl-8 pr-7 py-1.5 text-xs border border-border rounded-lg bg-surface-hover/50 focus:outline-none focus:ring-1 focus:ring-alpine-500 focus:border-alpine-500 text-foreground placeholder:text-muted"
-            />
-            {searchQuery && (
-              <button
-                onClick={() => setSearchQuery('')}
-                className="absolute right-2 top-1/2 -translate-y-1/2 text-muted hover:text-foreground"
-              >
-                <X size={12} />
-              </button>
-            )}
+        <div className="px-3 pt-2 pb-1.5 border-b border-border space-y-1.5">
+          {/* Row: text input + filter toggle */}
+          <div className="flex items-center gap-1.5">
+            <div className="relative flex-1">
+              <Search size={13} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-muted" />
+              <input
+                ref={searchInputRef}
+                type="text"
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                placeholder="Search notes..."
+                className="w-full pl-8 pr-7 py-1.5 text-xs border border-border rounded-lg bg-surface-hover/50 focus:outline-none focus:ring-1 focus:ring-alpine-500 focus:border-alpine-500 text-foreground placeholder:text-muted"
+              />
+              {searchQuery && (
+                <button
+                  onClick={() => setSearchQuery('')}
+                  className="absolute right-2 top-1/2 -translate-y-1/2 text-muted hover:text-foreground"
+                >
+                  <X size={12} />
+                </button>
+              )}
+            </div>
+            <button
+              onClick={() => setShowFilterPanel(v => !v)}
+              title="Toggle filters"
+              className={`relative flex-shrink-0 rounded-lg p-1.5 transition-colors ${
+                showFilterPanel || activeFilterCount > 0
+                  ? 'bg-alpine-100 dark:bg-alpine-900/40 text-alpine-600 dark:text-alpine-300'
+                  : 'text-muted hover:bg-surface-hover hover:text-foreground'
+              }`}
+            >
+              <SlidersHorizontal size={14} />
+              {activeFilterCount > 0 && (
+                <span className="absolute -top-1 -right-1 min-w-[14px] h-[14px] px-0.5 bg-alpine-600 text-white text-[9px] font-bold rounded-full flex items-center justify-center">
+                  {activeFilterCount}
+                </span>
+              )}
+            </button>
           </div>
+
+          {/* Filter panel */}
+          {showFilterPanel && (
+            <div className="space-y-2">
+              {/* Note type chips */}
+              <div>
+                <div className="text-[9px] font-semibold uppercase text-muted mb-1 tracking-wide">Type</div>
+                <div className="flex flex-wrap gap-1">
+                  {allNoteTypePresentations.map(tp => {
+                    const Icon = NOTE_TYPE_ICON_MAP[tp.iconKey]
+                    const active = filterNoteTypes.has(tp.id)
+                    return (
+                      <button
+                        key={tp.id}
+                        onClick={() => toggleNoteTypeFilter(tp.id)}
+                        title={tp.label}
+                        className={`flex items-center gap-1 px-1.5 py-0.5 rounded-full text-[10px] font-medium border transition-all ${
+                          active
+                            ? 'border-alpine-500 bg-alpine-100 dark:bg-alpine-900/40 text-alpine-700 dark:text-alpine-300'
+                            : 'border-border bg-surface-hover text-muted hover:border-alpine-400 hover:text-foreground'
+                        }`}
+                      >
+                        <Icon size={10} className={active ? '' : 'opacity-70'} />
+                        {tp.label}
+                      </button>
+                    )
+                  })}
+                </div>
+              </div>
+
+              {/* Project chips */}
+              {projects.length > 0 && (
+                <div>
+                  <div className="text-[9px] font-semibold uppercase text-muted mb-1 tracking-wide">Project</div>
+                  <div className="flex flex-wrap gap-1">
+                    {/* Unfiled chip */}
+                    <button
+                      onClick={() => toggleProjectFilter('__UNFILED__')}
+                      className={`flex items-center gap-1 px-1.5 py-0.5 rounded-full text-[10px] font-medium border transition-all ${
+                        filterProjectIds.has('__UNFILED__')
+                          ? 'border-alpine-500 bg-alpine-100 dark:bg-alpine-900/40 text-alpine-700 dark:text-alpine-300'
+                          : 'border-border bg-surface-hover text-muted hover:border-alpine-400 hover:text-foreground'
+                      }`}
+                    >
+                      <Home size={9} />
+                      Unfiled
+                    </button>
+                    {projects.map(p => {
+                      const active = filterProjectIds.has(p.id)
+                      return (
+                        <button
+                          key={p.id}
+                          onClick={() => toggleProjectFilter(p.id)}
+                          title={p.name}
+                          className={`flex items-center gap-1 px-1.5 py-0.5 rounded-full text-[10px] font-medium border transition-all ${
+                            active
+                              ? 'border-alpine-500 bg-alpine-100 dark:bg-alpine-900/40 text-alpine-700 dark:text-alpine-300'
+                              : 'border-border bg-surface-hover text-muted hover:border-alpine-400 hover:text-foreground'
+                          }`}
+                        >
+                          <span className="w-2 h-2 rounded-full flex-shrink-0" style={{ backgroundColor: p.color ?? '#6B7280' }} />
+                          <span className="truncate max-w-[80px]">{p.name}</span>
+                        </button>
+                      )
+                    })}
+                  </div>
+                </div>
+              )}
+
+              {/* Clear all */}
+              {activeFilterCount > 0 && (
+                <button
+                  onClick={clearAllFilters}
+                  className="text-[10px] text-muted hover:text-danger flex items-center gap-1 transition-colors"
+                >
+                  <X size={10} /> Clear all filters
+                </button>
+              )}
+            </div>
+          )}
         </div>
 
         {/* Breadcrumb context strip */}
@@ -859,9 +1030,87 @@ export default function SidebarTree({
           </div>
         )}
 
-        {/* Tree Content */}
-        <div className="flex-1 overflow-y-auto px-2 py-2 space-y-0.5">
-          {projectTree.map(node => renderProject(node))}
+        {/* Tree Content OR Flat Search Results */}
+        <div className="flex-1 overflow-y-auto px-2 py-2">
+          {isFilterActive ? (
+            <>
+              {/* Flat results header */}
+              <div className="flex items-center justify-between mb-2 px-1">
+                <span className="text-[10px] font-semibold uppercase tracking-wide text-muted">
+                  {filteredNotes.length} result{filteredNotes.length !== 1 ? 's' : ''}
+                </span>
+                <button onClick={clearAllFilters} className="text-[10px] text-muted hover:text-foreground flex items-center gap-0.5 transition-colors">
+                  <X size={9} /> Clear
+                </button>
+              </div>
+              {filteredNotes.length === 0 ? (
+                <div className="text-xs text-muted italic text-center py-8">No notes match your filters.</div>
+              ) : (
+                <div className="space-y-0.5">
+                  {filteredNotes.map(note => {
+                    const { projectName, projectColor, folderPath } = getNoteLocationMeta(note)
+                    const isActive = selectedNoteId === note.id
+                    const presentation = getNoteTypePresentation(note.note_type)
+                    const Icon = NOTE_TYPE_ICON_MAP[presentation.iconKey]
+                    return (
+                      <div
+                        role="button"
+                        tabIndex={0}
+                        key={note.id}
+                        onClick={() => onSelectNote(note)}
+                        onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onSelectNote(note) } }}
+                        onContextMenu={(e) => handleNoteContextMenu(e, note)}
+                        className={`group w-full text-left px-2 py-2 rounded-lg transition-all duration-150 flex items-start gap-2 ${
+                          isActive
+                            ? 'bg-alpine-100 dark:bg-alpine-900/40 ring-1 ring-alpine-300 dark:ring-alpine-700'
+                            : 'hover:bg-surface-hover'
+                        }`}
+                        style={isActive ? { borderLeft: `3px solid ${projectColor}`, paddingLeft: '5px' } : {}}
+                      >
+                        {/* Type icon */}
+                        <div className={`mt-0.5 flex-shrink-0 w-6 h-6 rounded-md flex items-center justify-center ${presentation.iconBgClassName}`}>
+                          <Icon size={12} />
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          {/* Title */}
+                          <div className={`text-xs truncate font-medium ${
+                            isActive ? 'text-alpine-800 dark:text-alpine-200' : 'text-foreground'
+                          }`}>
+                            {note.title || 'Untitled'}
+                          </div>
+                          {/* Location: project › folder */}
+                          <div className="flex items-center gap-1 mt-0.5 min-w-0">
+                            <span
+                              className="text-[10px] font-semibold truncate flex-shrink-0"
+                              style={{ color: projectColor }}
+                            >
+                              {projectName}
+                            </span>
+                            {folderPath && (
+                              <>
+                                <ChevronRight size={8} className="text-muted/50 flex-shrink-0" />
+                                <span className="text-[10px] text-muted truncate">{folderPath}</span>
+                              </>
+                            )}
+                          </div>
+                        </div>
+                        <button
+                          onClick={(e) => { e.stopPropagation(); handleNoteContextMenu(e, note) }}
+                          className="hidden group-hover:flex p-0.5 hover:bg-surface-hover rounded transition-colors flex-shrink-0 mt-0.5"
+                        >
+                          <MoreVertical size={11} />
+                        </button>
+                      </div>
+                    )
+                  })}
+                </div>
+              )}
+            </>
+          ) : (
+            <div className="space-y-0.5">
+              {projectTree.map(node => renderProject(node))}
+            </div>
+          )}
         </div>
 
         {/* Footer with New Folder / New Project buttons */}
