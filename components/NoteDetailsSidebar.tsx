@@ -22,6 +22,9 @@ import {
   X,
   Download,
   Sparkles,
+  Copy,
+  ExternalLink,
+  Globe,
   type LucideIcon,
 } from 'lucide-react'
 import type { NoteType } from '@/lib/notes'
@@ -78,6 +81,18 @@ export interface NoteDetailsSidebarProps {
   // AI Assistant
   onOpenAIAssistant?: () => void
 
+  // Share
+  shareUrl?: string | null
+  shareHint?: string | null
+  sharePublishedDisplay?: string | null
+  onPublish?: () => void
+  onUnpublish?: () => void
+  onCopyShareLink?: () => void
+  onOpenSharePage?: () => void
+  isPublishing?: boolean
+  isUnpublishing?: boolean
+  canPublish?: boolean
+
   // Visibility
   collapsed: boolean
   onToggleCollapsed: () => void
@@ -122,6 +137,16 @@ export default function NoteDetailsSidebar({
   outgoingLinks = [],
   onSelectOutgoing,
   onOpenAIAssistant,
+  shareUrl,
+  shareHint,
+  sharePublishedDisplay,
+  onPublish,
+  onUnpublish,
+  onCopyShareLink,
+  onOpenSharePage,
+  isPublishing = false,
+  isUnpublishing = false,
+  canPublish = true,
   collapsed,
   onToggleCollapsed,
 }: NoteDetailsSidebarProps) {
@@ -251,6 +276,16 @@ export default function NoteDetailsSidebar({
               title={`Connections (${connectionsCount})`}
             >
               <Network size={14} />
+            </button>
+          )}
+
+          {shareUrl && onCopyShareLink && (
+            <button
+              onClick={onCopyShareLink}
+              className="p-1.5 rounded-lg text-muted hover:bg-surface-hover hover:text-foreground transition-colors"
+              title="Copy share link"
+            >
+              <Globe size={14} />
             </button>
           )}
         </nav>
@@ -401,6 +436,82 @@ export default function NoteDetailsSidebar({
                   <span>Export as PDF</span>
                 </button>
               )}
+            </div>
+          </div>
+        )}
+
+        {/* Share Section */}
+        {(onPublish || shareUrl || shareHint) && (
+          <div className="px-3 py-3 border-b border-border">
+            <label className="text-[10px] font-semibold text-muted uppercase tracking-wider mb-2 block">Share</label>
+            <div className="rounded-xl border border-border bg-surface-hover/40 p-3">
+              <div className="flex items-start gap-2">
+                <div className={`mt-0.5 rounded-lg p-1.5 ${shareUrl ? 'bg-alpine-100 text-alpine-700' : 'bg-surface text-muted'}`}>
+                  <Globe size={13} />
+                </div>
+                <div className="min-w-0 flex-1">
+                  <div className="text-xs font-medium text-foreground">
+                    {shareUrl ? 'Published via link' : 'Private note'}
+                  </div>
+                  <div className="mt-1 text-[11px] leading-5 text-muted">
+                    {sharePublishedDisplay
+                      ? `Last published ${sharePublishedDisplay}`
+                      : shareHint || 'Create a read-only share page for this note.'}
+                  </div>
+                </div>
+              </div>
+
+              {shareUrl && (
+                <div className="mt-3 rounded-lg border border-border bg-surface px-2.5 py-2 text-[11px] text-foreground/80 truncate">
+                  {shareUrl}
+                </div>
+              )}
+
+              <div className="mt-3 flex flex-wrap gap-1.5">
+                {onPublish && (
+                  <button
+                    onClick={onPublish}
+                    disabled={!canPublish || isPublishing || isUnpublishing}
+                    className="inline-flex items-center gap-1.5 rounded-lg bg-alpine-600 px-3 py-1.5 text-xs font-medium text-white transition-colors hover:bg-alpine-700 disabled:cursor-not-allowed disabled:opacity-50"
+                  >
+                    {isPublishing ? <Loader2 size={12} className="animate-spin" /> : <Globe size={12} />}
+                    <span>{shareUrl ? 'Update share' : 'Publish note'}</span>
+                  </button>
+                )}
+
+                {shareUrl && onCopyShareLink && (
+                  <button
+                    onClick={onCopyShareLink}
+                    disabled={isPublishing || isUnpublishing}
+                    className="inline-flex items-center gap-1.5 rounded-lg border border-border px-3 py-1.5 text-xs font-medium text-foreground/80 transition-colors hover:bg-surface hover:text-foreground disabled:cursor-not-allowed disabled:opacity-50"
+                  >
+                    <Copy size={12} />
+                    <span>Copy link</span>
+                  </button>
+                )}
+
+                {shareUrl && onOpenSharePage && (
+                  <button
+                    onClick={onOpenSharePage}
+                    disabled={isPublishing || isUnpublishing}
+                    className="inline-flex items-center gap-1.5 rounded-lg border border-border px-3 py-1.5 text-xs font-medium text-foreground/80 transition-colors hover:bg-surface hover:text-foreground disabled:cursor-not-allowed disabled:opacity-50"
+                  >
+                    <ExternalLink size={12} />
+                    <span>Open page</span>
+                  </button>
+                )}
+
+                {shareUrl && onUnpublish && (
+                  <button
+                    onClick={onUnpublish}
+                    disabled={isPublishing || isUnpublishing}
+                    className="inline-flex items-center gap-1.5 rounded-lg border border-danger/30 px-3 py-1.5 text-xs font-medium text-danger transition-colors hover:bg-danger-light disabled:cursor-not-allowed disabled:opacity-50"
+                  >
+                    {isUnpublishing ? <Loader2 size={12} className="animate-spin" /> : <X size={12} />}
+                    <span>Unpublish</span>
+                  </button>
+                )}
+              </div>
             </div>
           </div>
         )}

@@ -72,6 +72,7 @@ import ProjectsWorkspaceModal from './ProjectsWorkspaceModal'
 import { useToast } from './ToastProvider'
 import { Note as LibNote, createNote, createNoteAttachment, deleteNoteAttachment, getNote, getNoteAttachments } from '../lib/notes'
 import { getProjects, Project } from '../lib/projects'
+import { buildPublicShareUrl, getNoteShare, publishNoteShare, unpublishNoteShare, type NoteShareMetadata, type PublishedNoteShare } from '../lib/note-shares'
 import NoteLinkDialog from './NoteLinkDialog'
 import DataSheetPickerDialog from './DataSheetPickerDialog'
 import { ErrorBoundary } from './ErrorBoundary'
@@ -89,7 +90,7 @@ import NoteDetailsSidebar from './NoteDetailsSidebar'
 import { Settings } from 'lucide-react'
 import { htmlToMarkdown } from '@/lib/editor/markdownHelpers'
 import type { NoteType } from '@/lib/notes'
-import { deleteFile, uploadImageFile } from '@/lib/file-storage'
+import { deleteFile, getFileSignedUrl, uploadImageFile } from '@/lib/file-storage'
 
 export type { Note } from '../lib/notes'
 
@@ -294,6 +295,14 @@ const sanitizePathSegment = (value: string, fallback: string): string => {
   return normalized || fallback
 }
 
+const safeParsePdfAnnotationData = (value: string): PdfAnnotationData | null => {
+  try {
+    return JSON.parse(value) as PdfAnnotationData
+  } catch {
+    return null
+  }
+}
+
 const commandShortcuts: Record<RichTextCommand, string> = {
   bold: '⌘/Ctrl+B',
   italic: '⌘/Ctrl+I',
@@ -424,6 +433,10 @@ export default function NoteEditor({
   const [showSettings, setShowSettings] = useState(false)
   const [showAIAssistant, setShowAIAssistant] = useState(false)
   const [rightSidebarCollapsed, setRightSidebarCollapsed] = useState(false)
+  const [shareRecord, setShareRecord] = useState<PublishedNoteShare | null>(null)
+  const [isLoadingShare, setIsLoadingShare] = useState(false)
+  const [isPublishingShare, setIsPublishingShare] = useState(false)
+  const [isUnpublishingShare, setIsUnpublishingShare] = useState(false)
   const [projects, setProjects] = useState<Project[]>([])
   const rightSidebarOffset = rightSidebarCollapsed ? '48px' : '280px'
   const currentProjectName = useMemo(() => {
@@ -457,6 +470,42 @@ export default function NoteEditor({
     }
     loadProjects()
   }, [])
+
+  useEffect(() => {
+    let cancelled = false
+
+    const loadShare = async () => {
+      if (!note?.id) {
+        setShareRecord(null)
+        setIsLoadingShare(false)
+        return
+      }
+
+      setIsLoadingShare(true)
+
+      try {
+        const existingShare = await getNoteShare(note.id)
+        if (!cancelled) {
+          setShareRecord(existingShare)
+        }
+      } catch (error) {
+        console.error('Failed to load note share:', error)
+        if (!cancelled) {
+          setShareRecord(null)
+        }
+      } finally {
+        if (!cancelled) {
+          setIsLoadingShare(false)
+        }
+      }
+    }
+
+    void loadShare()
+
+    return () => {
+      cancelled = true
+    }
+  }, [note?.id])
 
   // Set CSS variable for right sidebar offset
   useEffect(() => {
@@ -2126,6 +2175,77 @@ export default function NoteEditor({
     return content
   }, [noteType, drawingData, mindmapData, bulletJournalData, dataSheetData, pdfAnnotationData, content])
 
+  const serializeCurrentNoteContent = useCallback(() => {
+    if (noteType === 'drawing') {
+      return JSON.stringify(drawingData)
+    }
+    if (noteType === 'mindmap') {
+      return JSON.stringify(mindmapData)
+    }
+    if (noteType === 'bullet-journal') {
+      return JSON.stringify(bulletJournalData)
+    }
+    if (noteType === 'data-sheet') {
+      return JSON.stringify(dataSheetData)
+    }
+    if (noteType === 'pdf-annotation') {
+      return JSON.stringify(pdfAnnotationData)
+    }
+    return content
+  }, [bulletJournalData, content, dataSheetData, drawingData, mindmapData, noteType, pdfAnnotationData])
+
+  const buildShareMetadata = useCallback(async (serializedContent: string, type: NoteType): Promise<NoteShareMetadata | null> => {
+    if (type !== 'pdf-annotation') {
+      return null
+    }
+
+    const pdfData = safeParsePdfAnnotationData(serializedContent)
+    if (!pdfData?.pdfStoragePath) {
+      return null
+    }
+
+    try {
+      const pdfUrl = await getFileSignedUrl(pdfData.pdfStoragePath, 60 * 60 * 24 * 30)
+      return {
+        pdfUrl,
+        pdfStoragePath: pdfData.pdfStoragePath,
+      }
+    } catch (error) {
+      console.error('Failed to create signed PDF URL for share:', error)
+      return {
+        pdfStoragePath: pdfData.pdfStoragePath,
+      }
+    }
+  }, [])
+
+  const shareUrl = useMemo(() => {
+    if (!shareRecord) return null
+    return buildPublicShareUrl(shareRecord.share_token)
+  }, [shareRecord])
+
+  const sharePublishedDisplay = useMemo(() => {
+    if (!shareRecord?.published_at) return null
+    return new Intl.DateTimeFormat(undefined, {
+      dateStyle: 'medium',
+      timeStyle: 'short',
+    }).format(new Date(shareRecord.published_at))
+  }, [shareRecord?.published_at])
+
+  const shareHint = useMemo(() => {
+    if (!note?.id) {
+      return 'Save this note once before publishing it.'
+    }
+
+    if (!process.env.NEXT_PUBLIC_SHARE_BASE_URL && typeof window !== 'undefined') {
+      const protocol = window.location.protocol
+      if (protocol === 'tauri:' || protocol === 'file:') {
+        return 'Set NEXT_PUBLIC_SHARE_BASE_URL to your public web app URL so copied links work outside the desktop app.'
+      }
+    }
+
+    return 'Publishing creates a read-only page for anyone with the link.'
+  }, [note?.id])
+
   const handleExportMarkdown = useCallback(() => {
     const fileBase = sanitizePathSegment(title || note?.title || '', 'untitled-note')
 
@@ -2190,6 +2310,98 @@ export default function NoteEditor({
 
     toast.push({ title: 'Print dialog opened', description: 'Choose "Save as PDF" to export.' })
   }, [title, note?.title, noteType, content, getStructuredExportContent, toast])
+
+  const handleCopyShareLink = useCallback(async () => {
+    if (!shareUrl) return
+
+    try {
+      if (navigator.clipboard?.writeText) {
+        await navigator.clipboard.writeText(shareUrl)
+      } else {
+        const textArea = document.createElement('textarea')
+        textArea.value = shareUrl
+        textArea.setAttribute('readonly', 'true')
+        textArea.style.position = 'absolute'
+        textArea.style.left = '-9999px'
+        document.body.appendChild(textArea)
+        textArea.select()
+        document.execCommand('copy')
+        document.body.removeChild(textArea)
+      }
+
+      toast.push({ title: 'Share link copied' })
+    } catch (error) {
+      console.error('Failed to copy share link:', error)
+      toast.push({ title: 'Copy failed', description: 'The share link could not be copied.' })
+    }
+  }, [shareUrl, toast])
+
+  const handleOpenSharePage = useCallback(() => {
+    if (!shareUrl) return
+    window.open(shareUrl, '_blank', 'noopener,noreferrer')
+  }, [shareUrl])
+
+  const handlePublishShare = useCallback(async () => {
+    if (!note?.id) {
+      toast.push({ title: 'Save required', description: 'Save the note before publishing it.' })
+      return
+    }
+
+    setIsPublishingShare(true)
+
+    try {
+      if (hasChanges) {
+        await handleSave()
+      }
+
+      const latestNote = await getNote(note.id)
+      if (!latestNote) {
+        throw new Error('Could not load the saved note for publishing.')
+      }
+
+      const metadata = await buildShareMetadata(latestNote.content, latestNote.note_type)
+      const publishedShare = await publishNoteShare(latestNote.id, {
+        title: latestNote.title,
+        content: latestNote.content,
+        note_type: latestNote.note_type,
+        metadata,
+      })
+
+      setShareRecord(publishedShare)
+      toast.push({
+        title: shareRecord ? 'Share updated' : 'Note published',
+        description: 'The read-only share page is ready.',
+      })
+    } catch (error: any) {
+      console.error('Failed to publish note share:', error)
+      toast.push({
+        title: 'Publish failed',
+        description: error?.message || 'The share page could not be published.',
+      })
+    } finally {
+      setIsPublishingShare(false)
+    }
+  }, [buildShareMetadata, handleSave, hasChanges, note?.id, shareRecord, toast])
+
+  const handleUnpublishShare = useCallback(async () => {
+    if (!note?.id) return
+
+    setIsUnpublishingShare(true)
+
+    try {
+      await unpublishNoteShare(note.id)
+      setShareRecord(null)
+      toast.push({ title: 'Share removed', description: 'The public share page is no longer available.' })
+    } catch (error: any) {
+      console.error('Failed to unpublish note share:', error)
+      toast.push({
+        title: 'Unpublish failed',
+        description: error?.message || 'The share page could not be removed.',
+      })
+    } finally {
+      setIsUnpublishingShare(false)
+    }
+  }, [note?.id, toast])
 
   const handleSelectBacklink = useCallback(async (noteId: string) => {
     const targetNote = notesForConnections.find((item) => item.id === noteId)
@@ -2545,6 +2757,16 @@ export default function NoteEditor({
           onSelectBacklink={handleSelectBacklink}
           outgoingLinks={connectionData.outgoingLinks}
           onSelectOutgoing={handleSelectOutgoing}
+          shareUrl={shareUrl}
+          shareHint={shareHint}
+          sharePublishedDisplay={sharePublishedDisplay}
+          onPublish={handlePublishShare}
+          onUnpublish={shareRecord ? handleUnpublishShare : undefined}
+          onCopyShareLink={shareUrl ? handleCopyShareLink : undefined}
+          onOpenSharePage={shareUrl ? handleOpenSharePage : undefined}
+          isPublishing={isLoadingShare || isPublishingShare}
+          isUnpublishing={isUnpublishingShare}
+          canPublish={!!note?.id}
           collapsed={rightSidebarCollapsed}
           onToggleCollapsed={() => setRightSidebarCollapsed(prev => !prev)}
         />
