@@ -1254,3 +1254,77 @@
 /* ── 14. Gradient card backgrounds ── */
 .dark .bg-gradient-to-br.from-slate-50 { background-image: linear-gradient(to bottom right, #1e293b, var(--tw-gradient-to, #1e293b)); }
 .dark .bg-gradient-to-r.from-alpine-600 { background-image: linear-gradient(to right, #2570EB, var(--tw-gradient-to, #1D5BD8)); }
+
+/* ══════════════════════════════════════════════════════
+   Share Note Public View — .share-note-content
+   Styles for the read-only rendered rich-text in SharedNoteView
+   ══════════════════════════════════════════════════════ */
+
+/* Checklist: remove prose list markers */
+.share-note-content [data-checklist='true'] {
+  list-style: none !important;
+  padding-left: 0 !important;
+  margin: 0.75em 0 !important;
+}
+
+.share-note-content [data-checklist='true'] > li {
+  padding-left: 0 !important;
+  display: flex;
+  align-items: flex-start;
+  gap: 0.5rem;
+}
+
+/* Remove prose ::before / ::marker bullets on checklist items */
+.share-note-content [data-checklist='true'] > li::before,
+.share-note-content [data-checklist='true'] > li::marker {
+  content: none !important;
+  display: none !important;
+}
+
+/* Disabled checkbox appearance */
+.share-note-content input[type='checkbox'] {
+  accent-color: #0f766e; /* teal-700 */
+  width: 1em;
+  height: 1em;
+  flex-shrink: 0;
+  margin-top: 0.2em;
+  cursor: not-allowed;
+  opacity: 0.85;
+}
+
+/* Strikethrough for completed checklist items */
+.share-note-content [data-checklist='true'] li:has(input[type='checkbox']:checked) {
+  color: #94a3b8; /* slate-400 */
+  text-decoration: line-through;
+}
+
+/* File blocks: prevent prose from restyling their internals */
+.share-note-content .file-block-container,
+.share-note-content .file-block-container * {
+  /* Override any prose margin / padding resets */
+  max-width: none;
+}
+
+/* Note-link chips: render as non-interactive, display-only */
+.share-note-content [data-block-type='note-link'] {
+  pointer-events: none !important;
+  cursor: default !important;
+}
+
+/* Mark / highlight  */
+.share-note-content mark {
+  background-color: #fef08a; /* yellow-200 */
+  padding: 0.1em 0.15em;
+  border-radius: 0.2em;
+  color: inherit;
+}
+
+/* Inline code */
+.share-note-content :not(pre) > code {
+  background-color: #f1f5f9; /* slate-100 */
+  color: #0f766e;             /* teal-700 */
+  border-radius: 0.25rem;
+  padding: 0.15em 0.35em;
+  font-size: 0.875em;
+}
+

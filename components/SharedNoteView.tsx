@@ -38,6 +38,55 @@ function safeParseJson<T>(value: string): T | null {
   }
 }
 
+/**
+ * After DOMPurify sanitization, make interactive editor elements
+ * suitable for a static public read-only view:
+ *   - Remove action buttons from file blocks
+ *   - Mark file blocks as `not-prose` so the typography plugin skips them
+ *   - Disable checkboxes
+ *   - Remove pointer-events from note-link chips
+ */
+function postProcessNoteHtml(html: string): string {
+  if (typeof window === 'undefined') return html
+
+  const doc = new DOMParser().parseFromString(html, 'text/html')
+
+  // 1. Remove interactive action buttons from file blocks
+  for (const el of Array.from(
+    doc.querySelectorAll('.file-block-preview, .file-block-download, .file-block-delete')
+  )) {
+    el.remove()
+  }
+
+  // 2. Clean up "• Click to open" text in the file info row
+  for (const fileBlock of Array.from(doc.querySelectorAll('[data-block-type="file"]'))) {
+    const infoRow = fileBlock.querySelector('.text-xs')
+    if (infoRow) {
+      for (const span of Array.from(infoRow.querySelectorAll('span'))) {
+        const text = (span as HTMLElement).textContent?.trim()
+        if (text === '•' || text === 'Click to open') span.remove()
+      }
+    }
+    // Prevent @tailwindcss/typography from restyling the file block internals
+    ;(fileBlock as HTMLElement).classList.add('not-prose')
+  }
+
+  // 3. Disable all checkboxes (read-only in share view)
+  for (const cb of Array.from(doc.querySelectorAll('input[type="checkbox"]'))) {
+    cb.setAttribute('disabled', '')
+  }
+
+  // 4. Note-link chips: non-interactive, display-only
+  for (const noteLink of Array.from(doc.querySelectorAll('[data-block-type="note-link"]'))) {
+    const el = noteLink as HTMLElement
+    el.style.pointerEvents = 'none'
+    el.style.cursor = 'default'
+    el.className = el.className.replace(/\bcursor-pointer\b/g, '').trim()
+  }
+
+  return doc.body.innerHTML
+}
+
 function formatPublishedDate(value: string): string {
   return new Intl.DateTimeFormat(undefined, {
     dateStyle: 'medium',
@@ -356,12 +405,28 @@ function PdfAnnotationShareView({ data, pdfUrl }: { data: PdfAnnotationData; pdf
 function renderNoteBody(share: PublishedNoteShare) {
   switch (share.note_type) {
     case 'rich-text': {
-      const sanitizedHtml = DOMPurify.sanitize(share.content, {
+      const sanitized = DOMPurify.sanitize(share.content, {
         USE_PROFILES: { html: true },
+        ALLOW_DATA_ATTR: true,
+        ADD_ATTR: ['class', 'style', 'colspan', 'rowspan', 'disabled', 'checked'],
       })
+      const processed = postProcessNoteHtml(sanitized)
 
       return (
-        <article className="prose prose-slate max-w-none prose-headings:text-slate-900 prose-p:text-slate-700 prose-a:text-teal-700 prose-img:rounded-2xl prose-img:shadow-md" dangerouslySetInnerHTML={{ __html: sanitizedHtml }} />
+        <article
+          className="share-note-content prose prose-slate max-w-none
+            prose-headings:font-semibold prose-headings:tracking-tight prose-headings:text-slate-900
+            prose-p:text-slate-700 prose-p:leading-relaxed
+            prose-a:text-teal-700 prose-a:no-underline hover:prose-a:underline
+            prose-blockquote:border-l-teal-400 prose-blockquote:text-slate-600 prose-blockquote:not-italic
+            prose-pre:bg-slate-950 prose-pre:text-slate-100 prose-pre:rounded-2xl
+            prose-code:rounded prose-code:bg-slate-100 prose-code:text-teal-800 prose-code:before:content-none prose-code:after:content-none
+            prose-img:rounded-2xl prose-img:shadow-md
+            prose-table:rounded-xl prose-th:bg-slate-100 prose-th:text-slate-700
+            prose-hr:border-slate-200
+            prose-strong:text-slate-900 prose-li:text-slate-700"
+          dangerouslySetInnerHTML={{ __html: processed }}
+        />
       )
     }
     case 'drawing': {
