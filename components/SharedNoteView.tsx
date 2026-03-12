@@ -1,6 +1,6 @@
 'use client'
 
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import DOMPurify from 'dompurify'
 import { getStroke } from 'perfect-freehand'
 import {
@@ -28,6 +28,12 @@ import { getNoteTypePresentation } from '@/lib/note-types'
 
 interface SharedNoteViewProps {
   share: PublishedNoteShare
+}
+
+interface TocHeading {
+  id: string
+  text: string
+  level: number
 }
 
 function safeParseJson<T>(value: string): T | null {
@@ -84,7 +90,113 @@ function postProcessNoteHtml(html: string): string {
     el.className = el.className.replace(/\bcursor-pointer\b/g, '').trim()
   }
 
+  // 5. Ensure all h1–h4 headings have stable anchor IDs for the TOC
+  const usedIds = new Set<string>(
+    Array.from(doc.querySelectorAll('[id]')).map((el) => (el as HTMLElement).id)
+  )
+  for (const el of Array.from(doc.querySelectorAll('h1, h2, h3, h4'))) {
+    if ((el as HTMLElement).id) continue
+    let slug = (el.textContent || '')
+      .toLowerCase()
+      .replace(/[^a-z0-9\s-]/g, '')
+      .trim()
+      .replace(/\s+/g, '-')
+      .slice(0, 60) || 'heading'
+    let final = slug
+    let n = 1
+    while (usedIds.has(final)) final = `${slug}-${n++}`
+    usedIds.add(final)
+    ;(el as HTMLElement).id = final
+  }
+
   return doc.body.innerHTML
+}
+
+function extractHeadings(html: string): TocHeading[] {
+  if (typeof window === 'undefined') return []
+  const doc = new DOMParser().parseFromString(html, 'text/html')
+  return Array.from(doc.querySelectorAll('h1, h2, h3, h4'))
+    .map((el) => ({
+      id: (el as HTMLElement).id,
+      text: el.textContent?.trim() || '',
+      level: parseInt(el.tagName[1], 10),
+    }))
+    .filter((h) => h.id && h.text)
+}
+
+function FloatingTOC({ headings }: { headings: TocHeading[] }) {
+  const [activeId, setActiveId] = useState('')
+  const [collapsed, setCollapsed] = useState(false)
+
+  useEffect(() => {
+    if (!headings.length) return
+
+    const observer = new IntersectionObserver(
+      (entries) => {
+        const visible = entries.filter((e) => e.isIntersecting)
+        if (visible.length === 0) return
+        // Pick heading closest to the top of the viewport
+        const topmost = visible.reduce((best, e) =>
+          e.boundingClientRect.top < best.boundingClientRect.top ? e : best
+        )
+        setActiveId(topmost.target.id)
+      },
+      { rootMargin: '-72px 0px -60% 0px', threshold: 0 }
+    )
+
+    for (const h of headings) {
+      const el = document.getElementById(h.id)
+      if (el) observer.observe(el)
+    }
+
+    return () => observer.disconnect()
+  }, [headings])
+
+  if (headings.length < 2) return null
+
+  return (
+    <aside className="hidden xl:block fixed right-6 top-1/2 z-20 w-52 -translate-y-1/2">
+      <div className="flex max-h-[70vh] flex-col overflow-hidden rounded-2xl border border-slate-200/80 bg-white/90 shadow-[0_8px_30px_-8px_rgba(15,23,42,0.18)] backdrop-blur-md">
+        <button
+          type="button"
+          onClick={() => setCollapsed((c) => !c)}
+          className="flex w-full shrink-0 items-center justify-between gap-2 px-4 py-3 text-[11px] font-bold uppercase tracking-[0.16em] text-slate-500 transition hover:text-slate-800"
+        >
+          <span>On this page</span>
+          <ChevronRight
+            className={`h-3.5 w-3.5 shrink-0 transition-transform duration-200 ${
+              collapsed ? '' : 'rotate-90'
+            }`}
+          />
+        </button>
+
+        {!collapsed && (
+          <nav className="scrollbar-hide overflow-y-auto border-t border-slate-100 px-2 pb-2 pt-1">
+            {headings.map((heading) => {
+              const isActive = activeId === heading.id
+              return (
+                <a
+                  key={heading.id}
+                  href={`#${heading.id}`}
+                  className={`flex min-w-0 items-center gap-1.5 rounded-lg py-1.5 text-[13px] leading-snug transition-colors ${
+                    isActive
+                      ? 'font-medium text-teal-700'
+                      : 'text-slate-500 hover:text-slate-900'
+                  }`}
+                  style={{ paddingLeft: `${(heading.level - 1) * 10 + 10}px` }}
+                >
+                  {isActive && (
+                    <span className="block h-1.5 w-1.5 shrink-0 rounded-full bg-teal-500" />
+                  )}
+                  <span className="truncate">{heading.text}</span>
+                </a>
+              )
+            })}
+          </nav>
+        )}
+      </div>
+    </aside>
+  )
 }
 
 function formatPublishedDate(value: string): string {
@@ -480,6 +592,17 @@ export default function SharedNoteView({ share }: SharedNoteViewProps) {
   const TypeIcon = getTypeIcon(share.note_type)
   const publishedLabel = useMemo(() => formatPublishedDate(share.published_at), [share.published_at])
 
+  const { processedHtml, tocHeadings } = useMemo(() => {
+    if (share.note_type !== 'rich-text') return { processedHtml: '', tocHeadings: [] as TocHeading[] }
+    const sanitized = DOMPurify.sanitize(share.content, {
+      USE_PROFILES: { html: true },
+      ALLOW_DATA_ATTR: true,
+      ADD_ATTR: ['class', 'style', 'colspan', 'rowspan', 'disabled', 'checked'],
+    })
+    const html = postProcessNoteHtml(sanitized)
+    return { processedHtml: html, tocHeadings: extractHeadings(html) }
+  }, [share.note_type, share.content])
+
   return (
     <main className="min-h-screen bg-[radial-gradient(circle_at_top,#ccfbf1_0%,#f8fafc_40%,#e2e8f0_100%)] px-4 py-8 text-slate-950 sm:px-6 lg:px-8">
       <div className="mx-auto max-w-5xl">
@@ -521,8 +644,27 @@ export default function SharedNoteView({ share }: SharedNoteViewProps) {
           </div>
         </header>
 
+        {share.note_type === 'rich-text' && <FloatingTOC headings={tocHeadings} />}
+
         <section className="overflow-hidden rounded-[32px] border border-white/70 bg-white/85 px-6 py-8 shadow-[0_30px_100px_-60px_rgba(15,23,42,0.45)] backdrop-blur sm:px-8">
-          {renderNoteBody(share)}
+          {share.note_type === 'rich-text' ? (
+            <article
+              className="share-note-content prose prose-slate max-w-none
+                prose-headings:font-semibold prose-headings:tracking-tight prose-headings:text-slate-900
+                prose-p:text-slate-700 prose-p:leading-relaxed
+                prose-a:text-teal-700 prose-a:no-underline hover:prose-a:underline
+                prose-blockquote:border-l-teal-400 prose-blockquote:text-slate-600 prose-blockquote:not-italic
+                prose-pre:bg-slate-950 prose-pre:text-slate-100 prose-pre:rounded-2xl
+                prose-code:rounded prose-code:bg-slate-100 prose-code:text-teal-800 prose-code:before:content-none prose-code:after:content-none
+                prose-img:rounded-2xl prose-img:shadow-md
+                prose-table:rounded-xl prose-th:bg-slate-100 prose-th:text-slate-700
+                prose-hr:border-slate-200
+                prose-strong:text-slate-900 prose-li:text-slate-700"
+              dangerouslySetInnerHTML={{ __html: processedHtml }}
+            />
+          ) : (
+            renderNoteBody(share)
+          )}
         </section>
       </div>
     </main>
