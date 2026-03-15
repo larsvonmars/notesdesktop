@@ -34,6 +34,41 @@ export interface AIRequestOptions {
   temperature?: number
   maxTokens?: number
   stream?: boolean
+  signal?: AbortSignal
+  retryCount?: number
+}
+
+export type AIErrorCode =
+  | 'unauthorized'
+  | 'forbidden'
+  | 'rate_limited'
+  | 'timeout'
+  | 'network'
+  | 'not_configured'
+  | 'upstream'
+  | 'aborted'
+  | 'unknown'
+
+export class AIError extends Error {
+  code: AIErrorCode
+  status?: number
+  retryable: boolean
+  retryAfterSeconds?: number
+
+  constructor(
+    message: string,
+    code: AIErrorCode,
+    status?: number,
+    retryable: boolean = false,
+    retryAfterSeconds?: number,
+  ) {
+    super(message)
+    this.name = 'AIError'
+    this.code = code
+    this.status = status
+    this.retryable = retryable
+    this.retryAfterSeconds = retryAfterSeconds
+  }
 }
 
 export interface NoteSummary {
@@ -136,14 +171,26 @@ export type ToolCallHandler = (name: string, args: Record<string, unknown>) => P
 const DEFAULT_MODEL = 'deepseek-chat'
 const DEFAULT_TEMPERATURE = 0.7
 const DEFAULT_MAX_TOKENS = 2048
+const DEFAULT_RETRY_COUNT = 2
+const RETRY_BASE_DELAY_MS = 500
+const RETRYABLE_STATUS_CODES = new Set([408, 409, 425, 429, 500, 502, 503, 504])
 
 type AIKeyStatus = {
   available: boolean
   source: 'keychain' | 'env' | 'none' | string
 }
 
+export type AIRateLimitStatus = {
+  limit?: number
+  remaining?: number
+  resetAtEpochSeconds?: number
+  retryAfterSeconds?: number
+}
+
 // Runtime override key (for advanced/dev usage only)
 let runtimeApiKey: string | null = null
+let activeStreamAbortController: AbortController | null = null
+let latestRateLimitStatus: AIRateLimitStatus | null = null
 
 /**
  * Returns the active API key.
@@ -165,6 +212,165 @@ async function tauriInvoke<T>(command: string, args?: Record<string, unknown>): 
   return tauriCore.invoke<T>(command, args)
 }
 
+function isAbortLikeError(error: unknown): boolean {
+  if (error instanceof AIError && error.code === 'aborted') return true
+  if (error instanceof DOMException && error.name === 'AbortError') return true
+  if (!(error instanceof Error)) return false
+
+  const msg = error.message.toLowerCase()
+  return msg.includes('abort') || msg.includes('cancel')
+}
+
+function statusToCode(status?: number): AIErrorCode {
+  if (status === 401) return 'unauthorized'
+  if (status === 403) return 'forbidden'
+  if (status === 429) return 'rate_limited'
+  if (status === 408 || status === 504) return 'timeout'
+  if (status && status >= 500) return 'upstream'
+  return 'unknown'
+}
+
+function toAIErrorWithStatus(message: string, status?: number, retryAfterSeconds?: number): AIError {
+  if (status === 401) return new AIError('You need to sign in again to use AI features.', 'unauthorized', status, false)
+  if (status === 403) return new AIError('AI access is forbidden for this request.', 'forbidden', status, false)
+  if (status === 429) return new AIError('AI service is rate-limiting requests. Please try again shortly.', 'rate_limited', status, true, retryAfterSeconds)
+  if (status === 408 || status === 504) return new AIError('AI request timed out. Please try again.', 'timeout', status, true)
+  if (status === 503) return new AIError('AI service is temporarily unavailable. Please try again.', 'upstream', status, true)
+  if (status && status >= 500) return new AIError('AI service returned a server error. Please retry.', 'upstream', status, true)
+  if (status === 400) return new AIError('AI request payload is invalid.', 'unknown', status, false)
+  return new AIError(
+    message || 'AI request failed.',
+    statusToCode(status),
+    status,
+    !!(status && RETRYABLE_STATUS_CODES.has(status)),
+    retryAfterSeconds,
+  )
+}
+
+function toAIError(error: unknown): AIError {
+  if (error instanceof AIError) return error
+  if (isAbortLikeError(error)) return new AIError('Response canceled.', 'aborted', undefined, false)
+
+  if (error instanceof TypeError) {
+    return new AIError('Network error while contacting AI service.', 'network', undefined, true)
+  }
+
+  if (error instanceof Error) {
+    const match = error.message.match(/AI request failed:\s*(\d{3})/)
+    if (match) {
+      const status = Number(match[1])
+      return toAIErrorWithStatus(error.message, status)
+    }
+
+    if (error.message.toLowerCase().includes('not configured')) {
+      return new AIError('AI API key is not configured.', 'not_configured', undefined, false)
+    }
+
+    return new AIError(error.message, 'unknown', undefined, false)
+  }
+
+  return new AIError('Unexpected AI error.', 'unknown', undefined, false)
+}
+
+function parseRetryAfterSeconds(response: Response): number | undefined {
+  const raw = response.headers.get('Retry-After')
+  if (!raw) return undefined
+
+  const asNumber = Number(raw)
+  if (Number.isFinite(asNumber) && asNumber > 0) {
+    return Math.ceil(asNumber)
+  }
+
+  const asDate = Date.parse(raw)
+  if (Number.isFinite(asDate)) {
+    const seconds = Math.ceil((asDate - Date.now()) / 1000)
+    return seconds > 0 ? seconds : undefined
+  }
+
+  return undefined
+}
+
+function parseHeaderNumber(headers: Headers, key: string): number | undefined {
+  const raw = headers.get(key)
+  if (!raw) return undefined
+  const parsed = Number(raw)
+  return Number.isFinite(parsed) ? parsed : undefined
+}
+
+function updateRateLimitStatusFromResponse(response: Response): void {
+  latestRateLimitStatus = {
+    limit: parseHeaderNumber(response.headers, 'X-RateLimit-Limit'),
+    remaining: parseHeaderNumber(response.headers, 'X-RateLimit-Remaining'),
+    resetAtEpochSeconds: parseHeaderNumber(response.headers, 'X-RateLimit-Reset'),
+    retryAfterSeconds: parseRetryAfterSeconds(response),
+  }
+}
+
+export function getAIRateLimitStatus(): AIRateLimitStatus | null {
+  return latestRateLimitStatus
+}
+
+export function isAIAbortError(error: unknown): boolean {
+  return toAIError(error).code === 'aborted'
+}
+
+export function cancelActiveAIRequest(): void {
+  if (activeStreamAbortController) {
+    activeStreamAbortController.abort()
+    activeStreamAbortController = null
+  }
+}
+
+async function delayWithAbort(ms: number, signal?: AbortSignal): Promise<void> {
+  if (!signal) {
+    await new Promise(resolve => setTimeout(resolve, ms))
+    return
+  }
+
+  await new Promise<void>((resolve, reject) => {
+    const timeout = setTimeout(() => {
+      signal.removeEventListener('abort', onAbort)
+      resolve()
+    }, ms)
+
+    const onAbort = () => {
+      clearTimeout(timeout)
+      signal.removeEventListener('abort', onAbort)
+      reject(new AIError('Response canceled.', 'aborted', undefined, false))
+    }
+
+    signal.addEventListener('abort', onAbort)
+  })
+}
+
+async function withRetry<T>(
+  operation: () => Promise<T>,
+  retryCount: number,
+  signal?: AbortSignal,
+): Promise<T> {
+  let lastError: AIError | null = null
+
+  for (let attempt = 0; attempt <= retryCount; attempt++) {
+    if (signal?.aborted) {
+      throw new AIError('Response canceled.', 'aborted', undefined, false)
+    }
+
+    try {
+      return await operation()
+    } catch (error) {
+      const aiError = toAIError(error)
+      lastError = aiError
+      const canRetry = aiError.retryable && attempt < retryCount
+      if (!canRetry) throw aiError
+
+      const backoff = RETRY_BASE_DELAY_MS * Math.pow(2, attempt)
+      await delayWithAbort(backoff, signal)
+    }
+  }
+
+  throw lastError || new AIError('AI request failed.', 'unknown')
+}
+
 async function getWebAuthHeader(): Promise<Record<string, string>> {
   try {
     const { supabase } = await import('./supabase')
@@ -184,7 +390,11 @@ async function getWebAuthHeader(): Promise<Record<string, string>> {
 
 async function sendAIRequestPayload(payload: Record<string, unknown>): Promise<any> {
   if (isTauriRuntime()) {
-    return tauriInvoke('ai_chat_json', { payload })
+    try {
+      return await tauriInvoke('ai_chat_json', { payload })
+    } catch (error) {
+      throw toAIError(error)
+    }
   }
 
   const authHeaders = await getWebAuthHeader()
@@ -198,11 +408,13 @@ async function sendAIRequestPayload(payload: Record<string, unknown>): Promise<a
     body: JSON.stringify(payload),
   })
 
+  updateRateLimitStatusFromResponse(response)
+
   if (!response.ok) {
     const errorData = await response.json().catch(() => ({}))
-    throw new Error(
+    const message =
       errorData.error?.message || `AI request failed: ${response.status} ${response.statusText}`
-    )
+    throw toAIErrorWithStatus(message, response.status, parseRetryAfterSeconds(response))
   }
 
   return response.json()
@@ -373,15 +585,21 @@ export async function sendAIRequest(
     temperature = DEFAULT_TEMPERATURE,
     maxTokens = DEFAULT_MAX_TOKENS,
     stream = false,
+    retryCount = DEFAULT_RETRY_COUNT,
+    signal,
   } = options
 
-  const data = await sendAIRequestPayload({
-    model,
-    messages,
-    temperature,
-    max_tokens: maxTokens,
-    stream,
-  })
+  const data = await withRetry(
+    () => sendAIRequestPayload({
+      model,
+      messages,
+      temperature,
+      max_tokens: maxTokens,
+      stream,
+    }),
+    retryCount,
+    signal,
+  )
   return data.choices?.[0]?.message?.content || ''
 }
 
@@ -393,14 +611,20 @@ export async function sendAIRequestStream(
   callbacks: AIStreamCallbacks,
   options: AIRequestOptions = {}
 ): Promise<void> {
+  const {
+    model = DEFAULT_MODEL,
+    temperature = DEFAULT_TEMPERATURE,
+    maxTokens = DEFAULT_MAX_TOKENS,
+    signal,
+  } = options
+
+  if (signal?.aborted) {
+    callbacks.onError?.(new AIError('Response canceled.', 'aborted'))
+    return
+  }
+
   if (isTauriRuntime()) {
     try {
-      const {
-        model = DEFAULT_MODEL,
-        temperature = DEFAULT_TEMPERATURE,
-        maxTokens = DEFAULT_MAX_TOKENS,
-      } = options
-
       const data = await sendAIRequestPayload({
         model,
         messages,
@@ -416,21 +640,21 @@ export async function sendAIRequestStream(
       if (content) callbacks.onToken?.(content)
       callbacks.onComplete?.(content)
     } catch (error) {
-      callbacks.onError?.(error instanceof Error ? error : new Error(String(error)))
+      callbacks.onError?.(toAIError(error))
     }
     return
   }
 
-  const {
-    model = DEFAULT_MODEL,
-    temperature = DEFAULT_TEMPERATURE,
-    maxTokens = DEFAULT_MAX_TOKENS,
-  } = options
+  const controller = new AbortController()
+  activeStreamAbortController = controller
+  const onAbort = () => controller.abort()
+  if (signal) signal.addEventListener('abort', onAbort)
 
   try {
     const authHeaders = await getWebAuthHeader()
     const response = await fetch('/api/ai/stream', {
       method: 'POST',
+      signal: controller.signal,
       headers: {
         'Content-Type': 'application/json',
         ...authHeaders,
@@ -444,11 +668,13 @@ export async function sendAIRequestStream(
       }),
     })
 
+    updateRateLimitStatusFromResponse(response)
+
     if (!response.ok) {
       const errorData = await response.json().catch(() => ({}))
-      throw new Error(
+      const message =
         errorData.error?.message || `AI request failed: ${response.status} ${response.statusText}`
-      )
+      throw toAIErrorWithStatus(message, response.status, parseRetryAfterSeconds(response))
     }
 
     const reader = response.body?.getReader()
@@ -492,7 +718,12 @@ export async function sendAIRequestStream(
 
     callbacks.onComplete?.(fullResponse)
   } catch (error) {
-    callbacks.onError?.(error instanceof Error ? error : new Error(String(error)))
+    callbacks.onError?.(toAIError(error))
+  } finally {
+    if (signal) signal.removeEventListener('abort', onAbort)
+    if (activeStreamAbortController === controller) {
+      activeStreamAbortController = null
+    }
   }
 }
 

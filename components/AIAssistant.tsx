@@ -46,6 +46,10 @@ import {
   suggestEvents,
   hasAIApiKey,
   getAIApiKeyStatus,
+  cancelActiveAIRequest,
+  isAIAbortError,
+  AIError,
+  getAIRateLimitStatus,
   stripHtmlForAI,
   textToHtml,
   type AIMessage,
@@ -290,6 +294,9 @@ export default function AIAssistant({
   const [streamingContent, setStreamingContent] = useState('')
   const [copiedId, setCopiedId] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
+  const [lastFailedPrompt, setLastFailedPrompt] = useState<string | null>(null)
+  const [retryCooldown, setRetryCooldown] = useState(0)
+  const [rateLimitSnapshot, setRateLimitSnapshot] = useState(getAIRateLimitStatus())
   const [suggestions, setSuggestions] = useState<{
     tasks?: TaskSuggestion[]
     events?: CalendarSuggestion[]
@@ -317,6 +324,44 @@ export default function AIAssistant({
   useEffect(() => {
     if (showChatHistory) loadChatHistory()
   }, [showChatHistory, note?.id])
+
+  useEffect(() => {
+    if (retryCooldown <= 0) return
+    const timer = window.setInterval(() => {
+      setRetryCooldown(prev => (prev > 0 ? prev - 1 : 0))
+    }, 1000)
+    return () => window.clearInterval(timer)
+  }, [retryCooldown])
+
+  const refreshRateLimitSnapshot = useCallback(() => {
+    setRateLimitSnapshot(getAIRateLimitStatus())
+  }, [])
+
+  useEffect(() => {
+    // Keep reset-time based UI fresh even when user is idle.
+    const timer = window.setInterval(() => {
+      refreshRateLimitSnapshot()
+    }, 1000)
+    return () => window.clearInterval(timer)
+  }, [refreshRateLimitSnapshot])
+
+  const mapAIErrorToUserMessage = useCallback((err: unknown): string => {
+    if (err instanceof AIError) {
+      if (err.code === 'rate_limited') {
+        const suggested = err.retryAfterSeconds && err.retryAfterSeconds > 0 ? err.retryAfterSeconds : 5
+        setRetryCooldown(prev => (prev > suggested ? prev : suggested))
+        return 'AI rate limit reached. Please retry after a few seconds.'
+      }
+      if (err.code === 'timeout') return 'AI request timed out. Please retry.'
+      if (err.code === 'unauthorized') return 'Your session expired. Please sign in again.'
+      if (err.code === 'forbidden') return 'AI access is currently forbidden for this account.'
+      if (err.code === 'network') return 'Network error while contacting AI service. Check your connection and retry.'
+      if (err.code === 'upstream') return 'AI service is temporarily unavailable. Please retry.'
+      return err.message
+    }
+
+    return err instanceof Error ? err.message : 'An error occurred'
+  }, [])
 
   useEffect(() => {
     let mounted = true
@@ -492,18 +537,19 @@ export default function AIAssistant({
     }
   }, [allNotes])
 
-  const handleSend = useCallback(async () => {
-    if (!inputValue.trim() || isLoading) return
+  const handleSend = useCallback(async (overrideInput?: string) => {
+    const prompt = (overrideInput ?? inputValue).trim()
+    if (!prompt || isLoading) return
 
     const userMessage: Message = {
       id: `user-${Date.now()}`,
       role: 'user',
-      content: inputValue.trim(),
+      content: prompt,
       timestamp: new Date(),
     }
 
     setMessages(prev => [...prev, userMessage])
-    setInputValue('')
+    if (!overrideInput) setInputValue('')
     setIsLoading(true)
     setError(null)
     setStreamingContent('')
@@ -512,11 +558,10 @@ export default function AIAssistant({
     chatHistoryRef.current = [...chatHistoryRef.current, { role: 'user', content: userMessage.content }]
 
     const assistantMessageId = `assistant-${Date.now()}`
+    let fullResponse = ''
+    let reasoningContent = ''
 
     try {
-      let fullResponse = ''
-      let reasoningContent = ''
-
       setMessages(prev => [...prev, {
         id: assistantMessageId, role: 'assistant', content: '', timestamp: new Date(), isStreaming: true,
       }])
@@ -538,6 +583,8 @@ export default function AIAssistant({
       ))
 
       chatHistoryRef.current = [...chatHistoryRef.current, { role: 'assistant', content: fullResponse }]
+      setLastFailedPrompt(null)
+      refreshRateLimitSnapshot()
 
       try {
         // Build persisted messages, preserving reasoning chain and model used
@@ -565,14 +612,38 @@ export default function AIAssistant({
         console.error('Failed to save chat:', saveErr)
       }
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'An error occurred')
-      setMessages(prev => prev.filter(msg => msg.id !== assistantMessageId))
+      if (isAIAbortError(err)) {
+        setLastFailedPrompt(null)
+        if (fullResponse.trim()) {
+          setMessages(prev => prev.map(msg =>
+            msg.id === assistantMessageId
+              ? { ...msg, content: fullResponse, reasoning: reasoningContent || undefined, isStreaming: false }
+              : msg
+          ))
+          chatHistoryRef.current = [...chatHistoryRef.current, { role: 'assistant', content: fullResponse }]
+        } else {
+          setMessages(prev => prev.filter(msg => msg.id !== assistantMessageId))
+        }
+      } else {
+        setError(mapAIErrorToUserMessage(err))
+        setLastFailedPrompt(userMessage.content)
+        setMessages(prev => prev.filter(msg => msg.id !== assistantMessageId))
+      }
     } finally {
       setIsLoading(false)
       setStreamingContent('')
       setStreamingReasoning('')
+      refreshRateLimitSnapshot()
     }
-  }, [inputValue, isLoading, aiContext, allNotes, handleToolCall, currentChatId, note?.id, model])
+  }, [inputValue, isLoading, aiContext, allNotes, handleToolCall, currentChatId, note?.id, model, mapAIErrorToUserMessage, refreshRateLimitSnapshot])
+
+  const handleCancelResponse = useCallback(() => {
+    cancelActiveAIRequest()
+  }, [])
+
+  const handleSendClick = useCallback(() => {
+    void handleSend()
+  }, [handleSend])
 
   const handleQuickAction = useCallback(async (action: QuickAction) => {
     setIsLoading(true)
@@ -658,11 +729,32 @@ export default function AIAssistant({
         }
       }
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'An error occurred')
+      setError(mapAIErrorToUserMessage(err))
     } finally {
       setIsLoading(false)
+      refreshRateLimitSnapshot()
     }
-  }, [aiContext, selectedText])
+  }, [aiContext, selectedText, mapAIErrorToUserMessage, refreshRateLimitSnapshot])
+
+  const quotaInfo = useMemo(() => {
+    if (!rateLimitSnapshot?.limit && rateLimitSnapshot?.limit !== 0) return null
+
+    const limit = rateLimitSnapshot.limit ?? 0
+    const remaining = rateLimitSnapshot.remaining ?? 0
+    const resetAt = rateLimitSnapshot.resetAtEpochSeconds
+      ? rateLimitSnapshot.resetAtEpochSeconds * 1000
+      : null
+    const resetInSeconds = resetAt
+      ? Math.max(0, Math.ceil((resetAt - Date.now()) / 1000))
+      : null
+
+    return {
+      limit,
+      remaining,
+      resetInSeconds,
+      low: remaining <= Math.max(1, Math.floor(limit * 0.1)),
+    }
+  }, [rateLimitSnapshot])
 
   const handleCopy = useCallback((content: string, id: string) => {
     navigator.clipboard.writeText(content)
@@ -1280,7 +1372,22 @@ export default function AIAssistant({
       {error && (
         <div className="mb-2 px-3 py-2 bg-danger-light border border-danger/20 rounded-xl text-xs text-danger flex items-start gap-2">
           <X size={12} className="flex-shrink-0 mt-0.5" />
-          <span className="flex-1">{error}</span>
+          <div className="flex-1 min-w-0">
+            <div>{error}</div>
+            {lastFailedPrompt && !isLoading && (
+              <button
+                onClick={() => {
+                  if (retryCooldown > 0) return
+                  setError(null)
+                  void handleSend(lastFailedPrompt)
+                }}
+                disabled={retryCooldown > 0}
+                className="mt-1.5 px-2 py-1 rounded-md bg-danger/10 hover:bg-danger/20 disabled:opacity-40 disabled:cursor-not-allowed transition-colors text-[10px] font-medium"
+              >
+                {retryCooldown > 0 ? `Retry in ${retryCooldown}s` : 'Retry last message'}
+              </button>
+            )}
+          </div>
           <button onClick={() => setError(null)} className="p-0.5 hover:bg-danger/10 rounded transition-colors">
             <X size={10} />
           </button>
@@ -1318,13 +1425,23 @@ export default function AIAssistant({
           className="w-full px-3 py-2.5 pr-11 text-sm bg-surface-hover border border-border rounded-xl resize-none focus:ring-2 focus:ring-alpine-500/30 focus:border-alpine-500 focus:outline-none disabled:opacity-50 disabled:cursor-not-allowed transition-all text-foreground placeholder:text-muted"
           style={{ minHeight: '44px', maxHeight: '120px' }}
         />
-        <button
-          onClick={handleSend}
-          disabled={!inputValue.trim() || isLoading || !isConfigured}
-          className="absolute right-2 top-1/2 -translate-y-1/2 p-1.5 bg-alpine-600 text-white rounded-lg hover:bg-alpine-700 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
-        >
-          {isLoading ? <Loader2 size={14} className="animate-spin" /> : <Send size={14} />}
-        </button>
+        {isLoading ? (
+          <button
+            onClick={handleCancelResponse}
+            className="absolute right-2 top-1/2 -translate-y-1/2 p-1.5 bg-danger text-white rounded-lg hover:bg-danger/90 transition-colors"
+            title="Cancel response"
+          >
+            <X size={14} />
+          </button>
+        ) : (
+          <button
+            onClick={handleSendClick}
+            disabled={!inputValue.trim() || !isConfigured}
+            className="absolute right-2 top-1/2 -translate-y-1/2 p-1.5 bg-alpine-600 text-white rounded-lg hover:bg-alpine-700 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+          >
+            <Send size={14} />
+          </button>
+        )}
       </div>
 
       <div className="flex items-center justify-between mt-2 text-[10px] text-muted">
@@ -1394,6 +1511,22 @@ export default function AIAssistant({
           {isConfigured && !showChatHistory && (
             <span className="px-2 py-0.5 bg-accent-light text-accent text-[10px] font-medium rounded-full ml-1">
               Connected
+            </span>
+          )}
+          {quotaInfo && !showChatHistory && (
+            <span
+              className={`px-2 py-0.5 text-[10px] font-medium rounded-full ml-1 ${
+                quotaInfo.low
+                  ? 'bg-warning-light text-warning'
+                  : 'bg-surface-hover text-muted'
+              }`}
+              title={
+                quotaInfo.resetInSeconds !== null
+                  ? `Resets in ${quotaInfo.resetInSeconds}s`
+                  : 'Rate limit quota'
+              }
+            >
+              Quota {quotaInfo.remaining}/{quotaInfo.limit}
             </span>
           )}
           {onToggleExpand && (
