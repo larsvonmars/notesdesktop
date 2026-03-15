@@ -62,6 +62,7 @@ describe('AI transport reliability', () => {
             'X-RateLimit-Limit': '40',
             'X-RateLimit-Remaining': '37',
             'X-RateLimit-Reset': '9999999999',
+            'X-RateLimit-Window-Ms': '60000',
           },
         },
       ),
@@ -73,6 +74,7 @@ describe('AI transport reliability', () => {
       limit: 40,
       remaining: 37,
       resetAtEpochSeconds: 9999999999,
+      windowMs: 60000,
     })
   })
 })

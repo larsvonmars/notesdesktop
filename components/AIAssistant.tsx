@@ -297,6 +297,7 @@ export default function AIAssistant({
   const [lastFailedPrompt, setLastFailedPrompt] = useState<string | null>(null)
   const [retryCooldown, setRetryCooldown] = useState(0)
   const [rateLimitSnapshot, setRateLimitSnapshot] = useState(getAIRateLimitStatus())
+  const [showQuotaPopover, setShowQuotaPopover] = useState(false)
   const [suggestions, setSuggestions] = useState<{
     tasks?: TaskSuggestion[]
     events?: CalendarSuggestion[]
@@ -320,6 +321,7 @@ export default function AIAssistant({
   const inputRef = useRef<HTMLTextAreaElement>(null)
   const chatHistoryRef = useRef<AIMessage[]>([])
   const notePickerRef = useRef<HTMLDivElement>(null)
+  const quotaPopoverRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
     if (showChatHistory) loadChatHistory()
@@ -395,6 +397,17 @@ export default function AIAssistant({
     document.addEventListener('mousedown', handleClickOutside)
     return () => document.removeEventListener('mousedown', handleClickOutside)
   }, [showNotePicker])
+
+  useEffect(() => {
+    if (!showQuotaPopover) return
+    const handleClickOutside = (e: MouseEvent) => {
+      if (quotaPopoverRef.current && !quotaPopoverRef.current.contains(e.target as Node)) {
+        setShowQuotaPopover(false)
+      }
+    }
+    document.addEventListener('mousedown', handleClickOutside)
+    return () => document.removeEventListener('mousedown', handleClickOutside)
+  }, [showQuotaPopover])
 
   // Reset note context when switching notes
   useEffect(() => {
@@ -752,9 +765,19 @@ export default function AIAssistant({
       limit,
       remaining,
       resetInSeconds,
+      windowMs: rateLimitSnapshot.windowMs,
       low: remaining <= Math.max(1, Math.floor(limit * 0.1)),
     }
   }, [rateLimitSnapshot])
+
+  const quotaWindowLabel = useMemo(() => {
+    if (!quotaInfo?.windowMs) return 'n/a'
+    const totalSeconds = Math.round(quotaInfo.windowMs / 1000)
+    if (totalSeconds < 60) return `${totalSeconds}s`
+    const mins = Math.floor(totalSeconds / 60)
+    const secs = totalSeconds % 60
+    return secs === 0 ? `${mins}m` : `${mins}m ${secs}s`
+  }, [quotaInfo])
 
   const handleCopy = useCallback((content: string, id: string) => {
     navigator.clipboard.writeText(content)
@@ -1514,20 +1537,38 @@ export default function AIAssistant({
             </span>
           )}
           {quotaInfo && !showChatHistory && (
-            <span
-              className={`px-2 py-0.5 text-[10px] font-medium rounded-full ml-1 ${
-                quotaInfo.low
-                  ? 'bg-warning-light text-warning'
-                  : 'bg-surface-hover text-muted'
-              }`}
-              title={
-                quotaInfo.resetInSeconds !== null
-                  ? `Resets in ${quotaInfo.resetInSeconds}s`
-                  : 'Rate limit quota'
-              }
-            >
-              Quota {quotaInfo.remaining}/{quotaInfo.limit}
-            </span>
+            <div className="relative ml-1" ref={quotaPopoverRef}>
+              <button
+                onClick={() => setShowQuotaPopover(v => !v)}
+                className={`px-2 py-0.5 text-[10px] font-medium rounded-full transition-colors ${
+                  quotaInfo.low
+                    ? 'bg-warning-light text-warning hover:bg-warning-light/80'
+                    : 'bg-surface-hover text-muted hover:text-foreground'
+                }`}
+                title="Show quota details"
+              >
+                Quota {quotaInfo.remaining}/{quotaInfo.limit}
+              </button>
+              {showQuotaPopover && (
+                <div className="absolute right-0 top-full mt-1.5 w-48 rounded-xl border border-border bg-surface shadow-lg p-2.5 z-50">
+                  <div className="text-[10px] font-semibold text-muted uppercase tracking-wider mb-2">AI Quota</div>
+                  <div className="space-y-1 text-[11px] text-foreground/80">
+                    <div className="flex items-center justify-between">
+                      <span className="text-muted">Remaining</span>
+                      <span className="font-medium">{quotaInfo.remaining}/{quotaInfo.limit}</span>
+                    </div>
+                    <div className="flex items-center justify-between">
+                      <span className="text-muted">Resets in</span>
+                      <span className="font-medium">{quotaInfo.resetInSeconds ?? 0}s</span>
+                    </div>
+                    <div className="flex items-center justify-between">
+                      <span className="text-muted">Window</span>
+                      <span className="font-medium">{quotaWindowLabel}</span>
+                    </div>
+                  </div>
+                </div>
+              )}
+            </div>
           )}
           {onToggleExpand && (
             <button

@@ -185,6 +185,7 @@ export type AIRateLimitStatus = {
   remaining?: number
   resetAtEpochSeconds?: number
   retryAfterSeconds?: number
+  windowMs?: number
 }
 
 // Runtime override key (for advanced/dev usage only)
@@ -303,6 +304,7 @@ function updateRateLimitStatusFromResponse(response: Response): void {
     remaining: parseHeaderNumber(response.headers, 'X-RateLimit-Remaining'),
     resetAtEpochSeconds: parseHeaderNumber(response.headers, 'X-RateLimit-Reset'),
     retryAfterSeconds: parseRetryAfterSeconds(response),
+    windowMs: parseHeaderNumber(response.headers, 'X-RateLimit-Window-Ms'),
   }
 }
 
