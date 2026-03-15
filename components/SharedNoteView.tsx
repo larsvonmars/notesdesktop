@@ -317,14 +317,30 @@ function DrawingShareView({ data }: { data: DrawingData }) {
   )
 }
 
-function getMindmapStats(data: MindmapData): { nodeCount: number; leafCount: number; maxDepth: number } {
+function getMindmapStats(data: MindmapData): {
+  nodeCount: number
+  leafCount: number
+  maxDepth: number
+  parentConnectionCount: number
+  customConnectionCount: number
+  totalConnectionCount: number
+} {
   const root = data.nodes[data.rootId]
   if (!root) {
-    return { nodeCount: 0, leafCount: 0, maxDepth: 0 }
+    return {
+      nodeCount: 0,
+      leafCount: 0,
+      maxDepth: 0,
+      parentConnectionCount: 0,
+      customConnectionCount: 0,
+      totalConnectionCount: 0,
+    }
   }
 
   const nodeCount = Object.keys(data.nodes).length
   const leafCount = Object.values(data.nodes).filter((node) => node.children.length === 0).length
+  const parentConnectionCount = Object.values(data.nodes).filter((node) => Boolean(node.parentId)).length
+  const customConnectionCount = data.customEdges?.length ?? 0
 
   let maxDepth = 1
   const queue: Array<{ nodeId: string; depth: number }> = [{ nodeId: data.rootId, depth: 1 }]
@@ -345,7 +361,14 @@ function getMindmapStats(data: MindmapData): { nodeCount: number; leafCount: num
     }
   }
 
-  return { nodeCount, leafCount, maxDepth }
+  return {
+    nodeCount,
+    leafCount,
+    maxDepth,
+    parentConnectionCount,
+    customConnectionCount,
+    totalConnectionCount: parentConnectionCount + customConnectionCount,
+  }
 }
 
 function MindmapShareView({ data }: { data: MindmapData }) {
@@ -390,9 +413,9 @@ function MindmapShareView({ data }: { data: MindmapData }) {
           <div>
             <div className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">Mind Map</div>
             <div className="mt-1 text-sm text-slate-700">Explore connections with shared search and focus tools.</div>
-            <div className="mt-2 text-xs text-slate-500">Pan to move · Scroll or pinch to zoom · Click nodes to inspect details</div>
+            <div className="mt-2 text-xs text-slate-500">Pan to move · Scroll or pinch to zoom · Click nodes or connections to inspect details</div>
           </div>
-          <div className="grid grid-cols-3 gap-2 text-center text-xs sm:min-w-[260px]">
+          <div className="grid grid-cols-2 gap-2 text-center text-xs sm:min-w-[330px] sm:grid-cols-5">
             <div className="rounded-xl border border-slate-200 bg-white/90 px-3 py-2">
               <div className="font-semibold text-slate-900">{stats.nodeCount}</div>
               <div className="text-slate-500">Nodes</div>
@@ -404,6 +427,14 @@ function MindmapShareView({ data }: { data: MindmapData }) {
             <div className="rounded-xl border border-slate-200 bg-white/90 px-3 py-2">
               <div className="font-semibold text-slate-900">{stats.maxDepth}</div>
               <div className="text-slate-500">Depth</div>
+            </div>
+            <div className="rounded-xl border border-slate-200 bg-white/90 px-3 py-2">
+              <div className="font-semibold text-slate-900">{stats.parentConnectionCount}</div>
+              <div className="text-slate-500">Tree links</div>
+            </div>
+            <div className="rounded-xl border border-slate-200 bg-white/90 px-3 py-2">
+              <div className="font-semibold text-slate-900">{stats.customConnectionCount}</div>
+              <div className="text-slate-500">Custom links</div>
             </div>
           </div>
         </div>
@@ -443,7 +474,7 @@ function MindmapShareView({ data }: { data: MindmapData }) {
           </button>
           <div className="inline-flex items-center gap-1.5 rounded-full border border-teal-200 bg-teal-50 px-3 py-1.5 text-xs font-medium text-teal-800">
             <Crosshair className="h-3.5 w-3.5" />
-            Search recenters and focuses matching nodes
+            Click a connection line to inspect title and style metadata
           </div>
         </div>
       </div>

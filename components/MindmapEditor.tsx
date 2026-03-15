@@ -580,8 +580,11 @@ function isCustomEdgeSelection(edgeId: string | null): boolean {
 
 function mergeEdgeStyle(style?: MindmapEdgeStyle): Required<MindmapEdgeStyle> {
   return {
-    ...EDGE_DEFAULTS,
-    ...(style ?? {}),
+    color: style?.color ?? EDGE_DEFAULTS.color,
+    width: style?.width ?? EDGE_DEFAULTS.width,
+    lineType: style?.lineType ?? EDGE_DEFAULTS.lineType,
+    opacity: style?.opacity ?? EDGE_DEFAULTS.opacity,
+    arrowType: style?.arrowType ?? EDGE_DEFAULTS.arrowType,
   }
 }
 
@@ -3330,119 +3333,160 @@ const MindmapEditor = forwardRef<MindmapEditorHandle, MindmapEditorProps>(
             <div className="space-y-4 px-4 py-4">
               <div className="space-y-1.5">
                 <label className="text-xs font-medium text-slate-600 dark:text-slate-300">Title</label>
-                <input
-                  type="text"
-                  value={selectedEdge.title}
-                  onChange={(event) => updateSelectedEdgeMeta({ title: event.target.value.slice(0, 80) })}
-                  className="w-full rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 px-3 py-2 text-sm text-slate-800 dark:text-slate-100 focus:border-alpine-500 focus:outline-none focus:ring-2 focus:ring-alpine-200"
-                  placeholder="Relationship title"
-                />
+                {readOnly ? (
+                  <div className="rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/70 px-3 py-2 text-sm text-slate-700 dark:text-slate-200">
+                    {selectedEdge.title.trim() || 'No title'}
+                  </div>
+                ) : (
+                  <input
+                    type="text"
+                    value={selectedEdge.title}
+                    onChange={(event) => updateSelectedEdgeMeta({ title: event.target.value.slice(0, 80) })}
+                    className="w-full rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 px-3 py-2 text-sm text-slate-800 dark:text-slate-100 focus:border-alpine-500 focus:outline-none focus:ring-2 focus:ring-alpine-200"
+                    placeholder="Relationship title"
+                  />
+                )}
               </div>
 
-              <div className="space-y-1.5">
-                <label className="text-xs font-medium text-slate-600 dark:text-slate-300">Color</label>
-                <div className="flex flex-wrap gap-1.5">
-                  {DEFAULT_COLORS.map((color) => {
-                    const active = selectedEdge.style.color === color
-                    return (
-                      <button
-                        key={color}
-                        type="button"
-                        onClick={() => updateSelectedEdgeMeta({ style: { color } })}
-                        className={`h-7 w-7 rounded-full border-2 ${active ? 'border-slate-900 dark:border-white' : 'border-transparent'}`}
-                        style={{ backgroundColor: color }}
-                        aria-label={`Set connection color ${color}`}
+              {readOnly ? (
+                <div className="grid grid-cols-2 gap-2 text-xs">
+                  <div className="rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/70 px-3 py-2 text-slate-700 dark:text-slate-200">
+                    <div className="text-slate-500 dark:text-slate-400">Line type</div>
+                    <div className="mt-0.5 font-medium capitalize">{selectedEdge.style.lineType}</div>
+                  </div>
+                  <div className="rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/70 px-3 py-2 text-slate-700 dark:text-slate-200">
+                    <div className="text-slate-500 dark:text-slate-400">Arrow</div>
+                    <div className="mt-0.5 font-medium capitalize">{selectedEdge.style.arrowType}</div>
+                  </div>
+                  <div className="rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/70 px-3 py-2 text-slate-700 dark:text-slate-200">
+                    <div className="text-slate-500 dark:text-slate-400">Width</div>
+                    <div className="mt-0.5 font-medium">{selectedEdge.style.width.toFixed(1)}</div>
+                  </div>
+                  <div className="rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/70 px-3 py-2 text-slate-700 dark:text-slate-200">
+                    <div className="text-slate-500 dark:text-slate-400">Opacity</div>
+                    <div className="mt-0.5 font-medium">{Math.round(selectedEdge.style.opacity * 100)}%</div>
+                  </div>
+                  <div className="col-span-2 rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/70 px-3 py-2 text-slate-700 dark:text-slate-200">
+                    <div className="text-slate-500 dark:text-slate-400">Color</div>
+                    <div className="mt-1 flex items-center gap-2">
+                      <span
+                        className="inline-block h-4 w-4 rounded-full border border-slate-300 dark:border-slate-600"
+                        style={{ backgroundColor: selectedEdge.style.color || '#64748b' }}
                       />
-                    )
-                  })}
-                  <button
-                    type="button"
-                    onClick={() => updateSelectedEdgeMeta({ style: { color: '' } })}
-                    className="h-7 rounded-full border border-slate-300 dark:border-slate-600 px-2 text-xs text-slate-600 dark:text-slate-300"
-                  >
-                    Theme
-                  </button>
+                      <span className="font-medium">{selectedEdge.style.color || 'Theme default'}</span>
+                    </div>
+                  </div>
                 </div>
-              </div>
+              ) : (
+                <>
+                  <div className="space-y-1.5">
+                    <label className="text-xs font-medium text-slate-600 dark:text-slate-300">Color</label>
+                    <div className="flex flex-wrap gap-1.5">
+                      {DEFAULT_COLORS.map((color) => {
+                        const active = selectedEdge.style.color === color
+                        return (
+                          <button
+                            key={color}
+                            type="button"
+                            onClick={() => updateSelectedEdgeMeta({ style: { color } })}
+                            className={`h-7 w-7 rounded-full border-2 ${active ? 'border-slate-900 dark:border-white' : 'border-transparent'}`}
+                            style={{ backgroundColor: color }}
+                            aria-label={`Set connection color ${color}`}
+                          />
+                        )
+                      })}
+                      <button
+                        type="button"
+                        onClick={() => updateSelectedEdgeMeta({ style: { color: '' } })}
+                        className="h-7 rounded-full border border-slate-300 dark:border-slate-600 px-2 text-xs text-slate-600 dark:text-slate-300"
+                      >
+                        Theme
+                      </button>
+                    </div>
+                  </div>
 
-              <div className="grid grid-cols-2 gap-3">
-                <label className="space-y-1.5">
-                  <span className="text-xs font-medium text-slate-600 dark:text-slate-300">Line type</span>
-                  <select
-                    value={selectedEdge.style.lineType}
-                    onChange={(event) =>
-                      updateSelectedEdgeMeta({ style: { lineType: event.target.value as MindmapLineType } })
-                    }
-                    className="w-full rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 px-2.5 py-2 text-sm text-slate-800 dark:text-slate-100"
-                  >
-                    <option value="solid">Solid</option>
-                    <option value="dashed">Dashed</option>
-                    <option value="dotted">Dotted</option>
-                  </select>
-                </label>
-                <label className="space-y-1.5">
-                  <span className="text-xs font-medium text-slate-600 dark:text-slate-300">Arrow</span>
-                  <select
-                    value={selectedEdge.style.arrowType}
-                    onChange={(event) =>
-                      updateSelectedEdgeMeta({ style: { arrowType: event.target.value as MindmapArrowType } })
-                    }
-                    className="w-full rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 px-2.5 py-2 text-sm text-slate-800 dark:text-slate-100"
-                  >
-                    <option value="none">None</option>
-                    <option value="standard">Open</option>
-                    <option value="filled">Filled</option>
-                  </select>
-                </label>
-              </div>
+                  <div className="grid grid-cols-2 gap-3">
+                    <label className="space-y-1.5">
+                      <span className="text-xs font-medium text-slate-600 dark:text-slate-300">Line type</span>
+                      <select
+                        value={selectedEdge.style.lineType}
+                        onChange={(event) =>
+                          updateSelectedEdgeMeta({ style: { lineType: event.target.value as MindmapLineType } })
+                        }
+                        className="w-full rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 px-2.5 py-2 text-sm text-slate-800 dark:text-slate-100"
+                      >
+                        <option value="solid">Solid</option>
+                        <option value="dashed">Dashed</option>
+                        <option value="dotted">Dotted</option>
+                      </select>
+                    </label>
+                    <label className="space-y-1.5">
+                      <span className="text-xs font-medium text-slate-600 dark:text-slate-300">Arrow</span>
+                      <select
+                        value={selectedEdge.style.arrowType}
+                        onChange={(event) =>
+                          updateSelectedEdgeMeta({ style: { arrowType: event.target.value as MindmapArrowType } })
+                        }
+                        className="w-full rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 px-2.5 py-2 text-sm text-slate-800 dark:text-slate-100"
+                      >
+                        <option value="none">None</option>
+                        <option value="standard">Open</option>
+                        <option value="filled">Filled</option>
+                      </select>
+                    </label>
+                  </div>
 
-              <div className="space-y-3">
-                <label className="block space-y-1">
-                  <span className="text-xs font-medium text-slate-600 dark:text-slate-300">Width: {selectedEdge.style.width.toFixed(1)}</span>
-                  <input
-                    type="range"
-                    min={1}
-                    max={8}
-                    step={0.5}
-                    value={selectedEdge.style.width}
-                    onChange={(event) => updateSelectedEdgeMeta({ style: { width: Number(event.target.value) } })}
-                    className="w-full"
-                  />
-                </label>
-                <label className="block space-y-1">
-                  <span className="text-xs font-medium text-slate-600 dark:text-slate-300">Opacity: {Math.round(selectedEdge.style.opacity * 100)}%</span>
-                  <input
-                    type="range"
-                    min={0.1}
-                    max={1}
-                    step={0.05}
-                    value={selectedEdge.style.opacity}
-                    onChange={(event) => updateSelectedEdgeMeta({ style: { opacity: Number(event.target.value) } })}
-                    className="w-full"
-                  />
-                </label>
-              </div>
-            </div>
-
-            <div className="flex items-center justify-between border-t border-slate-200 dark:border-slate-700 px-4 py-3">
-              <button
-                type="button"
-                onClick={() => updateSelectedEdgeMeta({ title: '', style: {} })}
-                className="text-xs font-medium text-slate-500 hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-200"
-              >
-                Reset style
-              </button>
-              {selectedEdge.type === 'custom' && (
-                <button
-                  type="button"
-                  onClick={deleteSelectedCustomEdge}
-                  className="inline-flex items-center gap-1 rounded-lg border border-red-200 bg-red-50 px-3 py-1.5 text-xs font-semibold text-red-600 hover:bg-red-100 dark:border-red-900/40 dark:bg-red-900/20 dark:text-red-300"
-                >
-                  <Trash2 size={13} />
-                  Delete connection
-                </button>
+                  <div className="space-y-3">
+                    <label className="block space-y-1">
+                      <span className="text-xs font-medium text-slate-600 dark:text-slate-300">Width: {selectedEdge.style.width.toFixed(1)}</span>
+                      <input
+                        type="range"
+                        min={1}
+                        max={8}
+                        step={0.5}
+                        value={selectedEdge.style.width}
+                        onChange={(event) => updateSelectedEdgeMeta({ style: { width: Number(event.target.value) } })}
+                        className="w-full"
+                      />
+                    </label>
+                    <label className="block space-y-1">
+                      <span className="text-xs font-medium text-slate-600 dark:text-slate-300">Opacity: {Math.round(selectedEdge.style.opacity * 100)}%</span>
+                      <input
+                        type="range"
+                        min={0.1}
+                        max={1}
+                        step={0.05}
+                        value={selectedEdge.style.opacity}
+                        onChange={(event) => updateSelectedEdgeMeta({ style: { opacity: Number(event.target.value) } })}
+                        className="w-full"
+                      />
+                    </label>
+                  </div>
+                </>
               )}
             </div>
+
+            {!readOnly && (
+              <div className="flex items-center justify-between border-t border-slate-200 dark:border-slate-700 px-4 py-3">
+                <button
+                  type="button"
+                  onClick={() => updateSelectedEdgeMeta({ title: '', style: {} })}
+                  className="text-xs font-medium text-slate-500 hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-200"
+                >
+                  Reset style
+                </button>
+                {selectedEdge.type === 'custom' && (
+                  <button
+                    type="button"
+                    onClick={deleteSelectedCustomEdge}
+                    className="inline-flex items-center gap-1 rounded-lg border border-red-200 bg-red-50 px-3 py-1.5 text-xs font-semibold text-red-600 hover:bg-red-100 dark:border-red-900/40 dark:bg-red-900/20 dark:text-red-300"
+                  >
+                    <Trash2 size={13} />
+                    Delete connection
+                  </button>
+                )}
+              </div>
+            )}
           </div>
         )}
 
