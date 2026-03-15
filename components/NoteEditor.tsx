@@ -2695,6 +2695,7 @@ export default function NoteEditor({
     sourceTitle?: string
     sourceType: 'selection' | 'current-note'
     targetTitle?: string
+    additionalPrompt?: string
   }) => {
     const sourceText = input.sourceText?.trim()
     if (!sourceText) {
@@ -2714,7 +2715,7 @@ export default function NoteEditor({
     let usedAI = true
 
     try {
-      const outline = await generateMindmapOutline(sourceText, rootHint)
+      const outline = await generateMindmapOutline(sourceText, rootHint, input.additionalPrompt)
       mindmapDataForNote = buildMindmapDataFromOutline(outline, rootHint)
     } catch (error) {
       console.warn('AI mindmap generation failed, falling back to text outline conversion:', error)

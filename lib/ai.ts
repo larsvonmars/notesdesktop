@@ -616,6 +616,10 @@ export const AI_TOOLS: AITool[] = [
             type: 'string',
             description: 'Optional title for the new mindmap note',
           },
+          additionalPrompt: {
+            type: 'string',
+            description: 'Optional extra instructions for how the mindmap should be structured or focused',
+          },
         },
         required: [],
       },
@@ -1013,7 +1017,8 @@ export async function suggestMindmapNodes(
  */
 export async function generateMindmapOutline(
   sourceText: string,
-  rootTextHint?: string
+  rootTextHint?: string,
+  additionalPrompt?: string
 ): Promise<MindmapOutline> {
   const trimmedSource = sourceText.trim()
   if (!trimmedSource) {
@@ -1048,6 +1053,8 @@ Requirements:
 - Keep descriptions short and useful.
 
 Root title hint: ${rootTextHint?.trim() || 'Central Idea'}
+
+Additional instructions: ${additionalPrompt?.trim() || 'None'}
 
 Source text:
 ${trimmedSource.slice(0, 8000)}`,

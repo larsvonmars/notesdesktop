@@ -122,6 +122,7 @@ interface AIAssistantProps {
     sourceTitle?: string
     sourceType: 'selection' | 'current-note'
     targetTitle?: string
+    additionalPrompt?: string
   }) => Promise<void> | void
   onUpdateMindmapNode?: (nodeId: string, text: string, description?: string) => void
   onClose?: () => void
@@ -568,6 +569,7 @@ export default function AIAssistant({
         const noteId = (args.noteId as string | undefined)?.trim()
         const noteTitle = (args.noteTitle as string | undefined)?.trim()
         const focusText = (args.focusText as string | undefined)?.trim()
+        const additionalPrompt = (args.additionalPrompt as string | undefined)?.trim()
 
         let sourceType: 'selection' | 'current-note' = 'current-note'
         let sourceText = ''
@@ -612,6 +614,7 @@ export default function AIAssistant({
           sourceTitle,
           sourceType,
           targetTitle: requestedTitle,
+          additionalPrompt,
         })
 
         return `Created a new mindmap note from ${sourceType === 'selection' ? 'selected text' : 'the current note'}.`
@@ -825,16 +828,28 @@ export default function AIAssistant({
             break
           }
 
+          const promptInput = window.prompt(
+            'Optional: Add extra instructions for mindmap creation (e.g. focus, style, depth, audience). Leave blank to skip.',
+            ''
+          )
+          if (promptInput === null) {
+            break
+          }
+
+          const additionalPrompt = promptInput.trim() || undefined
           const sourceType: 'selection' | 'current-note' = selectedText?.trim() ? 'selection' : 'current-note'
           await onCreateMindmapNote({
             sourceText,
             sourceType,
             sourceTitle: sourceType === 'selection' ? 'Selected text' : aiContext.currentNote?.title,
+            additionalPrompt,
           })
           setMessages(prev => [...prev, {
             id: `action-${Date.now()}`,
             role: 'assistant',
-            content: 'Created a new mindmap note from your current context.',
+            content: additionalPrompt
+              ? `Created a new mindmap note from your current context using your instructions: "${additionalPrompt}".`
+              : 'Created a new mindmap note from your current context.',
             timestamp: new Date(),
           }])
           break
