@@ -4,7 +4,7 @@
   "identifier": "com.mindviz-notes.app",
   "build": {
     "beforeDevCommand": "npm run dev",
-    "beforeBuildCommand": "npm run build",
+    "beforeBuildCommand": "npm run build:tauri",
     "devUrl": "http://localhost:3000",
     "frontendDist": "../out"
   },

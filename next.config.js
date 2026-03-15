@@ -1,12 +1,10 @@
 /** @type {import('next').NextConfig} */
+const isTauriStaticExport = process.env.TAURI_STATIC_EXPORT === 'true'
+
 const nextConfig = {
-  output: 'export',
+  ...(isTauriStaticExport ? { output: 'export' } : {}),
   images: {
     unoptimized: true,
-  },
-  // Explicitly forward DEEPSEEK_API_KEY at build time without the NEXT_PUBLIC_ auto-exposure mechanism
-  env: {
-    DEEPSEEK_API_KEY: process.env.DEEPSEEK_API_KEY,
   },
 }
 

@@ -45,6 +45,7 @@ import {
   suggestTasks,
   suggestEvents,
   hasAIApiKey,
+  getAIApiKeyStatus,
   stripHtmlForAI,
   textToHtml,
   type AIMessage,
@@ -281,8 +282,7 @@ export default function AIAssistant({
   isExpanded = true,
   onToggleExpand,
 }: AIAssistantProps) {
-  // Key is configured via DEEPSEEK_API_KEY in .env.local (forwarded at build time via next.config.js)
-  const isConfigured = hasAIApiKey()
+  const [isConfigured, setIsConfigured] = useState(hasAIApiKey())
 
   const [messages, setMessages] = useState<Message[]>([])
   const [inputValue, setInputValue] = useState('')
@@ -317,6 +317,28 @@ export default function AIAssistant({
   useEffect(() => {
     if (showChatHistory) loadChatHistory()
   }, [showChatHistory, note?.id])
+
+  useEffect(() => {
+    let mounted = true
+
+    const loadKeyStatus = async () => {
+      try {
+        const status = await getAIApiKeyStatus()
+        if (mounted) {
+          setIsConfigured(status.available)
+        }
+      } catch {
+        if (mounted) {
+          setIsConfigured(hasAIApiKey())
+        }
+      }
+    }
+
+    loadKeyStatus()
+    return () => {
+      mounted = false
+    }
+  }, [])
 
   useEffect(() => {
     if (!showNotePicker) return

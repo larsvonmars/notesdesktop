@@ -133,10 +133,14 @@ export type ToolCallHandler = (name: string, args: Record<string, unknown>) => P
 // CONFIGURATION
 // ============================================================================
 
-const DEEPSEEK_API_URL = 'https://api.deepseek.com/chat/completions'
 const DEFAULT_MODEL = 'deepseek-chat'
 const DEFAULT_TEMPERATURE = 0.7
 const DEFAULT_MAX_TOKENS = 2048
+
+type AIKeyStatus = {
+  available: boolean
+  source: 'keychain' | 'env' | 'none' | string
+}
 
 // Runtime override key (for advanced/dev usage only)
 let runtimeApiKey: string | null = null
@@ -152,6 +156,58 @@ function getApiKey(): string | null {
   return envKey && envKey.length > 0 ? envKey : null
 }
 
+function isTauriRuntime(): boolean {
+  return typeof window !== 'undefined' && '__TAURI_INTERNALS__' in window
+}
+
+async function tauriInvoke<T>(command: string, args?: Record<string, unknown>): Promise<T> {
+  const tauriCore = await import('@tauri-apps/api/core')
+  return tauriCore.invoke<T>(command, args)
+}
+
+async function getWebAuthHeader(): Promise<Record<string, string>> {
+  try {
+    const { supabase } = await import('./supabase')
+    const {
+      data: { session },
+    } = await supabase.auth.getSession()
+
+    if (session?.access_token) {
+      return { Authorization: `Bearer ${session.access_token}` }
+    }
+  } catch {
+    // Auth-less requests are handled by server auth checks.
+  }
+
+  return {}
+}
+
+async function sendAIRequestPayload(payload: Record<string, unknown>): Promise<any> {
+  if (isTauriRuntime()) {
+    return tauriInvoke('ai_chat_json', { payload })
+  }
+
+  const authHeaders = await getWebAuthHeader()
+
+  const response = await fetch('/api/ai/chat', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      ...authHeaders,
+    },
+    body: JSON.stringify(payload),
+  })
+
+  if (!response.ok) {
+    const errorData = await response.json().catch(() => ({}))
+    throw new Error(
+      errorData.error?.message || `AI request failed: ${response.status} ${response.statusText}`
+    )
+  }
+
+  return response.json()
+}
+
 /** @deprecated Key is now managed via DEEPSEEK_API_KEY in .env.local */
 export function setAIApiKey(key: string) {
   runtimeApiKey = key
@@ -164,7 +220,29 @@ export function getAIApiKey(): string | null {
 
 /** Returns true when an API key is available (from env or runtime override). */
 export function hasAIApiKey(): boolean {
-  return !!getApiKey()
+  if (isTauriRuntime()) {
+    // Desktop key status is async via ai_key_status command; return true to avoid false warning banner.
+    return true
+  }
+  // Web key status is server-managed; fetch via getAIApiKeyStatus.
+  return true
+}
+
+export async function getAIApiKeyStatus(): Promise<AIKeyStatus> {
+  if (isTauriRuntime()) {
+    return tauriInvoke<AIKeyStatus>('ai_key_status')
+  }
+
+  const response = await fetch('/api/ai/key-status', { method: 'POST' })
+  if (!response.ok) {
+    return { available: false, source: 'none' }
+  }
+
+  const data = await response.json()
+  return {
+    available: !!data.available,
+    source: typeof data.source === 'string' ? data.source : 'none',
+  }
 }
 
 /** Clears runtime override key. Env key is always available if set. */
@@ -290,11 +368,6 @@ export async function sendAIRequest(
   messages: AIMessage[],
   options: AIRequestOptions = {}
 ): Promise<string> {
-  const key = getApiKey()
-  if (!key) {
-    throw new Error('AI API key not configured. Set DEEPSEEK_API_KEY in .env.local.')
-  }
-
   const {
     model = DEFAULT_MODEL,
     temperature = DEFAULT_TEMPERATURE,
@@ -302,29 +375,13 @@ export async function sendAIRequest(
     stream = false,
   } = options
 
-  const response = await fetch(DEEPSEEK_API_URL, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'Authorization': `Bearer ${key}`,
-    },
-    body: JSON.stringify({
-      model,
-      messages,
-      temperature,
-      max_tokens: maxTokens,
-      stream,
-    }),
+  const data = await sendAIRequestPayload({
+    model,
+    messages,
+    temperature,
+    max_tokens: maxTokens,
+    stream,
   })
-
-  if (!response.ok) {
-    const errorData = await response.json().catch(() => ({}))
-    throw new Error(
-      errorData.error?.message || `AI request failed: ${response.status} ${response.statusText}`
-    )
-  }
-
-  const data = await response.json()
   return data.choices?.[0]?.message?.content || ''
 }
 
@@ -336,9 +393,31 @@ export async function sendAIRequestStream(
   callbacks: AIStreamCallbacks,
   options: AIRequestOptions = {}
 ): Promise<void> {
-  const key = getApiKey()
-  if (!key) {
-    callbacks.onError?.(new Error('AI API key not configured. Set DEEPSEEK_API_KEY in .env.local.'))
+  if (isTauriRuntime()) {
+    try {
+      const {
+        model = DEFAULT_MODEL,
+        temperature = DEFAULT_TEMPERATURE,
+        maxTokens = DEFAULT_MAX_TOKENS,
+      } = options
+
+      const data = await sendAIRequestPayload({
+        model,
+        messages,
+        temperature,
+        max_tokens: maxTokens,
+        stream: false,
+      })
+
+      const reasoning = data.choices?.[0]?.message?.reasoning_content || ''
+      const content = data.choices?.[0]?.message?.content || ''
+
+      if (reasoning) callbacks.onReasoning?.(reasoning)
+      if (content) callbacks.onToken?.(content)
+      callbacks.onComplete?.(content)
+    } catch (error) {
+      callbacks.onError?.(error instanceof Error ? error : new Error(String(error)))
+    }
     return
   }
 
@@ -349,11 +428,12 @@ export async function sendAIRequestStream(
   } = options
 
   try {
-    const response = await fetch(DEEPSEEK_API_URL, {
+    const authHeaders = await getWebAuthHeader()
+    const response = await fetch('/api/ai/stream', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        'Authorization': `Bearer ${key}`,
+        ...authHeaders,
       },
       body: JSON.stringify({
         model,
@@ -475,39 +555,17 @@ async function chatWithTools(
   maxIterations: number = 5,
   model: DeepSeekModel = 'deepseek-chat',
 ): Promise<string> {
-  const key = getApiKey()
-  if (!key) {
-    throw new Error('AI API key not configured. Set DEEPSEEK_API_KEY in .env.local.')
-  }
-
   let currentMessages = [...messages]
   
   for (let i = 0; i < maxIterations; i++) {
-    // Make request with tools
-    const response = await fetch(DEEPSEEK_API_URL, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${key}`,
-      },
-      body: JSON.stringify({
-        model,
-        messages: currentMessages,
-        tools: AI_TOOLS,
-        tool_choice: 'auto',
-        temperature: DEFAULT_TEMPERATURE,
-        max_tokens: DEFAULT_MAX_TOKENS,
-      }),
+    const data = await sendAIRequestPayload({
+      model,
+      messages: currentMessages,
+      tools: AI_TOOLS,
+      tool_choice: 'auto',
+      temperature: DEFAULT_TEMPERATURE,
+      max_tokens: DEFAULT_MAX_TOKENS,
     })
-
-    if (!response.ok) {
-      const errorData = await response.json().catch(() => ({}))
-      throw new Error(
-        errorData.error?.message || `AI request failed: ${response.status}`
-      )
-    }
-
-    const data = await response.json()
     const choice = data.choices?.[0]
     const assistantMessage = choice?.message
 

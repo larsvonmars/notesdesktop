@@ -27,12 +27,22 @@ An Alpine-themed desktop notes application built with Tauri, Next.js, and Supaba
    NEXT_PUBLIC_SUPABASE_ANON_KEY=your-supabase-anon-key
    ```
 
-3. **App Icon** ✅
+3. **Configure AI (DeepSeek)**
+
+   - Add the DeepSeek key to `.env.local` for web proxy and desktop fallback:
+
+   ```
+   DEEPSEEK_API_KEY=your-deepseek-api-key
+   ```
+
+   - Desktop builds can also store the key in OS keychain via the integrated AI assistant settings path.
+
+4. **App Icon** ✅
 
    - A placeholder icon has been created for development
    - To customize: See `ICON_SETUP.md` for instructions
 
-4. **Enable Email Auth in Supabase**
+5. **Enable Email Auth in Supabase**
 
    - Go to Authentication > Providers in your Supabase dashboard
    - Enable Email provider
@@ -64,6 +74,18 @@ Build the application for production:
 
 ```bash
 npm run tauri:build
+```
+
+For web/server mode (includes AI proxy routes):
+
+```bash
+npm run build
+```
+
+For desktop static export assets (used by Tauri packaging internally):
+
+```bash
+npm run build:tauri
 ```
 
 The built application will be available in `src-tauri/target/release/bundle/`.
