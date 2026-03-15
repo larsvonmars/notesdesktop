@@ -89,6 +89,9 @@ export interface MindmapEditorHandle {
   clear: () => void
   getSelectedNodeId: () => string | null
   fitToView: () => void
+  resetView: () => void
+  openSearch: () => void
+  toggleMinimap: () => void
 }
 
 interface MindmapEditorProps {
@@ -99,6 +102,9 @@ interface MindmapEditorProps {
   onCreateTextNote?: (input: { title: string; description: string }) => Promise<MindmapTextNote>
   onOpenTextNote?: (noteId: string) => void
   readOnly?: boolean
+  allowViewerControls?: boolean
+  allowViewerSearch?: boolean
+  defaultShowMinimap?: boolean
 }
 
 interface MindmapTextNote {
@@ -788,10 +794,24 @@ function getCanvasContext(canvas: HTMLCanvasElement | null): CanvasRenderingCont
 // ============================================================================
 
 const MindmapEditor = forwardRef<MindmapEditorHandle, MindmapEditorProps>(
-  ({ initialData, onChange, onSelectedNodeChange, textNotes = [], onCreateTextNote, onOpenTextNote, readOnly = false }, ref) => {
+  ({
+    initialData,
+    onChange,
+    onSelectedNodeChange,
+    textNotes = [],
+    onCreateTextNote,
+    onOpenTextNote,
+    readOnly = false,
+    allowViewerControls = false,
+    allowViewerSearch = false,
+    defaultShowMinimap,
+  }, ref) => {
     const canvasRef = useRef<HTMLCanvasElement>(null)
     const containerRef = useRef<HTMLDivElement>(null)
     const fitToViewImperativeRef = useRef<(() => void) | null>(null)
+    const resetViewImperativeRef = useRef<(() => void) | null>(null)
+    const openSearchImperativeRef = useRef<(() => void) | null>(null)
+    const toggleMinimapImperativeRef = useRef<(() => void) | null>(null)
 
     // Theme & mobile
     const { resolvedTheme } = useTheme()
@@ -821,9 +841,15 @@ const MindmapEditor = forwardRef<MindmapEditorHandle, MindmapEditorProps>(
     // Search state
     const [searchQuery, setSearchQuery] = React.useState('')
     const [isSearchOpen, setIsSearchOpen] = React.useState(false)
+    const canShowViewerControls = readOnly && allowViewerControls
+    const showToolbar = !readOnly || canShowViewerControls
+    const canSearch = !readOnly || (canShowViewerControls && allowViewerSearch)
+    const canToggleMinimap = !readOnly || canShowViewerControls
 
     // Minimap visibility toggle (default hidden on mobile)
-    const [showMinimap, setShowMinimap] = React.useState(!isMobile)
+    const [showMinimap, setShowMinimap] = React.useState(
+      defaultShowMinimap ?? !isMobile
+    )
 
     // Info panel visibility
     const [showInfo, setShowInfo] = React.useState(true)
@@ -886,6 +912,9 @@ const MindmapEditor = forwardRef<MindmapEditorHandle, MindmapEditorProps>(
       },
       getSelectedNodeId: () => selectedNodeId,
       fitToView: () => fitToViewImperativeRef.current?.(),
+      resetView: () => resetViewImperativeRef.current?.(),
+      openSearch: () => openSearchImperativeRef.current?.(),
+      toggleMinimap: () => toggleMinimapImperativeRef.current?.(),
     }))
 
     useEffect(() => {
@@ -2098,9 +2127,6 @@ const MindmapEditor = forwardRef<MindmapEditorHandle, MindmapEditorProps>(
       const canvas = canvasRef.current
       if (!canvas) return
 
-      // Keep ref in sync so it can be called imperatively from outside
-      fitToViewImperativeRef.current = fitToView
-
       // Calculate bounding box of all nodes
       let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity
 
@@ -2130,6 +2156,17 @@ const MindmapEditor = forwardRef<MindmapEditorHandle, MindmapEditorProps>(
           y: canvas.height / 2 - centerY * newScale,
         },
       })
+    }
+
+    fitToViewImperativeRef.current = fitToView
+    resetViewImperativeRef.current = resetView
+    openSearchImperativeRef.current = () => {
+      if (!canSearch) return
+      setIsSearchOpen(true)
+    }
+    toggleMinimapImperativeRef.current = () => {
+      if (!canToggleMinimap) return
+      setShowMinimap((current) => !current)
     }
 
     const detailNode = detailNodeId ? mindmapData.nodes[detailNodeId] ?? null : null
@@ -2326,38 +2363,42 @@ const MindmapEditor = forwardRef<MindmapEditorHandle, MindmapEditorProps>(
         )}
 
         {/* Toolbar */}
-        {!readOnly && (
+        {showToolbar && (
           <div className="absolute top-3 left-3 z-10 flex flex-col gap-1 bg-white dark:bg-slate-800 rounded-xl shadow-lg p-1.5 border border-gray-200 dark:border-slate-700">
-            {/* Node actions */}
-            <button
-              onClick={addChildNode}
-              disabled={!selectedNodeId}
-              className="p-2 rounded-lg hover:bg-gray-100 dark:hover:bg-slate-700 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
-              title="Add child node"
-              aria-label="Add child node"
-            >
-              <Plus size={18} />
-            </button>
-            <button
-              onClick={deleteNode}
-              disabled={!selectedNodeId || selectedNodeId === mindmapData.rootId}
-              className="p-2 rounded-lg hover:bg-gray-100 dark:hover:bg-slate-700 disabled:opacity-40 disabled:cursor-not-allowed transition-colors text-red-500 dark:text-red-400"
-              title="Delete selected node"
-              aria-label="Delete node"
-            >
-              <Trash2 size={18} />
-            </button>
-            <button
-              onClick={() => toggleCollapse()}
-              disabled={!selectedNodeId || (mindmapData.nodes[selectedNodeId]?.children.length ?? 0) === 0}
-              className="p-2 rounded-lg hover:bg-gray-100 dark:hover:bg-slate-700 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
-              title="Collapse / expand node (Space)"
-              aria-label="Toggle collapse"
-            >
-              {selectedNodeId && mindmapData.nodes[selectedNodeId]?.collapsed ? <Plus size={18} /> : <Minus size={18} />}
-            </button>
+            {!readOnly && (
+              <>
+                {/* Node actions */}
+                <button
+                  onClick={addChildNode}
+                  disabled={!selectedNodeId}
+                  className="p-2 rounded-lg hover:bg-gray-100 dark:hover:bg-slate-700 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+                  title="Add child node"
+                  aria-label="Add child node"
+                >
+                  <Plus size={18} />
+                </button>
+                <button
+                  onClick={deleteNode}
+                  disabled={!selectedNodeId || selectedNodeId === mindmapData.rootId}
+                  className="p-2 rounded-lg hover:bg-gray-100 dark:hover:bg-slate-700 disabled:opacity-40 disabled:cursor-not-allowed transition-colors text-red-500 dark:text-red-400"
+                  title="Delete selected node"
+                  aria-label="Delete node"
+                >
+                  <Trash2 size={18} />
+                </button>
+                <button
+                  onClick={() => toggleCollapse()}
+                  disabled={!selectedNodeId || (mindmapData.nodes[selectedNodeId]?.children.length ?? 0) === 0}
+                  className="p-2 rounded-lg hover:bg-gray-100 dark:hover:bg-slate-700 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+                  title="Collapse / expand node (Space)"
+                  aria-label="Toggle collapse"
+                >
+                  {selectedNodeId && mindmapData.nodes[selectedNodeId]?.collapsed ? <Plus size={18} /> : <Minus size={18} />}
+                </button>
 
-            <div className="h-px bg-gray-200 dark:bg-slate-700 my-0.5" />
+                <div className="h-px bg-gray-200 dark:bg-slate-700 my-0.5" />
+              </>
+            )}
 
             {/* View controls */}
             <button
@@ -2393,54 +2434,61 @@ const MindmapEditor = forwardRef<MindmapEditorHandle, MindmapEditorProps>(
               <Maximize2 size={18} />
             </button>
 
-            <div className="h-px bg-gray-200 dark:bg-slate-700 my-0.5" />
+            {(canSearch || !readOnly) && <div className="h-px bg-gray-200 dark:bg-slate-700 my-0.5" />}
 
             {/* Search */}
-            <button
-              onClick={() => setIsSearchOpen((v) => !v)}
-              className={`p-2 rounded-lg hover:bg-gray-100 dark:hover:bg-slate-700 transition-colors ${isSearchOpen ? 'bg-alpine-50 dark:bg-alpine-900/30 text-alpine-600' : ''}`}
-              title="Search nodes"
-              aria-label="Search nodes"
-            >
-              <Search size={18} />
-            </button>
+            {canSearch && (
+              <button
+                onClick={() => setIsSearchOpen((v) => !v)}
+                className={`p-2 rounded-lg hover:bg-gray-100 dark:hover:bg-slate-700 transition-colors ${isSearchOpen ? 'bg-alpine-50 dark:bg-alpine-900/30 text-alpine-600' : ''}`}
+                title="Search nodes"
+                aria-label="Search nodes"
+              >
+                <Search size={18} />
+              </button>
+            )}
 
-            {/* Auto-layout */}
-            <button
-              onClick={autoLayout}
-              className="p-2 rounded-lg hover:bg-gray-100 dark:hover:bg-slate-700 transition-colors"
-              title="Auto-arrange nodes (radial layout)"
-              aria-label="Auto layout"
-            >
-              <LayoutTemplate size={18} />
-            </button>
+            {!readOnly && (
+              <>
+                {/* Auto-layout */}
+                <button
+                  onClick={autoLayout}
+                  className="p-2 rounded-lg hover:bg-gray-100 dark:hover:bg-slate-700 transition-colors"
+                  title="Auto-arrange nodes (radial layout)"
+                  aria-label="Auto layout"
+                >
+                  <LayoutTemplate size={18} />
+                </button>
 
-            <div className="h-px bg-gray-200 dark:bg-slate-700 my-0.5" />
+                <div className="h-px bg-gray-200 dark:bg-slate-700 my-0.5" />
 
-            {/* Export */}
-            <button
-              onClick={exportPNG}
-              className="p-2 rounded-lg hover:bg-gray-100 dark:hover:bg-slate-700 transition-colors"
-              title="Export as PNG image"
-              aria-label="Export PNG"
-            >
-              <Download size={18} />
-            </button>
+                {/* Export */}
+                <button
+                  onClick={exportPNG}
+                  className="p-2 rounded-lg hover:bg-gray-100 dark:hover:bg-slate-700 transition-colors"
+                  title="Export as PNG image"
+                  aria-label="Export PNG"
+                >
+                  <Download size={18} />
+                </button>
+              </>
+            )}
 
-            {/* Minimap toggle */}
-            <button
-              onClick={() => setShowMinimap((v) => !v)}
-              className={`p-2 rounded-lg hover:bg-gray-100 dark:hover:bg-slate-700 transition-colors ${showMinimap ? 'text-alpine-600' : 'opacity-50'}`}
-              title="Toggle minimap"
-              aria-label="Toggle minimap"
-            >
-              <MapIcon size={18} />
-            </button>
+            {canToggleMinimap && (
+              <button
+                onClick={() => setShowMinimap((v) => !v)}
+                className={`p-2 rounded-lg hover:bg-gray-100 dark:hover:bg-slate-700 transition-colors ${showMinimap ? 'text-alpine-600' : 'opacity-50'}`}
+                title="Toggle minimap"
+                aria-label="Toggle minimap"
+              >
+                <MapIcon size={18} />
+              </button>
+            )}
           </div>
         )}
 
         {/* Search dropdown */}
-        {isSearchOpen && !readOnly && (
+        {isSearchOpen && canSearch && (
           <div className="absolute top-3 left-16 z-20 w-64 bg-white dark:bg-slate-800 rounded-xl shadow-lg border border-gray-200 dark:border-slate-700 overflow-hidden">
             <div className="flex items-center gap-2 px-3 py-2 border-b border-gray-100 dark:border-slate-700">
               <Search size={14} className="text-slate-400 shrink-0" />

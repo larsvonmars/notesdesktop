@@ -333,6 +333,13 @@ export default function AIAssistant({
   const [selectedNoteIds, setSelectedNoteIds] = useState<string[]>([])
   const [showNotePicker, setShowNotePicker] = useState(false)
   const [streamingReasoning, setStreamingReasoning] = useState('')
+  const [showMindmapPromptModal, setShowMindmapPromptModal] = useState(false)
+  const [mindmapPromptInput, setMindmapPromptInput] = useState('')
+  const [pendingMindmapPayload, setPendingMindmapPayload] = useState<{
+    sourceText: string
+    sourceTitle?: string
+    sourceType: 'selection' | 'current-note'
+  } | null>(null)
 
   const messagesEndRef = useRef<HTMLDivElement>(null)
   const inputRef = useRef<HTMLTextAreaElement>(null)
@@ -732,7 +739,66 @@ export default function AIAssistant({
     void handleSend()
   }, [handleSend])
 
+  const handleSubmitMindmapCreation = useCallback(async () => {
+    if (!onCreateMindmapNote || !pendingMindmapPayload) return
+
+    setIsLoading(true)
+    setError(null)
+
+    const additionalPrompt = mindmapPromptInput.trim() || undefined
+
+    try {
+      await onCreateMindmapNote({
+        ...pendingMindmapPayload,
+        additionalPrompt,
+      })
+
+      setMessages(prev => [...prev, {
+        id: `action-${Date.now()}`,
+        role: 'assistant',
+        content: additionalPrompt
+          ? `Created a new mindmap note from your current context using your instructions: "${additionalPrompt}".`
+          : 'Created a new mindmap note from your current context.',
+        timestamp: new Date(),
+      }])
+
+      setShowMindmapPromptModal(false)
+      setPendingMindmapPayload(null)
+      setMindmapPromptInput('')
+    } catch (err) {
+      setError(mapAIErrorToUserMessage(err))
+    } finally {
+      setIsLoading(false)
+      refreshRateLimitSnapshot()
+    }
+  }, [onCreateMindmapNote, pendingMindmapPayload, mindmapPromptInput, mapAIErrorToUserMessage, refreshRateLimitSnapshot])
+
   const handleQuickAction = useCallback(async (action: QuickAction) => {
+    if (action === 'create-mindmap-note') {
+      if (!onCreateMindmapNote) { setError('Mindmap creation is not available here.'); return }
+
+      if (!selectedText?.trim() && note?.note_type !== 'rich-text') {
+        setError('Open a text note or select text first to create a mindmap note.')
+        return
+      }
+
+      const sourceText = selectedText?.trim() || aiContext.currentNote?.content?.trim() || ''
+      if (!sourceText) {
+        setError('No text content available. Select text or open a text note first.')
+        return
+      }
+
+      const sourceType: 'selection' | 'current-note' = selectedText?.trim() ? 'selection' : 'current-note'
+      setPendingMindmapPayload({
+        sourceText,
+        sourceType,
+        sourceTitle: sourceType === 'selection' ? 'Selected text' : aiContext.currentNote?.title,
+      })
+      setMindmapPromptInput('')
+      setShowMindmapPromptModal(true)
+      return
+    }
+
     setIsLoading(true)
     setError(null)
 
@@ -812,46 +878,6 @@ export default function AIAssistant({
           const mindmapSuggestions = await suggestMindmapNodes(aiContext.mindmapData.selectedNodeText, aiContext.mindmapData.selectedNodeDescription)
           setSuggestions(prev => ({ ...prev, mindmap: mindmapSuggestions }))
           setShowSuggestions(true)
-          break
-        }
-        case 'create-mindmap-note': {
-          if (!onCreateMindmapNote) { setError('Mindmap creation is not available here.'); break }
-
-          if (!selectedText?.trim() && note?.note_type !== 'rich-text') {
-            setError('Open a text note or select text first to create a mindmap note.')
-            break
-          }
-
-          const sourceText = selectedText?.trim() || aiContext.currentNote?.content?.trim() || ''
-          if (!sourceText) {
-            setError('No text content available. Select text or open a text note first.')
-            break
-          }
-
-          const promptInput = window.prompt(
-            'Optional: Add extra instructions for mindmap creation (e.g. focus, style, depth, audience). Leave blank to skip.',
-            ''
-          )
-          if (promptInput === null) {
-            break
-          }
-
-          const additionalPrompt = promptInput.trim() || undefined
-          const sourceType: 'selection' | 'current-note' = selectedText?.trim() ? 'selection' : 'current-note'
-          await onCreateMindmapNote({
-            sourceText,
-            sourceType,
-            sourceTitle: sourceType === 'selection' ? 'Selected text' : aiContext.currentNote?.title,
-            additionalPrompt,
-          })
-          setMessages(prev => [...prev, {
-            id: `action-${Date.now()}`,
-            role: 'assistant',
-            content: additionalPrompt
-              ? `Created a new mindmap note from your current context using your instructions: "${additionalPrompt}".`
-              : 'Created a new mindmap note from your current context.',
-            timestamp: new Date(),
-          }])
           break
         }
       }
@@ -1596,10 +1622,80 @@ export default function AIAssistant({
     </div>
   )
 
+  const renderMindmapPromptModal = () => {
+    if (!showMindmapPromptModal) return null
+
+    return (
+      <div className="absolute inset-0 z-50 flex items-center justify-center bg-black/45 p-4">
+        <div className="w-full max-w-lg rounded-2xl border border-border-strong bg-surface shadow-2xl">
+          <div className="flex items-center justify-between border-b border-border px-4 py-3">
+            <div>
+              <h4 className="text-sm font-semibold text-foreground">Create Mindmap</h4>
+              <p className="text-xs text-muted mt-0.5">Add optional instructions to guide AI node generation.</p>
+            </div>
+            <button
+              onClick={() => {
+                if (isLoading) return
+                setShowMindmapPromptModal(false)
+                setPendingMindmapPayload(null)
+                setMindmapPromptInput('')
+              }}
+              className="p-1.5 text-muted hover:text-foreground hover:bg-surface-hover rounded-lg transition-colors"
+              aria-label="Close modal"
+            >
+              <X size={14} />
+            </button>
+          </div>
+
+          <div className="px-4 py-3 space-y-2.5">
+            <label htmlFor="mindmap-additional-prompt" className="text-xs font-medium text-foreground/80">
+              Extra instructions (optional)
+            </label>
+            <textarea
+              id="mindmap-additional-prompt"
+              value={mindmapPromptInput}
+              onChange={(e) => setMindmapPromptInput(e.target.value)}
+              placeholder="Example: Focus on implementation steps, risks, and timeline; keep labels concise for stakeholders."
+              rows={4}
+              disabled={isLoading}
+              className="w-full px-3 py-2.5 text-sm bg-surface-hover border border-border rounded-xl resize-y focus:ring-2 focus:ring-alpine-500/30 focus:border-alpine-500 focus:outline-none disabled:opacity-50 disabled:cursor-not-allowed text-foreground placeholder:text-muted"
+            />
+            <p className="text-[11px] text-muted">
+              Leave empty to create from context only.
+            </p>
+          </div>
+
+          <div className="flex items-center justify-end gap-2 border-t border-border px-4 py-3">
+            <button
+              onClick={() => {
+                if (isLoading) return
+                setShowMindmapPromptModal(false)
+                setPendingMindmapPayload(null)
+                setMindmapPromptInput('')
+              }}
+              disabled={isLoading}
+              className="px-3 py-1.5 text-xs font-medium rounded-lg border border-border text-muted hover:text-foreground hover:bg-surface-hover transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              Cancel
+            </button>
+            <button
+              onClick={() => void handleSubmitMindmapCreation()}
+              disabled={isLoading || !pendingMindmapPayload}
+              className="px-3 py-1.5 text-xs font-medium rounded-lg bg-alpine-600 text-white hover:bg-alpine-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-1.5"
+            >
+              {isLoading ? <Loader2 size={12} className="animate-spin" /> : <Network size={12} />}
+              Create Mindmap
+            </button>
+          </div>
+        </div>
+      </div>
+    )
+  }
+
   // ─── MAIN RENDER ───────────────────────────────────────────────────────────
 
   return (
-    <div className="flex flex-col h-full bg-surface overflow-hidden">
+    <div className="relative flex flex-col h-full bg-surface overflow-hidden">
       {/* Header */}
       <div className="flex items-center justify-between border-b border-border px-3 py-2.5 shrink-0">
         <div className="flex items-center gap-2.5">
@@ -1729,6 +1825,8 @@ export default function AIAssistant({
           )}
         </>
       )}
+
+      {renderMindmapPromptModal()}
     </div>
   )
 }

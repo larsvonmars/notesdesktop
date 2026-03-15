@@ -6,13 +6,18 @@ import { getStroke } from 'perfect-freehand'
 import {
   BookOpen,
   Calendar,
+  Crosshair,
   ChevronLeft,
   ChevronRight,
   FilePenLine,
   FileText,
   Globe,
+  Map,
+  Maximize2,
   Network,
   PenTool,
+  RotateCcw,
+  Search,
   Table2,
 } from 'lucide-react'
 import type { PublishedNoteShare } from '@/lib/note-shares'
@@ -312,15 +317,62 @@ function DrawingShareView({ data }: { data: DrawingData }) {
   )
 }
 
+function getMindmapStats(data: MindmapData): { nodeCount: number; leafCount: number; maxDepth: number } {
+  const root = data.nodes[data.rootId]
+  if (!root) {
+    return { nodeCount: 0, leafCount: 0, maxDepth: 0 }
+  }
+
+  const nodeCount = Object.keys(data.nodes).length
+  const leafCount = Object.values(data.nodes).filter((node) => node.children.length === 0).length
+
+  let maxDepth = 1
+  const queue: Array<{ nodeId: string; depth: number }> = [{ nodeId: data.rootId, depth: 1 }]
+  const visited = new Set<string>()
+
+  while (queue.length > 0) {
+    const current = queue.shift()
+    if (!current || visited.has(current.nodeId)) continue
+    visited.add(current.nodeId)
+    maxDepth = Math.max(maxDepth, current.depth)
+
+    const node = data.nodes[current.nodeId]
+    if (!node) continue
+    for (const childId of node.children) {
+      if (data.nodes[childId] && !visited.has(childId)) {
+        queue.push({ nodeId: childId, depth: current.depth + 1 })
+      }
+    }
+  }
+
+  return { nodeCount, leafCount, maxDepth }
+}
+
 function MindmapShareView({ data }: { data: MindmapData }) {
   const editorRef = useRef<MindmapEditorHandle>(null)
+  const [isFramingView, setIsFramingView] = useState(true)
+  const stats = useMemo(() => getMindmapStats(data), [data])
 
   // Fit the whole graph into view once the canvas has mounted and sized itself
   useEffect(() => {
-    const timer = setTimeout(() => {
+    const fitOnce = () => {
       editorRef.current?.fitToView()
-    }, 120) // wait for ResizeObserver/canvas sizing in MindmapEditor
-    return () => clearTimeout(timer)
+    }
+
+    setIsFramingView(true)
+
+    const raf1 = requestAnimationFrame(() => {
+      fitOnce()
+      requestAnimationFrame(fitOnce)
+    })
+    const timer = setTimeout(fitOnce, 350)
+    const settleTimer = setTimeout(() => setIsFramingView(false), 450)
+
+    return () => {
+      cancelAnimationFrame(raf1)
+      clearTimeout(timer)
+      clearTimeout(settleTimer)
+    }
   }, [])
 
   if (!data.nodes[data.rootId]) {
@@ -332,15 +384,86 @@ function MindmapShareView({ data }: { data: MindmapData }) {
   }
 
   return (
-    <section className="space-y-3">
-      <div className="flex items-center justify-between">
-        <div>
-          <div className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">Mind Map</div>
-          <div className="text-sm text-slate-600">Pan · Scroll to zoom · Click nodes to collapse/expand</div>
+    <section className="space-y-4">
+      <div className="overflow-hidden rounded-[28px] border border-slate-200 bg-[linear-gradient(135deg,#f0fdfa_0%,#ffffff_42%,#ecfeff_100%)] p-5 shadow-sm">
+        <div className="flex flex-wrap items-start justify-between gap-4">
+          <div>
+            <div className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">Mind Map</div>
+            <div className="mt-1 text-sm text-slate-700">Explore connections with shared search and focus tools.</div>
+            <div className="mt-2 text-xs text-slate-500">Pan to move · Scroll or pinch to zoom · Click nodes to inspect details</div>
+          </div>
+          <div className="grid grid-cols-3 gap-2 text-center text-xs sm:min-w-[260px]">
+            <div className="rounded-xl border border-slate-200 bg-white/90 px-3 py-2">
+              <div className="font-semibold text-slate-900">{stats.nodeCount}</div>
+              <div className="text-slate-500">Nodes</div>
+            </div>
+            <div className="rounded-xl border border-slate-200 bg-white/90 px-3 py-2">
+              <div className="font-semibold text-slate-900">{stats.leafCount}</div>
+              <div className="text-slate-500">Leaves</div>
+            </div>
+            <div className="rounded-xl border border-slate-200 bg-white/90 px-3 py-2">
+              <div className="font-semibold text-slate-900">{stats.maxDepth}</div>
+              <div className="text-slate-500">Depth</div>
+            </div>
+          </div>
+        </div>
+
+        <div className="mt-4 flex flex-wrap gap-2">
+          <button
+            type="button"
+            onClick={() => editorRef.current?.fitToView()}
+            className="inline-flex items-center gap-1.5 rounded-full border border-slate-300 bg-white px-3 py-1.5 text-xs font-medium text-slate-700 transition hover:border-slate-400 hover:text-slate-900"
+          >
+            <Maximize2 className="h-3.5 w-3.5" />
+            Fit view
+          </button>
+          <button
+            type="button"
+            onClick={() => editorRef.current?.resetView()}
+            className="inline-flex items-center gap-1.5 rounded-full border border-slate-300 bg-white px-3 py-1.5 text-xs font-medium text-slate-700 transition hover:border-slate-400 hover:text-slate-900"
+          >
+            <RotateCcw className="h-3.5 w-3.5" />
+            1:1 zoom
+          </button>
+          <button
+            type="button"
+            onClick={() => editorRef.current?.openSearch()}
+            className="inline-flex items-center gap-1.5 rounded-full border border-slate-300 bg-white px-3 py-1.5 text-xs font-medium text-slate-700 transition hover:border-slate-400 hover:text-slate-900"
+          >
+            <Search className="h-3.5 w-3.5" />
+            Search nodes
+          </button>
+          <button
+            type="button"
+            onClick={() => editorRef.current?.toggleMinimap()}
+            className="inline-flex items-center gap-1.5 rounded-full border border-slate-300 bg-white px-3 py-1.5 text-xs font-medium text-slate-700 transition hover:border-slate-400 hover:text-slate-900"
+          >
+            <Map className="h-3.5 w-3.5" />
+            Mini-map
+          </button>
+          <div className="inline-flex items-center gap-1.5 rounded-full border border-teal-200 bg-teal-50 px-3 py-1.5 text-xs font-medium text-teal-800">
+            <Crosshair className="h-3.5 w-3.5" />
+            Search recenters and focuses matching nodes
+          </div>
         </div>
       </div>
-      <div className="overflow-hidden rounded-[28px] border border-slate-200 bg-white shadow-[0_25px_80px_-50px_rgba(15,23,42,0.45)]" style={{ height: '70vh', minHeight: '400px' }}>
-        <MindmapEditor ref={editorRef} initialData={data} readOnly />
+
+      <div className="relative overflow-hidden rounded-[28px] border border-slate-200 bg-white shadow-[0_25px_80px_-50px_rgba(15,23,42,0.45)]" style={{ height: '70vh', minHeight: '400px' }}>
+        {isFramingView && (
+          <div className="pointer-events-none absolute inset-0 z-10 flex items-center justify-center bg-white/55 backdrop-blur-[2px]">
+            <div className="rounded-full border border-white/70 bg-white/90 px-4 py-2 text-xs font-medium text-slate-600 shadow">
+              Framing map view...
+            </div>
+          </div>
+        )}
+        <MindmapEditor
+          ref={editorRef}
+          initialData={data}
+          readOnly
+          allowViewerControls
+          allowViewerSearch
+          defaultShowMinimap={false}
+        />
       </div>
     </section>
   )
