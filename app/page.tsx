@@ -8,10 +8,9 @@ import {
   Bot,
   FileText,
   FolderTree,
-  GitBranch,
   LayoutDashboard,
+  Network,
   PenSquare,
-  Share2,
   ShieldCheck,
   Sparkles,
 } from 'lucide-react'
@@ -23,6 +22,11 @@ const features = [
     title: 'Multi-format notes',
     description: 'Create rich text docs, mind maps, bullet journals, project dashboards, and annotated PDFs in one workspace.',
     icon: PenSquare,
+  },
+  {
+    title: 'Mindmap editor',
+    description: 'Drag ideas into visual clusters, create branches, and evolve complex thinking without losing structure.',
+    icon: Network,
   },
   {
     title: 'Organized knowledge graph',
@@ -38,24 +42,6 @@ const features = [
     title: 'Safe and private by default',
     description: 'Authentication and row-level access keep your personal workspace private while allowing deliberate sharing.',
     icon: ShieldCheck,
-  },
-]
-
-const workflow = [
-  {
-    title: 'Capture',
-    detail: 'Quickly capture ideas with templates designed for planning, research, and personal reflection.',
-    icon: FileText,
-  },
-  {
-    title: 'Connect',
-    detail: 'Link notes, map dependencies, and build project views that surface what matters right now.',
-    icon: GitBranch,
-  },
-  {
-    title: 'Ship',
-    detail: 'Share selected notes with secure links while your main workspace remains protected behind login.',
-    icon: Share2,
   },
 ]
 
@@ -152,23 +138,30 @@ export default function Home() {
             </div>
 
             <div className="rounded-[2rem] border border-white/80 bg-white/80 p-6 shadow-[0_40px_120px_-50px_rgba(15,23,42,0.5)] backdrop-blur sm:p-8">
-              <p className="text-xs font-semibold uppercase tracking-[0.22em] text-slate-500">How people use it</p>
-              <div className="mt-5 space-y-4">
-                {workflow.map((step) => {
-                  const Icon = step.icon
-
-                  return (
-                    <article key={step.title} className="rounded-2xl border border-slate-200/80 bg-slate-50/70 p-4">
-                      <div className="flex items-center gap-3">
-                        <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-white text-slate-700 shadow-sm">
-                          <Icon className="h-4 w-4" />
-                        </span>
-                        <h2 className="text-sm font-semibold uppercase tracking-[0.14em] text-slate-800">{step.title}</h2>
-                      </div>
-                      <p className="mt-3 text-sm leading-6 text-slate-600">{step.detail}</p>
-                    </article>
-                  )
-                })}
+              <p className="text-xs font-semibold uppercase tracking-[0.22em] text-slate-500">Live feature preview</p>
+              <div className="mt-5 rounded-2xl border border-slate-200/80 bg-slate-50/80 p-4">
+                <div className="mb-4 flex items-center gap-2 text-xs font-semibold uppercase tracking-[0.16em] text-slate-500">
+                  <FileText className="h-4 w-4" />
+                  Text Note Demo
+                </div>
+                <div className="rounded-xl border border-slate-200 bg-white p-4">
+                  <h2 className="text-base font-semibold text-slate-900">Sprint Planning - Week 12</h2>
+                  <p className="mt-2 text-sm text-slate-600">Objectives</p>
+                  <ul className="mt-2 space-y-2 text-sm text-slate-700">
+                    <li className="flex items-start gap-2">
+                      <span className="mt-1 h-1.5 w-1.5 rounded-full bg-emerald-500" />
+                      Finalize onboarding checklist and create guidance docs
+                    </li>
+                    <li className="flex items-start gap-2">
+                      <span className="mt-1 h-1.5 w-1.5 rounded-full bg-emerald-500" />
+                      Link related notes and decisions to release dashboard
+                    </li>
+                    <li className="flex items-start gap-2">
+                      <span className="mt-1 h-1.5 w-1.5 rounded-full bg-emerald-500" />
+                      Draft launch brief with AI-assisted summary
+                    </li>
+                  </ul>
+                </div>
               </div>
             </div>
           </div>
@@ -177,10 +170,85 @@ export default function Home() {
 
       <section className="px-6 pb-20">
         <div className="mx-auto max-w-6xl">
-          <h2 className="text-2xl font-semibold text-slate-950 sm:text-3xl">What you can do inside the app</h2>
+          <h2 className="text-2xl font-semibold text-slate-950 sm:text-3xl">Feature demos you can explore after signup</h2>
           <p className="mt-3 max-w-3xl text-sm leading-7 text-slate-600 sm:text-base">
-            From quick idea capture to detailed project planning, each feature is built to stay fast in desktop and web views.
+            The workspace is built for writing and visual thinking together. Here is a realistic preview of text notes and the mindmap editor.
           </p>
+
+          <div className="mt-8 grid gap-6 lg:grid-cols-[0.95fr_1.05fr]">
+            <article className="rounded-3xl border border-slate-200/80 bg-white/85 p-6 shadow-[0_20px_60px_-40px_rgba(15,23,42,0.45)] backdrop-blur">
+              <div className="mb-4 inline-flex items-center gap-2 rounded-full border border-slate-200 bg-slate-50 px-3 py-1 text-xs font-semibold uppercase tracking-[0.14em] text-slate-600">
+                <FileText className="h-4 w-4" />
+                Text Notes Editor
+              </div>
+              <h3 className="text-lg font-semibold text-slate-950">Write structured notes quickly</h3>
+              <p className="mt-2 text-sm leading-6 text-slate-600">
+                Rich formatting, checklists, linked references, and project tags let you move from rough ideas to clean plans.
+              </p>
+              <div className="mt-4 rounded-2xl border border-slate-200 bg-white p-4">
+                <div className="flex items-center gap-2 border-b border-slate-200 pb-3 text-xs text-slate-500">
+                  <span className="rounded-md bg-slate-100 px-2 py-1 font-medium">H1</span>
+                  <span className="rounded-md bg-slate-100 px-2 py-1 font-medium">Bold</span>
+                  <span className="rounded-md bg-slate-100 px-2 py-1 font-medium">Checklist</span>
+                  <span className="rounded-md bg-slate-100 px-2 py-1 font-medium">Link Note</span>
+                </div>
+                <h4 className="mt-4 text-sm font-semibold text-slate-900">Launch Retrospective</h4>
+                <p className="mt-2 text-sm text-slate-700">
+                  This sprint showed stronger handoff quality after linking requirements and design notes directly inside the editor.
+                </p>
+                <div className="mt-3 space-y-2 text-sm text-slate-700">
+                  <p className="flex items-center gap-2">
+                    <span className="h-4 w-4 rounded border border-emerald-500 bg-emerald-500/10" />
+                    Keep shared checklists for QA and release owners
+                  </p>
+                  <p className="flex items-center gap-2">
+                    <span className="h-4 w-4 rounded border border-slate-300 bg-white" />
+                    Add one-click links to architecture notes
+                  </p>
+                </div>
+              </div>
+            </article>
+
+            <article className="rounded-3xl border border-slate-200/80 bg-white/90 p-6 shadow-[0_30px_90px_-50px_rgba(15,23,42,0.55)] backdrop-blur">
+              <div className="mb-4 inline-flex items-center gap-2 rounded-full border border-sky-200 bg-sky-50 px-3 py-1 text-xs font-semibold uppercase tracking-[0.14em] text-sky-700">
+                <Network className="h-4 w-4" />
+                Mindmap Editor Demo
+              </div>
+              <h3 className="text-lg font-semibold text-slate-950">Map strategy visually with draggable branches</h3>
+              <p className="mt-2 text-sm leading-6 text-slate-600">
+                Expand ideas, create child nodes, and see relationships instantly. This is ideal for planning sessions and research breakdowns.
+              </p>
+
+              <div className="relative mt-5 h-[340px] rounded-2xl border border-slate-200 bg-[linear-gradient(to_right,#f1f5f9_1px,transparent_1px),linear-gradient(to_bottom,#f1f5f9_1px,transparent_1px)] bg-[size:24px_24px] p-4">
+                <svg className="pointer-events-none absolute inset-0 h-full w-full" viewBox="0 0 600 340" fill="none" aria-hidden>
+                  <path d="M292 170 C 330 170, 350 110, 395 95" stroke="#94a3b8" strokeWidth="2.5" />
+                  <path d="M292 170 C 340 170, 356 170, 412 170" stroke="#94a3b8" strokeWidth="2.5" />
+                  <path d="M292 170 C 330 175, 350 240, 395 255" stroke="#94a3b8" strokeWidth="2.5" />
+                  <path d="M212 170 C 180 170, 156 116, 116 95" stroke="#94a3b8" strokeWidth="2.5" />
+                  <path d="M212 170 C 176 170, 156 236, 116 252" stroke="#94a3b8" strokeWidth="2.5" />
+                </svg>
+
+                <div className="absolute left-[220px] top-[140px] rounded-xl border border-emerald-300 bg-emerald-100 px-4 py-2 text-sm font-semibold text-emerald-900 shadow">
+                  Product Launch
+                </div>
+                <div className="absolute left-[410px] top-[78px] rounded-xl border border-sky-300 bg-sky-100 px-3 py-2 text-xs font-semibold text-sky-900 shadow-sm">
+                  Messaging
+                </div>
+                <div className="absolute left-[430px] top-[152px] rounded-xl border border-indigo-300 bg-indigo-100 px-3 py-2 text-xs font-semibold text-indigo-900 shadow-sm">
+                  Channels
+                </div>
+                <div className="absolute left-[398px] top-[238px] rounded-xl border border-amber-300 bg-amber-100 px-3 py-2 text-xs font-semibold text-amber-900 shadow-sm">
+                  Metrics
+                </div>
+                <div className="absolute left-[64px] top-[78px] rounded-xl border border-teal-300 bg-teal-100 px-3 py-2 text-xs font-semibold text-teal-900 shadow-sm">
+                  Research
+                </div>
+                <div className="absolute left-[76px] top-[235px] rounded-xl border border-rose-300 bg-rose-100 px-3 py-2 text-xs font-semibold text-rose-900 shadow-sm">
+                  Risks
+                </div>
+              </div>
+            </article>
+          </div>
 
           <div className="mt-8 grid gap-5 sm:grid-cols-2">
             {features.map((feature) => {
