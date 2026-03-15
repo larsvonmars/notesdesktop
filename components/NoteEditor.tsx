@@ -85,7 +85,13 @@ import { fileBlock, type FileBlockPayload, initializeFileBlockInteractions } fro
 import FileExplorerModal from './FileExplorerModal'
 import SettingsModal from './SettingsModal'
 import AIAssistant from './AIAssistant'
-import { extractMindmapForAI, extractBulletJournalForAI, extractDataSheetForAI } from '@/lib/ai'
+import {
+  extractMindmapForAI,
+  extractBulletJournalForAI,
+  extractDataSheetForAI,
+  generateMindmapOutline,
+  type MindmapOutline,
+} from '@/lib/ai'
 import NoteDetailsSidebar from './NoteDetailsSidebar'
 import { Settings } from 'lucide-react'
 import { htmlToMarkdown } from '@/lib/editor/markdownHelpers'
@@ -115,6 +121,9 @@ const stripHtml = (html: string) => html.replace(/<[^>]*>/g, ' ').replace(/&nbsp
 
 const MINDMAP_NODE_COLORS = ['#3B82F6', '#10B981', '#F59E0B', '#EF4444', '#8B5CF6', '#EC4899', '#06B6D4', '#F97316']
 const MAX_AUTO_MINDMAP_NODES = 12
+const MAX_AI_MINDMAP_FIRST_LEVEL_NODES = 10
+const MINDMAP_ROOT_X = 400
+const MINDMAP_ROOT_Y = 300
 
 const normalizeTextLineForMindmap = (value: string): string => {
   return value
@@ -125,7 +134,7 @@ const normalizeTextLineForMindmap = (value: string): string => {
     .trim()
 }
 
-const buildMindmapDataFromText = (sourceText: string, rootText: string): MindmapData => {
+const buildFallbackMindmapDataFromText = (sourceText: string, rootText: string): MindmapData => {
   const rootId = 'root'
   const lines = sourceText
     .split(/\r?\n/)
@@ -181,6 +190,88 @@ const buildMindmapDataFromText = (sourceText: string, rootText: string): Mindmap
       attachments: [],
     }
   })
+
+  return { rootId, nodes }
+}
+
+const buildMindmapDataFromOutline = (outline: MindmapOutline, fallbackRootText: string): MindmapData => {
+  const rootId = 'root'
+  const rootText = outline.rootText?.trim().slice(0, 80) || fallbackRootText || 'Central Idea'
+  const nodes: MindmapData['nodes'] = {
+    [rootId]: {
+      id: rootId,
+      text: rootText,
+      x: MINDMAP_ROOT_X,
+      y: MINDMAP_ROOT_Y,
+      parentId: null,
+      children: [],
+      collapsed: false,
+      color: MINDMAP_NODE_COLORS[0],
+      description: outline.rootDescription?.trim() || '',
+      attachments: [],
+    },
+  }
+
+  const idCounter = { value: 0 }
+
+  const addChildren = (
+    parentId: string,
+    parentX: number,
+    parentY: number,
+    children: NonNullable<MindmapOutline['children']>,
+    depth: number,
+    startAngle: number,
+    endAngle: number
+  ) => {
+    if (!children.length || depth > 3) return
+
+    const radius = depth === 1 ? 210 : Math.max(110, 210 - depth * 35)
+    const arcSize = endAngle - startAngle
+
+    children.forEach((child, index) => {
+      idCounter.value += 1
+      const nodeId = `node-ai-${idCounter.value}`
+      const angle = startAngle + (arcSize * (index + 1)) / (children.length + 1)
+      const x = parentX + Math.cos(angle) * radius
+      const y = parentY + Math.sin(angle) * radius
+      const colorIndex = (depth + index) % MINDMAP_NODE_COLORS.length
+
+      nodes[parentId].children.push(nodeId)
+      nodes[nodeId] = {
+        id: nodeId,
+        text: child.text,
+        x,
+        y,
+        parentId,
+        children: [],
+        collapsed: false,
+        color: MINDMAP_NODE_COLORS[colorIndex],
+        description: child.description?.trim() || '',
+        attachments: [],
+      }
+
+      const grandchildren = (child.children || []).slice(0, MAX_AUTO_MINDMAP_NODES)
+      if (grandchildren.length > 0) {
+        const childArcSize = Math.min(Math.PI * 0.9, Math.max(Math.PI / 6, arcSize / Math.max(children.length, 1)))
+        addChildren(
+          nodeId,
+          x,
+          y,
+          grandchildren,
+          depth + 1,
+          angle - childArcSize / 2,
+          angle + childArcSize / 2
+        )
+      }
+    })
+  }
+
+  const firstLevel = outline.children.slice(0, MAX_AI_MINDMAP_FIRST_LEVEL_NODES)
+  addChildren(rootId, MINDMAP_ROOT_X, MINDMAP_ROOT_Y, firstLevel, 1, -Math.PI, Math.PI)
+
+  if (nodes[rootId].children.length === 0) {
+    return buildFallbackMindmapDataFromText(rootText, rootText)
+  }
 
   return { rootId, nodes }
 }
@@ -2617,7 +2708,19 @@ export default function NoteEditor({
       note?.title?.trim() ||
       'Untitled'
     const finalTitle = `${baseTitle.slice(0, 80)} Mindmap`
-    const mindmapDataForNote = buildMindmapDataFromText(sourceText, baseTitle.slice(0, 80) || 'Central Idea')
+
+    const rootHint = baseTitle.slice(0, 80) || 'Central Idea'
+    let mindmapDataForNote: MindmapData
+    let usedAI = true
+
+    try {
+      const outline = await generateMindmapOutline(sourceText, rootHint)
+      mindmapDataForNote = buildMindmapDataFromOutline(outline, rootHint)
+    } catch (error) {
+      console.warn('AI mindmap generation failed, falling back to text outline conversion:', error)
+      usedAI = false
+      mindmapDataForNote = buildFallbackMindmapDataFromText(sourceText, rootHint)
+    }
 
     try {
       const created = await createNote({
@@ -2630,9 +2733,13 @@ export default function NoteEditor({
 
       toast.push({
         title: 'Mindmap note created',
-        description: input.sourceType === 'selection'
-          ? 'Built from selected text.'
-          : 'Built from current note content.',
+        description: usedAI
+          ? input.sourceType === 'selection'
+            ? 'AI generated from selected text.'
+            : 'AI generated from current note content.'
+          : input.sourceType === 'selection'
+            ? 'Built from selected text (fallback mode).'
+            : 'Built from current note content (fallback mode).',
       })
 
       setShowAIAssistant(false)

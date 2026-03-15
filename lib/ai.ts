@@ -83,6 +83,18 @@ export interface MindmapSuggestion {
   childSuggestions?: string[]
 }
 
+export interface MindmapOutlineNode {
+  text: string
+  description?: string
+  children?: MindmapOutlineNode[]
+}
+
+export interface MindmapOutline {
+  rootText?: string
+  rootDescription?: string
+  children: MindmapOutlineNode[]
+}
+
 export interface TaskSuggestion {
   title: string
   description?: string
@@ -997,6 +1009,69 @@ export async function suggestMindmapNodes(
 }
 
 /**
+ * Generate a structured mindmap outline from source text.
+ */
+export async function generateMindmapOutline(
+  sourceText: string,
+  rootTextHint?: string
+): Promise<MindmapOutline> {
+  const trimmedSource = sourceText.trim()
+  if (!trimmedSource) {
+    throw new AIError('No source text provided for mindmap generation.', 'unknown')
+  }
+
+  const messages: AIMessage[] = [
+    { role: 'system', content: SYSTEM_PROMPTS.mindmap },
+    {
+      role: 'user',
+      content: `Create a mindmap outline from the text below.
+
+Requirements:
+- Return ONLY valid JSON (no markdown fences).
+- Use this exact schema:
+{
+  "rootText": "string",
+  "rootDescription": "string",
+  "children": [
+    {
+      "text": "string",
+      "description": "string",
+      "children": [
+        { "text": "string", "description": "string", "children": [] }
+      ]
+    }
+  ]
+}
+- 4 to 8 first-level children.
+- Up to 3 levels deep total.
+- Keep node text concise (max 80 chars).
+- Keep descriptions short and useful.
+
+Root title hint: ${rootTextHint?.trim() || 'Central Idea'}
+
+Source text:
+${trimmedSource.slice(0, 8000)}`,
+    },
+  ]
+
+  const response = await sendAIRequest(messages, { temperature: 0.5 })
+  const parsed = parseMindmapOutlineResponse(response)
+
+  if (!parsed) {
+    throw new AIError('AI returned an invalid mindmap outline.', 'upstream')
+  }
+
+  const normalizedChildren = normalizeMindmapOutlineNodes(parsed.children, 1, 40)
+  const fallbackRoot = (rootTextHint || 'Central Idea').trim().slice(0, 80) || 'Central Idea'
+
+  return {
+    rootText: (parsed.rootText || fallbackRoot).trim().slice(0, 80) || fallbackRoot,
+    rootDescription: (parsed.rootDescription || '').trim().slice(0, 240),
+    children: normalizedChildren,
+  }
+}
+
+/**
  * Suggest tasks based on context
  */
 export async function suggestTasks(
@@ -1147,6 +1222,114 @@ function buildSystemMessage(context?: AIContext): string {
   }
 
   return message
+}
+
+function parseMindmapOutlineResponse(response: string): MindmapOutline | null {
+  const normalized = stripJsonCodeFence(response)
+
+  try {
+    const direct = JSON.parse(normalized)
+    if (isMindmapOutlineShape(direct)) {
+      return direct
+    }
+  } catch {
+    // Continue with balanced object extraction fallback.
+  }
+
+  const start = normalized.indexOf('{')
+  if (start === -1) return null
+  const extracted = extractBalancedJSONObject(normalized, start)
+  if (!extracted) return null
+
+  try {
+    const parsed = JSON.parse(extracted)
+    return isMindmapOutlineShape(parsed) ? parsed : null
+  } catch {
+    return null
+  }
+}
+
+function extractBalancedJSONObject(value: string, startIdx: number): string | null {
+  if (value[startIdx] !== '{') return null
+  let depth = 0
+  let inString = false
+  let escaping = false
+
+  for (let i = startIdx; i < value.length; i++) {
+    const char = value[i]
+
+    if (escaping) {
+      escaping = false
+      continue
+    }
+
+    if (char === '\\' && inString) {
+      escaping = true
+      continue
+    }
+
+    if (char === '"') {
+      inString = !inString
+      continue
+    }
+
+    if (inString) continue
+
+    if (char === '{') depth++
+    if (char === '}') {
+      depth--
+      if (depth === 0) {
+        return value.slice(startIdx, i + 1)
+      }
+    }
+  }
+
+  return null
+}
+
+function isMindmapOutlineShape(input: unknown): input is MindmapOutline {
+  if (!input || typeof input !== 'object') return false
+  const candidate = input as { children?: unknown }
+  return Array.isArray(candidate.children)
+}
+
+function normalizeMindmapOutlineNodes(
+  rawNodes: unknown,
+  depth: number,
+  remainingBudget: number
+): MindmapOutlineNode[] {
+  if (!Array.isArray(rawNodes) || depth > 3 || remainingBudget <= 0) {
+    return []
+  }
+
+  const normalized: MindmapOutlineNode[] = []
+  let budget = remainingBudget
+
+  for (const rawNode of rawNodes) {
+    if (budget <= 0) break
+    if (!rawNode || typeof rawNode !== 'object') continue
+
+    const record = rawNode as {
+      text?: unknown
+      description?: unknown
+      children?: unknown
+    }
+
+    const text = typeof record.text === 'string' ? record.text.trim() : ''
+    if (!text) continue
+
+    budget -= 1
+    const children = normalizeMindmapOutlineNodes(record.children, depth + 1, budget)
+    budget -= children.length
+
+    normalized.push({
+      text: text.slice(0, 80),
+      description: typeof record.description === 'string' ? record.description.trim().slice(0, 240) : '',
+      children,
+    })
+  }
+
+  return normalized
 }
 
 // ============================================================================
