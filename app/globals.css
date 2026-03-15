@@ -522,7 +522,11 @@
   /* Horizontal rule styling */
   [contenteditable='true'] hr {
     border: none !important;
-    @apply border-t-2 border-gray-200 my-6;
+    border-top: 2px solid #94a3b8 !important;
+    @apply my-6;
+    display: block;
+    width: 100%;
+    opacity: 0.95;
   }
 
   /* Mark/highlight styling */
@@ -1186,7 +1190,8 @@
 }
 
 .dark [contenteditable='true'] hr {
-  border-top-color: #334155;
+  border-top-color: #64748b !important;
+  opacity: 1;
 }
 
 .dark [contenteditable='true'] mark {
