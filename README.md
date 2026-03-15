@@ -25,7 +25,12 @@ An Alpine-themed desktop notes application built with Tauri, Next.js, and Supaba
    ```
    NEXT_PUBLIC_SUPABASE_URL=your-supabase-url
    NEXT_PUBLIC_SUPABASE_ANON_KEY=your-supabase-anon-key
+   SUPABASE_SERVICE_ROLE_KEY=your-supabase-service-role-key
+   NEXT_PUBLIC_DELETE_ACCOUNT_ENDPOINT=https://your-domain.example/api/account/delete
    ```
+
+   `SUPABASE_SERVICE_ROLE_KEY` is used only by the server-side account deletion endpoint.
+   `NEXT_PUBLIC_DELETE_ACCOUNT_ENDPOINT` is optional and recommended for static/Tauri builds to point at a deployed delete-account API.
 
 3. **Configure AI (DeepSeek)**
 

@@ -1,4 +1,4 @@
-package com.saentis_notes.app
+package com.mindviz_notes.app
 
 import android.os.Bundle
 import androidx.activity.enableEdgeToEdge
