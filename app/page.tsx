@@ -313,18 +313,6 @@ export default function Home() {
             })}
           </div>
 
-          <div className="mt-10 rounded-3xl border border-emerald-200 bg-emerald-50/80 p-6 text-sm leading-6 text-emerald-900 sm:flex sm:items-center sm:justify-between sm:gap-6 sm:p-8 dark:border-emerald-500/40 dark:bg-emerald-500/15 dark:text-emerald-100">
-            <p>
-              Public share links stay available without login. If someone opens a shared note URL, they can view it directly from the share page.
-            </p>
-            <Link
-              href="/share"
-              className="mt-4 inline-flex items-center gap-2 rounded-full border border-emerald-300 bg-white px-4 py-2 font-semibold text-emerald-800 transition hover:border-emerald-400 hover:bg-emerald-100 sm:mt-0 dark:border-emerald-400 dark:bg-emerald-400 dark:text-emerald-950 dark:hover:bg-emerald-300"
-            >
-              Open share page
-              <ArrowRight className="h-4 w-4" />
-            </Link>
-          </div>
         </div>
       </section>
     </main>
