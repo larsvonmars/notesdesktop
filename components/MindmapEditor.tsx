@@ -88,6 +88,7 @@ export interface MindmapEditorHandle {
   setData: (data: MindmapData) => void
   clear: () => void
   getSelectedNodeId: () => string | null
+  fitToView: () => void
 }
 
 interface MindmapEditorProps {
@@ -790,6 +791,7 @@ const MindmapEditor = forwardRef<MindmapEditorHandle, MindmapEditorProps>(
   ({ initialData, onChange, onSelectedNodeChange, textNotes = [], onCreateTextNote, onOpenTextNote, readOnly = false }, ref) => {
     const canvasRef = useRef<HTMLCanvasElement>(null)
     const containerRef = useRef<HTMLDivElement>(null)
+    const fitToViewImperativeRef = useRef<(() => void) | null>(null)
 
     // Theme & mobile
     const { resolvedTheme } = useTheme()
@@ -823,6 +825,9 @@ const MindmapEditor = forwardRef<MindmapEditorHandle, MindmapEditorProps>(
     // Minimap visibility toggle (default hidden on mobile)
     const [showMinimap, setShowMinimap] = React.useState(!isMobile)
 
+    // Info panel visibility
+    const [showInfo, setShowInfo] = React.useState(true)
+
     // Context menu state
     const [contextMenu, setContextMenu] = React.useState<{ nodeId: string; x: number; y: number } | null>(null)
 
@@ -854,6 +859,8 @@ const MindmapEditor = forwardRef<MindmapEditorHandle, MindmapEditorProps>(
     // Long-press detection (open detail on touch)
     const longPressTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
     const longPressNodeIdRef = useRef<string | null>(null)
+    // Tracks whether a right-button drag (panning gesture) is in progress
+    const rightButtonPanningRef = useRef(false)
 
     useImperativeHandle(ref, () => ({
       getData: () => mindmapData,
@@ -878,6 +885,7 @@ const MindmapEditor = forwardRef<MindmapEditorHandle, MindmapEditorProps>(
         dispatch({ type: 'RESET_ALL', payload: reset })
       },
       getSelectedNodeId: () => selectedNodeId,
+      fitToView: () => fitToViewImperativeRef.current?.(),
     }))
 
     useEffect(() => {
@@ -1320,8 +1328,6 @@ const MindmapEditor = forwardRef<MindmapEditorHandle, MindmapEditorProps>(
     // ── Click / double-click (work for both mouse and touch via pointer events) ──
 
     const handleCanvasClick = (e: React.MouseEvent<HTMLCanvasElement>) => {
-      if (readOnly) return
-
       if (suppressClickRef.current) {
         suppressClickRef.current = false
         collapseTargetRef.current = null
@@ -1351,7 +1357,11 @@ const MindmapEditor = forwardRef<MindmapEditorHandle, MindmapEditorProps>(
       collapseTargetRef.current = null
       collapsePointerStartRef.current = null
       if (hit.area === 'body') {
-        dispatch({ type: 'SET_SELECTED_NODE_ID', payload: hit.nodeId })
+        if (readOnly) {
+          openNodeDetail(hit.nodeId)
+        } else {
+          dispatch({ type: 'SET_SELECTED_NODE_ID', payload: hit.nodeId })
+        }
       }
     }
 
@@ -1373,6 +1383,11 @@ const MindmapEditor = forwardRef<MindmapEditorHandle, MindmapEditorProps>(
 
     const handleCanvasContextMenu = (e: React.MouseEvent<HTMLCanvasElement>) => {
       e.preventDefault()
+      // Suppress context menu if the right button was used to pan
+      if (rightButtonPanningRef.current) {
+        rightButtonPanningRef.current = false
+        return
+      }
       if (readOnly) return
 
       const coordinates = mapClientToWorld(e.clientX, e.clientY)
@@ -1453,7 +1468,6 @@ const MindmapEditor = forwardRef<MindmapEditorHandle, MindmapEditorProps>(
     // ── Unified Pointer Events (mouse + touch + stylus) ──
 
     const handleCanvasPointerDown = (e: React.PointerEvent<HTMLCanvasElement>) => {
-      if (readOnly) return
       const canvas = canvasRef.current
       if (!canvas) return
       canvas.setPointerCapture(e.pointerId)
@@ -1462,6 +1476,13 @@ const MindmapEditor = forwardRef<MindmapEditorHandle, MindmapEditorProps>(
       const screenX = e.clientX - rect.left
       const screenY = e.clientY - rect.top
       activePointersRef.current.set(e.pointerId, { x: screenX, y: screenY })
+
+      // Right mouse button → always pan (regardless of what was hit)
+      if (e.button === 2) {
+        rightButtonPanningRef.current = false // reset; will be set true on first move
+        dispatch({ type: 'START_PANNING', payload: { x: screenX - offset.x, y: screenY - offset.y } })
+        return
+      }
 
       // Two fingers active → cancel single-touch interactions, start pinch
       if (activePointersRef.current.size >= 2) {
@@ -1493,20 +1514,22 @@ const MindmapEditor = forwardRef<MindmapEditorHandle, MindmapEditorProps>(
 
       if (hit?.nodeId) {
         dispatch({ type: 'SET_SELECTED_NODE_ID', payload: hit.nodeId })
-        dispatch({ type: 'START_DRAGGING', payload: { nodeId: hit.nodeId, start: { x: screenX, y: screenY } } })
+        if (!readOnly) {
+          dispatch({ type: 'START_DRAGGING', payload: { nodeId: hit.nodeId, start: { x: screenX, y: screenY } } })
 
-        // Long press to open detail (skip for mouse primary button)
-        if (e.pointerType !== 'mouse') {
-          clearLongPress()
-          longPressNodeIdRef.current = hit.nodeId
-          longPressTimerRef.current = setTimeout(() => {
-            if (longPressNodeIdRef.current && !suppressClickRef.current) {
-              openNodeDetail(longPressNodeIdRef.current)
-              dispatch({ type: 'STOP_DRAGGING' })
-              suppressClickRef.current = true
-            }
-            longPressNodeIdRef.current = null
-          }, 450)
+          // Long press to open detail (skip for mouse primary button)
+          if (e.pointerType !== 'mouse') {
+            clearLongPress()
+            longPressNodeIdRef.current = hit.nodeId
+            longPressTimerRef.current = setTimeout(() => {
+              if (longPressNodeIdRef.current && !suppressClickRef.current) {
+                openNodeDetail(longPressNodeIdRef.current)
+                dispatch({ type: 'STOP_DRAGGING' })
+                suppressClickRef.current = true
+              }
+              longPressNodeIdRef.current = null
+            }, 450)
+          }
         }
       } else {
         // Empty canvas → start panning
@@ -1515,7 +1538,6 @@ const MindmapEditor = forwardRef<MindmapEditorHandle, MindmapEditorProps>(
     }
 
     const handleCanvasPointerMove = (e: React.PointerEvent<HTMLCanvasElement>) => {
-      if (readOnly) return
       const canvas = canvasRef.current
       if (!canvas) return
 
@@ -1557,7 +1579,7 @@ const MindmapEditor = forwardRef<MindmapEditorHandle, MindmapEditorProps>(
       if (!coordinates) return
       const { worldX, worldY } = coordinates
 
-      if (draggingNodeId && dragStart) {
+      if (draggingNodeId && dragStart && !readOnly) {
         const dx = (screenX - dragStart.x) / scale
         const dy = (screenY - dragStart.y) / scale
 
@@ -1584,6 +1606,7 @@ const MindmapEditor = forwardRef<MindmapEditorHandle, MindmapEditorProps>(
         clearLongPress()
         collapseTargetRef.current = null
         collapsePointerStartRef.current = null
+        if (e.buttons === 2) rightButtonPanningRef.current = true
         dispatch({ type: 'SET_OFFSET', payload: { x: screenX - panStart.x, y: screenY - panStart.y } })
       } else if (collapseTargetRef.current && collapsePointerStartRef.current) {
         const distance = Math.hypot(
@@ -1607,6 +1630,7 @@ const MindmapEditor = forwardRef<MindmapEditorHandle, MindmapEditorProps>(
       if (draggingNodeId || isPanning) suppressClickRef.current = true
       dispatch({ type: 'STOP_DRAGGING' })
       dispatch({ type: 'STOP_PANNING' })
+      if (e.button === 2) rightButtonPanningRef.current = false
     }
 
     const handleCanvasPointerCancel = (e: React.PointerEvent<HTMLCanvasElement>) => {
@@ -1864,8 +1888,6 @@ const MindmapEditor = forwardRef<MindmapEditorHandle, MindmapEditorProps>(
 
     const toggleCollapse = useCallback(
       (nodeId?: string) => {
-        if (readOnly) return
-
         const targetId = nodeId ?? selectedNodeId
         if (!targetId) return
 
@@ -1887,7 +1909,7 @@ const MindmapEditor = forwardRef<MindmapEditorHandle, MindmapEditorProps>(
           animationFrameRef.current = requestAnimationFrame(renderMindmap)
         }
       },
-      [readOnly, selectedNodeId, mindmapData.nodes, renderMindmap]
+      [selectedNodeId, mindmapData.nodes, renderMindmap]
     )
 
     // Keyboard navigation for moving between nodes
@@ -2075,6 +2097,9 @@ const MindmapEditor = forwardRef<MindmapEditorHandle, MindmapEditorProps>(
     const fitToView = () => {
       const canvas = canvasRef.current
       if (!canvas) return
+
+      // Keep ref in sync so it can be called imperatively from outside
+      fitToViewImperativeRef.current = fitToView
 
       // Calculate bounding box of all nodes
       let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity
@@ -2499,34 +2524,47 @@ const MindmapEditor = forwardRef<MindmapEditorHandle, MindmapEditorProps>(
                   <label className="text-sm font-medium text-slate-700 dark:text-slate-300" htmlFor="mindmap-node-title">
                     Title
                   </label>
-                  <input
-                    id="mindmap-node-title"
-                    type="text"
-                    value={detailDraft.text}
-                    onChange={(e) =>
-                      dispatch({ type: 'UPDATE_DETAIL_DRAFT', payload: { text: e.target.value } })
-                    }
-                    className="w-full rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-800 dark:text-slate-100 px-3 py-2 text-sm shadow-sm focus:border-alpine-500 focus:outline-none focus:ring-2 focus:ring-alpine-200"
-                    placeholder="Node title"
-                  />
+                  {readOnly ? (
+                    <div className="w-full rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/60 text-slate-800 dark:text-slate-100 px-3 py-2 text-sm">
+                      {detailDraft.text || 'Untitled Node'}
+                    </div>
+                  ) : (
+                    <input
+                      id="mindmap-node-title"
+                      type="text"
+                      value={detailDraft.text}
+                      onChange={(e) =>
+                        dispatch({ type: 'UPDATE_DETAIL_DRAFT', payload: { text: e.target.value } })
+                      }
+                      className="w-full rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-800 dark:text-slate-100 px-3 py-2 text-sm shadow-sm focus:border-alpine-500 focus:outline-none focus:ring-2 focus:ring-alpine-200"
+                      placeholder="Node title"
+                    />
+                  )}
                 </div>
 
                 <div className="space-y-2">
                   <label className="text-sm font-medium text-slate-700 dark:text-slate-300" htmlFor="mindmap-node-description">
                     Description
                   </label>
-                  <textarea
-                    id="mindmap-node-description"
-                    value={detailDraft.description}
-                    onChange={(e) =>
-                      dispatch({ type: 'UPDATE_DETAIL_DRAFT', payload: { description: e.target.value } })
-                    }
-                    rows={5}
-                    className="w-full rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-800 dark:text-slate-100 px-3 py-2 text-sm shadow-sm focus:border-alpine-500 focus:outline-none focus:ring-2 focus:ring-alpine-200"
-                    placeholder="Add more context, notes, or action items"
-                  />
+                  {readOnly ? (
+                    <div className="w-full rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/60 text-slate-700 dark:text-slate-200 px-3 py-2 text-sm whitespace-pre-wrap min-h-[120px]">
+                      {detailDraft.description?.trim() ? detailDraft.description : 'No description provided.'}
+                    </div>
+                  ) : (
+                    <textarea
+                      id="mindmap-node-description"
+                      value={detailDraft.description}
+                      onChange={(e) =>
+                        dispatch({ type: 'UPDATE_DETAIL_DRAFT', payload: { description: e.target.value } })
+                      }
+                      rows={5}
+                      className="w-full rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-800 dark:text-slate-100 px-3 py-2 text-sm shadow-sm focus:border-alpine-500 focus:outline-none focus:ring-2 focus:ring-alpine-200"
+                      placeholder="Add more context, notes, or action items"
+                    />
+                  )}
                 </div>
 
+                {!readOnly && (
                 <div className="space-y-3 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50/70 dark:bg-slate-800/50 p-3">
                   <div className="flex items-center justify-between gap-2">
                     <span className="text-sm font-medium text-slate-700 dark:text-slate-300">Linked text note</span>
@@ -2599,7 +2637,9 @@ const MindmapEditor = forwardRef<MindmapEditorHandle, MindmapEditorProps>(
                     <p className="text-xs text-red-600 dark:text-red-400">{textNoteActionError}</p>
                   )}
                 </div>
+                )}
 
+                {!readOnly && (
                 <div className="space-y-3">
                   <span className="text-sm font-medium text-slate-700 dark:text-slate-300">Accent color</span>
                   <div className="flex flex-wrap gap-2">
@@ -2622,6 +2662,7 @@ const MindmapEditor = forwardRef<MindmapEditorHandle, MindmapEditorProps>(
                     })}
                   </div>
                 </div>
+                )}
 
                 <div className="space-y-3">
                   <div className="flex items-center justify-between">
@@ -2683,62 +2724,68 @@ const MindmapEditor = forwardRef<MindmapEditorHandle, MindmapEditorProps>(
                               </a>
                             )}
                           </div>
-                          <button
-                            onClick={() => removeAttachmentFromDraft(attachment.id)}
-                            className="flex h-9 w-9 items-center justify-center rounded-full border border-slate-200 dark:border-slate-700 text-slate-500 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-700 transition-colors shrink-0"
-                            aria-label="Remove attachment"
-                          >
-                            <Trash2 size={16} />
-                          </button>
+                          {!readOnly && (
+                            <button
+                              onClick={() => removeAttachmentFromDraft(attachment.id)}
+                              className="flex h-9 w-9 items-center justify-center rounded-full border border-slate-200 dark:border-slate-700 text-slate-500 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-700 transition-colors shrink-0"
+                              aria-label="Remove attachment"
+                            >
+                              <Trash2 size={16} />
+                            </button>
+                          )}
                         </div>
                       ))}
                     </div>
                   )}
 
-                  {/* Add attachment form — stacked vertically for mobile friendliness */}
-                  <div className="flex flex-col gap-2">
-                    <input
-                      type="text"
-                      value={newAttachmentInput.label}
-                      onChange={(e) =>
-                        dispatch({ type: 'SET_NEW_ATTACHMENT_INPUT', payload: { ...newAttachmentInput, label: e.target.value } })
-                      }
-                      placeholder="Label (optional)"
-                      className="rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-800 dark:text-slate-100 px-3 py-2 text-sm shadow-sm focus:border-alpine-500 focus:outline-none focus:ring-2 focus:ring-alpine-200"
-                    />
-                    <input
-                      type="url"
-                      value={newAttachmentInput.url}
-                      onChange={(e) =>
-                        dispatch({ type: 'SET_NEW_ATTACHMENT_INPUT', payload: { ...newAttachmentInput, url: e.target.value } })
-                      }
-                      placeholder="https://example.com/image.png"
-                      className="rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-800 dark:text-slate-100 px-3 py-2 text-sm shadow-sm focus:border-alpine-500 focus:outline-none focus:ring-2 focus:ring-alpine-200"
-                    />
-                    <div className="flex gap-2">
-                      <select
-                        value={newAttachmentInput.type}
-                        onChange={(e) =>
-                          dispatch({
-                            type: 'SET_NEW_ATTACHMENT_INPUT',
-                            payload: { ...newAttachmentInput, type: e.target.value === 'link' ? 'link' : 'image' },
-                          })
-                        }
-                        className="flex-1 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-800 dark:text-slate-100 px-3 py-2 text-sm shadow-sm focus:border-alpine-500 focus:outline-none focus:ring-2 focus:ring-alpine-200"
-                      >
-                        <option value="image">Image</option>
-                        <option value="link">Link</option>
-                      </select>
-                      <button
-                        onClick={addAttachmentToDraft}
-                        disabled={!newAttachmentInput.url.trim()}
-                        className="inline-flex items-center justify-center gap-2 rounded-lg bg-alpine-600 px-4 py-2 text-sm font-medium text-white shadow-sm transition-colors hover:bg-alpine-700 disabled:cursor-not-allowed disabled:opacity-40"
-                      >
-                        <Plus size={16} />
-                        Add
-                      </button>
-                    </div>
-                  </div>
+                  {!readOnly && (
+                    <>
+                      {/* Add attachment form — stacked vertically for mobile friendliness */}
+                      <div className="flex flex-col gap-2">
+                        <input
+                          type="text"
+                          value={newAttachmentInput.label}
+                          onChange={(e) =>
+                            dispatch({ type: 'SET_NEW_ATTACHMENT_INPUT', payload: { ...newAttachmentInput, label: e.target.value } })
+                          }
+                          placeholder="Label (optional)"
+                          className="rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-800 dark:text-slate-100 px-3 py-2 text-sm shadow-sm focus:border-alpine-500 focus:outline-none focus:ring-2 focus:ring-alpine-200"
+                        />
+                        <input
+                          type="url"
+                          value={newAttachmentInput.url}
+                          onChange={(e) =>
+                            dispatch({ type: 'SET_NEW_ATTACHMENT_INPUT', payload: { ...newAttachmentInput, url: e.target.value } })
+                          }
+                          placeholder="https://example.com/image.png"
+                          className="rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-800 dark:text-slate-100 px-3 py-2 text-sm shadow-sm focus:border-alpine-500 focus:outline-none focus:ring-2 focus:ring-alpine-200"
+                        />
+                        <div className="flex gap-2">
+                          <select
+                            value={newAttachmentInput.type}
+                            onChange={(e) =>
+                              dispatch({
+                                type: 'SET_NEW_ATTACHMENT_INPUT',
+                                payload: { ...newAttachmentInput, type: e.target.value === 'link' ? 'link' : 'image' },
+                              })
+                            }
+                            className="flex-1 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-800 dark:text-slate-100 px-3 py-2 text-sm shadow-sm focus:border-alpine-500 focus:outline-none focus:ring-2 focus:ring-alpine-200"
+                          >
+                            <option value="image">Image</option>
+                            <option value="link">Link</option>
+                          </select>
+                          <button
+                            onClick={addAttachmentToDraft}
+                            disabled={!newAttachmentInput.url.trim()}
+                            className="inline-flex items-center justify-center gap-2 rounded-lg bg-alpine-600 px-4 py-2 text-sm font-medium text-white shadow-sm transition-colors hover:bg-alpine-700 disabled:cursor-not-allowed disabled:opacity-40"
+                          >
+                            <Plus size={16} />
+                            Add
+                          </button>
+                        </div>
+                      </div>
+                    </>
+                  )}
                 </div>
               </div>
 
@@ -2750,13 +2797,15 @@ const MindmapEditor = forwardRef<MindmapEditorHandle, MindmapEditorProps>(
                   <X size={16} />
                   Close
                 </button>
-                <button
-                  onClick={saveNodeDetail}
-                  className="inline-flex items-center gap-2 rounded-lg bg-alpine-600 px-4 py-2 text-sm font-semibold text-white shadow-sm hover:bg-alpine-700 transition-colors"
-                >
-                  <Check size={16} />
-                  Save changes
-                </button>
+                {!readOnly && (
+                  <button
+                    onClick={saveNodeDetail}
+                    className="inline-flex items-center gap-2 rounded-lg bg-alpine-600 px-4 py-2 text-sm font-semibold text-white shadow-sm hover:bg-alpine-700 transition-colors"
+                  >
+                    <Check size={16} />
+                    Save changes
+                  </button>
+                )}
               </div>
             </div>
           </div>
@@ -2764,7 +2813,15 @@ const MindmapEditor = forwardRef<MindmapEditorHandle, MindmapEditorProps>(
 
         {showMinimap && (
           <div className="absolute bottom-4 left-4 z-10">
-            <div className="rounded-2xl border border-slate-200 dark:border-slate-700 bg-white/80 dark:bg-slate-900/80 p-3 shadow-lg backdrop-blur">
+            <div className="relative rounded-2xl border border-slate-200 dark:border-slate-700 bg-white/80 dark:bg-slate-900/80 p-3 shadow-lg backdrop-blur">
+              <button
+                type="button"
+                onClick={() => setShowMinimap(false)}
+                className="absolute -top-2 -right-2 flex h-5 w-5 items-center justify-center rounded-full border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-400 hover:text-slate-700 dark:hover:text-slate-300 shadow-sm transition-colors"
+                aria-label="Close minimap"
+              >
+                <X size={11} />
+              </button>
               <canvas
                 ref={miniMapCanvasRef}
                 onClick={handleMiniMapClick}
@@ -2920,9 +2977,20 @@ const MindmapEditor = forwardRef<MindmapEditorHandle, MindmapEditorProps>(
         })()}
 
         {/* Info overlay */}
+        {showInfo && (
         <div className="absolute bottom-4 right-4 bg-white/90 dark:bg-slate-900/90 backdrop-blur-sm rounded-lg shadow-lg p-3 border border-gray-200 dark:border-slate-700 text-sm">
           <div className="text-gray-600 dark:text-slate-400">
-            <div className="font-medium text-slate-700 dark:text-slate-200">Zoom: {Math.round(scale * 100)}%</div>
+            <div className="flex items-center justify-between gap-3">
+              <div className="font-medium text-slate-700 dark:text-slate-200">Zoom: {Math.round(scale * 100)}%</div>
+              <button
+                type="button"
+                onClick={() => setShowInfo(false)}
+                className="flex h-5 w-5 items-center justify-center rounded text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-slate-700 dark:hover:text-slate-300 transition-colors"
+                aria-label="Close info panel"
+              >
+                <X size={13} />
+              </button>
+            </div>
             {selectedNodeId && (
               <div className="mt-1 text-alpine-600 dark:text-alpine-400 font-medium truncate max-w-[160px]">
                 {mindmapData.nodes[selectedNodeId]?.text}
@@ -2944,6 +3012,7 @@ const MindmapEditor = forwardRef<MindmapEditorHandle, MindmapEditorProps>(
             )}
           </div>
         </div>
+        )}
       </div>
     )
   }

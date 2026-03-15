@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import DOMPurify from 'dompurify'
 import { getStroke } from 'perfect-freehand'
 import {
@@ -8,7 +8,6 @@ import {
   Calendar,
   ChevronLeft,
   ChevronRight,
-  ExternalLink,
   FilePenLine,
   FileText,
   Globe,
@@ -18,8 +17,9 @@ import {
 } from 'lucide-react'
 import type { PublishedNoteShare } from '@/lib/note-shares'
 import type { NoteType } from '@/lib/notes'
-import type { DrawingData, DrawingPage, Stroke } from '@/components/DrawingEditor'
-import type { MindmapData, MindmapNode } from '@/components/MindmapEditor'
+import type { DrawingData, Stroke } from '@/components/DrawingEditor'
+import MindmapEditor from '@/components/MindmapEditor'
+import type { MindmapEditorHandle, MindmapData } from '@/components/MindmapEditor'
 import type { BulletJournalData } from '@/components/BulletJournalEditor'
 import type { DataSheetData } from '@/components/DataSheetEditor'
 import type { PdfAnnotationData } from '@/components/PdfAnnotationEditor'
@@ -312,65 +312,36 @@ function DrawingShareView({ data }: { data: DrawingData }) {
   )
 }
 
-function MindmapBranch({ node, allNodes }: { node: MindmapNode; allNodes: MindmapData['nodes'] }) {
-  return (
-    <li className="space-y-3">
-      <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
-        <div className="flex items-start gap-3">
-          <div className="mt-1 h-3 w-3 shrink-0 rounded-full" style={{ backgroundColor: node.color || '#0f766e' }} />
-          <div className="min-w-0 flex-1">
-            <div className="font-semibold text-slate-900">{node.text || 'Untitled node'}</div>
-            {node.description && <p className="mt-1 whitespace-pre-wrap text-sm text-slate-600">{node.description}</p>}
-            {node.attachments.length > 0 && (
-              <div className="mt-3 flex flex-wrap gap-2">
-                {node.attachments.map((attachment) => (
-                  <a
-                    key={attachment.id}
-                    href={attachment.url}
-                    target="_blank"
-                    rel="noreferrer"
-                    className="inline-flex items-center gap-1 rounded-full bg-slate-100 px-3 py-1 text-xs font-medium text-slate-700 transition hover:bg-slate-200"
-                  >
-                    <ExternalLink className="h-3 w-3" />
-                    <span>{attachment.label}</span>
-                  </a>
-                ))}
-              </div>
-            )}
-          </div>
-        </div>
-      </div>
-
-      {node.children.length > 0 && (
-        <ul className="ml-4 space-y-3 border-l border-dashed border-slate-300 pl-5">
-          {node.children
-            .map((childId) => allNodes[childId])
-            .filter(Boolean)
-            .map((childNode) => (
-              <MindmapBranch key={childNode.id} node={childNode} allNodes={allNodes} />
-            ))}
-        </ul>
-      )}
-    </li>
-  )
-}
-
 function MindmapShareView({ data }: { data: MindmapData }) {
-  const rootNode = data.nodes[data.rootId]
+  const editorRef = useRef<MindmapEditorHandle>(null)
 
-  if (!rootNode) {
-    return <div className="rounded-2xl border border-dashed border-slate-300 bg-white/80 p-6 text-sm text-slate-500">This mind map could not be rendered.</div>
+  // Fit the whole graph into view once the canvas has mounted and sized itself
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      editorRef.current?.fitToView()
+    }, 120) // wait for ResizeObserver/canvas sizing in MindmapEditor
+    return () => clearTimeout(timer)
+  }, [])
+
+  if (!data.nodes[data.rootId]) {
+    return (
+      <div className="rounded-2xl border border-dashed border-slate-300 bg-white/80 p-6 text-sm text-slate-500">
+        This mind map could not be rendered.
+      </div>
+    )
   }
 
   return (
-    <section className="space-y-4">
-      <div>
-        <div className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">Mind Map</div>
-        <div className="text-sm text-slate-600">Shared as an interactive outline.</div>
+    <section className="space-y-3">
+      <div className="flex items-center justify-between">
+        <div>
+          <div className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">Mind Map</div>
+          <div className="text-sm text-slate-600">Pan · Scroll to zoom · Click nodes to collapse/expand</div>
+        </div>
       </div>
-      <ul className="space-y-4">
-        <MindmapBranch node={rootNode} allNodes={data.nodes} />
-      </ul>
+      <div className="overflow-hidden rounded-[28px] border border-slate-200 bg-white shadow-[0_25px_80px_-50px_rgba(15,23,42,0.45)]" style={{ height: '70vh', minHeight: '400px' }}>
+        <MindmapEditor ref={editorRef} initialData={data} readOnly />
+      </div>
     </section>
   )
 }
