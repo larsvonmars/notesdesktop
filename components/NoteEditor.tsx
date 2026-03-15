@@ -113,6 +113,78 @@ interface NoteEditorProps {
 
 const stripHtml = (html: string) => html.replace(/<[^>]*>/g, ' ').replace(/&nbsp;/g, ' ').trim()
 
+const MINDMAP_NODE_COLORS = ['#3B82F6', '#10B981', '#F59E0B', '#EF4444', '#8B5CF6', '#EC4899', '#06B6D4', '#F97316']
+const MAX_AUTO_MINDMAP_NODES = 12
+
+const normalizeTextLineForMindmap = (value: string): string => {
+  return value
+    .replace(/^\s*[-*+]\s+/, '')
+    .replace(/^\s*\d+[.)]\s+/, '')
+    .replace(/^\s*#{1,6}\s+/, '')
+    .replace(/\s+/g, ' ')
+    .trim()
+}
+
+const buildMindmapDataFromText = (sourceText: string, rootText: string): MindmapData => {
+  const rootId = 'root'
+  const lines = sourceText
+    .split(/\r?\n/)
+    .map(normalizeTextLineForMindmap)
+    .filter(Boolean)
+
+  const seen = new Set<string>()
+  const childLabels: string[] = []
+  for (const line of lines) {
+    const normalized = line.toLowerCase()
+    if (normalized === rootText.toLowerCase()) continue
+    if (seen.has(normalized)) continue
+    seen.add(normalized)
+    childLabels.push(line)
+    if (childLabels.length >= MAX_AUTO_MINDMAP_NODES) break
+  }
+
+  if (childLabels.length === 0) {
+    childLabels.push('Main Idea', 'Key Details', 'Next Steps')
+  }
+
+  const nodes: MindmapData['nodes'] = {
+    [rootId]: {
+      id: rootId,
+      text: rootText,
+      x: 400,
+      y: 300,
+      parentId: null,
+      children: [],
+      collapsed: false,
+      color: MINDMAP_NODE_COLORS[0],
+      description: '',
+      attachments: [],
+    },
+  }
+
+  childLabels.forEach((label, index) => {
+    const nodeId = `node-${Date.now()}-${index}`
+    const angle = (Math.PI * 2 * index) / childLabels.length
+    const distance = 190
+
+    nodes[rootId].children.push(nodeId)
+    nodes[nodeId] = {
+      id: nodeId,
+      text: label.slice(0, 80),
+      x: 400 + Math.cos(angle) * distance,
+      y: 300 + Math.sin(angle) * distance,
+      parentId: rootId,
+      children: [],
+      collapsed: false,
+      color: MINDMAP_NODE_COLORS[(index + 1) % MINDMAP_NODE_COLORS.length],
+      description: '',
+      attachments: [],
+    }
+  })
+
+  return { rootId, nodes }
+}
+
 const escapeHtml = (value: string) =>
   value
     .replace(/&/g, '&amp;')
@@ -2527,6 +2599,50 @@ export default function NoteEditor({
     return content
   }, [noteType, content, mindmapData, bulletJournalData, dataSheetData])
 
+  const handleAICreateMindmapNote = useCallback(async (input: {
+    sourceText: string
+    sourceTitle?: string
+    sourceType: 'selection' | 'current-note'
+    targetTitle?: string
+  }) => {
+    const sourceText = input.sourceText?.trim()
+    if (!sourceText) {
+      toast.push({ title: 'No text available', description: 'Select text or open a text note first.' })
+      return
+    }
+
+    const baseTitle =
+      input.targetTitle?.trim() ||
+      input.sourceTitle?.trim() ||
+      note?.title?.trim() ||
+      'Untitled'
+    const finalTitle = `${baseTitle.slice(0, 80)} Mindmap`
+    const mindmapDataForNote = buildMindmapDataFromText(sourceText, baseTitle.slice(0, 80) || 'Central Idea')
+
+    try {
+      const created = await createNote({
+        title: finalTitle,
+        content: JSON.stringify(mindmapDataForNote),
+        folder_id: note?.folder_id ?? selectedFolderId ?? null,
+        project_id: note?.project_id ?? null,
+        note_type: 'mindmap',
+      })
+
+      toast.push({
+        title: 'Mindmap note created',
+        description: input.sourceType === 'selection'
+          ? 'Built from selected text.'
+          : 'Built from current note content.',
+      })
+
+      setShowAIAssistant(false)
+      onSelectNote(created)
+    } catch (error) {
+      console.error('Failed to create mindmap note from AI action:', error)
+      toast.push({ title: 'Creation failed', description: 'Could not create the mindmap note.' })
+    }
+  }, [note?.title, note?.folder_id, note?.project_id, selectedFolderId, onSelectNote, toast])
+
   const handleAIInsertText = useCallback((text: string) => {
     if (noteType === 'rich-text' && editorRef.current) {
       // Insert the HTML at the end of the current content
@@ -3262,6 +3378,7 @@ export default function NoteEditor({
                   onReplaceSelection={handleAIReplaceSelection}
                   onInsertAtCursor={handleAIInsertAtCursor}
                   onAddMindmapNode={noteType === 'mindmap' ? handleAIAddMindmapNode : undefined}
+                  onCreateMindmapNote={handleAICreateMindmapNote}
                   onClose={() => setShowAIAssistant(false)}
                   onToggleSize={() => setIsAIAssistantLarge(prev => !prev)}
                   isLargeWindow={isAIAssistantLarge}

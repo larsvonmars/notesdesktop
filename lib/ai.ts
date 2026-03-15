@@ -569,6 +569,35 @@ export const AI_TOOLS: AITool[] = [
       },
     },
   },
+  {
+    type: 'function',
+    function: {
+      name: 'create_mindmap_note',
+      description: 'Create a new mindmap note from selected text or from an existing text note.',
+      parameters: {
+        type: 'object',
+        properties: {
+          noteId: {
+            type: 'string',
+            description: 'Optional source note ID to convert into a mindmap note',
+          },
+          noteTitle: {
+            type: 'string',
+            description: 'Optional source note title (alternative to noteId)',
+          },
+          focusText: {
+            type: 'string',
+            description: 'Optional selected text to use instead of full note content',
+          },
+          title: {
+            type: 'string',
+            description: 'Optional title for the new mindmap note',
+          },
+        },
+        required: [],
+      },
+    },
+  },
 ]
 
 // ============================================================================

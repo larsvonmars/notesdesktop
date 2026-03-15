@@ -117,6 +117,12 @@ interface AIAssistantProps {
   onCreateTask?: (title: string, options?: { description?: string; priority?: string; dueDate?: Date }) => void
   onCreateEvent?: (title: string, startTime: Date, endTime: Date, options?: { description?: string }) => void
   onAddMindmapNode?: (text: string, description?: string) => void
+  onCreateMindmapNote?: (input: {
+    sourceText: string
+    sourceTitle?: string
+    sourceType: 'selection' | 'current-note'
+    targetTitle?: string
+  }) => Promise<void> | void
   onUpdateMindmapNode?: (nodeId: string, text: string, description?: string) => void
   onClose?: () => void
   onToggleSize?: () => void
@@ -134,6 +140,7 @@ type QuickAction =
   | 'suggest-tasks'
   | 'suggest-events'
   | 'mindmap-ideas'
+  | 'create-mindmap-note'
   | 'continue-writing'
   | 'explain-selection'
   | 'improve-selection'
@@ -288,6 +295,7 @@ export default function AIAssistant({
   onCreateTask,
   onCreateEvent,
   onAddMindmapNode,
+  onCreateMindmapNote,
   onClose,
   onToggleSize,
   isLargeWindow = false,
@@ -553,10 +561,65 @@ export default function AIAssistant({
         })
         return `Found ${results.length} note(s) matching "${query}":\n${excerpts.join('\n\n')}`
       }
+      case 'create_mindmap_note': {
+        if (!onCreateMindmapNote) return 'Mindmap note creation is not available in this view.'
+
+        const requestedTitle = (args.title as string | undefined)?.trim()
+        const noteId = (args.noteId as string | undefined)?.trim()
+        const noteTitle = (args.noteTitle as string | undefined)?.trim()
+        const focusText = (args.focusText as string | undefined)?.trim()
+
+        let sourceType: 'selection' | 'current-note' = 'current-note'
+        let sourceText = ''
+        let sourceTitle: string | undefined
+
+        if (focusText) {
+          sourceType = 'selection'
+          sourceText = focusText
+          sourceTitle = requestedTitle || 'Selected text'
+        } else {
+          let targetNote: Note | undefined
+          if (noteId && allNotes?.length) {
+            targetNote = allNotes.find(n => n.id === noteId)
+          }
+          if (!targetNote && noteTitle && allNotes?.length) {
+            const normalized = noteTitle.toLowerCase()
+            targetNote = allNotes.find(n => (n.title || '').toLowerCase().includes(normalized))
+          }
+          if (!targetNote && note) {
+            targetNote = note
+          }
+
+          if (!targetNote) {
+            return 'No source note available. Provide noteId/noteTitle or open a note first.'
+          }
+
+          if (targetNote.note_type && targetNote.note_type !== 'rich-text') {
+            return 'Only rich-text notes can be converted directly. Provide focusText or choose a text note.'
+          }
+
+          sourceText = stripHtmlForAI(targetNote.content || '')
+          sourceTitle = targetNote.title || 'Untitled'
+          sourceType = 'current-note'
+        }
+
+        if (!sourceText.trim()) {
+          return 'No text content found to build a mindmap from.'
+        }
+
+        await onCreateMindmapNote({
+          sourceText,
+          sourceTitle,
+          sourceType,
+          targetTitle: requestedTitle,
+        })
+
+        return `Created a new mindmap note from ${sourceType === 'selection' ? 'selected text' : 'the current note'}.`
+      }
       default:
         return `Unknown tool: ${name}`
     }
-  }, [allNotes])
+  }, [allNotes, note, onCreateMindmapNote])
 
   const handleSend = useCallback(async (overrideInput?: string) => {
     const prompt = (overrideInput ?? inputValue).trim()
@@ -748,6 +811,34 @@ export default function AIAssistant({
           setShowSuggestions(true)
           break
         }
+        case 'create-mindmap-note': {
+          if (!onCreateMindmapNote) { setError('Mindmap creation is not available here.'); break }
+
+          if (!selectedText?.trim() && note?.note_type !== 'rich-text') {
+            setError('Open a text note or select text first to create a mindmap note.')
+            break
+          }
+
+          const sourceText = selectedText?.trim() || aiContext.currentNote?.content?.trim() || ''
+          if (!sourceText) {
+            setError('No text content available. Select text or open a text note first.')
+            break
+          }
+
+          const sourceType: 'selection' | 'current-note' = selectedText?.trim() ? 'selection' : 'current-note'
+          await onCreateMindmapNote({
+            sourceText,
+            sourceType,
+            sourceTitle: sourceType === 'selection' ? 'Selected text' : aiContext.currentNote?.title,
+          })
+          setMessages(prev => [...prev, {
+            id: `action-${Date.now()}`,
+            role: 'assistant',
+            content: 'Created a new mindmap note from your current context.',
+            timestamp: new Date(),
+          }])
+          break
+        }
       }
     } catch (err) {
       setError(mapAIErrorToUserMessage(err))
@@ -755,7 +846,7 @@ export default function AIAssistant({
       setIsLoading(false)
       refreshRateLimitSnapshot()
     }
-  }, [aiContext, selectedText, mapAIErrorToUserMessage, refreshRateLimitSnapshot])
+  }, [aiContext, selectedText, note?.note_type, onCreateMindmapNote, mapAIErrorToUserMessage, refreshRateLimitSnapshot])
 
   const quotaInfo = useMemo(() => {
     if (!rateLimitSnapshot?.limit && rateLimitSnapshot?.limit !== 0) return null
@@ -943,6 +1034,7 @@ export default function AIAssistant({
       { action: 'suggest-tasks', icon: <CheckSquare size={13} />, label: 'Tasks', show: true },
       { action: 'suggest-events', icon: <Calendar size={13} />, label: 'Events', show: true },
       { action: 'mindmap-ideas', icon: <Network size={13} />, label: 'Mindmap', show: !!mindmapData },
+      { action: 'create-mindmap-note', icon: <Network size={13} />, label: 'To Mindmap', show: !!onCreateMindmapNote },
     ]
 
     const hasSelection = !!(selectedText?.trim())
