@@ -2170,6 +2170,8 @@ const MindmapEditor = forwardRef<MindmapEditorHandle, MindmapEditorProps>(
     }
 
     const detailNode = detailNodeId ? mindmapData.nodes[detailNodeId] ?? null : null
+    const useSharedDetailLayout = readOnly && canShowViewerControls
+    const useSharedDetailBottomSheet = useSharedDetailLayout && isMobile
 
     // ── Search ──
 
@@ -2534,17 +2536,31 @@ const MindmapEditor = forwardRef<MindmapEditorHandle, MindmapEditorProps>(
 
         {/* Node detail view */}
         {detailNodeId && detailDraft && detailNode && (
-          <div className="absolute inset-0 z-20 flex items-end sm:items-center justify-center bg-slate-900/50 backdrop-blur-sm p-3">
+          <div
+            className={`absolute inset-0 z-20 p-3 ${
+              useSharedDetailLayout
+                ? useSharedDetailBottomSheet
+                  ? 'flex items-end justify-center bg-slate-900/30'
+                  : 'pointer-events-none flex items-stretch justify-end'
+                : 'flex items-end sm:items-center justify-center bg-slate-900/50 backdrop-blur-sm'
+            }`}
+          >
             <div
-              className="w-full max-w-2xl bg-white dark:bg-slate-900 rounded-2xl shadow-2xl border border-slate-200 dark:border-slate-700 overflow-hidden"
+              className={`bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 overflow-hidden shadow-2xl pointer-events-auto ${
+                useSharedDetailLayout
+                  ? useSharedDetailBottomSheet
+                    ? 'w-full max-w-2xl max-h-[78vh] rounded-2xl'
+                    : 'h-full w-full max-w-md rounded-2xl'
+                  : 'w-full max-w-2xl rounded-2xl'
+              }`}
               role="dialog"
-              aria-modal="true"
+              aria-modal={!useSharedDetailLayout}
             >
               <div className="flex items-start justify-between gap-4 px-5 py-3 border-b border-slate-200 dark:border-slate-700">
                 <div>
                   <div className="flex items-center gap-2 text-slate-600 dark:text-slate-400 text-sm font-medium">
-                    <Edit2 size={18} />
-                    Node Details
+                    {readOnly ? <Info size={18} /> : <Edit2 size={18} />}
+                    {readOnly ? 'Node Overview' : 'Node Details'}
                   </div>
                   <h3 className="text-lg font-semibold text-slate-800 dark:text-slate-100 mt-1 leading-tight break-words">
                     {detailNode.text}
@@ -2567,7 +2583,15 @@ const MindmapEditor = forwardRef<MindmapEditorHandle, MindmapEditorProps>(
                 </button>
               </div>
 
-              <div className="px-5 py-4 space-y-5 max-h-[70vh] overflow-y-auto">
+              <div
+                className={`px-5 py-4 space-y-5 overflow-y-auto ${
+                  useSharedDetailLayout
+                    ? useSharedDetailBottomSheet
+                      ? 'max-h-[58vh]'
+                      : 'h-[calc(100%-132px)]'
+                    : 'max-h-[70vh]'
+                }`}
+              >
                 <div className="space-y-2">
                   <label className="text-sm font-medium text-slate-700 dark:text-slate-300" htmlFor="mindmap-node-title">
                     Title
