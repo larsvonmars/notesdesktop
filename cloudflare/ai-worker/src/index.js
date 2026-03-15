@@ -332,6 +332,22 @@ async function handleStream(req, env) {
 
 export default {
   async fetch(req, env) {
+    const url = new URL(req.url)
+    const { pathname } = url
+
+    if (pathname === '/') {
+      return new Response('notesdesktop-ai worker is running. Use /api/ai/* endpoints.', {
+        status: 200,
+        headers: {
+          'Content-Type': 'text/plain; charset=utf-8',
+        },
+      })
+    }
+
+    if (!pathname.startsWith('/api/ai/')) {
+      return new Response('Not Found', { status: 404 })
+    }
+
     if (req.method === 'OPTIONS') {
       return new Response(null, { status: 204, headers: getCorsHeaders(env, req) })
     }
@@ -339,8 +355,6 @@ export default {
     if (req.method !== 'POST') {
       return new Response('Method Not Allowed', { status: 405 })
     }
-
-    const url = new URL(req.url)
 
     if (url.pathname.endsWith('/api/ai/chat')) {
       return handleChat(req, env)

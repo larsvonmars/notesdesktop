@@ -147,6 +147,8 @@ Choose one of the following:
 - Same-origin route rule (recommended): route `/api/ai/*` to the Worker, keep `NEXT_PUBLIC_AI_API_BASE_URL` unset.
 - Separate Worker domain: set `NEXT_PUBLIC_AI_API_BASE_URL` to the Worker origin (for example `https://notesdesktop-ai.example.workers.dev`).
 
+Important: do not bind this Worker to `/*` on your main app domain. If you do, browser `GET /` requests will hit the AI worker instead of your Pages frontend.
+
 ## Features
 
 - ✅ Desktop application with Tauri
