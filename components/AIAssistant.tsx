@@ -36,6 +36,8 @@ import {
   AlertCircle,
   Cpu,
   BookOpen,
+  Maximize2,
+  Minimize2,
 } from 'lucide-react'
 import {
   chat,
@@ -116,6 +118,9 @@ interface AIAssistantProps {
   onCreateEvent?: (title: string, startTime: Date, endTime: Date, options?: { description?: string }) => void
   onAddMindmapNode?: (text: string, description?: string) => void
   onUpdateMindmapNode?: (nodeId: string, text: string, description?: string) => void
+  onClose?: () => void
+  onToggleSize?: () => void
+  isLargeWindow?: boolean
   isExpanded?: boolean
   onToggleExpand?: () => void
 }
@@ -283,6 +288,9 @@ export default function AIAssistant({
   onCreateTask,
   onCreateEvent,
   onAddMindmapNode,
+  onClose,
+  onToggleSize,
+  isLargeWindow = false,
   isExpanded = true,
   onToggleExpand,
 }: AIAssistantProps) {
@@ -1530,6 +1538,25 @@ export default function AIAssistant({
                 <Plus size={15} />
               </button>
             </>
+          )}
+          {onToggleSize && !showChatHistory && (
+            <button
+              onClick={onToggleSize}
+              className="p-1.5 text-muted hover:text-foreground hover:bg-surface-hover rounded-lg transition-all"
+              title={isLargeWindow ? 'Use default size' : 'Use large size'}
+            >
+              {isLargeWindow ? <Minimize2 size={15} /> : <Maximize2 size={15} />}
+            </button>
+          )}
+          {onClose && (
+            <button
+              onClick={onClose}
+              className="p-1.5 text-muted hover:text-foreground hover:bg-surface-hover rounded-lg transition-all"
+              title="Close AI Assistant"
+              aria-label="Close AI Assistant"
+            >
+              <X size={15} />
+            </button>
           )}
           {isConfigured && !showChatHistory && (
             <span className="px-2 py-0.5 bg-accent-light text-accent text-[10px] font-medium rounded-full ml-1">

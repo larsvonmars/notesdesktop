@@ -432,6 +432,7 @@ export default function NoteEditor({
   const [showFilePicker, setShowFilePicker] = useState(false)
   const [showSettings, setShowSettings] = useState(false)
   const [showAIAssistant, setShowAIAssistant] = useState(false)
+  const [isAIAssistantLarge, setIsAIAssistantLarge] = useState(false)
   const [rightSidebarCollapsed, setRightSidebarCollapsed] = useState(false)
   const [shareRecord, setShareRecord] = useState<PublishedNoteShare | null>(null)
   const [isLoadingShare, setIsLoadingShare] = useState(false)
@@ -3233,33 +3234,39 @@ export default function NoteEditor({
 
       {/* AI Assistant Popup */}
       {showAIAssistant && (
-        <div className="fixed inset-0 z-50 flex items-end justify-end p-4 pointer-events-none">
-          <div className="pointer-events-auto flex flex-col w-[420px] h-[600px] max-h-[90vh] rounded-xl border border-border bg-surface shadow-2xl overflow-hidden">
-            <div className="flex items-center justify-between border-b border-border px-4 py-3 shrink-0">
-              <div className="flex items-center gap-2">
-                <span className="text-sm font-semibold text-foreground">AI Assistant</span>
+        <div className="fixed inset-0 z-50">
+          <button
+            onClick={() => setShowAIAssistant(false)}
+            className="absolute inset-0 bg-black/30 backdrop-blur-[1px]"
+            aria-label="Close AI Assistant"
+          />
+
+          <div className="absolute bottom-4 right-4 pointer-events-none">
+            <div
+              className={`pointer-events-auto flex flex-col rounded-2xl border border-border bg-surface shadow-2xl overflow-hidden md:resize ${
+                isAIAssistantLarge
+                  ? 'w-[calc(100vw-1rem)] h-[calc(100dvh-2rem)] sm:w-[min(92vw,860px)] sm:h-[min(88vh,860px)]'
+                  : 'w-[calc(100vw-1rem)] h-[calc(100dvh-2rem)] sm:w-[420px] sm:h-[600px] sm:max-h-[90vh]'
+              }`}
+              style={{ minHeight: '440px', maxWidth: '92vw', maxHeight: '88vh' }}
+            >
+              <div className="flex-1 min-h-0">
+                <AIAssistant
+                  note={note ?? null}
+                  noteContent={aiNoteContent}
+                  allNotes={allNotes}
+                  selectedText={selectedText || undefined}
+                  mindmapData={mindmapData}
+                  selectedMindmapNodeId={selectedMindmapNodeId}
+                  onInsertText={handleAIInsertText}
+                  onReplaceSelection={handleAIReplaceSelection}
+                  onInsertAtCursor={handleAIInsertAtCursor}
+                  onAddMindmapNode={noteType === 'mindmap' ? handleAIAddMindmapNode : undefined}
+                  onClose={() => setShowAIAssistant(false)}
+                  onToggleSize={() => setIsAIAssistantLarge(prev => !prev)}
+                  isLargeWindow={isAIAssistantLarge}
+                />
               </div>
-              <button
-                onClick={() => setShowAIAssistant(false)}
-                className="rounded-lg p-1 text-muted transition-colors hover:bg-surface-hover hover:text-foreground"
-                aria-label="Close AI Assistant"
-              >
-                <X size={16} />
-              </button>
-            </div>
-            <div className="flex-1 min-h-0">
-              <AIAssistant
-                note={note ?? null}
-                noteContent={aiNoteContent}
-                allNotes={allNotes}
-                selectedText={selectedText || undefined}
-                mindmapData={mindmapData}
-                selectedMindmapNodeId={selectedMindmapNodeId}
-                onInsertText={handleAIInsertText}
-                onReplaceSelection={handleAIReplaceSelection}
-                onInsertAtCursor={handleAIInsertAtCursor}
-                onAddMindmapNode={noteType === 'mindmap' ? handleAIAddMindmapNode : undefined}
-              />
             </div>
           </div>
         </div>
