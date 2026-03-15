@@ -88,7 +88,61 @@ For desktop static export assets (used by Tauri packaging internally):
 npm run build:tauri
 ```
 
+For Cloudflare Pages static output:
+
+```bash
+npm run build:pages
+```
+
 The built application will be available in `src-tauri/target/release/bundle/`.
+
+## Cloudflare Deployment (Pages + Worker)
+
+The web deployment is split into:
+
+- Cloudflare Pages: static frontend (`out/` from `npm run build:pages`)
+- Cloudflare Worker: AI proxy routes (`/api/ai/chat`, `/api/ai/stream`, `/api/ai/key-status`)
+
+### 1) Configure Pages project
+
+- Build command: `npm run build:pages`
+- Build output directory: `out`
+- Build environment variables:
+   - `NEXT_PUBLIC_SUPABASE_URL`
+   - `NEXT_PUBLIC_SUPABASE_ANON_KEY`
+   - `NEXT_PUBLIC_SHARE_BASE_URL`
+   - `NEXT_PUBLIC_AI_API_BASE_URL` (optional; set when Worker is hosted on a different origin)
+
+### 2) Configure Worker
+
+Worker source and config are in `cloudflare/ai-worker/`.
+
+Set Worker secrets/vars in Cloudflare:
+
+- Required secrets:
+   - `DEEPSEEK_API_KEY`
+- Required vars:
+   - `NEXT_PUBLIC_SUPABASE_URL`
+   - `NEXT_PUBLIC_SUPABASE_ANON_KEY`
+- Optional vars:
+   - `ALLOWED_ORIGIN`
+   - `AI_RATE_LIMIT_REQUESTS`
+   - `AI_RATE_LIMIT_WINDOW_MS`
+   - `AI_UPSTREAM_TIMEOUT_MS`
+
+Run locally / deploy:
+
+```bash
+npm run cf:worker:dev
+npm run cf:worker:deploy
+```
+
+### 3) Route AI endpoints
+
+Choose one of the following:
+
+- Same-origin route rule (recommended): route `/api/ai/*` to the Worker, keep `NEXT_PUBLIC_AI_API_BASE_URL` unset.
+- Separate Worker domain: set `NEXT_PUBLIC_AI_API_BASE_URL` to the Worker origin (for example `https://notesdesktop-ai.example.workers.dev`).
 
 ## Features
 

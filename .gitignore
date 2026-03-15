@@ -41,3 +41,6 @@ next-env.d.ts
 
 # snap files
 *.snap
+
+# cloudflare worker local secrets
+cloudflare/ai-worker/.dev.vars

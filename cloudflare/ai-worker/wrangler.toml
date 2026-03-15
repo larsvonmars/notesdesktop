@@ -1,0 +1,16 @@
+name = "notesdesktop-ai"
+main = "src/index.js"
+compatibility_date = "2026-03-15"
+
+[vars]
+AI_RATE_LIMIT_REQUESTS = "40"
+AI_RATE_LIMIT_WINDOW_MS = "60000"
+AI_UPSTREAM_TIMEOUT_MS = "30000"
+
+[[durable_objects.bindings]]
+name = "RATE_LIMITER"
+class_name = "RateLimiterDO"
+
+[[migrations]]
+tag = "v1"
+new_sqlite_classes = ["RateLimiterDO"]

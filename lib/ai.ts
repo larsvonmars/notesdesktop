@@ -208,6 +208,17 @@ function isTauriRuntime(): boolean {
   return typeof window !== 'undefined' && '__TAURI_INTERNALS__' in window
 }
 
+function getWebAIEndpoint(path: string): string {
+  const baseUrl = (process.env.NEXT_PUBLIC_AI_API_BASE_URL || '').trim()
+  if (!baseUrl) {
+    return path
+  }
+
+  const normalizedBase = baseUrl.endsWith('/') ? baseUrl.slice(0, -1) : baseUrl
+  const normalizedPath = path.startsWith('/') ? path : `/${path}`
+  return `${normalizedBase}${normalizedPath}`
+}
+
 async function tauriInvoke<T>(command: string, args?: Record<string, unknown>): Promise<T> {
   const tauriCore = await import('@tauri-apps/api/core')
   return tauriCore.invoke<T>(command, args)
@@ -401,7 +412,7 @@ async function sendAIRequestPayload(payload: Record<string, unknown>): Promise<a
 
   const authHeaders = await getWebAuthHeader()
 
-  const response = await fetch('/api/ai/chat', {
+  const response = await fetch(getWebAIEndpoint('/api/ai/chat'), {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
@@ -447,7 +458,7 @@ export async function getAIApiKeyStatus(): Promise<AIKeyStatus> {
     return tauriInvoke<AIKeyStatus>('ai_key_status')
   }
 
-  const response = await fetch('/api/ai/key-status', { method: 'POST' })
+  const response = await fetch(getWebAIEndpoint('/api/ai/key-status'), { method: 'POST' })
   if (!response.ok) {
     return { available: false, source: 'none' }
   }
@@ -683,7 +694,7 @@ export async function sendAIRequestStream(
 
   try {
     const authHeaders = await getWebAuthHeader()
-    const response = await fetch('/api/ai/stream', {
+    const response = await fetch(getWebAIEndpoint('/api/ai/stream'), {
       method: 'POST',
       signal: controller.signal,
       headers: {
