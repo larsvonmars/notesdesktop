@@ -866,7 +866,7 @@ function drawEdgeTitle(
   const midY = midpoint.y
 
   ctx.save()
-  ctx.globalAlpha = Math.max(0.28, Math.min(1, visibility))
+  ctx.globalAlpha = Math.max(0.75, Math.min(1, visibility))
   ctx.font = '12px sans-serif'
   ctx.textAlign = 'center'
   ctx.textBaseline = 'middle'
@@ -1741,6 +1741,7 @@ const MindmapEditor = forwardRef<MindmapEditorHandle, MindmapEditorProps>(
 
         const layoutSnapshot = createEmptyLayoutSnapshot()
         const visibleNodes = collectVisibleNodeIds(mindmapData)
+        const edgeTitlesToRender: Array<{ from: Point; to: Point; title: string; visibility: number }> = []
 
         // Render custom cross-node edges first so nodes stay on top.
         ;(mindmapData.customEdges ?? []).forEach((edge) => {
@@ -1765,7 +1766,14 @@ const MindmapEditor = forwardRef<MindmapEditorHandle, MindmapEditorProps>(
             selectedEdgeId === selectionId,
             useCurvedEdges
           )
-          drawEdgeTitle(ctx, fromPoint, toPoint, edge.title ?? '', isDark, 1, useCurvedEdges)
+          if (edge.title?.trim()) {
+            edgeTitlesToRender.push({
+              from: fromPoint,
+              to: toPoint,
+              title: edge.title,
+              visibility: 1,
+            })
+          }
           layoutSnapshot.edges.push({
             from: fromPoint,
             to: toPoint,
@@ -1804,7 +1812,14 @@ const MindmapEditor = forwardRef<MindmapEditorHandle, MindmapEditorProps>(
               selectedEdgeId === parentEdgeId(nodeId),
               useCurvedEdges
             )
-            drawEdgeTitle(ctx, edgeFrom, renderPos, childMeta?.title ?? '', isDark, clampedVisibility, useCurvedEdges)
+            if (childMeta?.title?.trim()) {
+              edgeTitlesToRender.push({
+                from: edgeFrom,
+                to: renderPos,
+                title: childMeta.title,
+                visibility: clampedVisibility,
+              })
+            }
             layoutSnapshot.edges.push({
               from: edgeFrom,
               to: renderPos,
@@ -1850,6 +1865,11 @@ const MindmapEditor = forwardRef<MindmapEditorHandle, MindmapEditorProps>(
 
         // Start drawing from root
         drawNode(mindmapData.rootId, 1)
+
+        // Render connection titles after nodes so labels stay readable and centered.
+        edgeTitlesToRender.forEach((label) => {
+          drawEdgeTitle(ctx, label.from, label.to, label.title, isDark, label.visibility, useCurvedEdges)
+        })
 
         ctx.restore()
         renderMiniMap(layoutSnapshot)
@@ -2172,9 +2192,9 @@ const MindmapEditor = forwardRef<MindmapEditorHandle, MindmapEditorProps>(
         dispatch({ type: 'SET_SELECTED_EDGE_ID', payload: null })
         dispatch({ type: 'SET_SELECTED_NODE_ID', payload: hit.nodeId })
 
-        // In connect mode, left-clicking a node should pick source/target via click
+        // In connect mode, clicking/tapping a node should pick source/target via click
         // rather than initiating drag behavior.
-        if (connectionMode && e.button === 0 && hit.area === 'body') {
+        if (connectionMode && hit.area === 'body') {
           return
         }
 
