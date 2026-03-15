@@ -44,7 +44,7 @@ const features = [
   },
   {
     title: 'Safe and private by default',
-    description: 'Authentication and row-level access keep your personal workspace private while allowing deliberate sharing.',
+    description: 'Safety and authentication features are built in through Supabase. Your data is stored safely in the Supabase cloud.',
     icon: ShieldCheck,
   },
 ]
@@ -174,9 +174,9 @@ export default function Home() {
 
       <section className="px-6 pb-20">
         <div className="mx-auto max-w-6xl">
-          <h2 className="text-2xl font-semibold text-slate-950 dark:text-white sm:text-3xl">Feature demos you can explore after signup</h2>
+          <h2 className="text-2xl font-semibold text-slate-950 dark:text-white sm:text-3xl">Feature demos</h2>
           <p className="mt-3 max-w-3xl text-sm leading-7 text-slate-700 dark:text-slate-200 sm:text-base">
-            The workspace is built for writing and visual thinking together. Here is a realistic preview of text notes and the mindmap editor.
+            The workspace is built for writing and visual thinking together. 
           </p>
 
           <div className="mt-8 grid gap-6 lg:grid-cols-[0.95fr_1.05fr]">
