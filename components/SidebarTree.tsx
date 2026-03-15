@@ -873,7 +873,7 @@ export default function SidebarTree({
         {/* Header */}
         <div className="flex items-center justify-between border-b border-border px-3 py-3">
           <div className="flex items-center gap-3 overflow-hidden">
-            <img src="/logo.svg" alt="MindViz Notes" className="h-8 w-8 rounded-lg flex-shrink-0" />
+            <img src="/icon-192.png" alt="MindViz Notes" className="h-8 w-8 rounded-lg flex-shrink-0" />
             <span className="truncate text-sm font-semibold text-foreground">MindViz Notes</span>
           </div>
           <button

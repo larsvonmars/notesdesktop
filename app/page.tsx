@@ -96,7 +96,7 @@ export default function Home() {
         <div className="mx-auto max-w-6xl">
           <header className="flex flex-col items-start justify-between gap-6 sm:flex-row sm:items-center">
             <div className="flex items-center gap-3">
-              <img src="/logo.svg" alt="MindViz Notes" className="h-10 w-10" />
+              <img src="/icon-192.png" alt="MindViz Notes" className="h-10 w-10" />
               <div>
                 <p className="text-xs font-semibold uppercase tracking-[0.24em] text-slate-600">MindViz Notes</p>
                 <p className="text-sm text-slate-500">Desktop knowledge workspace</p>

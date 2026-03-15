@@ -39,7 +39,7 @@ export default function Login() {
       <ThemeToggle />
       <div className="w-full max-w-md p-6 sm:p-8 bg-white/80 backdrop-blur-sm rounded-2xl shadow-lg border border-alpine-100">
         <div className="flex items-center justify-center gap-3 mb-1">
-          <img src="/logo.svg" alt="MindViz Notes" className="w-8 h-8" />
+          <img src="/icon-192.png" alt="MindViz Notes" className="w-8 h-8" />
           <h1 className="text-2xl font-bold text-gray-900">MindViz Notes</h1>
         </div>
         <p className="text-sm text-center text-gray-500 mb-6">Sign in to your account</p>

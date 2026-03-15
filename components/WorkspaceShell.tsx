@@ -1127,7 +1127,7 @@ function WorkspaceContent() {
               </button>
               <h2 className="text-sm font-semibold text-foreground">MindViz Notes</h2>
             </div>
-            <img src="/logo.svg" alt="MindViz Notes" className="h-8 w-8 rounded-lg" />
+            <img src="/icon-192.png" alt="MindViz Notes" className="h-8 w-8 rounded-lg" />
           </div>
         </header>
       )}
@@ -1142,7 +1142,7 @@ function WorkspaceContent() {
           <aside className="fixed inset-y-0 left-0 z-50 w-[280px] border-r border-border bg-surface flex flex-col">
             <div className="flex items-center justify-between border-b border-border px-3 py-3">
               <div className="flex items-center gap-3">
-                <img src="/logo.svg" alt="MindViz Notes" className="h-8 w-8 rounded-lg" />
+                <img src="/icon-192.png" alt="MindViz Notes" className="h-8 w-8 rounded-lg" />
                 <span className="text-sm font-semibold text-foreground">MindViz Notes</span>
               </div>
               <button

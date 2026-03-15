@@ -66,6 +66,12 @@ function main() {
     console.log('Synced desktop icon source to src-tauri/icons/icon.png')
   }
 
+  const webFaviconSource = path.join(webSource, 'favicon.ico')
+  const appFaviconDest = path.join(root, 'app', 'favicon.ico')
+  if (copyIfPresent(webFaviconSource, appFaviconDest)) {
+    console.log('Synced app/favicon.ico from icons/web/favicon.ico')
+  }
+
   console.log('Icon sync complete.')
 }
 
