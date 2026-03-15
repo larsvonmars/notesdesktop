@@ -107,11 +107,14 @@ The web deployment is split into:
 
 - Build command: `npm run build:pages`
 - Build output directory: `out`
+- Deploy command: `npm run cf:worker:deploy`
 - Build environment variables:
    - `NEXT_PUBLIC_SUPABASE_URL`
    - `NEXT_PUBLIC_SUPABASE_ANON_KEY`
    - `NEXT_PUBLIC_SHARE_BASE_URL`
    - `NEXT_PUBLIC_AI_API_BASE_URL` (optional; set when Worker is hosted on a different origin)
+
+Important: do not use bare `npx wrangler deploy` unless a root `wrangler.toml` exists and points to your AI Worker. This repository includes that file to avoid Cloudflare's OpenNext auto-migration path.
 
 ### 2) Configure Worker
 
