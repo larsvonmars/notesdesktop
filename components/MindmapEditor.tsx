@@ -630,6 +630,45 @@ function getEdgePolyline(from: Point, to: Point, curved: boolean): Point[] {
   return points
 }
 
+function getPolylineMidpoint(polyline: Point[]): Point {
+  if (polyline.length === 0) return { x: 0, y: 0 }
+  if (polyline.length === 1) return polyline[0]
+
+  let totalLength = 0
+  for (let i = 1; i < polyline.length; i += 1) {
+    totalLength += Math.hypot(polyline[i].x - polyline[i - 1].x, polyline[i].y - polyline[i - 1].y)
+  }
+
+  if (totalLength === 0) {
+    return {
+      x: (polyline[0].x + polyline[polyline.length - 1].x) / 2,
+      y: (polyline[0].y + polyline[polyline.length - 1].y) / 2,
+    }
+  }
+
+  const target = totalLength / 2
+  let traversed = 0
+
+  for (let i = 1; i < polyline.length; i += 1) {
+    const start = polyline[i - 1]
+    const end = polyline[i]
+    const segmentLength = Math.hypot(end.x - start.x, end.y - start.y)
+
+    if (traversed + segmentLength >= target) {
+      const remain = target - traversed
+      const t = segmentLength === 0 ? 0 : remain / segmentLength
+      return {
+        x: start.x + (end.x - start.x) * t,
+        y: start.y + (end.y - start.y) * t,
+      }
+    }
+
+    traversed += segmentLength
+  }
+
+  return polyline[polyline.length - 1]
+}
+
 export function hitTestConnectionEdge(
   point: Point,
   from: Point,
@@ -864,7 +903,7 @@ function drawEdgeTitle(
   if (!trimmed) return
 
   const polyline = getEdgePolyline(from, to, curved)
-  const midpoint = polyline[Math.floor(polyline.length / 2)] ?? { x: (from.x + to.x) / 2, y: (from.y + to.y) / 2 }
+  const midpoint = getPolylineMidpoint(polyline)
   const midX = midpoint.x
   const midY = midpoint.y
 
