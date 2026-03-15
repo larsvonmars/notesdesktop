@@ -19,6 +19,7 @@ const geistMono = Geist_Mono({
 export const metadata: Metadata = {
   title: 'MindViz Notes',
   description: 'A powerful mind-mapping and note-taking desktop app',
+  manifest: '/manifest.webmanifest',
   icons: {
     icon: '/favicon.ico',
     apple: '/apple-touch-icon.png',
