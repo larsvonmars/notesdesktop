@@ -21,6 +21,8 @@ import {
   FoldVertical,
   UnfoldVertical,
   Info,
+  Link2,
+  ArrowRight,
 } from 'lucide-react'
 import { useTheme } from '../lib/theme-context'
 import { useIsMobile } from '../lib/useIsMobile'
@@ -45,6 +47,30 @@ export interface MindmapNode {
 export interface MindmapData {
   nodes: { [key: string]: MindmapNode }
   rootId: string
+  customEdges?: MindmapEdge[]
+  parentEdgeMeta?: Record<string, MindmapEdgeMeta>
+}
+
+export type MindmapLineType = 'solid' | 'dashed' | 'dotted'
+export type MindmapArrowType = 'none' | 'standard' | 'filled'
+
+export interface MindmapEdgeStyle {
+  color?: string
+  width?: number
+  lineType?: MindmapLineType
+  opacity?: number
+  arrowType?: MindmapArrowType
+}
+
+export interface MindmapEdgeMeta {
+  title?: string
+  style?: MindmapEdgeStyle
+}
+
+export interface MindmapEdge extends MindmapEdgeMeta {
+  id: string
+  fromNodeId: string
+  toNodeId: string
 }
 
 export interface MindmapAttachment {
@@ -157,6 +183,9 @@ interface EditorState {
   scale: number
   offset: Point
   selectedNodeId: string | null
+  selectedEdgeId: string | null
+  connectionMode: boolean
+  connectionStartNodeId: string | null
   detailNodeId: string | null
   detailDraft: NodeDetailDraft | null
   newAttachmentInput: AttachmentInput
@@ -176,6 +205,13 @@ type EditorAction =
   | { type: 'SET_SCALE'; payload: number }
   | { type: 'SET_OFFSET'; payload: Point }
   | { type: 'SET_SELECTED_NODE_ID'; payload: string | null }
+  | { type: 'SET_SELECTED_EDGE_ID'; payload: string | null }
+  | { type: 'SET_CONNECTION_MODE'; payload: boolean }
+  | { type: 'SET_CONNECTION_START_NODE_ID'; payload: string | null }
+  | { type: 'UPSERT_CUSTOM_EDGE'; payload: MindmapEdge }
+  | { type: 'UPDATE_CUSTOM_EDGE'; payload: { edgeId: string; updates: Partial<MindmapEdgeMeta> } }
+  | { type: 'DELETE_CUSTOM_EDGE'; payload: { edgeId: string } }
+  | { type: 'UPDATE_PARENT_EDGE_META'; payload: { childId: string; updates: Partial<MindmapEdgeMeta> } }
   | { type: 'SET_DETAIL_NODE_ID'; payload: string | null }
   | { type: 'SET_DETAIL_DRAFT'; payload: NodeDetailDraft | null }
   | { type: 'UPDATE_DETAIL_DRAFT'; payload: Partial<NodeDetailDraft> }
@@ -268,10 +304,37 @@ function editorReducer(state: EditorState, action: EditorAction): EditorState {
         children: parent.children.filter(id => id !== nodeId),
       }
 
+      const nextCustomEdges = (state.mindmapData.customEdges ?? []).filter(
+        (edge) => !nodesToRemove.has(edge.fromNodeId) && !nodesToRemove.has(edge.toNodeId)
+      )
+
+      const nextParentEdgeMeta: Record<string, MindmapEdgeMeta> = {}
+      Object.entries(state.mindmapData.parentEdgeMeta ?? {}).forEach(([childId, meta]) => {
+        if (!nodesToRemove.has(childId)) {
+          nextParentEdgeMeta[childId] = meta
+        }
+      })
+
+      const nextSelectedEdgeId =
+        state.selectedEdgeId &&
+        (state.selectedEdgeId.startsWith('custom:')
+          ? nextCustomEdges.some((edge) => `custom:${edge.id}` === state.selectedEdgeId)
+          : state.selectedEdgeId.startsWith('parent:')
+            ? Boolean(nextParentEdgeMeta[state.selectedEdgeId.slice(7)] || newNodes[state.selectedEdgeId.slice(7)])
+            : false)
+          ? state.selectedEdgeId
+          : null
+
       return {
         ...state,
-        mindmapData: { ...state.mindmapData, nodes: newNodes },
+        mindmapData: {
+          ...state.mindmapData,
+          nodes: newNodes,
+          customEdges: nextCustomEdges,
+          parentEdgeMeta: nextParentEdgeMeta,
+        },
         selectedNodeId: null,
+        selectedEdgeId: nextSelectedEdgeId,
       }
     }
 
@@ -282,7 +345,101 @@ function editorReducer(state: EditorState, action: EditorAction): EditorState {
       return { ...state, offset: action.payload }
 
     case 'SET_SELECTED_NODE_ID':
-      return { ...state, selectedNodeId: action.payload }
+      return {
+        ...state,
+        selectedNodeId: action.payload,
+        selectedEdgeId: action.payload ? null : state.selectedEdgeId,
+      }
+
+    case 'SET_SELECTED_EDGE_ID':
+      return {
+        ...state,
+        selectedEdgeId: action.payload,
+        selectedNodeId: action.payload ? null : state.selectedNodeId,
+      }
+
+    case 'SET_CONNECTION_MODE':
+      return {
+        ...state,
+        connectionMode: action.payload,
+        connectionStartNodeId: action.payload ? state.connectionStartNodeId : null,
+      }
+
+    case 'SET_CONNECTION_START_NODE_ID':
+      return { ...state, connectionStartNodeId: action.payload }
+
+    case 'UPSERT_CUSTOM_EDGE': {
+      const nextEdges = [...(state.mindmapData.customEdges ?? [])]
+      const existingIndex = nextEdges.findIndex((edge) => edge.id === action.payload.id)
+      if (existingIndex >= 0) {
+        nextEdges[existingIndex] = { ...nextEdges[existingIndex], ...action.payload }
+      } else {
+        nextEdges.push(action.payload)
+      }
+      return {
+        ...state,
+        mindmapData: {
+          ...state.mindmapData,
+          customEdges: nextEdges,
+        },
+      }
+    }
+
+    case 'UPDATE_CUSTOM_EDGE': {
+      const nextEdges = (state.mindmapData.customEdges ?? []).map((edge) => {
+        if (edge.id !== action.payload.edgeId) return edge
+        return {
+          ...edge,
+          ...action.payload.updates,
+          style: {
+            ...edge.style,
+            ...(action.payload.updates.style ?? {}),
+          },
+        }
+      })
+      return {
+        ...state,
+        mindmapData: {
+          ...state.mindmapData,
+          customEdges: nextEdges,
+        },
+      }
+    }
+
+    case 'DELETE_CUSTOM_EDGE': {
+      const nextEdges = (state.mindmapData.customEdges ?? []).filter((edge) => edge.id !== action.payload.edgeId)
+      return {
+        ...state,
+        mindmapData: {
+          ...state.mindmapData,
+          customEdges: nextEdges,
+        },
+        selectedEdgeId: state.selectedEdgeId === `custom:${action.payload.edgeId}` ? null : state.selectedEdgeId,
+      }
+    }
+
+    case 'UPDATE_PARENT_EDGE_META': {
+      const currentMeta = state.mindmapData.parentEdgeMeta?.[action.payload.childId] ?? {}
+      const nextMeta: MindmapEdgeMeta = {
+        ...currentMeta,
+        ...action.payload.updates,
+        style: {
+          ...currentMeta.style,
+          ...(action.payload.updates.style ?? {}),
+        },
+      }
+
+      return {
+        ...state,
+        mindmapData: {
+          ...state.mindmapData,
+          parentEdgeMeta: {
+            ...(state.mindmapData.parentEdgeMeta ?? {}),
+            [action.payload.childId]: nextMeta,
+          },
+        },
+      }
+    }
 
     case 'SET_DETAIL_NODE_ID':
       return { ...state, detailNodeId: action.payload }
@@ -324,6 +481,9 @@ function editorReducer(state: EditorState, action: EditorAction): EditorState {
         ...state,
         mindmapData: action.payload,
         selectedNodeId: action.payload.rootId,
+        selectedEdgeId: null,
+        connectionMode: false,
+        connectionStartNodeId: null,
         scale: 1,
         offset: { x: 0, y: 0 },
         detailNodeId: null,
@@ -359,6 +519,9 @@ function createInitialState(initialData?: MindmapData): EditorState {
     scale: 1,
     offset: { x: 0, y: 0 },
     selectedNodeId: null,
+    selectedEdgeId: null,
+    connectionMode: false,
+    connectionStartNodeId: null,
     detailNodeId: null,
     detailDraft: null,
     newAttachmentInput: DEFAULT_ATTACHMENT_INPUT,
@@ -391,6 +554,49 @@ const MIN_NODE_WIDTH = 120
 const COLLAPSE_INDICATOR_SIZE = 36
 const COLLAPSE_ANIMATION_DURATION = 260
 const NOTE_ATTACHMENT_PREFIX = 'note://'
+const EDGE_DEFAULTS: Required<MindmapEdgeStyle> = {
+  color: '',
+  width: 2,
+  lineType: 'solid',
+  opacity: 1,
+  arrowType: 'none',
+}
+
+function parentEdgeId(childId: string): string {
+  return `parent:${childId}`
+}
+
+function customEdgeId(edgeId: string): string {
+  return `custom:${edgeId}`
+}
+
+function isParentEdgeSelection(edgeId: string | null): boolean {
+  return Boolean(edgeId?.startsWith('parent:'))
+}
+
+function isCustomEdgeSelection(edgeId: string | null): boolean {
+  return Boolean(edgeId?.startsWith('custom:'))
+}
+
+function mergeEdgeStyle(style?: MindmapEdgeStyle): Required<MindmapEdgeStyle> {
+  return {
+    ...EDGE_DEFAULTS,
+    ...(style ?? {}),
+  }
+}
+
+function collectVisibleNodeIds(mindmapData: MindmapData): Set<string> {
+  const visible = new Set<string>()
+  const walk = (nodeId: string) => {
+    const node = mindmapData.nodes[nodeId]
+    if (!node) return
+    visible.add(nodeId)
+    if (node.collapsed) return
+    node.children.forEach((childId) => walk(childId))
+  }
+  walk(mindmapData.rootId)
+  return visible
+}
 
 function htmlToPlainText(html: string): string {
   if (!html) return ''
@@ -449,6 +655,10 @@ type NodeHitArea = 'body' | 'collapse'
 interface NodeHit {
   nodeId: string
   area: NodeHitArea
+}
+
+interface EdgeHit {
+  edgeId: string
 }
 
 // ============================================================================
@@ -514,16 +724,125 @@ function drawEdge(
   from: Point,
   to: Point,
   visibility: number,
-  edgeColor: string
+  edgeColor: string,
+  meta?: MindmapEdgeMeta,
+  isSelected?: boolean
 ): void {
+  const width = Math.max(1, meta?.style?.width ?? EDGE_DEFAULTS.width)
+  const lineType = meta?.style?.lineType ?? EDGE_DEFAULTS.lineType
+  const opacity = Math.max(0.15, Math.min(1, meta?.style?.opacity ?? EDGE_DEFAULTS.opacity))
+  const color = meta?.style?.color?.trim() || edgeColor
+  const arrowType = meta?.style?.arrowType ?? EDGE_DEFAULTS.arrowType
+
   ctx.save()
-  ctx.strokeStyle = edgeColor
-  ctx.lineWidth = Math.max(1, 2 * visibility)
+  ctx.strokeStyle = color
+  ctx.globalAlpha = Math.max(0.12, visibility * opacity)
+  ctx.lineWidth = Math.max(1, width * visibility)
+  if (lineType === 'dashed') {
+    ctx.setLineDash([10, 6])
+  } else if (lineType === 'dotted') {
+    ctx.setLineDash([2, 6])
+  } else {
+    ctx.setLineDash([])
+  }
   ctx.beginPath()
   ctx.moveTo(from.x, from.y)
   ctx.lineTo(to.x, to.y)
   ctx.stroke()
+
+  if (arrowType !== 'none') {
+    const dx = to.x - from.x
+    const dy = to.y - from.y
+    const len = Math.max(1, Math.hypot(dx, dy))
+    const ux = dx / len
+    const uy = dy / len
+    const arrowLength = 14
+    const arrowWidth = 6
+    const baseX = to.x - ux * arrowLength
+    const baseY = to.y - uy * arrowLength
+    const leftX = baseX - uy * arrowWidth
+    const leftY = baseY + ux * arrowWidth
+    const rightX = baseX + uy * arrowWidth
+    const rightY = baseY - ux * arrowWidth
+
+    ctx.beginPath()
+    ctx.moveTo(to.x, to.y)
+    ctx.lineTo(leftX, leftY)
+    ctx.lineTo(rightX, rightY)
+    ctx.closePath()
+    if (arrowType === 'filled') {
+      ctx.fillStyle = color
+      ctx.fill()
+    } else {
+      ctx.strokeStyle = color
+      ctx.lineWidth = Math.max(1, width * 0.9)
+      ctx.stroke()
+    }
+  }
+
+  if (isSelected) {
+    ctx.globalAlpha = 0.95
+    ctx.setLineDash([])
+    ctx.lineWidth = Math.max(2, width + 1)
+    ctx.strokeStyle = '#0ea5e9'
+    ctx.beginPath()
+    ctx.moveTo(from.x, from.y)
+    ctx.lineTo(to.x, to.y)
+    ctx.stroke()
+  }
+
+  ctx.setLineDash([])
   ctx.restore()
+}
+
+function drawEdgeTitle(
+  ctx: CanvasRenderingContext2D,
+  from: Point,
+  to: Point,
+  title: string,
+  isDark: boolean,
+  visibility: number
+): void {
+  const trimmed = title.trim()
+  if (!trimmed) return
+
+  const midX = (from.x + to.x) / 2
+  const midY = (from.y + to.y) / 2
+
+  ctx.save()
+  ctx.globalAlpha = Math.max(0.28, Math.min(1, visibility))
+  ctx.font = '12px sans-serif'
+  ctx.textAlign = 'center'
+  ctx.textBaseline = 'middle'
+  const textWidth = ctx.measureText(trimmed).width
+  const width = textWidth + 14
+  const height = 22
+  const x = midX - width / 2
+  const y = midY - height / 2
+
+  ctx.fillStyle = isDark ? 'rgba(15, 23, 42, 0.85)' : 'rgba(255, 255, 255, 0.95)'
+  ctx.strokeStyle = isDark ? 'rgba(148, 163, 184, 0.35)' : 'rgba(100, 116, 139, 0.35)'
+  ctx.lineWidth = 1
+  ctx.beginPath()
+  ctx.roundRect(x, y, width, height, 10)
+  ctx.fill()
+  ctx.stroke()
+
+  ctx.fillStyle = isDark ? '#e2e8f0' : '#0f172a'
+  ctx.fillText(trimmed, midX, midY)
+  ctx.restore()
+}
+
+function distanceToSegment(point: Point, from: Point, to: Point): number {
+  const dx = to.x - from.x
+  const dy = to.y - from.y
+  if (dx === 0 && dy === 0) {
+    return Math.hypot(point.x - from.x, point.y - from.y)
+  }
+  const t = Math.max(0, Math.min(1, ((point.x - from.x) * dx + (point.y - from.y) * dy) / (dx * dx + dy * dy)))
+  const projX = from.x + t * dx
+  const projY = from.y + t * dy
+  return Math.hypot(point.x - projX, point.y - projY)
 }
 
 /**
@@ -663,6 +982,8 @@ const createDefaultMindmap = (): MindmapData => {
   const rootId = 'root'
   return {
     rootId,
+    customEdges: [],
+    parentEdgeMeta: {},
     nodes: {
       [rootId]: {
         id: rootId,
@@ -747,9 +1068,78 @@ const normalizeMindmapData = (input?: MindmapData | null): MindmapData => {
     })
   })
 
+  const rawCustomEdges: Array<MindmapEdge | null> = Array.isArray(input.customEdges)
+    ? input.customEdges
+        .map((edge) => {
+          if (!edge || typeof edge !== 'object') return null
+          const id = typeof edge.id === 'string' && edge.id.trim() ? edge.id : `edge-${Date.now()}-${Math.random()}`
+          const fromNodeId = typeof edge.fromNodeId === 'string' ? edge.fromNodeId : ''
+          const toNodeId = typeof edge.toNodeId === 'string' ? edge.toNodeId : ''
+          if (!normalizedNodes[fromNodeId] || !normalizedNodes[toNodeId] || fromNodeId === toNodeId) return null
+          return {
+            id,
+            fromNodeId,
+            toNodeId,
+            title: typeof edge.title === 'string' ? edge.title : '',
+            style: {
+              color: typeof edge.style?.color === 'string' ? edge.style.color : undefined,
+              width: Number.isFinite(edge.style?.width) ? Math.max(1, Math.min(8, Number(edge.style?.width))) : undefined,
+              lineType:
+                edge.style?.lineType === 'solid' || edge.style?.lineType === 'dashed' || edge.style?.lineType === 'dotted'
+                  ? edge.style.lineType
+                  : undefined,
+              opacity: Number.isFinite(edge.style?.opacity)
+                ? Math.max(0.1, Math.min(1, Number(edge.style?.opacity)))
+                : undefined,
+              arrowType:
+                edge.style?.arrowType === 'none' || edge.style?.arrowType === 'standard' || edge.style?.arrowType === 'filled'
+                  ? edge.style.arrowType
+                  : undefined,
+            },
+          }
+        })
+    : []
+
+  const normalizedCustomEdges: MindmapEdge[] = rawCustomEdges.filter(
+    (edge): edge is MindmapEdge => edge !== null
+  )
+
+  const dedupedEdgeKeys = new Set<string>()
+  const dedupedCustomEdges = normalizedCustomEdges.filter((edge) => {
+    const key = `${edge.fromNodeId}->${edge.toNodeId}`
+    if (dedupedEdgeKeys.has(key)) return false
+    dedupedEdgeKeys.add(key)
+    return true
+  })
+
+  const normalizedParentEdgeMeta: Record<string, MindmapEdgeMeta> = {}
+  if (input.parentEdgeMeta && typeof input.parentEdgeMeta === 'object') {
+    Object.entries(input.parentEdgeMeta).forEach(([childId, meta]) => {
+      if (!normalizedNodes[childId] || !normalizedNodes[childId].parentId) return
+      normalizedParentEdgeMeta[childId] = {
+        title: typeof meta?.title === 'string' ? meta.title : '',
+        style: {
+          color: typeof meta?.style?.color === 'string' ? meta.style.color : undefined,
+          width: Number.isFinite(meta?.style?.width) ? Math.max(1, Math.min(8, Number(meta?.style?.width))) : undefined,
+          lineType:
+            meta?.style?.lineType === 'solid' || meta?.style?.lineType === 'dashed' || meta?.style?.lineType === 'dotted'
+              ? meta.style.lineType
+              : undefined,
+          opacity: Number.isFinite(meta?.style?.opacity) ? Math.max(0.1, Math.min(1, Number(meta?.style?.opacity))) : undefined,
+          arrowType:
+            meta?.style?.arrowType === 'none' || meta?.style?.arrowType === 'standard' || meta?.style?.arrowType === 'filled'
+              ? meta.style.arrowType
+              : undefined,
+        },
+      }
+    })
+  }
+
   return {
     rootId: rootNode.id,
     nodes: normalizedNodes,
+    customEdges: dedupedCustomEdges,
+    parentEdgeMeta: normalizedParentEdgeMeta,
   }
 }
 
@@ -825,6 +1215,9 @@ const MindmapEditor = forwardRef<MindmapEditorHandle, MindmapEditorProps>(
       scale,
       offset,
       selectedNodeId,
+      selectedEdgeId,
+      connectionMode,
+      connectionStartNodeId,
       detailNodeId,
       detailDraft,
       newAttachmentInput,
@@ -853,6 +1246,8 @@ const MindmapEditor = forwardRef<MindmapEditorHandle, MindmapEditorProps>(
 
     // Info panel visibility
     const [showInfo, setShowInfo] = React.useState(true)
+    const [sheetDragOffset, setSheetDragOffset] = React.useState(0)
+    const [isSheetDragging, setIsSheetDragging] = React.useState(false)
 
     // Context menu state
     const [contextMenu, setContextMenu] = React.useState<{ nodeId: string; x: number; y: number } | null>(null)
@@ -887,6 +1282,9 @@ const MindmapEditor = forwardRef<MindmapEditorHandle, MindmapEditorProps>(
     const longPressNodeIdRef = useRef<string | null>(null)
     // Tracks whether a right-button drag (panning gesture) is in progress
     const rightButtonPanningRef = useRef(false)
+    const sheetPointerIdRef = useRef<number | null>(null)
+    const sheetStartYRef = useRef(0)
+    const sheetStartOffsetRef = useRef(0)
 
     useImperativeHandle(ref, () => ({
       getData: () => mindmapData,
@@ -1185,6 +1583,81 @@ const MindmapEditor = forwardRef<MindmapEditorHandle, MindmapEditorProps>(
       [mindmapData, resolveChildrenVisibility]
     )
 
+    const hitTestEdges = useCallback(
+      (worldX: number, worldY: number): EdgeHit | null => {
+        const visibleNodes = collectVisibleNodeIds(mindmapData)
+        const point = { x: worldX, y: worldY }
+        const tolerance = Math.max(8, 8 / Math.max(scale, 0.35))
+
+        for (const edge of mindmapData.customEdges ?? []) {
+          if (!visibleNodes.has(edge.fromNodeId) || !visibleNodes.has(edge.toNodeId)) continue
+          const fromNode = mindmapData.nodes[edge.fromNodeId]
+          const toNode = mindmapData.nodes[edge.toNodeId]
+          if (!fromNode || !toNode) continue
+          const distance = distanceToSegment(point, { x: fromNode.x, y: fromNode.y }, { x: toNode.x, y: toNode.y })
+          if (distance <= tolerance) {
+            return { edgeId: customEdgeId(edge.id) }
+          }
+        }
+
+        for (const node of Object.values(mindmapData.nodes)) {
+          if (!node.parentId) continue
+          if (!visibleNodes.has(node.id) || !visibleNodes.has(node.parentId)) continue
+          const parent = mindmapData.nodes[node.parentId]
+          if (!parent) continue
+          const distance = distanceToSegment(point, { x: parent.x, y: parent.y }, { x: node.x, y: node.y })
+          if (distance <= tolerance) {
+            return { edgeId: parentEdgeId(node.id) }
+          }
+        }
+
+        return null
+      },
+      [mindmapData, scale]
+    )
+
+    const resolveSelectedEdge = useCallback(() => {
+      if (!selectedEdgeId) return null
+
+      if (isCustomEdgeSelection(selectedEdgeId)) {
+        const edgeId = selectedEdgeId.slice(7)
+        const edge = (mindmapData.customEdges ?? []).find((item) => item.id === edgeId)
+        if (!edge) return null
+        const fromNode = mindmapData.nodes[edge.fromNodeId]
+        const toNode = mindmapData.nodes[edge.toNodeId]
+        if (!fromNode || !toNode) return null
+        return {
+          type: 'custom' as const,
+          edgeId,
+          selectionId: selectedEdgeId,
+          fromNode,
+          toNode,
+          title: edge.title ?? '',
+          style: mergeEdgeStyle(edge.style),
+        }
+      }
+
+      if (isParentEdgeSelection(selectedEdgeId)) {
+        const childId = selectedEdgeId.slice(7)
+        const child = mindmapData.nodes[childId]
+        if (!child?.parentId) return null
+        const parent = mindmapData.nodes[child.parentId]
+        if (!parent) return null
+        const meta = mindmapData.parentEdgeMeta?.[childId] ?? {}
+        return {
+          type: 'parent' as const,
+          edgeId: childId,
+          selectionId: selectedEdgeId,
+          fromNode: parent,
+          toNode: child,
+          title: meta.title ?? '',
+          style: mergeEdgeStyle(meta.style),
+        }
+      }
+
+      return null
+    }, [mindmapData, selectedEdgeId])
+
     const renderMindmap = useCallback(
       (timestamp?: number) => {
         const canvas = canvasRef.current
@@ -1212,6 +1685,37 @@ const MindmapEditor = forwardRef<MindmapEditorHandle, MindmapEditorProps>(
         ctx.fillRect(-offset.x / scale, -offset.y / scale, canvas.width / scale, canvas.height / scale)
 
         const layoutSnapshot = createEmptyLayoutSnapshot()
+        const visibleNodes = collectVisibleNodeIds(mindmapData)
+
+        // Render custom cross-node edges first so nodes stay on top.
+        ;(mindmapData.customEdges ?? []).forEach((edge) => {
+          if (!visibleNodes.has(edge.fromNodeId) || !visibleNodes.has(edge.toNodeId)) return
+          const fromNode = mindmapData.nodes[edge.fromNodeId]
+          const toNode = mindmapData.nodes[edge.toNodeId]
+          if (!fromNode || !toNode) return
+
+          const fromPoint = { x: fromNode.x, y: fromNode.y }
+          const toPoint = { x: toNode.x, y: toNode.y }
+          const selectionId = customEdgeId(edge.id)
+          drawEdge(
+            ctx,
+            fromPoint,
+            toPoint,
+            1,
+            canvasTheme.edgeColor,
+            {
+              title: edge.title,
+              style: edge.style,
+            },
+            selectedEdgeId === selectionId
+          )
+          drawEdgeTitle(ctx, fromPoint, toPoint, edge.title ?? '', isDark, 1)
+          layoutSnapshot.edges.push({
+            from: fromPoint,
+            to: toPoint,
+            visibility: 1,
+          })
+        })
 
         // Recursive node drawing function
         const drawNode = (
@@ -1233,7 +1737,17 @@ const MindmapEditor = forwardRef<MindmapEditorHandle, MindmapEditorProps>(
             : null
 
           if (edgeFrom) {
-            drawEdge(ctx, edgeFrom, renderPos, clampedVisibility, canvasTheme.edgeColor)
+            const childMeta = mindmapData.parentEdgeMeta?.[nodeId]
+            drawEdge(
+              ctx,
+              edgeFrom,
+              renderPos,
+              clampedVisibility,
+              canvasTheme.edgeColor,
+              childMeta,
+              selectedEdgeId === parentEdgeId(nodeId)
+            )
+            drawEdgeTitle(ctx, edgeFrom, renderPos, childMeta?.title ?? '', isDark, clampedVisibility)
             layoutSnapshot.edges.push({
               from: edgeFrom,
               to: renderPos,
@@ -1291,7 +1805,7 @@ const MindmapEditor = forwardRef<MindmapEditorHandle, MindmapEditorProps>(
           animationFrameRef.current = null
         }
       },
-      [mindmapData, offset, scale, selectedNodeId, resolveChildrenVisibility, renderMiniMap, isDark]
+      [mindmapData, offset, scale, selectedNodeId, selectedEdgeId, resolveChildrenVisibility, renderMiniMap, isDark]
     )
 
     useEffect(() => {
@@ -1368,8 +1882,21 @@ const MindmapEditor = forwardRef<MindmapEditorHandle, MindmapEditorProps>(
       if (!coordinates) return
 
       const hit = hitTestNodes(coordinates.worldX, coordinates.worldY)
+      const edgeHit = hit ? null : hitTestEdges(coordinates.worldX, coordinates.worldY)
+
+      if (!hit && edgeHit) {
+        dispatch({ type: 'SET_SELECTED_EDGE_ID', payload: edgeHit.edgeId })
+        dispatch({ type: 'SET_CONNECTION_START_NODE_ID', payload: null })
+        collapseTargetRef.current = null
+        collapsePointerStartRef.current = null
+        return
+      }
 
       if (!hit) {
+        dispatch({ type: 'SET_SELECTED_EDGE_ID', payload: null })
+        if (connectionMode) {
+          dispatch({ type: 'SET_CONNECTION_START_NODE_ID', payload: null })
+        }
         collapseTargetRef.current = null
         collapsePointerStartRef.current = null
         return
@@ -1386,6 +1913,44 @@ const MindmapEditor = forwardRef<MindmapEditorHandle, MindmapEditorProps>(
       collapseTargetRef.current = null
       collapsePointerStartRef.current = null
       if (hit.area === 'body') {
+        dispatch({ type: 'SET_SELECTED_EDGE_ID', payload: null })
+        if (connectionMode && !readOnly) {
+          if (!connectionStartNodeId) {
+            dispatch({ type: 'SET_CONNECTION_START_NODE_ID', payload: hit.nodeId })
+            dispatch({ type: 'SET_SELECTED_NODE_ID', payload: hit.nodeId })
+            return
+          }
+
+          if (connectionStartNodeId === hit.nodeId) {
+            dispatch({ type: 'SET_CONNECTION_START_NODE_ID', payload: null })
+            dispatch({ type: 'SET_SELECTED_NODE_ID', payload: hit.nodeId })
+            return
+          }
+
+          const duplicate = (mindmapData.customEdges ?? []).some(
+            (edge) => edge.fromNodeId === connectionStartNodeId && edge.toNodeId === hit.nodeId
+          )
+
+          if (!duplicate) {
+            const newEdgeId = `edge-${Date.now()}`
+            dispatch({
+              type: 'UPSERT_CUSTOM_EDGE',
+              payload: {
+                id: newEdgeId,
+                fromNodeId: connectionStartNodeId,
+                toNodeId: hit.nodeId,
+                title: '',
+                style: {},
+              },
+            })
+            dispatch({ type: 'SET_SELECTED_EDGE_ID', payload: customEdgeId(newEdgeId) })
+          }
+
+          dispatch({ type: 'SET_CONNECTION_START_NODE_ID', payload: hit.nodeId })
+          dispatch({ type: 'SET_SELECTED_NODE_ID', payload: hit.nodeId })
+          return
+        }
+
         if (readOnly) {
           openNodeDetail(hit.nodeId)
         } else {
@@ -1423,12 +1988,16 @@ const MindmapEditor = forwardRef<MindmapEditorHandle, MindmapEditorProps>(
       if (!coordinates) return
 
       const hit = hitTestNodes(coordinates.worldX, coordinates.worldY)
+      const edgeHit = hit ? null : hitTestEdges(coordinates.worldX, coordinates.worldY)
       if (hit?.area === 'body') {
         dispatch({ type: 'SET_SELECTED_NODE_ID', payload: hit.nodeId })
         const rect = containerRef.current?.getBoundingClientRect()
         const menuX = rect ? e.clientX - rect.left : e.clientX
         const menuY = rect ? e.clientY - rect.top : e.clientY
         setContextMenu({ nodeId: hit.nodeId, x: menuX, y: menuY })
+      } else if (edgeHit) {
+        dispatch({ type: 'SET_SELECTED_EDGE_ID', payload: edgeHit.edgeId })
+        setContextMenu(null)
       } else {
         setContextMenu(null)
       }
@@ -1530,6 +2099,7 @@ const MindmapEditor = forwardRef<MindmapEditorHandle, MindmapEditorProps>(
       const { worldX, worldY } = coordinates
 
       const hit = hitTestNodes(worldX, worldY)
+      const edgeHit = hit ? null : hitTestEdges(worldX, worldY)
 
       if (hit?.area === 'collapse') {
         collapseTargetRef.current = hit.nodeId
@@ -1542,6 +2112,7 @@ const MindmapEditor = forwardRef<MindmapEditorHandle, MindmapEditorProps>(
       collapsePointerStartRef.current = null
 
       if (hit?.nodeId) {
+        dispatch({ type: 'SET_SELECTED_EDGE_ID', payload: null })
         dispatch({ type: 'SET_SELECTED_NODE_ID', payload: hit.nodeId })
         if (!readOnly) {
           dispatch({ type: 'START_DRAGGING', payload: { nodeId: hit.nodeId, start: { x: screenX, y: screenY } } })
@@ -1560,6 +2131,9 @@ const MindmapEditor = forwardRef<MindmapEditorHandle, MindmapEditorProps>(
             }, 450)
           }
         }
+      } else if (edgeHit) {
+        dispatch({ type: 'SET_SELECTED_EDGE_ID', payload: edgeHit.edgeId })
+        dispatch({ type: 'SET_SELECTED_NODE_ID', payload: null })
       } else {
         // Empty canvas → start panning
         dispatch({ type: 'START_PANNING', payload: { x: screenX - offset.x, y: screenY - offset.y } })
@@ -1648,7 +2222,8 @@ const MindmapEditor = forwardRef<MindmapEditorHandle, MindmapEditorProps>(
         }
       } else {
         const hit = hitTestNodes(worldX, worldY)
-        dispatch({ type: 'SET_HOVERING_EMPTY_SPACE', payload: !hit })
+        const edgeHit = hit ? null : hitTestEdges(worldX, worldY)
+        dispatch({ type: 'SET_HOVERING_EMPTY_SPACE', payload: !hit && !edgeHit })
       }
     }
 
@@ -2073,7 +2648,11 @@ const MindmapEditor = forwardRef<MindmapEditorHandle, MindmapEditorProps>(
           case 'Delete':
           case 'Backspace': {
             event.preventDefault()
-            deleteNode()
+            if (selectedEdgeId && isCustomEdgeSelection(selectedEdgeId)) {
+              dispatch({ type: 'DELETE_CUSTOM_EDGE', payload: { edgeId: selectedEdgeId.slice(7) } })
+            } else {
+              deleteNode()
+            }
             break
           }
           case ' ': {
@@ -2086,6 +2665,9 @@ const MindmapEditor = forwardRef<MindmapEditorHandle, MindmapEditorProps>(
           case 'Escape': {
             event.preventDefault()
             setContextMenu(null)
+            dispatch({ type: 'SET_SELECTED_EDGE_ID', payload: null })
+            dispatch({ type: 'SET_CONNECTION_START_NODE_ID', payload: null })
+            dispatch({ type: 'SET_CONNECTION_MODE', payload: false })
             dispatch({ type: 'SET_SELECTED_NODE_ID', payload: null })
             break
           }
@@ -2109,7 +2691,7 @@ const MindmapEditor = forwardRef<MindmapEditorHandle, MindmapEditorProps>(
 
       window.addEventListener('keydown', handleKeyDown)
       return () => window.removeEventListener('keydown', handleKeyDown)
-    }, [detailNodeId, readOnly, selectedNodeId, mindmapData, scale, toggleCollapse, openNodeDetail, startInlineEdit, addChildNode, deleteNode, inlineEditNodeId])
+    }, [detailNodeId, readOnly, selectedNodeId, selectedEdgeId, mindmapData, scale, toggleCollapse, openNodeDetail, startInlineEdit, addChildNode, deleteNode, inlineEditNodeId])
 
     const zoomIn = () => {
       dispatch({ type: 'SET_SCALE', payload: Math.min(3, scale * 1.2) })
@@ -2170,8 +2752,75 @@ const MindmapEditor = forwardRef<MindmapEditorHandle, MindmapEditorProps>(
     }
 
     const detailNode = detailNodeId ? mindmapData.nodes[detailNodeId] ?? null : null
+    const selectedEdge = useMemo(() => resolveSelectedEdge(), [resolveSelectedEdge])
     const useSharedDetailLayout = readOnly && canShowViewerControls
     const useSharedDetailBottomSheet = useSharedDetailLayout && isMobile
+
+    const updateSelectedEdgeMeta = useCallback(
+      (updates: Partial<MindmapEdgeMeta>) => {
+        if (!selectedEdge) return
+        if (selectedEdge.type === 'custom') {
+          dispatch({ type: 'UPDATE_CUSTOM_EDGE', payload: { edgeId: selectedEdge.edgeId, updates } })
+          return
+        }
+        dispatch({ type: 'UPDATE_PARENT_EDGE_META', payload: { childId: selectedEdge.edgeId, updates } })
+      },
+      [selectedEdge]
+    )
+
+    const deleteSelectedCustomEdge = useCallback(() => {
+      if (!selectedEdge || selectedEdge.type !== 'custom') return
+      dispatch({ type: 'DELETE_CUSTOM_EDGE', payload: { edgeId: selectedEdge.edgeId } })
+      dispatch({ type: 'SET_SELECTED_EDGE_ID', payload: null })
+    }, [selectedEdge])
+
+    const startSheetDrag = useCallback((event: React.PointerEvent<HTMLElement>) => {
+      if (!useSharedDetailBottomSheet) return
+      sheetPointerIdRef.current = event.pointerId
+      sheetStartYRef.current = event.clientY
+      sheetStartOffsetRef.current = sheetDragOffset
+      setIsSheetDragging(true)
+    }, [useSharedDetailBottomSheet, sheetDragOffset])
+
+    const moveSheetDrag = useCallback((event: React.PointerEvent<HTMLElement>) => {
+      if (!useSharedDetailBottomSheet) return
+      if (!isSheetDragging || sheetPointerIdRef.current !== event.pointerId) return
+
+      const deltaY = event.clientY - sheetStartYRef.current
+      const nextOffset = Math.max(0, sheetStartOffsetRef.current + deltaY)
+      setSheetDragOffset(nextOffset)
+    }, [useSharedDetailBottomSheet, isSheetDragging])
+
+    const endSheetDrag = useCallback((event?: React.PointerEvent<HTMLElement>) => {
+      if (!useSharedDetailBottomSheet) return
+      if (event && sheetPointerIdRef.current !== event.pointerId) return
+
+      const dismissThreshold = 120
+      const velocityThreshold = 180
+      const moved = sheetDragOffset
+      const quickSwipe = event ? event.movementY > velocityThreshold : false
+
+      setIsSheetDragging(false)
+      sheetPointerIdRef.current = null
+      sheetStartYRef.current = 0
+      sheetStartOffsetRef.current = 0
+
+      if (moved > dismissThreshold || quickSwipe) {
+        setSheetDragOffset(0)
+        closeNodeDetail()
+        return
+      }
+
+      setSheetDragOffset(0)
+    }, [useSharedDetailBottomSheet, sheetDragOffset, closeNodeDetail])
+
+    useEffect(() => {
+      if (!useSharedDetailBottomSheet || !detailNodeId) {
+        setSheetDragOffset(0)
+        setIsSheetDragging(false)
+        sheetPointerIdRef.current = null
+      }
+    }, [useSharedDetailBottomSheet, detailNodeId])
 
     // ── Search ──
 
@@ -2364,6 +3013,12 @@ const MindmapEditor = forwardRef<MindmapEditorHandle, MindmapEditorProps>(
           </div>
         )}
 
+        {connectionMode && !readOnly && (
+          <div className="absolute top-3 right-3 z-10 rounded-full border border-alpine-200 bg-alpine-50 px-3 py-1.5 text-xs font-semibold text-alpine-700 dark:border-alpine-900/40 dark:bg-alpine-900/30 dark:text-alpine-300">
+            Connect mode {connectionStartNodeId ? `• from ${mindmapData.nodes[connectionStartNodeId]?.text ?? 'node'}` : '• select source'}
+          </div>
+        )}
+
         {/* Toolbar */}
         {showToolbar && (
           <div className="absolute top-3 left-3 z-10 flex flex-col gap-1 bg-white dark:bg-slate-800 rounded-xl shadow-lg p-1.5 border border-gray-200 dark:border-slate-700">
@@ -2396,6 +3051,24 @@ const MindmapEditor = forwardRef<MindmapEditorHandle, MindmapEditorProps>(
                   aria-label="Toggle collapse"
                 >
                   {selectedNodeId && mindmapData.nodes[selectedNodeId]?.collapsed ? <Plus size={18} /> : <Minus size={18} />}
+                </button>
+                <button
+                  onClick={() => {
+                    const nextMode = !connectionMode
+                    dispatch({ type: 'SET_CONNECTION_MODE', payload: nextMode })
+                    if (!nextMode) {
+                      dispatch({ type: 'SET_CONNECTION_START_NODE_ID', payload: null })
+                    }
+                  }}
+                  className={`p-2 rounded-lg transition-colors ${
+                    connectionMode
+                      ? 'bg-alpine-50 text-alpine-600 dark:bg-alpine-900/30 dark:text-alpine-300'
+                      : 'hover:bg-gray-100 dark:hover:bg-slate-700'
+                  }`}
+                  title="Connect mode: click source node then target node"
+                  aria-label="Toggle connect mode"
+                >
+                  <Link2 size={18} />
                 </button>
 
                 <div className="h-px bg-gray-200 dark:bg-slate-700 my-0.5" />
@@ -2535,6 +3208,148 @@ const MindmapEditor = forwardRef<MindmapEditorHandle, MindmapEditorProps>(
         )}
 
         {/* Node detail view */}
+        {selectedEdge && !detailNodeId && (
+          <div className="absolute right-3 top-3 z-20 w-[320px] max-w-[calc(100%-1.5rem)] rounded-2xl border border-slate-200 dark:border-slate-700 bg-white/95 dark:bg-slate-900/95 shadow-xl backdrop-blur">
+            <div className="flex items-center justify-between border-b border-slate-200 dark:border-slate-700 px-4 py-3">
+              <div>
+                <p className="text-xs uppercase tracking-wide text-slate-400 dark:text-slate-500">
+                  {selectedEdge.type === 'custom' ? 'Custom connection' : 'Parent connection'}
+                </p>
+                <p className="mt-0.5 flex items-center gap-1.5 text-sm font-semibold text-slate-800 dark:text-slate-100">
+                  <span className="truncate max-w-[115px]">{selectedEdge.fromNode.text}</span>
+                  <ArrowRight size={14} className="text-slate-400" />
+                  <span className="truncate max-w-[115px]">{selectedEdge.toNode.text}</span>
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => dispatch({ type: 'SET_SELECTED_EDGE_ID', payload: null })}
+                className="flex h-8 w-8 items-center justify-center rounded-full border border-slate-200 dark:border-slate-700 text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800"
+                aria-label="Close connection panel"
+              >
+                <X size={14} />
+              </button>
+            </div>
+
+            <div className="space-y-4 px-4 py-4">
+              <div className="space-y-1.5">
+                <label className="text-xs font-medium text-slate-600 dark:text-slate-300">Title</label>
+                <input
+                  type="text"
+                  value={selectedEdge.title}
+                  onChange={(event) => updateSelectedEdgeMeta({ title: event.target.value.slice(0, 80) })}
+                  className="w-full rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 px-3 py-2 text-sm text-slate-800 dark:text-slate-100 focus:border-alpine-500 focus:outline-none focus:ring-2 focus:ring-alpine-200"
+                  placeholder="Relationship title"
+                />
+              </div>
+
+              <div className="space-y-1.5">
+                <label className="text-xs font-medium text-slate-600 dark:text-slate-300">Color</label>
+                <div className="flex flex-wrap gap-1.5">
+                  {DEFAULT_COLORS.map((color) => {
+                    const active = selectedEdge.style.color === color
+                    return (
+                      <button
+                        key={color}
+                        type="button"
+                        onClick={() => updateSelectedEdgeMeta({ style: { color } })}
+                        className={`h-7 w-7 rounded-full border-2 ${active ? 'border-slate-900 dark:border-white' : 'border-transparent'}`}
+                        style={{ backgroundColor: color }}
+                        aria-label={`Set connection color ${color}`}
+                      />
+                    )
+                  })}
+                  <button
+                    type="button"
+                    onClick={() => updateSelectedEdgeMeta({ style: { color: '' } })}
+                    className="h-7 rounded-full border border-slate-300 dark:border-slate-600 px-2 text-xs text-slate-600 dark:text-slate-300"
+                  >
+                    Theme
+                  </button>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <label className="space-y-1.5">
+                  <span className="text-xs font-medium text-slate-600 dark:text-slate-300">Line type</span>
+                  <select
+                    value={selectedEdge.style.lineType}
+                    onChange={(event) =>
+                      updateSelectedEdgeMeta({ style: { lineType: event.target.value as MindmapLineType } })
+                    }
+                    className="w-full rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 px-2.5 py-2 text-sm text-slate-800 dark:text-slate-100"
+                  >
+                    <option value="solid">Solid</option>
+                    <option value="dashed">Dashed</option>
+                    <option value="dotted">Dotted</option>
+                  </select>
+                </label>
+                <label className="space-y-1.5">
+                  <span className="text-xs font-medium text-slate-600 dark:text-slate-300">Arrow</span>
+                  <select
+                    value={selectedEdge.style.arrowType}
+                    onChange={(event) =>
+                      updateSelectedEdgeMeta({ style: { arrowType: event.target.value as MindmapArrowType } })
+                    }
+                    className="w-full rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 px-2.5 py-2 text-sm text-slate-800 dark:text-slate-100"
+                  >
+                    <option value="none">None</option>
+                    <option value="standard">Open</option>
+                    <option value="filled">Filled</option>
+                  </select>
+                </label>
+              </div>
+
+              <div className="space-y-3">
+                <label className="block space-y-1">
+                  <span className="text-xs font-medium text-slate-600 dark:text-slate-300">Width: {selectedEdge.style.width.toFixed(1)}</span>
+                  <input
+                    type="range"
+                    min={1}
+                    max={8}
+                    step={0.5}
+                    value={selectedEdge.style.width}
+                    onChange={(event) => updateSelectedEdgeMeta({ style: { width: Number(event.target.value) } })}
+                    className="w-full"
+                  />
+                </label>
+                <label className="block space-y-1">
+                  <span className="text-xs font-medium text-slate-600 dark:text-slate-300">Opacity: {Math.round(selectedEdge.style.opacity * 100)}%</span>
+                  <input
+                    type="range"
+                    min={0.1}
+                    max={1}
+                    step={0.05}
+                    value={selectedEdge.style.opacity}
+                    onChange={(event) => updateSelectedEdgeMeta({ style: { opacity: Number(event.target.value) } })}
+                    className="w-full"
+                  />
+                </label>
+              </div>
+            </div>
+
+            <div className="flex items-center justify-between border-t border-slate-200 dark:border-slate-700 px-4 py-3">
+              <button
+                type="button"
+                onClick={() => updateSelectedEdgeMeta({ title: '', style: {} })}
+                className="text-xs font-medium text-slate-500 hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-200"
+              >
+                Reset style
+              </button>
+              {selectedEdge.type === 'custom' && (
+                <button
+                  type="button"
+                  onClick={deleteSelectedCustomEdge}
+                  className="inline-flex items-center gap-1 rounded-lg border border-red-200 bg-red-50 px-3 py-1.5 text-xs font-semibold text-red-600 hover:bg-red-100 dark:border-red-900/40 dark:bg-red-900/20 dark:text-red-300"
+                >
+                  <Trash2 size={13} />
+                  Delete connection
+                </button>
+              )}
+            </div>
+          </div>
+        )}
+
         {detailNodeId && detailDraft && detailNode && (
           <div
             className={`absolute inset-0 z-20 p-3 ${
@@ -2544,6 +3359,11 @@ const MindmapEditor = forwardRef<MindmapEditorHandle, MindmapEditorProps>(
                   : 'pointer-events-none flex items-stretch justify-end'
                 : 'flex items-end sm:items-center justify-center bg-slate-900/50 backdrop-blur-sm'
             }`}
+            onClick={() => {
+              if (useSharedDetailBottomSheet && !isSheetDragging) {
+                closeNodeDetail()
+              }
+            }}
           >
             <div
               className={`bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 overflow-hidden shadow-2xl pointer-events-auto ${
@@ -2555,7 +3375,29 @@ const MindmapEditor = forwardRef<MindmapEditorHandle, MindmapEditorProps>(
               }`}
               role="dialog"
               aria-modal={!useSharedDetailLayout}
+              onClick={(event) => event.stopPropagation()}
+              onPointerMove={moveSheetDrag}
+              onPointerUp={endSheetDrag}
+              onPointerCancel={endSheetDrag}
+              style={
+                useSharedDetailBottomSheet
+                  ? {
+                      transform: `translateY(${sheetDragOffset}px)`,
+                      transition: isSheetDragging ? 'none' : 'transform 220ms ease-out',
+                    }
+                  : undefined
+              }
             >
+              {useSharedDetailBottomSheet && (
+                <div className="flex justify-center pt-2">
+                  <button
+                    type="button"
+                    aria-label="Drag down to close"
+                    className="h-5 w-16 cursor-grab touch-none rounded-full bg-slate-300/80 active:cursor-grabbing dark:bg-slate-600/80"
+                    onPointerDown={startSheetDrag}
+                  />
+                </div>
+              )}
               <div className="flex items-start justify-between gap-4 px-5 py-3 border-b border-slate-200 dark:border-slate-700">
                 <div>
                   <div className="flex items-center gap-2 text-slate-600 dark:text-slate-400 text-sm font-medium">
@@ -3073,7 +3915,7 @@ const MindmapEditor = forwardRef<MindmapEditorHandle, MindmapEditorProps>(
                 <div>Drag canvas to pan · Scroll to zoom</div>
                 <div>← Parent · → Child · ↑↓ Siblings · Tab: Cycle</div>
                 <div>F2: Rename · Enter: Details · +: Add child</div>
-                <div>Del: Delete · Space: Collapse · Home: Root</div>
+                <div>Del: Delete · Space: Collapse · Home: Root · Link: Connect mode</div>
               </div>
             )}
             {isMobile && (

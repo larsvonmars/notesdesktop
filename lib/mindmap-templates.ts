@@ -90,6 +90,8 @@ function radialPositions(
 function createBlankData(): MindmapData {
   return {
     rootId: 'root',
+    customEdges: [],
+    parentEdgeMeta: {},
     nodes: {
       root: makeNode('root', 'Central Idea', CENTER_X, CENTER_Y, COLORS.blue),
     },
@@ -154,7 +156,7 @@ function createProjectPlanningData(): MindmapData {
     })
   })
 
-  return { rootId, nodes }
+  return { rootId, nodes, customEdges: [], parentEdgeMeta: {} }
 }
 
 // ============================================================================
@@ -188,7 +190,7 @@ function createSWOTData(): MindmapData {
     })
   })
 
-  return { rootId, nodes }
+  return { rootId, nodes, customEdges: [], parentEdgeMeta: {} }
 }
 
 // ============================================================================
@@ -220,7 +222,7 @@ function createBrainstormingData(): MindmapData {
     })
   })
 
-  return { rootId, nodes }
+  return { rootId, nodes, customEdges: [], parentEdgeMeta: {} }
 }
 
 // ============================================================================
@@ -257,7 +259,7 @@ function createProsConsData(): MindmapData {
     nodes[`con-${i + 1}`] = makeNode(`con-${i + 1}`, text, p.x, p.y, COLORS.red, 'cons')
   })
 
-  return { rootId, nodes }
+  return { rootId, nodes, customEdges: [], parentEdgeMeta: {} }
 }
 
 // ============================================================================
