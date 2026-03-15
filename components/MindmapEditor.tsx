@@ -2171,6 +2171,13 @@ const MindmapEditor = forwardRef<MindmapEditorHandle, MindmapEditorProps>(
       if (hit?.nodeId) {
         dispatch({ type: 'SET_SELECTED_EDGE_ID', payload: null })
         dispatch({ type: 'SET_SELECTED_NODE_ID', payload: hit.nodeId })
+
+        // In connect mode, left-clicking a node should pick source/target via click
+        // rather than initiating drag behavior.
+        if (connectionMode && e.button === 0 && hit.area === 'body') {
+          return
+        }
+
         if (!readOnly) {
           dispatch({ type: 'START_DRAGGING', payload: { nodeId: hit.nodeId, start: { x: screenX, y: screenY } } })
 
