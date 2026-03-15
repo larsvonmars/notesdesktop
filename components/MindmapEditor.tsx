@@ -598,6 +598,50 @@ function collectVisibleNodeIds(mindmapData: MindmapData): Set<string> {
   return visible
 }
 
+function getQuadraticControlPoint(from: Point, to: Point): Point {
+  const midX = (from.x + to.x) / 2
+  const midY = (from.y + to.y) / 2
+  const dx = to.x - from.x
+  const dy = to.y - from.y
+  const length = Math.max(1, Math.hypot(dx, dy))
+  const nx = -dy / length
+  const ny = dx / length
+  const bend = Math.min(80, length * 0.22)
+  return { x: midX + nx * bend, y: midY + ny * bend }
+}
+
+function getEdgePolyline(from: Point, to: Point, curved: boolean): Point[] {
+  if (!curved) return [from, to]
+
+  const control = getQuadraticControlPoint(from, to)
+  const points: Point[] = []
+  const segments = 24
+  for (let i = 0; i <= segments; i += 1) {
+    const t = i / segments
+    const inv = 1 - t
+    points.push({
+      x: inv * inv * from.x + 2 * inv * t * control.x + t * t * to.x,
+      y: inv * inv * from.y + 2 * inv * t * control.y + t * t * to.y,
+    })
+  }
+  return points
+}
+
+export function hitTestConnectionEdge(
+  point: Point,
+  from: Point,
+  to: Point,
+  tolerance: number,
+  curved = false
+): boolean {
+  const polyline = getEdgePolyline(from, to, curved)
+  for (let i = 1; i < polyline.length; i += 1) {
+    const distance = distanceToSegment(point, polyline[i - 1], polyline[i])
+    if (distance <= tolerance) return true
+  }
+  return false
+}
+
 function htmlToPlainText(html: string): string {
   if (!html) return ''
   return html
@@ -726,13 +770,16 @@ function drawEdge(
   visibility: number,
   edgeColor: string,
   meta?: MindmapEdgeMeta,
-  isSelected?: boolean
+  isSelected?: boolean,
+  curved = false
 ): void {
   const width = Math.max(1, meta?.style?.width ?? EDGE_DEFAULTS.width)
   const lineType = meta?.style?.lineType ?? EDGE_DEFAULTS.lineType
   const opacity = Math.max(0.15, Math.min(1, meta?.style?.opacity ?? EDGE_DEFAULTS.opacity))
   const color = meta?.style?.color?.trim() || edgeColor
   const arrowType = meta?.style?.arrowType ?? EDGE_DEFAULTS.arrowType
+
+  const polyline = getEdgePolyline(from, to, curved)
 
   ctx.save()
   ctx.strokeStyle = color
@@ -746,27 +793,31 @@ function drawEdge(
     ctx.setLineDash([])
   }
   ctx.beginPath()
-  ctx.moveTo(from.x, from.y)
-  ctx.lineTo(to.x, to.y)
+  ctx.moveTo(polyline[0].x, polyline[0].y)
+  for (let i = 1; i < polyline.length; i += 1) {
+    ctx.lineTo(polyline[i].x, polyline[i].y)
+  }
   ctx.stroke()
 
   if (arrowType !== 'none') {
-    const dx = to.x - from.x
-    const dy = to.y - from.y
+    const last = polyline[polyline.length - 1]
+    const prev = polyline[Math.max(0, polyline.length - 2)]
+    const dx = last.x - prev.x
+    const dy = last.y - prev.y
     const len = Math.max(1, Math.hypot(dx, dy))
     const ux = dx / len
     const uy = dy / len
     const arrowLength = 14
     const arrowWidth = 6
-    const baseX = to.x - ux * arrowLength
-    const baseY = to.y - uy * arrowLength
+    const baseX = last.x - ux * arrowLength
+    const baseY = last.y - uy * arrowLength
     const leftX = baseX - uy * arrowWidth
     const leftY = baseY + ux * arrowWidth
     const rightX = baseX + uy * arrowWidth
     const rightY = baseY - ux * arrowWidth
 
     ctx.beginPath()
-    ctx.moveTo(to.x, to.y)
+    ctx.moveTo(last.x, last.y)
     ctx.lineTo(leftX, leftY)
     ctx.lineTo(rightX, rightY)
     ctx.closePath()
@@ -786,8 +837,10 @@ function drawEdge(
     ctx.lineWidth = Math.max(2, width + 1)
     ctx.strokeStyle = '#0ea5e9'
     ctx.beginPath()
-    ctx.moveTo(from.x, from.y)
-    ctx.lineTo(to.x, to.y)
+    ctx.moveTo(polyline[0].x, polyline[0].y)
+    for (let i = 1; i < polyline.length; i += 1) {
+      ctx.lineTo(polyline[i].x, polyline[i].y)
+    }
     ctx.stroke()
   }
 
@@ -801,13 +854,16 @@ function drawEdgeTitle(
   to: Point,
   title: string,
   isDark: boolean,
-  visibility: number
+  visibility: number,
+  curved = false
 ): void {
   const trimmed = title.trim()
   if (!trimmed) return
 
-  const midX = (from.x + to.x) / 2
-  const midY = (from.y + to.y) / 2
+  const polyline = getEdgePolyline(from, to, curved)
+  const midpoint = polyline[Math.floor(polyline.length / 2)] ?? { x: (from.x + to.x) / 2, y: (from.y + to.y) / 2 }
+  const midX = midpoint.x
+  const midY = midpoint.y
 
   ctx.save()
   ctx.globalAlpha = Math.max(0.28, Math.min(1, visibility))
@@ -1001,7 +1057,7 @@ const createDefaultMindmap = (): MindmapData => {
   }
 }
 
-const normalizeMindmapData = (input?: MindmapData | null): MindmapData => {
+export const normalizeMindmapData = (input?: MindmapData | null): MindmapData => {
   if (!input || !input.rootId || !input.nodes || !input.nodes[input.rootId]) {
     return createDefaultMindmap()
   }
@@ -1243,6 +1299,7 @@ const MindmapEditor = forwardRef<MindmapEditorHandle, MindmapEditorProps>(
     const [showMinimap, setShowMinimap] = React.useState(
       defaultShowMinimap ?? !isMobile
     )
+    const [useCurvedEdges, setUseCurvedEdges] = React.useState(false)
 
     // Info panel visibility
     const [showInfo, setShowInfo] = React.useState(true)
@@ -1594,8 +1651,7 @@ const MindmapEditor = forwardRef<MindmapEditorHandle, MindmapEditorProps>(
           const fromNode = mindmapData.nodes[edge.fromNodeId]
           const toNode = mindmapData.nodes[edge.toNodeId]
           if (!fromNode || !toNode) continue
-          const distance = distanceToSegment(point, { x: fromNode.x, y: fromNode.y }, { x: toNode.x, y: toNode.y })
-          if (distance <= tolerance) {
+          if (hitTestConnectionEdge(point, { x: fromNode.x, y: fromNode.y }, { x: toNode.x, y: toNode.y }, tolerance, useCurvedEdges)) {
             return { edgeId: customEdgeId(edge.id) }
           }
         }
@@ -1605,15 +1661,14 @@ const MindmapEditor = forwardRef<MindmapEditorHandle, MindmapEditorProps>(
           if (!visibleNodes.has(node.id) || !visibleNodes.has(node.parentId)) continue
           const parent = mindmapData.nodes[node.parentId]
           if (!parent) continue
-          const distance = distanceToSegment(point, { x: parent.x, y: parent.y }, { x: node.x, y: node.y })
-          if (distance <= tolerance) {
+          if (hitTestConnectionEdge(point, { x: parent.x, y: parent.y }, { x: node.x, y: node.y }, tolerance, useCurvedEdges)) {
             return { edgeId: parentEdgeId(node.id) }
           }
         }
 
         return null
       },
-      [mindmapData, scale]
+      [mindmapData, scale, useCurvedEdges]
     )
 
     const resolveSelectedEdge = useCallback(() => {
@@ -1707,9 +1762,10 @@ const MindmapEditor = forwardRef<MindmapEditorHandle, MindmapEditorProps>(
               title: edge.title,
               style: edge.style,
             },
-            selectedEdgeId === selectionId
+            selectedEdgeId === selectionId,
+            useCurvedEdges
           )
-          drawEdgeTitle(ctx, fromPoint, toPoint, edge.title ?? '', isDark, 1)
+          drawEdgeTitle(ctx, fromPoint, toPoint, edge.title ?? '', isDark, 1, useCurvedEdges)
           layoutSnapshot.edges.push({
             from: fromPoint,
             to: toPoint,
@@ -1745,9 +1801,10 @@ const MindmapEditor = forwardRef<MindmapEditorHandle, MindmapEditorProps>(
               clampedVisibility,
               canvasTheme.edgeColor,
               childMeta,
-              selectedEdgeId === parentEdgeId(nodeId)
+              selectedEdgeId === parentEdgeId(nodeId),
+              useCurvedEdges
             )
-            drawEdgeTitle(ctx, edgeFrom, renderPos, childMeta?.title ?? '', isDark, clampedVisibility)
+            drawEdgeTitle(ctx, edgeFrom, renderPos, childMeta?.title ?? '', isDark, clampedVisibility, useCurvedEdges)
             layoutSnapshot.edges.push({
               from: edgeFrom,
               to: renderPos,
@@ -1805,7 +1862,7 @@ const MindmapEditor = forwardRef<MindmapEditorHandle, MindmapEditorProps>(
           animationFrameRef.current = null
         }
       },
-      [mindmapData, offset, scale, selectedNodeId, selectedEdgeId, resolveChildrenVisibility, renderMiniMap, isDark]
+      [mindmapData, offset, scale, selectedNodeId, selectedEdgeId, resolveChildrenVisibility, renderMiniMap, isDark, useCurvedEdges]
     )
 
     useEffect(() => {
@@ -3108,6 +3165,18 @@ const MindmapEditor = forwardRef<MindmapEditorHandle, MindmapEditorProps>(
             >
               <Maximize2 size={18} />
             </button>
+            <button
+              onClick={() => setUseCurvedEdges((current) => !current)}
+              className={`p-2 rounded-lg transition-colors ${
+                useCurvedEdges
+                  ? 'bg-alpine-50 text-alpine-600 dark:bg-alpine-900/30 dark:text-alpine-300'
+                  : 'hover:bg-gray-100 dark:hover:bg-slate-700'
+              }`}
+              title="Toggle curved connections"
+              aria-label="Toggle curved connections"
+            >
+              <ChevronRight size={18} className={useCurvedEdges ? 'rotate-90' : ''} />
+            </button>
 
             {(canSearch || !readOnly) && <div className="h-px bg-gray-200 dark:bg-slate-700 my-0.5" />}
 
@@ -3838,6 +3907,19 @@ const MindmapEditor = forwardRef<MindmapEditorHandle, MindmapEditorProps>(
                 <span className="flex-1 text-left">Edit details</span>
                 <kbd className="text-xs text-slate-400">Enter</kbd>
               </button>
+              <button
+                type="button"
+                className="flex w-full items-center gap-3 px-3 py-2 hover:bg-slate-100 dark:hover:bg-slate-700 transition-colors"
+                onClick={() => {
+                  dispatch({ type: 'SET_CONNECTION_MODE', payload: true })
+                  dispatch({ type: 'SET_CONNECTION_START_NODE_ID', payload: contextMenu.nodeId })
+                  dispatch({ type: 'SET_SELECTED_NODE_ID', payload: contextMenu.nodeId })
+                  setContextMenu(null)
+                }}
+              >
+                <Link2 size={15} className="text-slate-400" />
+                <span className="flex-1 text-left">Start connection here</span>
+              </button>
               {hasChildren && (
                 <button
                   type="button"
@@ -3916,6 +3998,7 @@ const MindmapEditor = forwardRef<MindmapEditorHandle, MindmapEditorProps>(
                 <div>← Parent · → Child · ↑↓ Siblings · Tab: Cycle</div>
                 <div>F2: Rename · Enter: Details · +: Add child</div>
                 <div>Del: Delete · Space: Collapse · Home: Root · Link: Connect mode</div>
+                <div>Curve toggle: toolbar arrow button</div>
               </div>
             )}
             {isMobile && (
