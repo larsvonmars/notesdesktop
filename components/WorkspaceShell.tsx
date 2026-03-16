@@ -105,6 +105,8 @@ function WorkspaceContent() {
   const [activeView, setActiveView] = useState<WorkspaceView>('notes')
   const [workspaceNavCollapsed, setWorkspaceNavCollapsed] = useState(false)
   const [workspaceNavOpen, setWorkspaceNavOpen] = useState(false)
+  const mobileSwipeStartRef = useRef<{ x: number; y: number } | null>(null)
+  const mobileSwipeModeRef = useRef<'open' | 'close' | null>(null)
   
   // Welcome Back modal state
   const [showWelcomeBack, setShowWelcomeBack] = useState(false)
@@ -316,6 +318,54 @@ function WorkspaceContent() {
   const switchWorkspaceView = useCallback((view: WorkspaceView) => {
     setActiveView(view)
     setWorkspaceNavOpen(false)
+  }, [])
+
+  const beginOpenSwipe = useCallback((clientX: number, clientY: number) => {
+    if (!isMobile || workspaceNavOpen) return
+    // Only treat swipes starting from the left edge as an intent to open nav.
+    if (clientX > 28) return
+    mobileSwipeModeRef.current = 'open'
+    mobileSwipeStartRef.current = { x: clientX, y: clientY }
+  }, [isMobile, workspaceNavOpen])
+
+  const endOpenSwipe = useCallback((clientX: number, clientY: number) => {
+    if (mobileSwipeModeRef.current !== 'open' || !mobileSwipeStartRef.current) {
+      mobileSwipeModeRef.current = null
+      mobileSwipeStartRef.current = null
+      return
+    }
+
+    const dx = clientX - mobileSwipeStartRef.current.x
+    const dy = Math.abs(clientY - mobileSwipeStartRef.current.y)
+    if (dx > 72 && dy < 80) {
+      setWorkspaceNavOpen(true)
+    }
+
+    mobileSwipeModeRef.current = null
+    mobileSwipeStartRef.current = null
+  }, [])
+
+  const beginCloseSwipe = useCallback((clientX: number, clientY: number) => {
+    if (!isMobile || !workspaceNavOpen) return
+    mobileSwipeModeRef.current = 'close'
+    mobileSwipeStartRef.current = { x: clientX, y: clientY }
+  }, [isMobile, workspaceNavOpen])
+
+  const endCloseSwipe = useCallback((clientX: number, clientY: number) => {
+    if (mobileSwipeModeRef.current !== 'close' || !mobileSwipeStartRef.current) {
+      mobileSwipeModeRef.current = null
+      mobileSwipeStartRef.current = null
+      return
+    }
+
+    const dx = clientX - mobileSwipeStartRef.current.x
+    const dy = Math.abs(clientY - mobileSwipeStartRef.current.y)
+    if (dx < -56 && dy < 80) {
+      setWorkspaceNavOpen(false)
+    }
+
+    mobileSwipeModeRef.current = null
+    mobileSwipeStartRef.current = null
   }, [])
 
   useEffect(() => {
@@ -1073,7 +1123,20 @@ function WorkspaceContent() {
   }
 
   return (
-    <div className="min-h-screen flex flex-col">
+    <div
+      className="min-h-screen flex flex-col"
+      onTouchStartCapture={(event) => {
+        if (!isMobile || workspaceNavOpen || event.touches.length !== 1) return
+        const touch = event.touches[0]
+        beginOpenSwipe(touch.clientX, touch.clientY)
+      }}
+      onTouchEndCapture={(event) => {
+        if (!isMobile || workspaceNavOpen) return
+        const touch = event.changedTouches[0]
+        if (!touch) return
+        endOpenSwipe(touch.clientX, touch.clientY)
+      }}
+    >
       {/* Unified Sidebar — always visible on desktop, regardless of activeView */}
       {!isMobile && (
         <SidebarTree
@@ -1115,7 +1178,7 @@ function WorkspaceContent() {
 
       {/* Mobile header */}
       {isMobile && (
-        <header className="fixed inset-x-0 top-0 z-40 border-b border-border bg-surface px-4 py-3">
+        <header className="safe-top fixed inset-x-0 top-0 z-40 border-b border-border bg-surface px-4 py-3">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-3">
               <button
@@ -1138,8 +1201,30 @@ function WorkspaceContent() {
           <div
             className="fixed inset-0 z-40 bg-black/40"
             onClick={() => setWorkspaceNavOpen(false)}
+            onTouchStart={(event) => {
+              if (event.touches.length !== 1) return
+              const touch = event.touches[0]
+              beginCloseSwipe(touch.clientX, touch.clientY)
+            }}
+            onTouchEnd={(event) => {
+              const touch = event.changedTouches[0]
+              if (!touch) return
+              endCloseSwipe(touch.clientX, touch.clientY)
+            }}
           />
-          <aside className="fixed inset-y-0 left-0 z-50 w-[280px] border-r border-border bg-surface flex flex-col">
+          <aside
+            className="safe-top fixed inset-y-0 left-0 z-50 w-[280px] border-r border-border bg-surface flex flex-col"
+            onTouchStart={(event) => {
+              if (event.touches.length !== 1) return
+              const touch = event.touches[0]
+              beginCloseSwipe(touch.clientX, touch.clientY)
+            }}
+            onTouchEnd={(event) => {
+              const touch = event.changedTouches[0]
+              if (!touch) return
+              endCloseSwipe(touch.clientX, touch.clientY)
+            }}
+          >
             <div className="flex items-center justify-between border-b border-border px-3 py-3">
               <div className="flex items-center gap-3">
                 <img src="/icon-192.png" alt="MindViz Notes" className="h-8 w-8 rounded-lg" />
@@ -1231,7 +1316,14 @@ function WorkspaceContent() {
       )}
 
       {/* Main content area */}
-      <main className={`flex-1 w-full h-screen overflow-hidden ${isMobile ? 'pt-14' : ''}`} style={!isMobile ? { paddingLeft: sidebarOffset } : undefined}>
+      <main
+        className="flex-1 w-full h-screen overflow-hidden"
+        style={
+          isMobile
+            ? { paddingTop: 'calc(56px + var(--sat))' }
+            : { paddingLeft: sidebarOffset }
+        }
+      >
         {activeView === 'welcome' && (
           <WelcomeBackModal
             isOpen={showWelcomeBack}
