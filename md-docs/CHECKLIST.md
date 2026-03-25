@@ -66,3 +66,30 @@ npm run tauri:dev
 - [ ] Version history
 - [ ] Tauri system tray integration
 - [ ] Auto-save functionality
+
+## 🤖 AI Assistant QA Checklist
+
+Use this checklist after AI assistant context changes to verify note access behavior is safe and predictable.
+
+### Consent Flow
+- [ ] Open AI assistant with a note selected and "current note in context" enabled.
+- [ ] Send a prompt and confirm the note-context consent modal appears before the request is sent.
+- [ ] Click "Cancel" and verify no user message is sent and no assistant response starts.
+- [ ] Send again, click "Continue", and verify the pending prompt is sent automatically.
+- [ ] Enable "Remember this choice on this device", send another prompt with note context, and verify the consent modal no longer appears.
+
+### Context Diagnostics
+- [ ] Select multiple notes in context picker and confirm the diagnostics row updates counts and char usage.
+- [ ] Confirm diagnostics shows truncation warning when long notes are selected.
+- [ ] Confirm diagnostics shows omitted-note warning when selected notes exceed injection limits.
+- [ ] Switch between Chat and Reasoner models and verify context diagnostics remain visible and accurate.
+
+### Tooling Behavior
+- [ ] Ask the assistant to "search notes for <keyword>" and verify results are ranked and excerpted with readable boundaries.
+- [ ] Ask the assistant to "read note <title>" for a long note and verify truncation marker is present.
+- [ ] Ask for "list notes" in a large workspace and verify response is bounded with total-count summary.
+
+### API Guardrails
+- [ ] Verify oversized AI payloads return 413 from chat route.
+- [ ] Verify oversized AI payloads return 413 from stream route.
+- [ ] Verify invalid JSON request bodies return 400 with a clear validation error.

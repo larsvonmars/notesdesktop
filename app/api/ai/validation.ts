@@ -2,8 +2,8 @@ const ALLOWED_MODELS = new Set(['deepseek-chat', 'deepseek-reasoner'])
 const ALLOWED_ROLES = new Set(['system', 'user', 'assistant', 'tool'])
 const ALLOWED_TOOL_NAMES = new Set(['list_notes', 'read_note', 'search_notes', 'create_mindmap_note'])
 const MAX_MESSAGES = 100
-const MAX_MESSAGE_CONTENT_CHARS = 120000
-const MAX_TOTAL_MESSAGE_CHARS = 280000
+const MAX_MESSAGE_CONTENT_CHARS = 320000
+const MAX_TOTAL_MESSAGE_CHARS = 640000
 const MAX_TOOL_COUNT = 8
 
 type ValidationSuccess = {

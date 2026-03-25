@@ -89,11 +89,11 @@ const TEXT_TRUNCATION_MEDIUM = 60
 const CONTEXT_LENGTH_LIMIT = 1000
 const AI_NOTE_CONTEXT_CONSENT_KEY = 'ai-note-context-consent-v1'
 const AI_NOTE_CONTEXT_LIMITS = {
-  maxCharsPerNote: 4000,
-  maxTotalInjectedChars: 20000,
-  maxSelectedNotes: 8,
-  readNoteToolChars: 8000,
-  searchExcerptChars: 360,
+  maxCharsPerNote: 32000,
+  maxTotalInjectedChars: 320000,
+  maxSelectedNotes: 12,
+  readNoteToolChars: 32000,
+  searchExcerptChars: 900,
   searchMaxResultsDefault: 8,
   searchMaxResultsHard: 15,
 } as const

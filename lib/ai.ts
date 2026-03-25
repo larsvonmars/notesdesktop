@@ -182,18 +182,18 @@ export type ToolCallHandler = (name: string, args: Record<string, unknown>) => P
 
 const DEFAULT_MODEL = 'deepseek-chat'
 const DEFAULT_TEMPERATURE = 0.7
-const DEFAULT_MAX_TOKENS = 2048
+const DEFAULT_MAX_TOKENS = 4096
 const DEFAULT_RETRY_COUNT = 2
 const RETRY_BASE_DELAY_MS = 500
 const RETRYABLE_STATUS_CODES = new Set([408, 409, 425, 429, 500, 502, 503, 504])
 
 export const AI_NOTE_CONTEXT_LIMITS = {
-  maxCharsPerNote: 4000,
-  maxTotalInjectedChars: 20000,
-  maxSelectedNotes: 8,
-  selectedTextContextChars: 500,
-  readNoteToolChars: 8000,
-  searchExcerptChars: 360,
+  maxCharsPerNote: 32000,
+  maxTotalInjectedChars: 320000,
+  maxSelectedNotes: 12,
+  selectedTextContextChars: 4000,
+  readNoteToolChars: 32000,
+  searchExcerptChars: 900,
   searchMaxResultsDefault: 8,
   searchMaxResultsHard: 15,
 } as const
