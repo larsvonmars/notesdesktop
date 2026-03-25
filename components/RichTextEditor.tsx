@@ -198,6 +198,7 @@ const MAX_REPLACE_MATCHES = 1000
 const REGEX_ESCAPE_PATTERN = /[.*+?^${}()|[\]\\]/g
 const EXTRA_BLANK_LINES_PATTERN = /\n{3,}/g
 const ZERO_WIDTH_CHARS_PATTERN = /[\u200B-\u200D\uFEFF]/g
+const GEMINI_CITATION_TAG_PATTERN = /\[cite_start\]|\[cite:\s*\d+(?:\s*,\s*\d+)*\s*\]/gi
 
 const BASIC_PASTE_WRAPPER_TAGS = new Set(['DIV', 'P', 'SPAN', 'BR'])
 const SEMANTIC_PASTE_SELECTOR =
@@ -215,6 +216,33 @@ const splitLinesToFragment = (text: string): DocumentFragment => {
   })
 
   return fragment
+}
+
+const stripGeminiCitationTags = (text: string): string =>
+  text.replace(GEMINI_CITATION_TAG_PATTERN, '')
+
+const stripGeminiCitationTagsFromHtml = (html: string): string => {
+  try {
+    const template = document.createElement('template')
+    template.innerHTML = html
+
+    const walker = document.createTreeWalker(template.content, NodeFilter.SHOW_TEXT)
+    let node = walker.nextNode()
+
+    while (node) {
+      const textNode = node as Text
+      const updatedText = stripGeminiCitationTags(textNode.textContent || '')
+      if (updatedText !== textNode.textContent) {
+        textNode.textContent = updatedText
+      }
+      node = walker.nextNode()
+    }
+
+    return template.innerHTML
+  } catch (error) {
+    console.warn('Unable to strip Gemini citation tags from pasted HTML:', error)
+    return stripGeminiCitationTags(html)
+  }
 }
 
 const normalizePastedText = (text: string): string => {
@@ -2638,7 +2666,9 @@ const RichTextEditor = forwardRef<RichTextEditorHandle, RichTextEditorProps>(
 
         const html = event.clipboardData.getData('text/html')
         const rawText = event.clipboardData.getData('text/plain')
-        const text = normalizePastedText(rawText)
+        const textWithoutGeminiCitations = normalizePastedText(
+          stripGeminiCitationTags(rawText)
+        )
 
         // ── 0. Image/file paste path ──────────────────────────────────────
         // Check for pasted images (e.g., screenshots from clipboard)
@@ -2654,12 +2684,12 @@ const RichTextEditor = forwardRef<RichTextEditorHandle, RichTextEditorProps>(
             }
           }
         }
-        const textForPlainPaste = text
+        const textForPlainPaste = textWithoutGeminiCitations
 
         // ── 1. Markdown path ──────────────────────────────────────────────
-        if (text && looksLikeMarkdown(text)) {
+        if (textWithoutGeminiCitations && looksLikeMarkdown(textWithoutGeminiCitations)) {
           const selectionSnapshot = saveSelectionUtil()
-          markdownToHtml(text)
+          markdownToHtml(textWithoutGeminiCitations)
             .then((convertedHtml) => {
               try {
                 if (selectionSnapshot) {
@@ -2700,7 +2730,8 @@ const RichTextEditor = forwardRef<RichTextEditorHandle, RichTextEditorProps>(
             // Clean up external-source HTML before sanitizing
             const cleaned = cleanPastedHtml(html)
             const sanitized = sanitize(cleaned)
-            if (insertHTMLAtSelection(sanitized)) {
+            const withoutGeminiCitations = stripGeminiCitationTagsFromHtml(sanitized)
+            if (insertHTMLAtSelection(withoutGeminiCitations)) {
               finalizeInsertion()
             }
           } catch (error) {
