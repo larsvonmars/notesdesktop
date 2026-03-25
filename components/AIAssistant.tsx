@@ -87,6 +87,7 @@ import type { MindmapData, MindmapNode } from './MindmapEditor'
 const TEXT_TRUNCATION_SHORT = 50
 const TEXT_TRUNCATION_MEDIUM = 60
 const CONTEXT_LENGTH_LIMIT = 1000
+const AI_NOTE_CONTEXT_CONSENT_KEY = 'ai-note-context-consent-v1'
 const AI_NOTE_CONTEXT_LIMITS = {
   maxCharsPerNote: 4000,
   maxTotalInjectedChars: 20000,
@@ -364,6 +365,10 @@ export default function AIAssistant({
   const [streamingReasoning, setStreamingReasoning] = useState('')
   const [showMindmapPromptModal, setShowMindmapPromptModal] = useState(false)
   const [mindmapPromptInput, setMindmapPromptInput] = useState('')
+  const [hasNoteContextConsent, setHasNoteContextConsent] = useState(false)
+  const [showNoteContextConsentModal, setShowNoteContextConsentModal] = useState(false)
+  const [rememberNoteContextConsent, setRememberNoteContextConsent] = useState(true)
+  const [pendingPromptForConsent, setPendingPromptForConsent] = useState<string | null>(null)
   const [pendingMindmapPayload, setPendingMindmapPayload] = useState<{
     sourceText: string
     sourceTitle?: string
@@ -379,6 +384,15 @@ export default function AIAssistant({
   useEffect(() => {
     if (showChatHistory) loadChatHistory()
   }, [showChatHistory, note?.id])
+
+  useEffect(() => {
+    try {
+      const stored = window.localStorage.getItem(AI_NOTE_CONTEXT_CONSENT_KEY)
+      setHasNoteContextConsent(stored === 'accepted')
+    } catch {
+      setHasNoteContextConsent(false)
+    }
+  }, [])
 
   useEffect(() => {
     if (retryCooldown <= 0) return
@@ -748,9 +762,23 @@ export default function AIAssistant({
     }
   }, [allNotes, note, onCreateMindmapNote])
 
-  const handleSend = useCallback(async (overrideInput?: string) => {
+  const handleSend = useCallback(async (
+    overrideInput?: string,
+    options?: { skipConsentCheck?: boolean },
+  ) => {
     const prompt = (overrideInput ?? inputValue).trim()
     if (!prompt || isLoading) return
+
+    const hasInjectedNoteContext = !!(
+      aiContext.currentNote?.content?.trim() ||
+      (aiContext.additionalNoteContents && aiContext.additionalNoteContents.length > 0)
+    )
+
+    if (hasInjectedNoteContext && !hasNoteContextConsent && !options?.skipConsentCheck) {
+      setPendingPromptForConsent(prompt)
+      setShowNoteContextConsentModal(true)
+      return
+    }
 
     const userMessage: Message = {
       id: `user-${Date.now()}`,
@@ -846,7 +874,7 @@ export default function AIAssistant({
       setStreamingReasoning('')
       refreshRateLimitSnapshot()
     }
-  }, [inputValue, isLoading, aiContext, allNotes, handleToolCall, currentChatId, note?.id, model, mapAIErrorToUserMessage, refreshRateLimitSnapshot])
+  }, [inputValue, isLoading, aiContext, allNotes, handleToolCall, currentChatId, note?.id, model, mapAIErrorToUserMessage, refreshRateLimitSnapshot, hasNoteContextConsent])
 
   const handleCancelResponse = useCallback(() => {
     cancelActiveAIRequest()
@@ -855,6 +883,30 @@ export default function AIAssistant({
   const handleSendClick = useCallback(() => {
     void handleSend()
   }, [handleSend])
+
+  const handleConfirmNoteContextConsent = useCallback(() => {
+    if (rememberNoteContextConsent) {
+      try {
+        window.localStorage.setItem(AI_NOTE_CONTEXT_CONSENT_KEY, 'accepted')
+      } catch {
+        // Ignore storage failures and continue with in-memory consent.
+      }
+    }
+
+    setHasNoteContextConsent(true)
+    setShowNoteContextConsentModal(false)
+
+    const promptToSend = pendingPromptForConsent
+    setPendingPromptForConsent(null)
+    if (promptToSend) {
+      void handleSend(promptToSend, { skipConsentCheck: true })
+    }
+  }, [rememberNoteContextConsent, pendingPromptForConsent, handleSend])
+
+  const handleCancelNoteContextConsent = useCallback(() => {
+    setShowNoteContextConsentModal(false)
+    setPendingPromptForConsent(null)
+  }, [])
 
   const handleSubmitMindmapCreation = useCallback(async () => {
     if (!onCreateMindmapNote || !pendingMindmapPayload) return
@@ -1846,6 +1898,49 @@ export default function AIAssistant({
     )
   }
 
+  const renderNoteContextConsentModal = () => {
+    if (!showNoteContextConsentModal) return null
+
+    return (
+      <div className="absolute inset-0 z-[60] flex items-center justify-center bg-black/45 p-4">
+        <div className="w-full max-w-md rounded-2xl border border-border-strong bg-surface shadow-2xl">
+          <div className="px-4 py-3 border-b border-border">
+            <h3 className="text-sm font-semibold text-foreground">Share selected note context with AI?</h3>
+          </div>
+          <div className="px-4 py-3">
+            <p className="text-xs text-muted leading-relaxed">
+              This message includes note content from your workspace and sends it to the configured AI provider.
+              Continue only if this context is safe to share.
+            </p>
+            <label className="mt-3 flex items-center gap-2 text-xs text-foreground/80 cursor-pointer select-none">
+              <input
+                type="checkbox"
+                checked={rememberNoteContextConsent}
+                onChange={(e) => setRememberNoteContextConsent(e.target.checked)}
+                className="rounded border-border bg-surface"
+              />
+              Remember this choice on this device
+            </label>
+          </div>
+          <div className="px-4 py-3 border-t border-border flex items-center justify-end gap-2">
+            <button
+              onClick={handleCancelNoteContextConsent}
+              className="px-3 py-1.5 text-xs rounded-lg border border-border text-muted hover:text-foreground hover:bg-surface-hover transition-colors"
+            >
+              Cancel
+            </button>
+            <button
+              onClick={handleConfirmNoteContextConsent}
+              className="px-3 py-1.5 text-xs rounded-lg bg-alpine-600 text-white hover:bg-alpine-700 transition-colors"
+            >
+              Continue
+            </button>
+          </div>
+        </div>
+      </div>
+    )
+  }
+
   // ─── MAIN RENDER ───────────────────────────────────────────────────────────
 
   return (
@@ -1981,6 +2076,7 @@ export default function AIAssistant({
       )}
 
       {renderMindmapPromptModal()}
+      {renderNoteContextConsentModal()}
     </div>
   )
 }
