@@ -1,10 +1,15 @@
 import { createClient } from '@supabase/supabase-js'
 import { NextResponse } from 'next/server'
+import {
+  AI_DEEPSEEK_CHAT_COMPLETIONS_URL,
+  AI_INVALID_JSON_PAYLOAD_MESSAGE,
+  AI_PROXY_PAYLOAD_TOO_LARGE_MESSAGE,
+  getAIProxyMaxBodyBytes,
+  getAIUpstreamTimeoutMs,
+} from '../limits'
 import { validateAndSanitizeAIPayload } from '../validation'
 import { checkRateLimit } from '../rate-limit'
 import { fetchWithTimeout } from '../upstream'
-
-const DEEPSEEK_API_URL = 'https://api.deepseek.com/chat/completions'
 
 function getServerSupabaseClient() {
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL
@@ -17,7 +22,6 @@ function getServerSupabaseClient() {
   return createClient(url, anon)
 }
 
-const AI_UPSTREAM_TIMEOUT_MS = Number(process.env.AI_UPSTREAM_TIMEOUT_MS || '30000')
 
 async function requireUserFromRequest(req: Request): Promise<string | null> {
   const authHeader = req.headers.get('authorization')
@@ -80,7 +84,24 @@ export async function POST(req: Request) {
       )
     }
 
-    const payload = await req.json()
+    const rawBody = await req.text()
+    if (rawBody.length > getAIProxyMaxBodyBytes()) {
+      return NextResponse.json(
+        { error: { message: AI_PROXY_PAYLOAD_TOO_LARGE_MESSAGE } },
+        { status: 413, headers: rateHeaders },
+      )
+    }
+
+    let payload: unknown
+    try {
+      payload = JSON.parse(rawBody)
+    } catch {
+      return NextResponse.json(
+        { error: { message: AI_INVALID_JSON_PAYLOAD_MESSAGE } },
+        { status: 400, headers: rateHeaders },
+      )
+    }
+
     const validation = validateAndSanitizeAIPayload(payload)
     if (!validation.valid) {
       return NextResponse.json(
@@ -89,14 +110,22 @@ export async function POST(req: Request) {
       )
     }
 
-    const response = await fetchWithTimeout(DEEPSEEK_API_URL, {
+    const upstreamBody = JSON.stringify(validation.payload)
+    if (upstreamBody.length > getAIProxyMaxBodyBytes()) {
+      return NextResponse.json(
+        { error: { message: AI_PROXY_PAYLOAD_TOO_LARGE_MESSAGE } },
+        { status: 413, headers: rateHeaders },
+      )
+    }
+
+    const response = await fetchWithTimeout(AI_DEEPSEEK_CHAT_COMPLETIONS_URL, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
         Authorization: `Bearer ${key}`,
       },
-      body: JSON.stringify(validation.payload),
-    }, AI_UPSTREAM_TIMEOUT_MS)
+      body: upstreamBody,
+    }, getAIUpstreamTimeoutMs('chat'))
 
     const contentType = response.headers.get('content-type') || 'application/json'
     const bodyText = await response.text()

@@ -36,6 +36,7 @@ import {
   AlertCircle,
   Cpu,
   BookOpen,
+  Search,
   Maximize2,
   Minimize2,
 } from 'lucide-react'
@@ -86,6 +87,33 @@ import type { MindmapData, MindmapNode } from './MindmapEditor'
 const TEXT_TRUNCATION_SHORT = 50
 const TEXT_TRUNCATION_MEDIUM = 60
 const CONTEXT_LENGTH_LIMIT = 1000
+const AI_NOTE_CONTEXT_LIMITS = {
+  maxCharsPerNote: 4000,
+  maxTotalInjectedChars: 20000,
+  maxSelectedNotes: 8,
+  readNoteToolChars: 8000,
+  searchExcerptChars: 360,
+  searchMaxResultsDefault: 8,
+  searchMaxResultsHard: 15,
+} as const
+
+function isReasonerToolCallingEnabled(): boolean {
+  return (process.env.NEXT_PUBLIC_DEEPSEEK_REASONER_TOOLS || '').trim().toLowerCase() === 'true'
+}
+
+function truncateAtBoundary(text: string, maxChars: number): string {
+  if (text.length <= maxChars) return text
+  const slice = text.slice(0, maxChars)
+  const paragraphBoundary = Math.max(slice.lastIndexOf('\n\n'), slice.lastIndexOf('. '))
+  if (paragraphBoundary >= Math.floor(maxChars * 0.65)) {
+    return slice.slice(0, paragraphBoundary + 1).trimEnd()
+  }
+  const wordBoundary = slice.lastIndexOf(' ')
+  if (wordBoundary >= Math.floor(maxChars * 0.65)) {
+    return slice.slice(0, wordBoundary).trimEnd()
+  }
+  return slice.trimEnd()
+}
 
 // ============================================================================
 // TYPES
@@ -332,6 +360,7 @@ export default function AIAssistant({
   const [includeCurrentNote, setIncludeCurrentNote] = useState(true)
   const [selectedNoteIds, setSelectedNoteIds] = useState<string[]>([])
   const [showNotePicker, setShowNotePicker] = useState(false)
+  const [notePickerSearch, setNotePickerSearch] = useState('')
   const [streamingReasoning, setStreamingReasoning] = useState('')
   const [showMindmapPromptModal, setShowMindmapPromptModal] = useState(false)
   const [mindmapPromptInput, setMindmapPromptInput] = useState('')
@@ -437,7 +466,74 @@ export default function AIAssistant({
   useEffect(() => {
     setSelectedNoteIds([])
     setIncludeCurrentNote(true)
+    setNotePickerSearch('')
   }, [note?.id])
+
+  useEffect(() => {
+    if (!showNotePicker) {
+      setNotePickerSearch('')
+    }
+  }, [showNotePicker])
+
+  const selectableNotes = useMemo(() => {
+    if (!allNotes?.length) return []
+    return allNotes
+      .filter(n => n.id !== note?.id)
+      .slice()
+      .sort((a, b) => (a.title || 'Untitled').localeCompare(b.title || 'Untitled'))
+  }, [allNotes, note?.id])
+
+  const filteredSelectableNotes = useMemo(() => {
+    const query = notePickerSearch.trim().toLowerCase()
+    if (!query) return selectableNotes
+    return selectableNotes.filter(n => (n.title || 'Untitled').toLowerCase().includes(query))
+  }, [notePickerSearch, selectableNotes])
+
+  const selectedAdditionalNotes = useMemo(() => {
+    if (!allNotes?.length || selectedNoteIds.length === 0) return []
+    const selectedMap = new Set(selectedNoteIds)
+    return allNotes
+      .filter(n => selectedMap.has(n.id) && n.id !== note?.id)
+      .slice(0, AI_NOTE_CONTEXT_LIMITS.maxSelectedNotes)
+  }, [allNotes, note?.id, selectedNoteIds])
+
+  const contextDiagnostics = useMemo(() => {
+    const noteCaps = AI_NOTE_CONTEXT_LIMITS
+    let remaining: number = noteCaps.maxTotalInjectedChars
+    let totalIncludedChars = 0
+    let totalOriginalChars = 0
+    let truncatedCount = 0
+
+    const applyBudget = (content: string) => {
+      const original = content.length
+      totalOriginalChars += original
+      const allowed = Math.max(0, Math.min(noteCaps.maxCharsPerNote, remaining))
+      const included = Math.min(original, allowed)
+      totalIncludedChars += included
+      remaining = Math.max(0, remaining - included)
+      if (included < original) truncatedCount += 1
+    }
+
+    if (includeCurrentNote && note) {
+      const currentContent = noteContent
+        ? stripHtmlForAI(noteContent)
+        : stripHtmlForAI(note.content || '')
+      applyBudget(currentContent)
+    }
+
+    for (const selected of selectedAdditionalNotes) {
+      applyBudget(stripHtmlForAI(selected.content || ''))
+    }
+
+    return {
+      totalIncludedChars,
+      totalOriginalChars,
+      truncatedCount,
+      omittedSelectedCount: Math.max(0, selectedNoteIds.length - selectedAdditionalNotes.length),
+      nearLimit: remaining < Math.floor(AI_NOTE_CONTEXT_LIMITS.maxTotalInjectedChars * 0.2),
+      exhausted: remaining === 0,
+    }
+  }, [includeCurrentNote, note, noteContent, selectedAdditionalNotes, selectedNoteIds.length])
 
   const loadChatHistory = useCallback(async () => {
     setIsLoadingHistory(true)
@@ -525,9 +621,8 @@ export default function AIAssistant({
     if (allNotes?.length) {
       context.allNotes = allNotes.map(n => ({ id: n.id, title: n.title || 'Untitled' }))
     }
-    if (selectedNoteIds.length > 0 && allNotes?.length) {
-      context.additionalNoteContents = allNotes
-        .filter(n => selectedNoteIds.includes(n.id))
+    if (selectedAdditionalNotes.length > 0) {
+      context.additionalNoteContents = selectedAdditionalNotes
         .map(n => ({
           id: n.id,
           title: n.title || 'Untitled',
@@ -535,13 +630,18 @@ export default function AIAssistant({
         }))
     }
     return context
-  }, [note, noteContent, selectedText, mindmapData, selectedMindmapNodeId, tasks, events, allNotes, includeCurrentNote, selectedNoteIds])
+  }, [note, noteContent, selectedText, mindmapData, selectedMindmapNodeId, tasks, events, allNotes, includeCurrentNote, selectedAdditionalNotes])
 
   const handleToolCall: ToolCallHandler = useCallback(async (name, args) => {
     switch (name) {
       case 'list_notes': {
         if (!allNotes?.length) return 'No notes available.'
-        return `Available notes:\n${allNotes.map(n => `- "${n.title || 'Untitled'}" (ID: ${n.id})`).join('\n')}`
+        const listPreview = allNotes
+          .slice(0, 60)
+          .map(n => `- "${n.title || 'Untitled'}" (ID: ${n.id})`)
+          .join('\n')
+        const remaining = allNotes.length - 60
+        return `Available notes (${allNotes.length} total):\n${listPreview}${remaining > 0 ? `\n...and ${remaining} more notes.` : ''}`
       }
       case 'read_note': {
         const noteId = args.noteId as string | undefined
@@ -551,23 +651,40 @@ export default function AIAssistant({
         if (noteId) targetNote = allNotes.find(n => n.id === noteId)
         else if (noteTitle) targetNote = allNotes.find(n => n.title?.toLowerCase().includes(noteTitle.toLowerCase()))
         if (!targetNote) return `Note not found. Available: ${allNotes.map(n => n.title || 'Untitled').join(', ')}`
-        return `Note: "${targetNote.title || 'Untitled'}"\nType: ${targetNote.note_type || 'rich-text'}\n\nContent:\n${stripHtmlForAI(targetNote.content || '')}`
+        const fullContent = stripHtmlForAI(targetNote.content || '')
+        const limited = truncateAtBoundary(fullContent, AI_NOTE_CONTEXT_LIMITS.readNoteToolChars)
+        const wasTruncated = limited.length < fullContent.length
+        return `Note: "${targetNote.title || 'Untitled'}"\nType: ${targetNote.note_type || 'rich-text'}\n\nContent:\n${limited}${wasTruncated ? '\n\n...[truncated for context window]' : ''}`
       }
       case 'search_notes': {
-        const query = ((args.query as string) || '').toLowerCase()
+        const rawQuery = ((args.query as string) || '').trim()
+        const query = rawQuery.toLowerCase()
+        const requestedMax = Number(args.maxResults)
+        const maxResults = Number.isFinite(requestedMax)
+          ? Math.max(1, Math.min(Math.floor(requestedMax), AI_NOTE_CONTEXT_LIMITS.searchMaxResultsHard))
+          : AI_NOTE_CONTEXT_LIMITS.searchMaxResultsDefault
         if (!query) return 'No search query provided.'
         if (!allNotes?.length) return 'No notes available to search.'
-        const results = allNotes.filter(n => {
+        const scored = allNotes
+          .map(n => {
           const t = (n.title || '').toLowerCase()
           const c = stripHtmlForAI(n.content || '').toLowerCase()
-          return t.includes(query) || c.includes(query)
+          let score = 0
+          if (t === query) score += 4
+          else if (t.includes(query)) score += 2
+          if (c.includes(query)) score += 1
+          return { note: n, score }
         })
-        if (!results.length) return `No notes found matching "${query}".`
-        const excerpts = results.slice(0, 5).map(n => {
+          .filter(item => item.score > 0)
+          .sort((a, b) => b.score - a.score)
+
+        if (!scored.length) return `No notes found matching "${query}".`
+        const excerpts = scored.slice(0, maxResults).map(({ note: n }) => {
           const c = stripHtmlForAI(n.content || '')
-          return `- "${n.title || 'Untitled'}": ${c.slice(0, 200)}${c.length > 200 ? '...' : ''}`
+          const excerpt = truncateAtBoundary(c, AI_NOTE_CONTEXT_LIMITS.searchExcerptChars)
+          return `- "${n.title || 'Untitled'}": ${excerpt}${excerpt.length < c.length ? '...' : ''}`
         })
-        return `Found ${results.length} note(s) matching "${query}":\n${excerpts.join('\n\n')}`
+        return `Found ${scored.length} note(s) matching "${query}". Showing top ${Math.min(maxResults, scored.length)}:\n${excerpts.join('\n\n')}`
       }
       case 'create_mindmap_note': {
         if (!onCreateMindmapNote) return 'Mindmap note creation is not available in this view.'
@@ -665,7 +782,7 @@ export default function AIAssistant({
         aiContext,
         chatHistoryRef.current.slice(0, -1),
         (token) => { fullResponse += token; setStreamingContent(fullResponse) },
-        model === 'deepseek-reasoner' ? undefined : (allNotes?.length ? handleToolCall : undefined),
+        (!isReasonerToolCallingEnabled() && model === 'deepseek-reasoner') ? undefined : (allNotes?.length ? handleToolCall : undefined),
         model,
         (token) => { reasoningContent += token; setStreamingReasoning(prev => prev + token) },
       )
@@ -1505,8 +1622,24 @@ export default function AIAssistant({
                   <div className="text-[10px] font-semibold text-muted uppercase tracking-wider px-3 py-1.5">
                     Add to context
                   </div>
-                  {allNotes
-                    .filter(n => n.id !== note?.id)
+                  <div className="px-3 pb-1.5">
+                    <div className="relative">
+                      <Search size={11} className="absolute left-2 top-1/2 -translate-y-1/2 text-muted" />
+                      <input
+                        value={notePickerSearch}
+                        onChange={(e) => setNotePickerSearch(e.target.value)}
+                        placeholder="Filter notes..."
+                        className="w-full h-7 rounded-lg bg-surface-hover border border-border pl-7 pr-2 text-[11px] text-foreground placeholder:text-muted focus:outline-none focus:ring-2 focus:ring-alpine-500/30 focus:border-alpine-500"
+                      />
+                    </div>
+                    <div className="mt-1 text-[10px] text-muted">
+                      {selectedNoteIds.length} selected • up to {AI_NOTE_CONTEXT_LIMITS.maxSelectedNotes} injected
+                    </div>
+                  </div>
+                  {filteredSelectableNotes.length === 0 && (
+                    <div className="px-3 py-2 text-[11px] text-muted">No notes match your filter.</div>
+                  )}
+                  {filteredSelectableNotes
                     .map(n => (
                       <button
                         key={n.id}
@@ -1531,6 +1664,27 @@ export default function AIAssistant({
             </div>
           )}
         </div>
+      </div>
+
+      <div className="mb-2 px-2.5 py-1.5 rounded-lg border border-border bg-surface-hover/40 text-[10px] text-muted">
+        <div className="flex items-center justify-between gap-2">
+          <span>
+            Context: {includeCurrentNote && note ? 'current note' : 'no current note'} • {selectedAdditionalNotes.length} extra note{selectedAdditionalNotes.length !== 1 ? 's' : ''}
+          </span>
+          <span className={contextDiagnostics.nearLimit ? 'text-warning' : ''}>
+            {contextDiagnostics.totalIncludedChars}/{contextDiagnostics.totalOriginalChars || contextDiagnostics.totalIncludedChars} chars
+          </span>
+        </div>
+        {(contextDiagnostics.truncatedCount > 0 || contextDiagnostics.omittedSelectedCount > 0 || contextDiagnostics.exhausted) && (
+          <div className="mt-1 text-warning">
+            {contextDiagnostics.truncatedCount > 0 ? `${contextDiagnostics.truncatedCount} note context${contextDiagnostics.truncatedCount !== 1 ? 's are' : ' is'} truncated.` : ''}
+            {contextDiagnostics.omittedSelectedCount > 0 ? ` ${contextDiagnostics.omittedSelectedCount} selected note${contextDiagnostics.omittedSelectedCount !== 1 ? 's are' : ' is'} not injected due to context cap.` : ''}
+            {contextDiagnostics.exhausted ? ' Context budget reached.' : ''}
+          </div>
+        )}
+        {model === 'deepseek-reasoner' && !isReasonerToolCallingEnabled() && (
+          <div className="mt-1 text-muted">Reasoner tools are disabled by default. Set NEXT_PUBLIC_DEEPSEEK_REASONER_TOOLS=true to enable experimental tool access.</div>
+        )}
       </div>
 
       {error && (

@@ -16,6 +16,7 @@ describe('AI proxy routes', () => {
   const originalSupabaseAnon = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
   const originalRateLimitRequests = process.env.AI_RATE_LIMIT_REQUESTS
   const originalRateLimitWindowMs = process.env.AI_RATE_LIMIT_WINDOW_MS
+  const originalProxyMaxBodyBytes = process.env.AI_PROXY_MAX_BODY_BYTES
 
   beforeEach(() => {
     vi.resetModules()
@@ -26,6 +27,7 @@ describe('AI proxy routes', () => {
     process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY = 'anon-key'
     process.env.AI_RATE_LIMIT_REQUESTS = '50'
     process.env.AI_RATE_LIMIT_WINDOW_MS = '60000'
+    process.env.AI_PROXY_MAX_BODY_BYTES = '400000'
   })
 
   afterEach(() => {
@@ -34,6 +36,7 @@ describe('AI proxy routes', () => {
     process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY = originalSupabaseAnon
     process.env.AI_RATE_LIMIT_REQUESTS = originalRateLimitRequests
     process.env.AI_RATE_LIMIT_WINDOW_MS = originalRateLimitWindowMs
+    process.env.AI_PROXY_MAX_BODY_BYTES = originalProxyMaxBodyBytes
   })
 
   it('returns 401 when chat request has no auth header', async () => {
@@ -207,5 +210,52 @@ describe('AI proxy routes', () => {
 
     const res = await POST(req)
     expect(res.status).toBe(504)
+  })
+
+  it('returns 413 for oversized chat payload and skips upstream call', async () => {
+    process.env.AI_PROXY_MAX_BODY_BYTES = '300'
+    getUserMock.mockResolvedValue({ data: { user: { id: 'user-too-large-chat' } }, error: null })
+    const fetchMock = vi.spyOn(globalThis, 'fetch')
+
+    const { POST } = await import('@/app/api/ai/chat/route')
+    const req = new Request('http://localhost/api/ai/chat', {
+      method: 'POST',
+      body: JSON.stringify({
+        model: 'deepseek-chat',
+        messages: [{ role: 'user', content: 'x'.repeat(2000) }],
+      }),
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: 'Bearer token-1',
+      },
+    })
+
+    const res = await POST(req)
+    expect(res.status).toBe(413)
+    expect(fetchMock).not.toHaveBeenCalled()
+  })
+
+  it('returns 413 for oversized stream payload and skips upstream call', async () => {
+    process.env.AI_PROXY_MAX_BODY_BYTES = '300'
+    getUserMock.mockResolvedValue({ data: { user: { id: 'user-too-large-stream' } }, error: null })
+    const fetchMock = vi.spyOn(globalThis, 'fetch')
+
+    const { POST } = await import('@/app/api/ai/stream/route')
+    const req = new Request('http://localhost/api/ai/stream', {
+      method: 'POST',
+      body: JSON.stringify({
+        model: 'deepseek-chat',
+        stream: true,
+        messages: [{ role: 'user', content: 'x'.repeat(2000) }],
+      }),
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: 'Bearer token-1',
+      },
+    })
+
+    const res = await POST(req)
+    expect(res.status).toBe(413)
+    expect(fetchMock).not.toHaveBeenCalled()
   })
 })

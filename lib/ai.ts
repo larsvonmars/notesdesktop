@@ -187,6 +187,17 @@ const DEFAULT_RETRY_COUNT = 2
 const RETRY_BASE_DELAY_MS = 500
 const RETRYABLE_STATUS_CODES = new Set([408, 409, 425, 429, 500, 502, 503, 504])
 
+export const AI_NOTE_CONTEXT_LIMITS = {
+  maxCharsPerNote: 4000,
+  maxTotalInjectedChars: 20000,
+  maxSelectedNotes: 8,
+  selectedTextContextChars: 500,
+  readNoteToolChars: 8000,
+  searchExcerptChars: 360,
+  searchMaxResultsDefault: 8,
+  searchMaxResultsHard: 15,
+} as const
+
 type AIKeyStatus = {
   available: boolean
   source: 'keychain' | 'env' | 'none' | string
@@ -229,6 +240,10 @@ function getWebAIEndpoint(path: string): string {
   const normalizedBase = baseUrl.endsWith('/') ? baseUrl.slice(0, -1) : baseUrl
   const normalizedPath = path.startsWith('/') ? path : `/${path}`
   return `${normalizedBase}${normalizedPath}`
+}
+
+export function isReasonerToolCallingEnabled(): boolean {
+  return (process.env.NEXT_PUBLIC_DEEPSEEK_REASONER_TOOLS || '').trim().toLowerCase() === 'true'
 }
 
 async function tauriInvoke<T>(command: string, args?: Record<string, unknown>): Promise<T> {
@@ -587,6 +602,12 @@ export const AI_TOOLS: AITool[] = [
             type: 'string',
             description: 'The search query to find in notes',
           },
+          maxResults: {
+            type: 'number',
+            description: `Optional number of search results to return (1-${AI_NOTE_CONTEXT_LIMITS.searchMaxResultsHard})`,
+            minimum: 1,
+            maximum: AI_NOTE_CONTEXT_LIMITS.searchMaxResultsHard,
+          },
         },
         required: ['query'],
       },
@@ -811,8 +832,12 @@ export async function chat(
   const resolvedModel = model || DEFAULT_MODEL
   const resolvedMaxTokens = resolvedModel === 'deepseek-reasoner' ? 8192 : DEFAULT_MAX_TOKENS
 
-  // deepseek-reasoner doesn't support tool calling
-  if (toolHandler && context?.allNotes && resolvedModel !== 'deepseek-reasoner') {
+  const shouldUseTools =
+    !!toolHandler &&
+    !!context?.allNotes &&
+    (resolvedModel !== 'deepseek-reasoner' || isReasonerToolCallingEnabled())
+
+  if (shouldUseTools) {
     return chatWithTools(messages, toolHandler, onStream, 5, resolvedModel)
   }
 
@@ -1177,6 +1202,7 @@ export async function suggestEvents(
  */
 function buildSystemMessage(context?: AIContext): string {
   let message = SYSTEM_PROMPTS.general
+  let remainingContextChars = AI_NOTE_CONTEXT_LIMITS.maxTotalInjectedChars
 
   if (context) {
     const contextParts: string[] = ['\n\nCurrent context:']
@@ -1187,7 +1213,7 @@ function buildSystemMessage(context?: AIContext): string {
 
     // Include selected text for context-aware interactions
     if (context.selectedText) {
-      contextParts.push(`- User has selected the following text: "${context.selectedText.slice(0, 500)}${context.selectedText.length > 500 ? '...' : ''}"`)
+      contextParts.push(`- User has selected the following text: "${context.selectedText.slice(0, AI_NOTE_CONTEXT_LIMITS.selectedTextContextChars)}${context.selectedText.length > AI_NOTE_CONTEXT_LIMITS.selectedTextContextChars ? '...' : ''}"`)
       contextParts.push(`  When the user asks about "this", "the selection", or "selected text", refer to this text.`)
     }
 
@@ -1210,25 +1236,79 @@ function buildSystemMessage(context?: AIContext): string {
 
     // Inject current note full content directly (avoids requiring a tool-call round-trip)
     if (context.currentNote?.content) {
-      const body = context.currentNote.content.length > 4000
-        ? context.currentNote.content.slice(0, 4000) + '\n...(truncated)'
-        : context.currentNote.content
-      message += `\n\n---\n## Current Note: "${context.currentNote.title}"\n${body}\n---`
+      const current = fitContentIntoContextBudget(
+        context.currentNote.content,
+        AI_NOTE_CONTEXT_LIMITS.maxCharsPerNote,
+        remainingContextChars,
+      )
+      remainingContextChars -= current.usedChars
+
+      if (!current.omitted) {
+        message += `\n\n---\n## Current Note: "${context.currentNote.title}"\n${current.content}${current.truncated ? '\n...(truncated for context window)' : ''}\n---`
+      }
     }
 
     if (context.additionalNoteContents && context.additionalNoteContents.length > 0) {
+      const limitedNotes = context.additionalNoteContents.slice(0, AI_NOTE_CONTEXT_LIMITS.maxSelectedNotes)
       message += '\n\n---\n## Notes in Context\n'
-      for (const n of context.additionalNoteContents) {
-        const truncated = n.content.length > 4000
-          ? n.content.slice(0, 4000) + '\n...(truncated)'
-          : n.content
-        message += `\n### "${n.title}"\n${truncated}\n`
+      for (const n of limitedNotes) {
+        const noteContent = fitContentIntoContextBudget(
+          n.content,
+          AI_NOTE_CONTEXT_LIMITS.maxCharsPerNote,
+          remainingContextChars,
+        )
+        remainingContextChars -= noteContent.usedChars
+
+        if (noteContent.omitted) {
+          message += `\n### "${n.title}"\n[omitted due to context budget]\n`
+          continue
+        }
+
+        message += `\n### "${n.title}"\n${noteContent.content}${noteContent.truncated ? '\n...(truncated for context window)' : ''}\n`
+      }
+
+      const omittedCount = Math.max(0, context.additionalNoteContents.length - limitedNotes.length)
+      if (omittedCount > 0) {
+        message += `\n${omittedCount} additional note(s) omitted due to note limit.`
       }
       message += '---'
     }
   }
 
   return message
+}
+
+function truncateAtBoundary(text: string, maxChars: number): string {
+  if (text.length <= maxChars) return text
+  const slice = text.slice(0, maxChars)
+  const paragraphBoundary = Math.max(slice.lastIndexOf('\n\n'), slice.lastIndexOf('. '))
+  if (paragraphBoundary >= Math.floor(maxChars * 0.65)) {
+    return slice.slice(0, paragraphBoundary + 1).trimEnd()
+  }
+  const wordBoundary = slice.lastIndexOf(' ')
+  if (wordBoundary >= Math.floor(maxChars * 0.65)) {
+    return slice.slice(0, wordBoundary).trimEnd()
+  }
+  return slice.trimEnd()
+}
+
+function fitContentIntoContextBudget(
+  content: string,
+  perNoteMaxChars: number,
+  remainingBudgetChars: number,
+): { content: string; usedChars: number; truncated: boolean; omitted: boolean } {
+  if (remainingBudgetChars <= 0) {
+    return { content: '', usedChars: 0, truncated: true, omitted: true }
+  }
+
+  const hardMax = Math.max(0, Math.min(perNoteMaxChars, remainingBudgetChars))
+  const bounded = truncateAtBoundary(content, hardMax)
+  return {
+    content: bounded,
+    usedChars: bounded.length,
+    truncated: bounded.length < content.length,
+    omitted: false,
+  }
 }
 
 function parseMindmapOutlineResponse(response: string): MindmapOutline | null {
