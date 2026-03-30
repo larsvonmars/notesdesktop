@@ -30,7 +30,7 @@ export interface FileBlockAnnotatePdfEventDetail {
 
 export const FILE_BLOCK_ANNOTATE_PDF_EVENT = 'file-block-annotate-pdf'
 
-type FileAction = 'open' | 'download' | 'copy-path' | 'remove' | 'annotate-pdf'
+type FileAction = 'open' | 'download' | 'copy-path' | 'remove' | 'annotate-pdf' | 'toggle-collapse'
 
 /**
  * Escape HTML entities to prevent XSS
@@ -272,81 +272,91 @@ export const fileBlock: CustomBlockDescriptor = {
     const ext = getFileExtension(payload.name)
     const kindLabel = escapeHtml(getFileKindLabel(type))
     const attachedLabel = escapeHtml(formatAttachedAtLabel(payload.attached_at))
-    const pathHint = escapeHtml(truncateMiddle(getPathHint(payload.path), 38))
+    const pathHint = escapeHtml(truncateMiddle(getPathHint(payload.path), 32))
     const attachedAtIso = payload.attached_at ? escapeHtml(payload.attached_at) : ''
     const isPdf = isPdfType(type)
 
-    return `<div class="file-block-container my-3" data-block="true" data-block-type="file" data-file-path="${path}" data-file-name="${name}" data-file-size="${size}" data-file-type="${escapedType}" data-file-attached-at="${attachedAtIso}" contenteditable="false">
-      <div class="file-block-card group relative overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm transition-all hover:border-slate-300 hover:shadow-md" data-file-path="${path}" data-file-name="${name}" data-file-size="${size}" data-file-type="${escapedType}" data-file-attached-at="${attachedAtIso}">
-        <div class="absolute inset-x-0 top-0 h-1 bg-gradient-to-r ${accentClass}"></div>
+    return `<div class="file-block-container file-block-compact my-1.5" data-block="true" data-block-type="file" data-file-path="${path}" data-file-name="${name}" data-file-size="${size}" data-file-type="${escapedType}" data-file-attached-at="${attachedAtIso}" data-file-collapsed="true" contenteditable="false">
+      <div class="file-block-card group relative overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm transition-all hover:border-slate-300 hover:shadow-md" data-file-path="${path}" data-file-name="${name}" data-file-size="${size}" data-file-type="${escapedType}" data-file-attached-at="${attachedAtIso}">
+        <div class="absolute inset-x-0 top-0 h-[2px] bg-gradient-to-r ${accentClass}"></div>
 
-        <button type="button" class="file-block-surface file-block-surface-button flex w-full items-start gap-3 px-4 pb-3 pt-4 text-left" aria-label="Open file" title="Open ${name}" contenteditable="false">
-          <div class="file-block-icon-wrap flex h-11 w-11 flex-shrink-0 items-center justify-center rounded-xl border border-slate-200 bg-white text-slate-600 shadow-sm ${bgClass}">
-            ${iconSvg}
+        <div class="file-block-head flex items-center gap-2 px-2.5 py-1.5">
+          <button type="button" class="file-block-surface file-block-surface-button flex min-w-0 flex-1 items-center gap-2 text-left" aria-label="Open file" title="Open ${name}" contenteditable="false">
+            <div class="file-block-icon-wrap flex h-7 w-7 flex-shrink-0 items-center justify-center rounded-lg border border-slate-200 bg-white text-slate-600 shadow-sm ${bgClass}">
+              ${iconSvg}
+            </div>
+
+            <div class="min-w-0 flex-1">
+              <div class="truncate text-[12px] font-semibold leading-4 text-slate-900" title="${name}">${name}</div>
+              <div class="mt-0.5 flex items-center gap-1 text-[10px] leading-3 text-slate-500">
+                <span class="inline-flex items-center rounded border border-slate-200 bg-slate-50 px-1 py-0 font-semibold tracking-wide text-slate-600">${escapeHtml(ext)}</span>
+                <span data-file-size-label="true">${sizeStr}</span>
+                <span>•</span>
+                <span>${kindLabel}</span>
+              </div>
+            </div>
+          </button>
+
+          <div class="file-block-head-actions flex items-center gap-1">
+            <button type="button" class="file-block-action file-block-download file-block-action-icon inline-flex items-center justify-center rounded-md border border-slate-200 bg-white text-slate-700 transition-colors hover:bg-slate-100" data-file-action="download" aria-label="Download file" title="Download ${name}" contenteditable="false">
+              <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+                <polyline points="7 10 12 15 17 10"/>
+                <line x1="12" y1="15" x2="12" y2="3"/>
+              </svg>
+            </button>
+
+            <button type="button" class="file-block-action file-block-toggle file-block-action-icon inline-flex items-center justify-center rounded-md border border-slate-200 bg-white text-slate-700 transition-colors hover:bg-slate-100" data-file-action="toggle-collapse" aria-expanded="false" aria-label="Toggle attachment details" title="Expand attachment details" contenteditable="false">
+              <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" data-file-chevron="true">
+                <polyline points="6 9 12 15 18 9"/>
+              </svg>
+            </button>
+          </div>
+        </div>
+
+        <div class="file-block-expandable border-t border-slate-100 px-2.5 py-2">
+          <div class="file-block-path-pill inline-flex max-w-full items-center gap-1 rounded-md bg-slate-100 px-2 py-1 text-[10px] leading-4 text-slate-600" title="${path}">
+            <span class="font-medium text-slate-500">Path</span>
+            <span class="truncate">${pathHint}</span>
           </div>
 
-          <div class="min-w-0 flex-1">
-            <div class="flex min-w-0 items-start gap-2">
-              <span class="min-w-0 flex-1 truncate text-sm font-semibold text-slate-900" title="${name}">${name}</span>
-              <span class="inline-flex flex-shrink-0 items-center rounded-md border border-slate-200 bg-slate-50 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-slate-600">${escapeHtml(ext)}</span>
-            </div>
-
-            <div class="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-slate-500">
-              <span>${kindLabel}</span>
-              <span>•</span>
-              <span data-file-size-label="true">${sizeStr}</span>
-              <span>•</span>
-              <span>${attachedLabel}</span>
-            </div>
-
-            <div class="file-block-path-pill mt-1.5 inline-flex max-w-full items-center gap-1 rounded-md bg-slate-100 px-2 py-1 text-[11px] text-slate-600">
-              <span class="font-medium text-slate-500">Path</span>
-              <span class="truncate" title="${path}">${pathHint}</span>
-            </div>
+          <div class="mt-1 flex items-center gap-1 text-[10px] leading-4 text-slate-500">
+            <span>${attachedLabel}</span>
           </div>
-        </button>
 
-        <div class="file-block-actions-row flex items-center gap-1 border-t border-slate-100 bg-slate-50/80 px-2 py-2">
-          <button type="button" class="file-block-action file-block-preview inline-flex items-center gap-1 rounded-md border border-slate-200 bg-white px-2.5 py-1.5 text-xs font-medium text-slate-700 transition-colors hover:bg-slate-100" data-file-action="open" aria-label="Open file" title="Open ${name}" contenteditable="false">
-            <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-              <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/>
-              <circle cx="12" cy="12" r="3"/>
-            </svg>
-            <span>Open</span>
-          </button>
+          <div class="mt-1.5 flex flex-wrap items-center gap-1">
+            <button type="button" class="file-block-action file-block-preview inline-flex items-center gap-1 rounded-md border border-slate-200 bg-white px-2 py-1 text-[10px] font-medium text-slate-700 transition-colors hover:bg-slate-100" data-file-action="open" aria-label="Open file" title="Open ${name}" contenteditable="false">
+              <svg xmlns="http://www.w3.org/2000/svg" width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/>
+                <circle cx="12" cy="12" r="3"/>
+              </svg>
+              <span>Open</span>
+            </button>
 
-          <button type="button" class="file-block-action file-block-download inline-flex items-center gap-1 rounded-md border border-slate-200 bg-white px-2.5 py-1.5 text-xs font-medium text-slate-700 transition-colors hover:bg-slate-100" data-file-action="download" aria-label="Download file" title="Download ${name}" contenteditable="false">
-            <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-              <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
-              <polyline points="7 10 12 15 17 10"/>
-              <line x1="12" y1="15" x2="12" y2="3"/>
-            </svg>
-            <span>Download</span>
-          </button>
+            <button type="button" class="file-block-action inline-flex items-center gap-1 rounded-md border border-slate-200 bg-white px-2 py-1 text-[10px] font-medium text-slate-700 transition-colors hover:bg-slate-100" data-file-action="copy-path" aria-label="Copy file path" title="Copy file path" contenteditable="false">
+              <svg xmlns="http://www.w3.org/2000/svg" width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <rect x="9" y="9" width="13" height="13" rx="2" ry="2"/>
+                <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/>
+              </svg>
+              <span>Copy</span>
+            </button>
 
-          <button type="button" class="file-block-action inline-flex items-center gap-1 rounded-md border border-slate-200 bg-white px-2.5 py-1.5 text-xs font-medium text-slate-700 transition-colors hover:bg-slate-100" data-file-action="copy-path" aria-label="Copy file path" title="Copy file path" contenteditable="false">
-            <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-              <rect x="9" y="9" width="13" height="13" rx="2" ry="2"/>
-              <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/>
-            </svg>
-            <span>Copy Path</span>
-          </button>
+            ${isPdf ? `<button type="button" class="file-block-action file-block-annotate inline-flex items-center gap-1 rounded-md border border-indigo-200 bg-white px-2 py-1 text-[10px] font-medium text-indigo-700 transition-colors hover:bg-indigo-50" data-file-action="annotate-pdf" aria-label="Create embedded PDF annotation note" title="Annotate PDF" contenteditable="false">
+              <svg xmlns="http://www.w3.org/2000/svg" width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M12 20h9"/>
+                <path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z"/>
+              </svg>
+              <span>Annotate</span>
+            </button>` : ''}
 
-          ${isPdf ? `<button type="button" class="file-block-action file-block-annotate inline-flex items-center gap-1 rounded-md border border-indigo-200 bg-white px-2.5 py-1.5 text-xs font-medium text-indigo-700 transition-colors hover:bg-indigo-50" data-file-action="annotate-pdf" aria-label="Create embedded PDF annotation note" title="Annotate PDF" contenteditable="false">
-            <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-              <path d="M12 20h9"/>
-              <path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z"/>
-            </svg>
-            <span>Annotate</span>
-          </button>` : ''}
-
-          <button type="button" class="file-block-action file-block-delete ml-auto inline-flex items-center gap-1 rounded-md border border-red-200 bg-white px-2.5 py-1.5 text-xs font-medium text-red-600 transition-colors hover:bg-red-50" data-file-action="remove" aria-label="Remove file attachment" title="Remove from note" contenteditable="false">
-            <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-              <line x1="18" y1="6" x2="6" y2="18"/>
-              <line x1="6" y1="6" x2="18" y2="18"/>
-            </svg>
-            <span>Remove</span>
-          </button>
+            <button type="button" class="file-block-action file-block-delete ml-auto inline-flex items-center gap-1 rounded-md border border-red-200 bg-white px-2 py-1 text-[10px] font-medium text-red-600 transition-colors hover:bg-red-50" data-file-action="remove" aria-label="Remove file attachment" title="Remove from note" contenteditable="false">
+              <svg xmlns="http://www.w3.org/2000/svg" width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <line x1="18" y1="6" x2="6" y2="18"/>
+                <line x1="6" y1="6" x2="18" y2="18"/>
+              </svg>
+              <span>Remove</span>
+            </button>
+          </div>
         </div>
       </div>
     </div>`
@@ -383,10 +393,6 @@ export function initializeFileBlockInteractions(
     }
   })
 
-  if (hasMigratedLegacyRefs) {
-    onContentChange()
-  }
-
   const getContainer = (target: Element | null): HTMLElement | null => {
     if (!target) return null
     return target.closest('.file-block-container, [data-block-type="file"], [data-block-type="file-ref"]') as HTMLElement | null
@@ -403,7 +409,26 @@ export function initializeFileBlockInteractions(
     if (target.closest('.file-block-download')) return 'download'
     if (target.closest('.file-block-delete')) return 'remove'
     if (target.closest('.file-block-annotate')) return 'annotate-pdf'
+    if (target.closest('.file-block-toggle')) return 'toggle-collapse'
     return null
+  }
+
+  const setCollapsedState = (container: HTMLElement, collapsed: boolean) => {
+    container.setAttribute('data-file-collapsed', collapsed ? 'true' : 'false')
+    const toggleButtons = Array.from(
+      container.querySelectorAll('[data-file-action="toggle-collapse"]')
+    ) as HTMLElement[]
+
+    toggleButtons.forEach((button) => {
+      button.setAttribute('aria-expanded', String(!collapsed))
+      button.setAttribute('title', collapsed ? 'Expand attachment details' : 'Collapse attachment details')
+    })
+  }
+
+  const ensureCollapsedState = (container: HTMLElement) => {
+    if (!container.hasAttribute('data-file-collapsed')) {
+      setCollapsedState(container, true)
+    }
   }
 
   const flashActionState = (button: HTMLElement | null, doneLabel: string) => {
@@ -435,6 +460,35 @@ export function initializeFileBlockInteractions(
     return Math.max(0, filtered.findIndex((node) => node === container))
   }
 
+  const fileNodes = Array.from(editorElement.querySelectorAll('[data-block-type="file"]')) as HTMLElement[]
+  let hasMigratedLegacyFileBlocks = false
+  fileNodes.forEach((node) => {
+    const hasCompactStructure =
+      node.classList.contains('file-block-compact') &&
+      !!node.querySelector('.file-block-head') &&
+      !!node.querySelector('.file-block-expandable')
+
+    if (hasCompactStructure) {
+      ensureCollapsedState(node)
+      return
+    }
+
+    const parsed = parsePayloadFromElement(node)
+    if (!parsed) return
+
+    const wrapper = document.createElement('div')
+    wrapper.innerHTML = fileBlock.render(parsed)
+    const replacement = wrapper.firstElementChild
+    if (replacement) {
+      node.replaceWith(replacement)
+      hasMigratedLegacyFileBlocks = true
+    }
+  })
+
+  if (hasMigratedLegacyRefs || hasMigratedLegacyFileBlocks) {
+    onContentChange()
+  }
+
   const openFileInNewTab = async (container: HTMLElement) => {
     const filePath = container.getAttribute('data-file-path')
     if (!filePath) return
@@ -454,6 +508,7 @@ export function initializeFileBlockInteractions(
 
     const container = getContainer(target)
     if (!container) return
+    ensureCollapsedState(container)
 
     const action = getAction(target)
     const clickedSurface = !!target.closest('.file-block-surface')
@@ -469,6 +524,12 @@ export function initializeFileBlockInteractions(
 
     if (effectiveAction === 'open') {
       await openFileInNewTab(container)
+      return
+    }
+
+    if (effectiveAction === 'toggle-collapse') {
+      const currentlyCollapsed = container.getAttribute('data-file-collapsed') !== 'false'
+      setCollapsedState(container, !currentlyCollapsed)
       return
     }
 

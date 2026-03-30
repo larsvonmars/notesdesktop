@@ -1357,7 +1357,7 @@
 @keyframes file-block-enter {
   from {
     opacity: 0;
-    transform: translateY(10px) scale(0.995);
+    transform: translateY(6px) scale(0.995);
   }
   to {
     opacity: 1;
@@ -1365,79 +1365,75 @@
   }
 }
 
-@keyframes file-block-action-enter {
-  from {
-    opacity: 0;
-    transform: translateY(4px);
-  }
-  to {
-    opacity: 1;
-    transform: translateY(0);
-  }
-}
-
 .file-block-container .file-block-card {
-  animation: file-block-enter 240ms cubic-bezier(0.2, 0.8, 0.2, 1) both;
-  transform-origin: 50% 16px;
+  animation: file-block-enter 180ms cubic-bezier(0.2, 0.8, 0.2, 1) both;
+  transform-origin: 50% 12px;
 }
 
 .file-block-container .file-block-surface-button {
-  transition: background-color 180ms ease, transform 180ms ease;
+  transition: background-color 140ms ease;
 }
 
 .file-block-container .file-block-icon-wrap {
-  transition: transform 220ms ease, box-shadow 220ms ease;
+  transition: transform 160ms ease, box-shadow 160ms ease;
 }
 
-.file-block-container .file-block-path-pill {
-  transition: background-color 180ms ease, color 180ms ease;
+.file-block-container .file-block-head-actions {
+  flex-shrink: 0;
 }
 
-.file-block-container .file-block-actions-row {
-  transition: background-color 180ms ease;
+.file-block-container .file-block-action-icon {
+  width: 1.5rem;
+  height: 1.5rem;
+  padding: 0;
 }
 
 .file-block-container .file-block-action {
-  opacity: 0.92;
-  transform: translateY(2px);
-  transition: transform 180ms ease, box-shadow 180ms ease, opacity 180ms ease, border-color 180ms ease;
+  transition: transform 140ms ease, box-shadow 140ms ease, border-color 140ms ease, background-color 140ms ease, color 140ms ease;
 }
 
-.file-block-container .file-block-card:hover .file-block-action,
-.file-block-container .file-block-card:focus-within .file-block-action {
+.file-block-container .file-block-expandable {
+  overflow: hidden;
+  max-height: 220px;
   opacity: 1;
-  transform: translateY(0);
-  animation: file-block-action-enter 180ms ease both;
+  transition: max-height 180ms ease, opacity 140ms ease, padding 180ms ease, border-color 180ms ease;
 }
 
-.file-block-container .file-block-action[data-file-action='open'] {
-  animation-delay: 10ms;
+.file-block-container[data-file-collapsed='true'] .file-block-expandable {
+  max-height: 0;
+  opacity: 0;
+  padding-top: 0;
+  padding-bottom: 0;
+  border-top-color: transparent;
+  pointer-events: none;
 }
 
-.file-block-container .file-block-action[data-file-action='download'] {
-  animation-delay: 35ms;
+.file-block-container [data-file-chevron='true'] {
+  transition: transform 160ms ease;
+  transform: rotate(0deg);
 }
 
-.file-block-container .file-block-action[data-file-action='copy-path'] {
-  animation-delay: 60ms;
+.file-block-container[data-file-collapsed='true'] [data-file-chevron='true'] {
+  transform: rotate(-90deg);
 }
 
-.file-block-container .file-block-action[data-file-action='annotate-pdf'] {
-  animation-delay: 85ms;
+.file-block-container[data-file-collapsed='false'] [data-file-chevron='true'] {
+  transform: rotate(0deg);
 }
 
-.file-block-container .file-block-action[data-file-action='remove'] {
-  animation-delay: 110ms;
-}
-
-.file-block-container .file-block-card:hover {
+.file-block-container .file-block-card:hover,
+.file-block-container .file-block-card:focus-within {
   transform: translateY(-1px);
 }
 
 .file-block-container .file-block-card:hover .file-block-icon-wrap,
 .file-block-container .file-block-card:focus-within .file-block-icon-wrap {
-  transform: scale(1.03);
-  box-shadow: 0 8px 18px -12px rgba(15, 23, 42, 0.55);
+  transform: scale(1.04);
+  box-shadow: 0 8px 14px -12px rgba(15, 23, 42, 0.65);
+}
+
+.file-block-container .file-block-path-pill {
+  transition: background-color 140ms ease, color 140ms ease;
 }
 
 .file-block-container .file-block-card:hover .file-block-path-pill,
@@ -1446,15 +1442,10 @@
   color: #334155;
 }
 
-.file-block-container .file-block-card:hover .file-block-actions-row,
-.file-block-container .file-block-card:focus-within .file-block-actions-row {
-  background-color: rgba(241, 245, 249, 0.95);
-}
-
 .file-block-container .file-block-action:hover,
 .file-block-container .file-block-action:focus-visible {
   transform: translateY(-1px);
-  box-shadow: 0 8px 16px -12px rgba(15, 23, 42, 0.75);
+  box-shadow: 0 8px 14px -12px rgba(15, 23, 42, 0.72);
 }
 
 .file-block-container .file-block-action[data-file-state='success'] {
@@ -1472,8 +1463,9 @@
   .file-block-container .file-block-card,
   .file-block-container .file-block-surface-button,
   .file-block-container .file-block-icon-wrap,
+  .file-block-container [data-file-chevron='true'],
   .file-block-container .file-block-path-pill,
-  .file-block-container .file-block-actions-row,
+  .file-block-container .file-block-expandable,
   .file-block-container .file-block-action {
     animation: none !important;
     transition: none !important;
