@@ -9,12 +9,18 @@ import { formatFileSize, getFileIconHint, triggerDownload, getFileUrl } from '..
 
 // Event and type for PDF annotation action
 export const FILE_BLOCK_ANNOTATE_PDF_EVENT = 'file-block-annotate-pdf'
+export const FILE_BLOCK_PREVIEW_PDF_EVENT = 'file-block-preview-pdf'
 
 export interface FileBlockAnnotatePdfEventDetail {
   filePath: string
   fileName: string
   fileType: string
   occurrenceIndex?: number
+}
+
+export interface FileBlockPreviewPdfEventDetail {
+  filePath: string
+  fileName: string
 }
 
 export interface FileBlockPayload {
@@ -394,6 +400,20 @@ export function initializeFileBlockInteractions(
     e.stopPropagation()
 
     if (effectiveAction === 'open') {
+      const fileType = container.getAttribute('data-file-type')
+      if (fileType === 'application/pdf') {
+        const filePath = container.getAttribute('data-file-path')
+        const fileName = container.getAttribute('data-file-name')
+        if (filePath && fileName) {
+          const event = new CustomEvent<FileBlockPreviewPdfEventDetail>(
+            FILE_BLOCK_PREVIEW_PDF_EVENT,
+            { detail: { filePath, fileName } }
+          )
+          window.dispatchEvent(event)
+          return
+        }
+      }
+
       await openFileInNewTab(container)
       return
     }

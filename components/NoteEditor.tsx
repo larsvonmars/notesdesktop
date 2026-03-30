@@ -87,9 +87,12 @@ import {
   type FileBlockPayload,
   initializeFileBlockInteractions,
   FILE_BLOCK_ANNOTATE_PDF_EVENT,
+  FILE_BLOCK_PREVIEW_PDF_EVENT,
+  type FileBlockPreviewPdfEventDetail,
   type FileBlockAnnotatePdfEventDetail,
 } from '../lib/editor/fileBlock'
 import FileExplorerModal from './FileExplorerModal'
+import PdfPreviewModal from './PdfPreviewModal'
 import SettingsModal from './SettingsModal'
 import AIAssistant from './AIAssistant'
 import {
@@ -600,6 +603,14 @@ export default function NoteEditor({
   const [showKnowledgeGraph, setShowKnowledgeGraph] = useState(false)
   const [showProjectsModal, setShowProjectsModal] = useState(false)
   const [showFilePicker, setShowFilePicker] = useState(false)
+  
+  // PDF Preview Modal State
+  const [pdfPreview, setPdfPreview] = useState<{isOpen: boolean, filePath: string | null, fileName: string | null}>({
+    isOpen: false,
+    filePath: null,
+    fileName: null
+  })
+
   const [showSettings, setShowSettings] = useState(false)
   const [showAIAssistant, setShowAIAssistant] = useState(false)
   const [isAIAssistantLarge, setIsAIAssistantLarge] = useState(false)
@@ -1968,6 +1979,18 @@ export default function NoteEditor({
       }
     }
 
+    const handlePreviewPdfFromFileBlock = (event: Event) => {
+      const customEvent = event as CustomEvent<FileBlockPreviewPdfEventDetail>
+      const detail = customEvent.detail
+      if (!detail?.filePath) return
+      
+      setPdfPreview({
+        isOpen: true,
+        filePath: detail.filePath,
+        fileName: detail.fileName
+      })
+    }
+
     const handleOpenEmbeddedPdfNote = async (event: Event) => {
       const target = event.target as HTMLElement | null
       if (!target) return
@@ -1985,10 +2008,12 @@ export default function NoteEditor({
     }
 
     window.addEventListener(FILE_BLOCK_ANNOTATE_PDF_EVENT, handleAnnotatePdfFromFileBlock as EventListener)
+    window.addEventListener(FILE_BLOCK_PREVIEW_PDF_EVENT, handlePreviewPdfFromFileBlock as EventListener)
     window.addEventListener('click', handleOpenEmbeddedPdfNote)
 
     return () => {
       window.removeEventListener(FILE_BLOCK_ANNOTATE_PDF_EVENT, handleAnnotatePdfFromFileBlock as EventListener)
+      window.removeEventListener(FILE_BLOCK_PREVIEW_PDF_EVENT, handlePreviewPdfFromFileBlock as EventListener)
       window.removeEventListener('click', handleOpenEmbeddedPdfNote)
     }
   }, [
@@ -3491,6 +3516,14 @@ export default function NoteEditor({
         title="Attach File"
         initialPath={noteFileUploadPath}
         uploadPath={noteFileUploadPath}
+      />
+
+      {/* PDF Action Previews */}
+      <PdfPreviewModal 
+        isOpen={pdfPreview.isOpen}
+        onClose={() => setPdfPreview({isOpen: false, filePath: null, fileName: null})}
+        filePath={pdfPreview.filePath}
+        fileName={pdfPreview.fileName}
       />
 
       {/* Project Manager Modal (fallback when workspace view callback is not provided) */}
