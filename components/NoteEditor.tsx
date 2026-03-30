@@ -88,11 +88,14 @@ import {
   initializeFileBlockInteractions,
   FILE_BLOCK_ANNOTATE_PDF_EVENT,
   FILE_BLOCK_PREVIEW_PDF_EVENT,
+  FILE_BLOCK_PREVIEW_DOCX_EVENT,
   type FileBlockPreviewPdfEventDetail,
+  type FileBlockPreviewDocxEventDetail,
   type FileBlockAnnotatePdfEventDetail,
 } from '../lib/editor/fileBlock'
 import FileExplorerModal from './FileExplorerModal'
 import PdfPreviewModal from './PdfPreviewModal'
+import DocxPreviewModal from './DocxPreviewModal'
 import SettingsModal from './SettingsModal'
 import AIAssistant from './AIAssistant'
 import {
@@ -606,6 +609,13 @@ export default function NoteEditor({
   
   // PDF Preview Modal State
   const [pdfPreview, setPdfPreview] = useState<{isOpen: boolean, filePath: string | null, fileName: string | null}>({
+    isOpen: false,
+    filePath: null,
+    fileName: null
+  })
+
+  // DOCX Preview Modal State
+  const [docxPreview, setDocxPreview] = useState<{isOpen: boolean, filePath: string | null, fileName: string | null}>({
     isOpen: false,
     filePath: null,
     fileName: null
@@ -1991,6 +2001,18 @@ export default function NoteEditor({
       })
     }
 
+    const handlePreviewDocxFromFileBlock = (event: Event) => {
+      const customEvent = event as CustomEvent<FileBlockPreviewDocxEventDetail>
+      const detail = customEvent.detail
+      if (!detail?.filePath) return
+      
+      setDocxPreview({
+        isOpen: true,
+        filePath: detail.filePath,
+        fileName: detail.fileName
+      })
+    }
+
     const handleOpenEmbeddedPdfNote = async (event: Event) => {
       const target = event.target as HTMLElement | null
       if (!target) return
@@ -2009,11 +2031,13 @@ export default function NoteEditor({
 
     window.addEventListener(FILE_BLOCK_ANNOTATE_PDF_EVENT, handleAnnotatePdfFromFileBlock as EventListener)
     window.addEventListener(FILE_BLOCK_PREVIEW_PDF_EVENT, handlePreviewPdfFromFileBlock as EventListener)
+    window.addEventListener(FILE_BLOCK_PREVIEW_DOCX_EVENT, handlePreviewDocxFromFileBlock as EventListener)
     window.addEventListener('click', handleOpenEmbeddedPdfNote)
 
     return () => {
       window.removeEventListener(FILE_BLOCK_ANNOTATE_PDF_EVENT, handleAnnotatePdfFromFileBlock as EventListener)
       window.removeEventListener(FILE_BLOCK_PREVIEW_PDF_EVENT, handlePreviewPdfFromFileBlock as EventListener)
+      window.removeEventListener(FILE_BLOCK_PREVIEW_DOCX_EVENT, handlePreviewDocxFromFileBlock as EventListener)
       window.removeEventListener('click', handleOpenEmbeddedPdfNote)
     }
   }, [
@@ -2515,6 +2539,17 @@ export default function NoteEditor({
     return `${diffHours}h ago`
   }, [lastSaveTime])
 
+  const downloadBlobFile = useCallback((fileName: string, blob: Blob) => {
+    const url = URL.createObjectURL(blob)
+    const anchor = document.createElement('a')
+    anchor.href = url
+    anchor.download = fileName
+    document.body.appendChild(anchor)
+    anchor.click()
+    document.body.removeChild(anchor)
+    URL.revokeObjectURL(url)
+  }, [])
+
   const downloadTextFile = useCallback((fileName: string, body: string, mimeType: string) => {
     const blob = new Blob([body], { type: mimeType })
     const url = URL.createObjectURL(blob)
@@ -2632,6 +2667,76 @@ export default function NoteEditor({
     downloadTextFile(`${fileBase}.md`, markdown, 'text/markdown;charset=utf-8')
     toast.push({ title: 'Markdown exported' })
   }, [title, note?.title, noteType, content, getStructuredExportContent, downloadTextFile, toast])
+
+  const handleExportDocx = useCallback(async () => {
+    const fileBase = sanitizePathSegment(title || note?.title || '', 'untitled-note')
+
+    if (noteType !== 'rich-text') {
+      toast.push({ title: 'DOCX export only supported for Rich Text notes' })
+      return
+    }
+
+    try {
+      const bodyHtml = editorRef.current?.getHTML() || content
+      const htmlContent = `<!DOCTYPE html><html><head><meta charset="utf-8"></head><body>${bodyHtml}</body></html>`
+      
+      const { asBlob } = await import('html-docx-js-typescript')
+      const blob = await asBlob(htmlContent) as Blob
+      
+      downloadBlobFile(`${fileBase}.docx`, blob)
+      toast.push({ title: 'DOCX exported' })
+    } catch (error) {
+      console.error('Export docx error:', error)
+      toast.push({ title: 'Failed to export DOCX' })
+    }
+  }, [title, note?.title, noteType, content, downloadBlobFile, toast])
+
+  const handleImportDocx = useCallback(() => {
+    const input = document.createElement('input')
+    input.type = 'file'
+    input.accept = '.docx'
+    input.onchange = async (e) => {
+      const file = (e.target as HTMLInputElement).files?.[0]
+      if (!file) return
+      try {
+        const arrayBuffer = await file.arrayBuffer()
+        const mammoth = (await import('mammoth')).default
+        const result = await mammoth.convertToHtml({ arrayBuffer })
+        const DOMPurify = (await import('dompurify')).default
+        
+        // mammoth usually returns paragraphs, we need to clean them gently
+        let plainHtml = result.value.replace(/<p><\/p>/g, '')
+        
+        let cleanHtml = ''
+        if (typeof window !== 'undefined' && typeof DOMPurify.sanitize === 'function') {
+           cleanHtml = DOMPurify.sanitize(plainHtml)
+        } else {
+           cleanHtml = plainHtml
+        }
+        
+        // Set content
+        if (content.trim() === '' || content === '<p></p>') {
+            handleContentChange(cleanHtml)
+        } else {
+            handleContentChange(content + '<hr>' + cleanHtml)
+        }
+        
+        if (editorRef.current) {
+             editorRef.current.focus()
+             // wait for render then scroll
+             setTimeout(() => {
+                 editorRef.current?.focus()
+             }, 100)
+        }
+        
+        toast.push({ title: 'DOCX imported' })
+      } catch (error) {
+        console.error('Import docx error:', error)
+        toast.push({ title: 'Failed to import DOCX' })
+      }
+    }
+    input.click()
+  }, [content, handleContentChange, toast])
 
   const handleExportPdf = useCallback(() => {
     const printableTitle = escapeHtml(title || note?.title || 'Untitled note')
@@ -3183,6 +3288,8 @@ export default function NoteEditor({
           onOpenAIAssistant={() => setShowAIAssistant(true)}
           onExportMarkdown={handleExportMarkdown}
           onExportPdf={handleExportPdf}
+          onExportDocx={handleExportDocx}
+          onImportDocx={handleImportDocx}
           onOpenConnections={() => setShowKnowledgeGraph(true)}
           backlinks={connectionData.backlinks}
           connectionsCount={connectionData.connectionsCount}
@@ -3524,6 +3631,14 @@ export default function NoteEditor({
         onClose={() => setPdfPreview({isOpen: false, filePath: null, fileName: null})}
         filePath={pdfPreview.filePath}
         fileName={pdfPreview.fileName}
+      />
+
+      {/* DOCX Action Previews */}
+      <DocxPreviewModal
+        isOpen={docxPreview.isOpen}
+        onClose={() => setDocxPreview({isOpen: false, filePath: null, fileName: null})}
+        filePath={docxPreview.filePath}
+        fileName={docxPreview.fileName}
       />
 
       {/* Project Manager Modal (fallback when workspace view callback is not provided) */}

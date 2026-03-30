@@ -21,6 +21,8 @@ import {
   Settings,
   X,
   Download,
+  FileDown,
+  FileUp,
   Sparkles,
   Copy,
   ExternalLink,
@@ -68,6 +70,8 @@ export interface NoteDetailsSidebarProps {
   // Export
   onExportMarkdown?: () => void
   onExportPdf?: () => void
+  onExportDocx?: () => void
+  onImportDocx?: () => void
 
   // Connections
   onOpenConnections?: () => void
@@ -130,6 +134,8 @@ export default function NoteDetailsSidebar({
   onOpenSettings,
   onExportMarkdown,
   onExportPdf,
+  onExportDocx,
+  onImportDocx,
   onOpenConnections,
   backlinks = [],
   connectionsCount = 0,
@@ -246,7 +252,7 @@ export default function NoteDetailsSidebar({
           </button>
 
           {/* Export */}
-          {(onExportMarkdown || onExportPdf) && (
+          {(onExportMarkdown || onExportPdf || onExportDocx || onImportDocx) && (
             <div className="mt-1 h-px w-6 bg-border" />
           )}
           {onExportMarkdown && (
@@ -265,6 +271,24 @@ export default function NoteDetailsSidebar({
               title="Export PDF"
             >
               <Download size={14} />
+            </button>
+          )}
+          {onExportDocx && (
+            <button
+              onClick={onExportDocx}
+              className="p-1.5 rounded-lg text-muted hover:bg-surface-hover hover:text-foreground transition-colors"
+              title="Export DOCX"
+            >
+              <FileDown size={14} />
+            </button>
+          )}
+          {onImportDocx && (
+            <button
+              onClick={onImportDocx}
+              className="p-1.5 rounded-lg text-muted hover:bg-surface-hover hover:text-foreground transition-colors"
+              title="Import DOCX"
+            >
+              <FileUp size={14} />
             </button>
           )}
 
@@ -414,7 +438,7 @@ export default function NoteDetailsSidebar({
         </div>
 
         {/* Export Section */}
-        {(onExportMarkdown || onExportPdf) && (
+        {(onExportMarkdown || onExportPdf || onExportDocx || onImportDocx) && (
           <div className="px-3 py-3 border-b border-border">
             <label className="text-[10px] font-semibold text-muted uppercase tracking-wider mb-2 block">Export</label>
             <div className="space-y-1.5">
@@ -434,6 +458,24 @@ export default function NoteDetailsSidebar({
                 >
                   <Download size={13} className="text-muted" />
                   <span>Export as PDF</span>
+                </button>
+              )}
+              {onExportDocx && (
+                <button
+                  onClick={onExportDocx}
+                  className="flex w-full items-center gap-2 rounded-lg px-2.5 py-1.5 text-xs text-foreground/80 transition-colors hover:bg-surface-hover hover:text-foreground"
+                >
+                  <FileDown size={13} className="text-muted" />
+                  <span>Export as DOCX</span>
+                </button>
+              )}
+              {onImportDocx && (
+                <button
+                  onClick={onImportDocx}
+                  className="flex w-full items-center gap-2 rounded-lg px-2.5 py-1.5 text-xs text-foreground/80 transition-colors hover:bg-surface-hover hover:text-foreground"
+                >
+                  <FileUp size={13} className="text-muted" />
+                  <span>Import from DOCX</span>
                 </button>
               )}
             </div>

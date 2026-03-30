@@ -10,6 +10,7 @@ import { formatFileSize, getFileIconHint, triggerDownload, getFileUrl } from '..
 // Event and type for PDF annotation action
 export const FILE_BLOCK_ANNOTATE_PDF_EVENT = 'file-block-annotate-pdf'
 export const FILE_BLOCK_PREVIEW_PDF_EVENT = 'file-block-preview-pdf'
+export const FILE_BLOCK_PREVIEW_DOCX_EVENT = 'file-block-preview-docx'
 
 export interface FileBlockAnnotatePdfEventDetail {
   filePath: string
@@ -19,6 +20,11 @@ export interface FileBlockAnnotatePdfEventDetail {
 }
 
 export interface FileBlockPreviewPdfEventDetail {
+  filePath: string
+  fileName: string
+}
+
+export interface FileBlockPreviewDocxEventDetail {
   filePath: string
   fileName: string
 }
@@ -401,17 +407,29 @@ export function initializeFileBlockInteractions(
 
     if (effectiveAction === 'open') {
       const fileType = container.getAttribute('data-file-type')
-      if (fileType === 'application/pdf') {
-        const filePath = container.getAttribute('data-file-path')
-        const fileName = container.getAttribute('data-file-name')
-        if (filePath && fileName) {
-          const event = new CustomEvent<FileBlockPreviewPdfEventDetail>(
-            FILE_BLOCK_PREVIEW_PDF_EVENT,
-            { detail: { filePath, fileName } }
-          )
-          window.dispatchEvent(event)
-          return
-        }
+      const fileName = container.getAttribute('data-file-name')
+      const filePath = container.getAttribute('data-file-path')
+
+      if (fileType === 'application/pdf' && filePath && fileName) {
+        const event = new CustomEvent<FileBlockPreviewPdfEventDetail>(
+          FILE_BLOCK_PREVIEW_PDF_EVENT,
+          { detail: { filePath, fileName } }
+        )
+        window.dispatchEvent(event)
+        return
+      }
+
+      if (
+        (fileType === 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' || 
+         fileName?.toLowerCase().endsWith('.docx')) && 
+        filePath && fileName
+      ) {
+        const event = new CustomEvent<FileBlockPreviewDocxEventDetail>(
+          FILE_BLOCK_PREVIEW_DOCX_EVENT,
+          { detail: { filePath, fileName } }
+        )
+        window.dispatchEvent(event)
+        return
       }
 
       await openFileInNewTab(container)
