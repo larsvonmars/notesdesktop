@@ -6,7 +6,6 @@ import DOMPurify from 'dompurify'
 import {
   Send,
   Sparkles,
-  Bot,
   User,
   Loader2,
   Copy,
@@ -39,6 +38,9 @@ import {
   Search,
   Maximize2,
   Minimize2,
+  CornerDownLeft,
+  StopCircle,
+  Settings2,
 } from 'lucide-react'
 import {
   chat,
@@ -261,21 +263,24 @@ function MarkdownContent({ content, className = '' }: { content: string; classNa
   }, [content])
   return (
     <div
-      className={`text-sm leading-relaxed text-foreground
-        [&_p]:my-1.5 [&_p:first-child]:mt-0 [&_p:last-child]:mb-0
+      className={`text-[13px] leading-[1.7] text-foreground
+        [&_p]:my-2 [&_p:first-child]:mt-0 [&_p:last-child]:mb-0
         [&_strong]:font-semibold [&_em]:italic
-        [&_h1]:text-base [&_h1]:font-bold [&_h1]:my-2
-        [&_h2]:text-sm [&_h2]:font-semibold [&_h2]:my-1.5
-        [&_h3]:text-sm [&_h3]:font-medium [&_h3]:my-1
-        [&_ul]:list-disc [&_ul]:pl-4 [&_ul]:my-1.5
-        [&_ol]:list-decimal [&_ol]:pl-4 [&_ol]:my-1.5
-        [&_li]:my-0.5
-        [&_code]:bg-surface-active [&_code]:text-foreground [&_code]:px-1.5 [&_code]:py-0.5 [&_code]:rounded [&_code]:text-xs [&_code]:font-mono
-        [&_pre]:bg-surface-active [&_pre]:rounded-lg [&_pre]:p-3 [&_pre]:overflow-auto [&_pre]:my-2
+        [&_h1]:text-base [&_h1]:font-bold [&_h1]:mt-4 [&_h1]:mb-2
+        [&_h2]:text-[13px] [&_h2]:font-semibold [&_h2]:mt-3 [&_h2]:mb-1.5
+        [&_h3]:text-[13px] [&_h3]:font-medium [&_h3]:mt-2 [&_h3]:mb-1
+        [&_ul]:list-disc [&_ul]:pl-5 [&_ul]:my-2
+        [&_ol]:list-decimal [&_ol]:pl-5 [&_ol]:my-2
+        [&_li]:my-1 [&_li]:leading-relaxed
+        [&_code]:bg-surface-active/60 [&_code]:text-foreground [&_code]:px-1.5 [&_code]:py-0.5 [&_code]:rounded-md [&_code]:text-xs [&_code]:font-mono
+        [&_pre]:bg-surface-active/60 [&_pre]:rounded-xl [&_pre]:p-3.5 [&_pre]:overflow-auto [&_pre]:my-3 [&_pre]:border [&_pre]:border-border/50
         [&_pre>code]:bg-transparent [&_pre>code]:p-0
-        [&_blockquote]:border-l-2 [&_blockquote]:border-border-strong [&_blockquote]:pl-3 [&_blockquote]:text-muted [&_blockquote]:my-1.5
-        [&_a]:text-alpine-600 [&_a]:underline hover:[&_a]:text-alpine-700
-        [&_hr]:border-border [&_hr]:my-3
+        [&_blockquote]:border-l-2 [&_blockquote]:border-alpine-400/40 [&_blockquote]:pl-3 [&_blockquote]:text-muted [&_blockquote]:my-2 [&_blockquote]:italic
+        [&_a]:text-alpine-500 [&_a]:underline [&_a]:underline-offset-2 hover:[&_a]:text-alpine-400
+        [&_hr]:border-border/50 [&_hr]:my-4
+        [&_table]:w-full [&_table]:text-xs [&_table]:border-collapse [&_table]:my-3
+        [&_th]:bg-surface-hover [&_th]:border [&_th]:border-border [&_th]:px-2 [&_th]:py-1.5 [&_th]:text-left [&_th]:font-medium
+        [&_td]:border [&_td]:border-border [&_td]:px-2 [&_td]:py-1.5
         ${className}`}
       dangerouslySetInnerHTML={{ __html: html }}
     />
@@ -287,22 +292,46 @@ function ThinkingSection({ reasoning }: { reasoning: string }) {
   const [open, setOpen] = useState(false)
   const wordCount = Math.round(reasoning.split(/\s+/).filter(Boolean).length)
   return (
-    <div className="mb-2 pb-2 border-b border-border/50">
+    <div className="mb-3 rounded-lg bg-surface-hover/50 border border-border/40 overflow-hidden">
       <button
         onClick={() => setOpen(v => !v)}
-        className="flex items-center gap-1.5 text-[11px] font-medium text-muted hover:text-foreground transition-colors w-full text-left"
+        className="flex items-center gap-2 w-full text-left px-3 py-2 text-xs text-muted hover:text-foreground transition-colors"
       >
-        <Cpu size={11} />
-        <span>Reasoning chain</span>
-        <span className="text-[10px] opacity-60 ml-1">· {wordCount} words</span>
-        {open ? <ChevronUp size={10} className="ml-auto" /> : <ChevronDown size={10} className="ml-auto" />}
+        <Cpu size={12} className="text-alpine-500/70" />
+        <span className="font-medium">Reasoning chain</span>
+        <span className="text-[10px] opacity-50">({wordCount} words)</span>
+        <ChevronDown size={12} className={`ml-auto transition-transform duration-200 ${open ? 'rotate-180' : ''}`} />
       </button>
       {open && (
-        <div className="mt-1.5 pl-3 border-l-2 border-border/60 text-[11px] text-muted leading-relaxed whitespace-pre-wrap">
+        <div className="px-3 pb-3 pt-0 text-xs text-muted/80 leading-relaxed whitespace-pre-wrap border-t border-border/30">
           {reasoning}
         </div>
       )}
     </div>
+  )
+}
+
+/** Animated typing dots */
+function TypingDots() {
+  return (
+    <span className="inline-flex items-center gap-1 py-1">
+      {[0, 1, 2].map(i => (
+        <span
+          key={i}
+          className="w-1.5 h-1.5 rounded-full bg-muted/60"
+          style={{
+            animation: 'ai-typing 1.4s infinite',
+            animationDelay: `${i * 0.2}s`,
+          }}
+        />
+      ))}
+      <style>{`
+        @keyframes ai-typing {
+          0%, 60%, 100% { opacity: 0.3; transform: scale(0.8); }
+          30% { opacity: 1; transform: scale(1); }
+        }
+      `}</style>
+    </span>
   )
 }
 
@@ -459,6 +488,7 @@ export default function AIAssistant({
     const handleClickOutside = (e: MouseEvent) => {
       if (notePickerRef.current && !notePickerRef.current.contains(e.target as Node)) {
         setShowNotePicker(false)
+        setShowContextSettings(false)
       }
     }
     document.addEventListener('mousedown', handleClickOutside)
@@ -1152,56 +1182,63 @@ export default function AIAssistant({
   // ─── CHAT HISTORY PANEL ─────────────────────────────────────────────────────
 
   const renderChatHistory = () => (
-    <div className="flex-1 overflow-y-auto flex flex-col">
+    <div className="flex-1 flex flex-col overflow-hidden">
       <div className="flex-1 overflow-y-auto">
         {isLoadingHistory ? (
-          <div className="flex items-center justify-center py-12">
+          <div className="flex items-center justify-center py-16">
             <div className="flex flex-col items-center gap-3">
-              <Loader2 size={20} className="animate-spin text-muted" />
-              <span className="text-xs text-muted">Loading history…</span>
+              <div className="w-10 h-10 rounded-full bg-surface-hover flex items-center justify-center">
+                <Loader2 size={18} className="animate-spin text-muted" />
+              </div>
+              <span className="text-xs text-muted">Loading conversations…</span>
             </div>
           </div>
         ) : chatHistory.length === 0 ? (
-          <div className="flex flex-col items-center justify-center py-12 px-6">
-            <div className="w-14 h-14 rounded-2xl bg-surface-hover flex items-center justify-center mb-4">
-              <MessageSquare size={24} className="text-muted" />
+          <div className="flex flex-col items-center justify-center py-16 px-8">
+            <div className="w-16 h-16 rounded-2xl bg-gradient-to-br from-surface-hover to-surface-active/50 flex items-center justify-center mb-4">
+              <MessageSquare size={24} className="text-muted/60" />
             </div>
-            <p className="text-sm font-medium text-foreground/80">No conversations yet</p>
-            <p className="text-xs text-muted mt-1 text-center">Start a conversation to see it saved here</p>
+            <p className="text-sm font-medium text-foreground/70">No conversations yet</p>
+            <p className="text-xs text-muted mt-1.5 text-center leading-relaxed">
+              Your AI conversations will appear here
+            </p>
           </div>
         ) : (
-          <div className="p-3 space-y-1.5">
+          <div className="p-2 space-y-1">
             {chatHistory.map(c => (
               <button
                 key={c.id}
                 onClick={() => loadChat(c)}
-                className={`w-full p-3 text-left rounded-xl transition-all duration-150 group border ${
+                className={`w-full p-3 text-left rounded-xl transition-all duration-200 group relative ${
                   currentChatId === c.id
-                    ? 'bg-alpine-600 border-alpine-600 text-white shadow-sm'
-                    : 'bg-surface border-border hover:bg-surface-hover hover:border-border-strong'
+                    ? 'bg-alpine-600/10 ring-1 ring-alpine-500/30'
+                    : 'hover:bg-surface-hover'
                 }`}
               >
-                <div className="flex items-start justify-between gap-2">
+                <div className="flex items-start gap-3">
+                  <div className={`w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0 ${
+                    currentChatId === c.id
+                      ? 'bg-alpine-500/20 text-alpine-500'
+                      : 'bg-surface-hover text-muted'
+                  }`}>
+                    <MessageSquare size={14} />
+                  </div>
                   <div className="flex-1 min-w-0">
-                    <h4 className={`text-xs font-medium truncate ${currentChatId === c.id ? 'text-white' : 'text-foreground'}`}>
+                    <h4 className={`text-xs font-medium truncate ${currentChatId === c.id ? 'text-alpine-600 dark:text-alpine-400' : 'text-foreground'}`}>
                       {c.title}
                     </h4>
-                    <div className={`flex items-center gap-1.5 mt-0.5 text-[10px] ${currentChatId === c.id ? 'text-white/60' : 'text-muted'}`}>
-                      <span>{c.messages.length} msgs</span>
-                      <span>·</span>
+                    <div className="flex items-center gap-1.5 mt-1 text-[10px] text-muted">
+                      <span>{c.messages.length} messages</span>
+                      <span className="opacity-40">·</span>
                       <span>{new Date(c.updated_at).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}</span>
                     </div>
                   </div>
                   <button
                     onClick={(e) => handleDeleteChat(c.id, e)}
-                    className={`p-1 rounded-lg opacity-0 group-hover:opacity-100 transition-all ${
-                      currentChatId === c.id
-                        ? 'hover:bg-white/20 text-white/60 hover:text-white'
-                        : 'hover:bg-surface-active text-muted hover:text-danger'
-                    }`}
+                    className="p-1.5 rounded-lg opacity-0 group-hover:opacity-100 transition-all text-muted hover:text-danger hover:bg-danger/10"
                     title="Delete"
                   >
-                    <Trash2 size={11} />
+                    <Trash2 size={12} />
                   </button>
                 </div>
               </button>
@@ -1209,10 +1246,10 @@ export default function AIAssistant({
           </div>
         )}
       </div>
-      <div className="p-3 border-t border-border shrink-0">
+      <div className="p-3 border-t border-border/50 shrink-0">
         <button
           onClick={startNewChat}
-          className="w-full flex items-center justify-center gap-2 px-4 py-2 bg-alpine-600 text-white text-sm font-medium rounded-xl hover:bg-alpine-700 transition-colors"
+          className="w-full flex items-center justify-center gap-2 px-4 py-2.5 bg-alpine-600 text-white text-xs font-medium rounded-xl hover:bg-alpine-700 active:scale-[0.98] transition-all shadow-sm"
         >
           <Plus size={14} />
           New Conversation
@@ -1222,6 +1259,8 @@ export default function AIAssistant({
   )
 
   // ─── QUICK ACTIONS ─────────────────────────────────────────────────────────
+
+  const [showQuickActions, setShowQuickActions] = useState(false)
 
   const renderQuickActions = () => {
     const noteActions: { action: QuickAction; icon: React.ReactNode; label: string }[] = [
@@ -1248,47 +1287,55 @@ export default function AIAssistant({
     ]
 
     const hasSelection = !!(selectedText?.trim())
-    const actionBtn = (action: QuickAction, icon: React.ReactNode, label: string, variant: 'primary' | 'default' = 'default') => (
+
+    const actionPill = (action: QuickAction, icon: React.ReactNode, label: string, highlight = false) => (
       <button
         key={action}
-        onClick={() => handleQuickAction(action)}
+        onClick={() => { handleQuickAction(action); setShowQuickActions(false) }}
         disabled={isLoading || !isConfigured}
-        className={`flex flex-col items-center justify-center gap-1 p-2 rounded-lg transition-colors disabled:opacity-40 disabled:cursor-not-allowed text-center ${
-          variant === 'primary'
-            ? 'bg-alpine-600 text-white hover:bg-alpine-700'
-            : 'bg-surface border border-border text-muted hover:bg-surface-hover hover:border-border-strong hover:text-foreground group'
+        className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium transition-all
+          disabled:opacity-40 disabled:cursor-not-allowed whitespace-nowrap
+          active:scale-95 ${
+          highlight
+            ? 'bg-alpine-600/10 text-alpine-600 dark:text-alpine-400 border border-alpine-500/20 hover:bg-alpine-600/20'
+            : 'bg-surface-hover text-muted border border-border/50 hover:text-foreground hover:bg-surface-active hover:border-border-strong'
         }`}
       >
         {icon}
-        <span className="text-[10px] font-medium leading-tight">{label}</span>
+        {label}
       </button>
     )
 
-    return (
-      <div className="p-3 border-b border-border bg-surface-hover/30 shrink-0">
-        {hasSelection && (
-          <div className="mb-2.5">
-            <div className="flex items-center gap-1.5 mb-1.5">
-              <MousePointerClick size={11} className="text-alpine-500" />
-              <span className="text-[10px] font-semibold text-muted uppercase tracking-wider">Selection</span>
-              <span className="text-[10px] text-muted italic truncate max-w-[120px]">
-                &ldquo;{selectedText!.slice(0, 24)}{selectedText!.length > 24 ? '…' : ''}&rdquo;
-              </span>
-            </div>
-            <div className="grid grid-cols-4 gap-1.5">
-              {selectionActions.map(({ action, icon, label }) => actionBtn(action, icon, label, 'primary'))}
-            </div>
-          </div>
-        )}
+    if (!showQuickActions) return null
 
-        <div className="flex items-center gap-1.5 mb-1.5">
-          <Zap size={11} className="text-muted" />
-          <span className="text-[10px] font-semibold text-muted uppercase tracking-wider">Quick Actions</span>
-        </div>
-        <div className="grid grid-cols-4 gap-1.5">
-          {writingActions.filter(a => a.show).map(({ action, icon, label }) => actionBtn(action, icon, label))}
-          {note && noteActions.map(({ action, icon, label }) => actionBtn(action, icon, label))}
-          {otherActions.filter(a => a.show).map(({ action, icon, label }) => actionBtn(action, icon, label))}
+    return (
+      <div className="border-b border-border/50 bg-surface-hover/20 shrink-0 animate-in slide-in-from-top-2 duration-200">
+        <div className="p-3 space-y-3">
+          {hasSelection && (
+            <div>
+              <div className="flex items-center gap-2 mb-2">
+                <MousePointerClick size={12} className="text-alpine-500" />
+                <span className="text-[10px] font-semibold text-muted uppercase tracking-wider">Selection</span>
+              </div>
+              <div className="flex flex-wrap gap-1.5">
+                {selectionActions.map(({ action, icon, label }) => actionPill(action, icon, label, true))}
+              </div>
+            </div>
+          )}
+
+          {(note || !!writingActions.filter(a => a.show).length) && (
+            <div>
+              <div className="flex items-center gap-2 mb-2">
+                <Zap size={12} className="text-muted" />
+                <span className="text-[10px] font-semibold text-muted uppercase tracking-wider">Quick Actions</span>
+              </div>
+              <div className="flex flex-wrap gap-1.5">
+                {writingActions.filter(a => a.show).map(({ action, icon, label }) => actionPill(action, icon, label))}
+                {note && noteActions.map(({ action, icon, label }) => actionPill(action, icon, label))}
+                {otherActions.filter(a => a.show).map(({ action, icon, label }) => actionPill(action, icon, label))}
+              </div>
+            </div>
+          )}
         </div>
       </div>
     )
@@ -1299,144 +1346,148 @@ export default function AIAssistant({
   const renderSuggestions = () => {
     if (!showSuggestions) return null
     return (
-      <div className="p-3 border-b border-border bg-surface-hover/20 shrink-0 overflow-y-auto max-h-[40%]">
-        <div className="flex items-center justify-between mb-2.5">
-          <div className="flex items-center gap-2">
-            <Sparkles size={12} className="text-alpine-500" />
-            <span className="text-xs font-semibold text-foreground">AI Suggestions</span>
-          </div>
-          <button
-            onClick={() => { setSuggestions({}); setShowSuggestions(false) }}
-            className="p-1 hover:bg-surface-hover rounded-lg transition-colors"
-          >
-            <X size={12} className="text-muted" />
-          </button>
-        </div>
-
-        {suggestions.summary && (
-          <div className="bg-surface border border-border rounded-xl p-3 mb-2">
-            <div className="text-[10px] font-semibold text-muted uppercase tracking-wider mb-2 flex items-center gap-1.5">
-              <FileText size={10} /> Summary
+      <div className="border-b border-border/50 bg-surface-hover/10 shrink-0 overflow-y-auto max-h-[40%]">
+        <div className="p-3">
+          <div className="flex items-center justify-between mb-3">
+            <div className="flex items-center gap-2">
+              <Sparkles size={14} className="text-alpine-500" />
+              <span className="text-xs font-semibold text-foreground">Suggestions</span>
             </div>
-            <p className="text-sm text-foreground/80 leading-relaxed">{suggestions.summary.summary}</p>
-            {suggestions.summary.keyPoints.length > 0 && (
-              <div className="mt-3 pt-2 border-t border-border">
-                <div className="text-[10px] font-medium text-muted mb-1.5">Key Points</div>
-                <ul className="space-y-1.5">
-                  {suggestions.summary.keyPoints.map((point, i) => (
-                    <li key={i} className="flex gap-2 text-xs text-foreground/70">
-                      <span className="w-4 h-4 rounded-full bg-alpine-600/10 text-alpine-600 flex items-center justify-center flex-shrink-0 text-[10px] font-semibold">{i + 1}</span>
-                      {point}
-                    </li>
-                  ))}
-                </ul>
-              </div>
-            )}
-            {suggestions.summary.suggestedTasks && suggestions.summary.suggestedTasks.length > 0 && (
-              <div className="mt-3 pt-2 border-t border-border">
-                <div className="text-[10px] font-medium text-muted mb-1.5">Suggested Tasks</div>
-                <div className="space-y-1">
-                  {suggestions.summary.suggestedTasks.map((task, i) => (
-                    <button key={i} onClick={() => handleApplyTask({ title: task })} className="flex items-center gap-2 w-full text-left text-xs text-foreground/70 hover:text-foreground p-1.5 rounded-lg hover:bg-surface-hover transition-colors">
-                      <Plus size={10} className="text-muted" /> {task}
-                    </button>
-                  ))}
+            <button
+              onClick={() => { setSuggestions({}); setShowSuggestions(false) }}
+              className="p-1.5 hover:bg-surface-hover rounded-lg transition-colors text-muted hover:text-foreground"
+            >
+              <X size={14} />
+            </button>
+          </div>
+
+          <div className="space-y-2.5">
+            {suggestions.summary && (
+              <div className="bg-surface rounded-xl p-3.5 border border-border/50">
+                <div className="flex items-center gap-1.5 text-[10px] font-semibold text-muted uppercase tracking-wider mb-2.5">
+                  <FileText size={10} /> Summary
                 </div>
-              </div>
-            )}
-          </div>
-        )}
-
-        {suggestions.tasks && suggestions.tasks.length > 0 && (
-          <div className="bg-surface border border-border rounded-xl p-3 mb-2">
-            <div className="text-[10px] font-semibold text-muted uppercase tracking-wider mb-2 flex items-center gap-1.5">
-              <CheckSquare size={10} /> Task Suggestions
-            </div>
-            <div className="space-y-1.5">
-              {suggestions.tasks.map((task, i) => (
-                <div key={i} className="flex items-start justify-between gap-2 p-2 bg-surface-hover/50 rounded-lg">
-                  <div className="flex-1 min-w-0">
-                    <div className="text-xs font-medium text-foreground">{task.title}</div>
-                    {task.description && <div className="text-[10px] text-muted mt-0.5">{task.description}</div>}
-                    <div className="flex items-center gap-1.5 mt-1">
-                      {task.priority && (
-                        <span className={`text-[10px] px-1.5 py-0.5 rounded-full font-medium ${
-                          task.priority === 'urgent' ? 'bg-danger text-white' :
-                          task.priority === 'high' ? 'bg-warning-light text-warning' :
-                          task.priority === 'low' ? 'bg-surface-active text-muted' :
-                          'bg-alpine-600/10 text-alpine-600'
-                        }`}>{task.priority}</span>
-                      )}
-                      {task.dueDate && <span className="text-[10px] text-muted">{task.dueDate}</span>}
+                <p className="text-[13px] text-foreground/80 leading-relaxed">{suggestions.summary.summary}</p>
+                {suggestions.summary.keyPoints.length > 0 && (
+                  <div className="mt-3 pt-2.5 border-t border-border/40">
+                    <div className="text-[10px] font-semibold text-muted uppercase tracking-wider mb-2">Key Points</div>
+                    <ul className="space-y-2">
+                      {suggestions.summary.keyPoints.map((point, i) => (
+                        <li key={i} className="flex gap-2.5 text-xs text-foreground/70 leading-relaxed">
+                          <span className="w-5 h-5 rounded-full bg-alpine-600/10 text-alpine-600 flex items-center justify-center flex-shrink-0 text-[10px] font-bold mt-0.5">{i + 1}</span>
+                          <span>{point}</span>
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
+                {suggestions.summary.suggestedTasks && suggestions.summary.suggestedTasks.length > 0 && (
+                  <div className="mt-3 pt-2.5 border-t border-border/40">
+                    <div className="text-[10px] font-semibold text-muted uppercase tracking-wider mb-2">Suggested Tasks</div>
+                    <div className="space-y-1">
+                      {suggestions.summary.suggestedTasks.map((task, i) => (
+                        <button key={i} onClick={() => handleApplyTask({ title: task })} className="flex items-center gap-2 w-full text-left text-xs text-foreground/70 hover:text-foreground p-2 rounded-lg hover:bg-surface-hover transition-colors group">
+                          <Plus size={12} className="text-muted group-hover:text-alpine-500 transition-colors" /> {task}
+                        </button>
+                      ))}
                     </div>
                   </div>
-                  {onCreateTask && (
-                    <button onClick={() => handleApplyTask(task)} className="px-2 py-1 text-[10px] font-medium bg-alpine-600 text-white rounded-lg hover:bg-alpine-700 transition-colors flex-shrink-0">
-                      Add
-                    </button>
-                  )}
-                </div>
-              ))}
-            </div>
-          </div>
-        )}
+                )}
+              </div>
+            )}
 
-        {suggestions.events && suggestions.events.length > 0 && (
-          <div className="bg-surface border border-border rounded-xl p-3 mb-2">
-            <div className="text-[10px] font-semibold text-muted uppercase tracking-wider mb-2 flex items-center gap-1.5">
-              <Calendar size={10} /> Event Suggestions
-            </div>
-            <div className="space-y-1.5">
-              {suggestions.events.map((event, i) => (
-                <div key={i} className="flex items-start justify-between gap-2 p-2 bg-surface-hover/50 rounded-lg">
-                  <div className="flex-1 min-w-0">
-                    <div className="text-xs font-medium text-foreground">{event.title}</div>
-                    {event.description && <div className="text-[10px] text-muted mt-0.5">{event.description}</div>}
-                    <div className="flex items-center gap-1.5 mt-1 text-[10px] text-muted">
-                      {event.suggestedDate && <span>{event.suggestedDate}</span>}
-                      {event.duration && <span>({event.duration} min)</span>}
-                    </div>
-                  </div>
-                  {onCreateEvent && event.suggestedDate && (
-                    <button onClick={() => handleApplyEvent(event)} className="px-2 py-1 text-[10px] font-medium bg-alpine-600 text-white rounded-lg hover:bg-alpine-700 transition-colors flex-shrink-0">
-                      Add
-                    </button>
-                  )}
+            {suggestions.tasks && suggestions.tasks.length > 0 && (
+              <div className="bg-surface rounded-xl p-3.5 border border-border/50">
+                <div className="flex items-center gap-1.5 text-[10px] font-semibold text-muted uppercase tracking-wider mb-2.5">
+                  <CheckSquare size={10} /> Task Suggestions
                 </div>
-              ))}
-            </div>
-          </div>
-        )}
-
-        {suggestions.mindmap && suggestions.mindmap.length > 0 && (
-          <div className="bg-surface border border-border rounded-xl p-3">
-            <div className="text-[10px] font-semibold text-muted uppercase tracking-wider mb-2 flex items-center gap-1.5">
-              <Network size={10} /> Mindmap Ideas
-            </div>
-            <div className="space-y-1.5">
-              {suggestions.mindmap.map((suggestion, i) => (
-                <div key={i} className="flex items-start justify-between gap-2 p-2 bg-surface-hover/50 rounded-lg">
-                  <div className="flex-1 min-w-0">
-                    <div className="text-xs font-medium text-foreground">{suggestion.nodeText}</div>
-                    {suggestion.description && <div className="text-[10px] text-muted mt-0.5">{suggestion.description}</div>}
-                    {suggestion.childSuggestions && suggestion.childSuggestions.length > 0 && (
-                      <div className="mt-1 flex flex-wrap gap-1">
-                        {suggestion.childSuggestions.map((child, j) => (
-                          <span key={j} className="text-[10px] px-1.5 py-0.5 bg-surface-active text-muted rounded-full">{child}</span>
-                        ))}
+                <div className="space-y-2">
+                  {suggestions.tasks.map((task, i) => (
+                    <div key={i} className="flex items-start justify-between gap-3 p-2.5 bg-surface-hover/40 rounded-lg">
+                      <div className="flex-1 min-w-0">
+                        <div className="text-xs font-medium text-foreground">{task.title}</div>
+                        {task.description && <div className="text-[11px] text-muted mt-0.5 leading-relaxed">{task.description}</div>}
+                        <div className="flex items-center gap-2 mt-1.5">
+                          {task.priority && (
+                            <span className={`text-[10px] px-2 py-0.5 rounded-full font-medium ${
+                              task.priority === 'urgent' ? 'bg-danger/10 text-danger' :
+                              task.priority === 'high' ? 'bg-warning/10 text-warning' :
+                              task.priority === 'low' ? 'bg-surface-active text-muted' :
+                              'bg-alpine-600/10 text-alpine-600'
+                            }`}>{task.priority}</span>
+                          )}
+                          {task.dueDate && <span className="text-[10px] text-muted">{task.dueDate}</span>}
+                        </div>
                       </div>
-                    )}
-                  </div>
-                  {onAddMindmapNode && (
-                    <button onClick={() => handleApplyMindmapNode(suggestion)} className="px-2 py-1 text-[10px] font-medium bg-alpine-600 text-white rounded-lg hover:bg-alpine-700 transition-colors flex-shrink-0">
-                      Add
-                    </button>
-                  )}
+                      {onCreateTask && (
+                        <button onClick={() => handleApplyTask(task)} className="px-2.5 py-1 text-[10px] font-medium bg-alpine-600 text-white rounded-lg hover:bg-alpine-700 active:scale-95 transition-all flex-shrink-0">
+                          Add
+                        </button>
+                      )}
+                    </div>
+                  ))}
                 </div>
-              ))}
-            </div>
+              </div>
+            )}
+
+            {suggestions.events && suggestions.events.length > 0 && (
+              <div className="bg-surface rounded-xl p-3.5 border border-border/50">
+                <div className="flex items-center gap-1.5 text-[10px] font-semibold text-muted uppercase tracking-wider mb-2.5">
+                  <Calendar size={10} /> Event Suggestions
+                </div>
+                <div className="space-y-2">
+                  {suggestions.events.map((event, i) => (
+                    <div key={i} className="flex items-start justify-between gap-3 p-2.5 bg-surface-hover/40 rounded-lg">
+                      <div className="flex-1 min-w-0">
+                        <div className="text-xs font-medium text-foreground">{event.title}</div>
+                        {event.description && <div className="text-[11px] text-muted mt-0.5 leading-relaxed">{event.description}</div>}
+                        <div className="flex items-center gap-2 mt-1.5 text-[10px] text-muted">
+                          {event.suggestedDate && <span>{event.suggestedDate}</span>}
+                          {event.duration && <span>({event.duration} min)</span>}
+                        </div>
+                      </div>
+                      {onCreateEvent && event.suggestedDate && (
+                        <button onClick={() => handleApplyEvent(event)} className="px-2.5 py-1 text-[10px] font-medium bg-alpine-600 text-white rounded-lg hover:bg-alpine-700 active:scale-95 transition-all flex-shrink-0">
+                          Add
+                        </button>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {suggestions.mindmap && suggestions.mindmap.length > 0 && (
+              <div className="bg-surface rounded-xl p-3.5 border border-border/50">
+                <div className="flex items-center gap-1.5 text-[10px] font-semibold text-muted uppercase tracking-wider mb-2.5">
+                  <Network size={10} /> Mindmap Ideas
+                </div>
+                <div className="space-y-2">
+                  {suggestions.mindmap.map((suggestion, i) => (
+                    <div key={i} className="flex items-start justify-between gap-3 p-2.5 bg-surface-hover/40 rounded-lg">
+                      <div className="flex-1 min-w-0">
+                        <div className="text-xs font-medium text-foreground">{suggestion.nodeText}</div>
+                        {suggestion.description && <div className="text-[11px] text-muted mt-0.5 leading-relaxed">{suggestion.description}</div>}
+                        {suggestion.childSuggestions && suggestion.childSuggestions.length > 0 && (
+                          <div className="mt-1.5 flex flex-wrap gap-1">
+                            {suggestion.childSuggestions.map((child, j) => (
+                              <span key={j} className="text-[10px] px-2 py-0.5 bg-surface-active/60 text-muted rounded-full">{child}</span>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                      {onAddMindmapNode && (
+                        <button onClick={() => handleApplyMindmapNode(suggestion)} className="px-2.5 py-1 text-[10px] font-medium bg-alpine-600 text-white rounded-lg hover:bg-alpine-700 active:scale-95 transition-all flex-shrink-0">
+                          Add
+                        </button>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
           </div>
-        )}
+        </div>
       </div>
     )
   }
@@ -1446,25 +1497,25 @@ export default function AIAssistant({
   const renderStructuredContent = (parsed: ParsedAIResponse) => {
     if (parsed.type === 'text') return <MarkdownContent content={parsed.rawText || ''} />
     return (
-      <div className="space-y-3">
+      <div className="space-y-4">
         {parsed.summary && (
           <div>
-            <div className="text-[10px] font-semibold text-muted uppercase tracking-wider mb-1.5 flex items-center gap-1">
+            <div className="flex items-center gap-1.5 text-[10px] font-semibold text-muted uppercase tracking-wider mb-2">
               <FileText size={10} /> Summary
             </div>
-            <p className="text-sm text-foreground/80 leading-relaxed">{parsed.summary}</p>
+            <p className="text-[13px] text-foreground/80 leading-relaxed">{parsed.summary}</p>
           </div>
         )}
         {parsed.keyPoints && parsed.keyPoints.length > 0 && (
           <div>
-            <div className="text-[10px] font-semibold text-muted uppercase tracking-wider mb-2 flex items-center gap-1">
+            <div className="flex items-center gap-1.5 text-[10px] font-semibold text-muted uppercase tracking-wider mb-2">
               <Lightbulb size={10} /> Key Points
             </div>
-            <ul className="space-y-2">
+            <ul className="space-y-2.5">
               {parsed.keyPoints.map((point, i) => (
-                <li key={i} className="flex gap-2 text-sm text-foreground/80">
-                  <span className="flex-shrink-0 w-5 h-5 rounded-full bg-alpine-600 text-white text-[10px] font-semibold flex items-center justify-center">{i + 1}</span>
-                  <span className="leading-relaxed pt-0.5">{point}</span>
+                <li key={i} className="flex gap-2.5 text-[13px] text-foreground/80">
+                  <span className="flex-shrink-0 w-5 h-5 rounded-full bg-alpine-600 text-white text-[10px] font-bold flex items-center justify-center mt-0.5">{i + 1}</span>
+                  <span className="leading-relaxed">{point}</span>
                 </li>
               ))}
             </ul>
@@ -1472,13 +1523,13 @@ export default function AIAssistant({
         )}
         {parsed.suggestedTasks && parsed.suggestedTasks.length > 0 && (
           <div>
-            <div className="text-[10px] font-semibold text-muted uppercase tracking-wider mb-1.5 flex items-center gap-1">
+            <div className="flex items-center gap-1.5 text-[10px] font-semibold text-muted uppercase tracking-wider mb-2">
               <CheckSquare size={10} /> Suggested Tasks
             </div>
             <ul className="space-y-1.5">
               {parsed.suggestedTasks.map((task, i) => (
                 <li key={i} className="flex items-start gap-2 group">
-                  <div className="flex-1 text-sm text-foreground/80 bg-surface-hover px-3 py-2 rounded-lg border border-border">{task}</div>
+                  <div className="flex-1 text-[13px] text-foreground/80 bg-surface-hover/50 px-3 py-2 rounded-xl border border-border/40">{task}</div>
                   {onCreateTask && (
                     <button onClick={() => handleApplyTask({ title: task })} className="flex-shrink-0 p-2 text-muted hover:text-foreground hover:bg-surface-hover rounded-lg transition-all opacity-0 group-hover:opacity-100" title="Add as task">
                       <Plus size={12} />
@@ -1493,257 +1544,204 @@ export default function AIAssistant({
     )
   }
 
+  // ─── WELCOME STATE ─────────────────────────────────────────────────────────
+
+  const renderWelcome = () => {
+    const suggestions = [
+      selectedText?.trim() ? 'Explain this selection' : null,
+      note ? 'Summarize this note' : null,
+      'Help me brainstorm ideas',
+      'Create a task list',
+    ].filter(Boolean) as string[]
+
+    return (
+      <div className="flex-1 flex flex-col items-center justify-center px-6 py-8">
+        <div className="relative mb-5">
+          <div className="w-16 h-16 rounded-2xl bg-gradient-to-br from-alpine-500/20 to-peak-500/20 flex items-center justify-center">
+            <Sparkles size={28} className="text-alpine-500" />
+          </div>
+          <div className="absolute -bottom-1 -right-1 w-5 h-5 rounded-full bg-accent flex items-center justify-center">
+            <Check size={10} className="text-white" />
+          </div>
+        </div>
+        <h3 className="text-base font-semibold text-foreground mb-1">AI Assistant</h3>
+        <p className="text-xs text-muted text-center max-w-[220px] leading-relaxed mb-6">
+          {isConfigured
+            ? 'Ask about your notes, get writing help, or brainstorm ideas'
+            : 'Set DEEPSEEK_API_KEY in .env.local to get started'}
+        </p>
+        {isConfigured && (
+          <div className="w-full max-w-[280px] space-y-1.5">
+            {suggestions.map((s, i) => (
+              <button
+                key={i}
+                onClick={() => void handleSend(s)}
+                className="w-full flex items-center gap-2.5 px-3.5 py-2.5 text-xs text-left text-muted hover:text-foreground bg-surface-hover/50 hover:bg-surface-hover border border-border/40 hover:border-border-strong rounded-xl transition-all group"
+              >
+                <ArrowRight size={12} className="text-muted/50 group-hover:text-alpine-500 transition-colors flex-shrink-0" />
+                <span>{s}</span>
+              </button>
+            ))}
+          </div>
+        )}
+      </div>
+    )
+  }
+
   // ─── MESSAGES ──────────────────────────────────────────────────────────────
 
   const renderMessages = () => (
-    <div className="flex-1 overflow-y-auto p-3 space-y-3 min-h-0">
+    <div className="flex-1 overflow-y-auto min-h-0">
       {messages.length === 0 ? (
-        <div className="flex flex-col items-center justify-center h-full py-8">
-          <div className="w-14 h-14 rounded-2xl bg-alpine-600/10 flex items-center justify-center mb-3">
-            <Bot size={26} className="text-alpine-500" />
-          </div>
-          <p className="text-sm font-medium text-foreground/70">AI Assistant</p>
-          <p className="text-xs text-muted mt-1 text-center max-w-[200px] leading-relaxed">
-            {isConfigured
-              ? 'Ask me anything about your notes, tasks, or ideas'
-              : 'Set DEEPSEEK_API_KEY in .env.local to enable AI'}
-          </p>
-        </div>
+        renderWelcome()
       ) : (
-        messages.map((message) => {
-          const parsed = message.role === 'assistant' && !message.isStreaming
-            ? parseAIResponse(message.content) : null
-          const isStructured = parsed?.type === 'structured'
+        <div className="p-4 space-y-5">
+          {messages.map((message) => {
+            const parsed = message.role === 'assistant' && !message.isStreaming
+              ? parseAIResponse(message.content) : null
+            const isUser = message.role === 'user'
 
-          return (
-            <div key={message.id} className={`flex gap-2 ${message.role === 'user' ? 'flex-row-reverse' : ''}`}>
-              <div className={`flex-shrink-0 w-7 h-7 rounded-lg flex items-center justify-center text-xs ${
-                message.role === 'user'
-                  ? 'bg-alpine-600 text-white'
-                  : 'bg-surface-hover border border-border text-muted'
-              }`}>
-                {message.role === 'user' ? <User size={13} /> : <Sparkles size={13} />}
-              </div>
-
-              <div
-                className={`flex-1 min-w-0 ${message.role === 'user' ? 'text-right' : ''}`}
-                style={{ maxWidth: isStructured ? '100%' : '88%' }}
-              >
-                <div className={`inline-block px-3 py-2 rounded-xl text-sm leading-relaxed ${
-                  message.role === 'user'
-                    ? 'bg-alpine-600 text-white rounded-tr-sm max-w-full'
-                    : isStructured
-                      ? 'bg-surface border border-border text-foreground rounded-tl-sm w-full'
-                      : 'bg-surface border border-border text-foreground rounded-tl-sm'
+            return (
+              <div key={message.id} className={`flex gap-3 ${isUser ? 'flex-row-reverse' : ''}`}>
+                {/* Avatar */}
+                <div className={`flex-shrink-0 w-7 h-7 rounded-full flex items-center justify-center mt-0.5 ${
+                  isUser
+                    ? 'bg-alpine-600 text-white'
+                    : 'bg-gradient-to-br from-surface-hover to-surface-active text-muted'
                 }`}>
-                  {message.isStreaming ? (
-                    streamingContent ? (
-                      <>
-                        {streamingReasoning && (
-                          <div className="mb-2 pb-2 border-b border-border/50">
-                            <div className="flex items-center gap-1 text-[10px] font-medium text-muted mb-1">
-                              <Cpu size={10} />
-                              <span>Reasoning…</span>
-                            </div>
-                            <p className="text-[11px] text-muted leading-relaxed italic line-clamp-3">
-                              {streamingReasoning.slice(-300)}
-                            </p>
-                          </div>
-                        )}
-                        <MarkdownContent content={streamingContent} />
-                      </>
-                    ) : (
-                      <div className="flex items-center gap-2">
-                        <Loader2 size={12} className="animate-spin text-muted" />
-                        <span className="text-xs text-muted">
-                          {streamingReasoning ? 'Reasoning…' : 'Thinking…'}
-                        </span>
-                      </div>
-                    )
-                  ) : parsed ? (
-                    <>
-                      {message.reasoning && <ThinkingSection reasoning={message.reasoning} />}
-                      {renderStructuredContent(parsed)}
-                    </>
-                  ) : message.role === 'assistant' ? (
-                    <>
-                      {message.reasoning && <ThinkingSection reasoning={message.reasoning} />}
-                      <MarkdownContent content={message.content} />
-                    </>
-                  ) : (
-                    <div className="whitespace-pre-wrap text-sm">{message.content}</div>
-                  )}
+                  {isUser ? <User size={13} /> : <Sparkles size={13} />}
                 </div>
 
-                {message.role === 'assistant' && !message.isStreaming && (
-                  <div className="flex items-center gap-0.5 mt-1 flex-wrap">
-                    <button onClick={() => handleCopy(message.content, message.id)} className="p-1 text-muted hover:text-foreground hover:bg-surface-hover rounded-md transition-all" title="Copy">
-                      {copiedId === message.id ? <Check size={11} className="text-success" /> : <Copy size={11} />}
-                    </button>
-                    {onInsertText && (
-                      <button onClick={() => handleInsertToNote(message.content)} className="p-1 text-muted hover:text-foreground hover:bg-surface-hover rounded-md transition-all" title="Append to note">
-                        <FileText size={11} />
-                      </button>
-                    )}
-                    {onInsertAtCursor && (
-                      <button onClick={() => handleInsertAtCursorPosition(message.content)} className="p-1 text-muted hover:text-foreground hover:bg-surface-hover rounded-md transition-all" title="Insert at cursor">
-                        <PenLine size={11} />
-                      </button>
-                    )}
-                    {selectedText && onReplaceSelection && (
-                      <button onClick={() => handleReplaceSelectionWithResponse(message.content)} className="p-1 text-muted hover:text-foreground hover:bg-surface-hover rounded-md transition-all" title="Replace selection">
-                        <ArrowRight size={11} />
-                      </button>
+                {/* Content */}
+                <div className={`flex-1 min-w-0 ${isUser ? 'flex flex-col items-end' : ''}`} style={{ maxWidth: '85%' }}>
+                  <div className={`rounded-2xl transition-all ${
+                    isUser
+                      ? 'bg-alpine-600 text-white px-4 py-2.5 rounded-tr-md'
+                      : 'bg-transparent'
+                  }`}>
+                    {message.isStreaming ? (
+                      streamingContent ? (
+                        <div className={isUser ? '' : ''}>
+                          {streamingReasoning && (
+                            <div className="mb-3 rounded-lg bg-surface-hover/50 border border-border/40 px-3 py-2">
+                              <div className="flex items-center gap-1.5 text-[10px] font-medium text-muted mb-1">
+                                <Cpu size={10} className="text-alpine-500/70" />
+                                <span>Reasoning…</span>
+                              </div>
+                              <p className="text-[11px] text-muted/70 leading-relaxed italic line-clamp-3">
+                                {streamingReasoning.slice(-300)}
+                              </p>
+                            </div>
+                          )}
+                          <MarkdownContent content={streamingContent} />
+                        </div>
+                      ) : (
+                        <div className="flex items-center gap-2.5 py-1">
+                          <TypingDots />
+                          <span className="text-xs text-muted">
+                            {streamingReasoning ? 'Thinking deeply…' : 'Thinking…'}
+                          </span>
+                        </div>
+                      )
+                    ) : parsed ? (
+                      <>
+                        {message.reasoning && <ThinkingSection reasoning={message.reasoning} />}
+                        {renderStructuredContent(parsed)}
+                      </>
+                    ) : !isUser ? (
+                      <>
+                        {message.reasoning && <ThinkingSection reasoning={message.reasoning} />}
+                        <MarkdownContent content={message.content} />
+                      </>
+                    ) : (
+                      <div className="text-[13px] leading-relaxed whitespace-pre-wrap">{message.content}</div>
                     )}
                   </div>
-                )}
+
+                  {/* Action bar for assistant messages */}
+                  {!isUser && !message.isStreaming && (
+                    <div className="flex items-center gap-0.5 mt-2 opacity-0 hover:opacity-100 transition-opacity group/actions [.group:hover_&]:opacity-100">
+                      <button onClick={() => handleCopy(message.content, message.id)} className="p-1.5 text-muted hover:text-foreground hover:bg-surface-hover rounded-lg transition-all" title="Copy">
+                        {copiedId === message.id ? <Check size={12} className="text-accent" /> : <Copy size={12} />}
+                      </button>
+                      {onInsertText && (
+                        <button onClick={() => handleInsertToNote(message.content)} className="p-1.5 text-muted hover:text-foreground hover:bg-surface-hover rounded-lg transition-all" title="Append to note">
+                          <FileText size={12} />
+                        </button>
+                      )}
+                      {onInsertAtCursor && (
+                        <button onClick={() => handleInsertAtCursorPosition(message.content)} className="p-1.5 text-muted hover:text-foreground hover:bg-surface-hover rounded-lg transition-all" title="Insert at cursor">
+                          <PenLine size={12} />
+                        </button>
+                      )}
+                      {selectedText && onReplaceSelection && (
+                        <button onClick={() => handleReplaceSelectionWithResponse(message.content)} className="p-1.5 text-muted hover:text-foreground hover:bg-surface-hover rounded-lg transition-all" title="Replace selection">
+                          <ArrowRight size={12} />
+                        </button>
+                      )}
+                    </div>
+                  )}
+                </div>
               </div>
-            </div>
-          )
-        })
+            )
+          })}
+          <div ref={messagesEndRef} />
+        </div>
       )}
-      <div ref={messagesEndRef} />
     </div>
   )
+
+  // ─── CONTEXT BAR (above input) ─────────────────────────────────────────────
+
+  const [showContextSettings, setShowContextSettings] = useState(false)
+
+  const renderContextBar = () => {
+    const noteCount = (includeCurrentNote && note ? 1 : 0) + selectedAdditionalNotes.length
+    if (noteCount === 0 && !selectedText?.trim()) return null
+    return (
+      <div className="flex items-center gap-1.5 flex-wrap mb-2">
+        {selectedText?.trim() && (
+          <span className="inline-flex items-center gap-1 px-2 py-1 text-[10px] font-medium rounded-full bg-alpine-600/10 text-alpine-600 dark:text-alpine-400 border border-alpine-500/15">
+            <MousePointerClick size={10} />
+            Selection
+          </span>
+        )}
+        {includeCurrentNote && note && (
+          <button
+            onClick={() => setIncludeCurrentNote(false)}
+            className="inline-flex items-center gap-1 px-2 py-1 text-[10px] font-medium rounded-full bg-surface-hover border border-border/50 text-muted hover:text-foreground hover:border-border-strong transition-all group"
+            title="Remove from context"
+          >
+            <FileText size={10} />
+            <span className="max-w-[60px] truncate">{note.title || 'Note'}</span>
+            <X size={8} className="opacity-0 group-hover:opacity-100 transition-opacity" />
+          </button>
+        )}
+        {selectedAdditionalNotes.length > 0 && (
+          <span className="inline-flex items-center gap-1 px-2 py-1 text-[10px] font-medium rounded-full bg-surface-hover border border-border/50 text-muted">
+            <BookOpen size={10} />
+            +{selectedAdditionalNotes.length} note{selectedAdditionalNotes.length !== 1 ? 's' : ''}
+          </span>
+        )}
+        {contextDiagnostics.truncatedCount > 0 && (
+          <span className="text-[10px] text-warning" title="Some note content was truncated to fit context limits">
+            (truncated)
+          </span>
+        )}
+      </div>
+    )
+  }
 
   // ─── INPUT ─────────────────────────────────────────────────────────────────
 
   const renderInput = () => (
-    <div className="p-3 border-t border-border bg-surface shrink-0">
-      {/* Model + context bar */}
-      <div className="flex items-center justify-between mb-2.5 gap-2">
-        {/* Model toggle */}
-        <div className="flex items-center gap-0.5 bg-surface-hover rounded-lg p-0.5 flex-shrink-0">
-          <button
-            onClick={() => setModel('deepseek-chat')}
-            className={`px-2.5 py-1 text-xs font-medium rounded-md transition-colors ${
-              model === 'deepseek-chat'
-                ? 'bg-surface text-foreground shadow-sm border border-border'
-                : 'text-muted hover:text-foreground'
-            }`}
-          >
-            Chat
-          </button>
-          <button
-            onClick={() => setModel('deepseek-reasoner')}
-            className={`px-2.5 py-1 text-xs font-medium rounded-md transition-colors flex items-center gap-1 ${
-              model === 'deepseek-reasoner'
-                ? 'bg-surface text-foreground shadow-sm border border-border'
-                : 'text-muted hover:text-foreground'
-            }`}
-          >
-            <Cpu size={10} />
-            Reasoner
-          </button>
-        </div>
-        {/* Note context toggles */}
-        <div className="flex items-center gap-1 min-w-0">
-          {note && (
-            <button
-              onClick={() => setIncludeCurrentNote(v => !v)}
-              title={includeCurrentNote ? 'Remove current note from context' : 'Add current note to context'}
-              className={`px-2 py-1 text-xs font-medium rounded-lg transition-colors flex items-center gap-1 border flex-shrink-0 ${
-                includeCurrentNote
-                  ? 'bg-alpine-600/10 text-alpine-600 border-alpine-600/20'
-                  : 'bg-surface border-border text-muted hover:text-foreground'
-              }`}
-            >
-              <FileText size={11} />
-              <span className="max-w-[56px] truncate">{note.title || 'Note'}</span>
-              {includeCurrentNote && <Check size={9} />}
-            </button>
-          )}
-          {allNotes && allNotes.filter(n => n.id !== note?.id).length > 0 && (
-            <div className="relative flex-shrink-0" ref={notePickerRef}>
-              <button
-                onClick={() => setShowNotePicker(v => !v)}
-                className={`px-2 py-1 text-xs font-medium rounded-lg transition-colors flex items-center gap-1 border ${
-                  selectedNoteIds.length > 0
-                    ? 'bg-alpine-600/10 text-alpine-600 border-alpine-600/20'
-                    : 'bg-surface border-border text-muted hover:text-foreground hover:bg-surface-hover'
-                }`}
-              >
-                <BookOpen size={11} />
-                {selectedNoteIds.length > 0
-                  ? `${selectedNoteIds.length} note${selectedNoteIds.length !== 1 ? 's' : ''}`
-                  : 'Notes'}
-                <ChevronDown size={9} className={`transition-transform ${showNotePicker ? 'rotate-180' : ''}`} />
-              </button>
-              {showNotePicker && (
-                <div className="absolute bottom-full right-0 mb-1 w-60 max-h-52 overflow-y-auto bg-surface border border-border-strong rounded-xl shadow-lg z-50 py-1.5">
-                  <div className="text-[10px] font-semibold text-muted uppercase tracking-wider px-3 py-1.5">
-                    Add to context
-                  </div>
-                  <div className="px-3 pb-1.5">
-                    <div className="relative">
-                      <Search size={11} className="absolute left-2 top-1/2 -translate-y-1/2 text-muted" />
-                      <input
-                        value={notePickerSearch}
-                        onChange={(e) => setNotePickerSearch(e.target.value)}
-                        placeholder="Filter notes..."
-                        className="w-full h-7 rounded-lg bg-surface-hover border border-border pl-7 pr-2 text-[11px] text-foreground placeholder:text-muted focus:outline-none focus:ring-2 focus:ring-alpine-500/30 focus:border-alpine-500"
-                      />
-                    </div>
-                    <div className="mt-1 text-[10px] text-muted">
-                      {selectedNoteIds.length} selected • up to {AI_NOTE_CONTEXT_LIMITS.maxSelectedNotes} injected
-                    </div>
-                  </div>
-                  {filteredSelectableNotes.length === 0 && (
-                    <div className="px-3 py-2 text-[11px] text-muted">No notes match your filter.</div>
-                  )}
-                  {filteredSelectableNotes
-                    .map(n => (
-                      <button
-                        key={n.id}
-                        onClick={() => setSelectedNoteIds(prev =>
-                          prev.includes(n.id) ? prev.filter(id => id !== n.id) : [...prev, n.id]
-                        )}
-                        className="w-full flex items-center gap-2.5 px-3 py-1.5 hover:bg-surface-hover transition-colors text-left"
-                      >
-                        <div className={`w-3.5 h-3.5 rounded border-2 flex items-center justify-center flex-shrink-0 transition-colors ${
-                          selectedNoteIds.includes(n.id)
-                            ? 'border-alpine-600 bg-alpine-600'
-                            : 'border-border'
-                        }`}>
-                          {selectedNoteIds.includes(n.id) && <Check size={9} className="text-white" />}
-                        </div>
-                        <span className="text-xs text-foreground truncate">{n.title || 'Untitled'}</span>
-                      </button>
-                    ))
-                  }
-                </div>
-              )}
-            </div>
-          )}
-        </div>
-      </div>
-
-      <div className="mb-2 px-2.5 py-1.5 rounded-lg border border-border bg-surface-hover/40 text-[10px] text-muted">
-        <div className="flex items-center justify-between gap-2">
-          <span>
-            Context: {includeCurrentNote && note ? 'current note' : 'no current note'} • {selectedAdditionalNotes.length} extra note{selectedAdditionalNotes.length !== 1 ? 's' : ''}
-          </span>
-          <span className={contextDiagnostics.nearLimit ? 'text-warning' : ''}>
-            {contextDiagnostics.totalIncludedChars}/{contextDiagnostics.totalOriginalChars || contextDiagnostics.totalIncludedChars} chars
-          </span>
-        </div>
-        {(contextDiagnostics.truncatedCount > 0 || contextDiagnostics.omittedSelectedCount > 0 || contextDiagnostics.exhausted) && (
-          <div className="mt-1 text-warning">
-            {contextDiagnostics.truncatedCount > 0 ? `${contextDiagnostics.truncatedCount} note context${contextDiagnostics.truncatedCount !== 1 ? 's are' : ' is'} truncated.` : ''}
-            {contextDiagnostics.omittedSelectedCount > 0 ? ` ${contextDiagnostics.omittedSelectedCount} selected note${contextDiagnostics.omittedSelectedCount !== 1 ? 's are' : ' is'} not injected due to context cap.` : ''}
-            {contextDiagnostics.exhausted ? ' Context budget reached.' : ''}
-          </div>
-        )}
-        {model === 'deepseek-reasoner' && !isReasonerToolCallingEnabled() && (
-          <div className="mt-1 text-muted">Reasoner tools are disabled by default. Set NEXT_PUBLIC_DEEPSEEK_REASONER_TOOLS=true to enable experimental tool access.</div>
-        )}
-      </div>
-
+    <div className="border-t border-border/50 bg-surface shrink-0">
+      {/* Error & warnings */}
       {error && (
-        <div className="mb-2 px-3 py-2 bg-danger-light border border-danger/20 rounded-xl text-xs text-danger flex items-start gap-2">
-          <X size={12} className="flex-shrink-0 mt-0.5" />
+        <div className="mx-3 mt-3 px-3 py-2.5 bg-danger/5 border border-danger/15 rounded-xl text-xs flex items-start gap-2.5">
+          <AlertCircle size={14} className="flex-shrink-0 mt-0.5 text-danger" />
           <div className="flex-1 min-w-0">
-            <div>{error}</div>
+            <div className="text-foreground/80">{error}</div>
             {lastFailedPrompt && !isLoading && (
               <button
                 onClick={() => {
@@ -1752,78 +1750,199 @@ export default function AIAssistant({
                   void handleSend(lastFailedPrompt)
                 }}
                 disabled={retryCooldown > 0}
-                className="mt-1.5 px-2 py-1 rounded-md bg-danger/10 hover:bg-danger/20 disabled:opacity-40 disabled:cursor-not-allowed transition-colors text-[10px] font-medium"
+                className="mt-1.5 px-2.5 py-1 rounded-lg bg-danger/10 hover:bg-danger/20 disabled:opacity-40 disabled:cursor-not-allowed transition-colors text-[10px] font-medium text-danger"
               >
-                {retryCooldown > 0 ? `Retry in ${retryCooldown}s` : 'Retry last message'}
+                {retryCooldown > 0 ? `Retry in ${retryCooldown}s` : 'Retry'}
               </button>
             )}
           </div>
-          <button onClick={() => setError(null)} className="p-0.5 hover:bg-danger/10 rounded transition-colors">
-            <X size={10} />
+          <button onClick={() => setError(null)} className="p-1 hover:bg-danger/10 rounded-lg transition-colors flex-shrink-0 text-muted">
+            <X size={12} />
           </button>
         </div>
       )}
 
       {!isConfigured && (
-        <div className="mb-2 px-3 py-2 bg-warning-light border border-warning/20 rounded-xl text-xs text-foreground/70 flex items-start gap-2">
-          <AlertCircle size={12} className="flex-shrink-0 mt-0.5 text-warning" />
-          <span>Set <code className="font-mono bg-surface-active px-1 rounded text-[10px]">DEEPSEEK_API_KEY</code> in .env.local to enable AI.</span>
+        <div className="mx-3 mt-3 px-3 py-2.5 bg-warning/5 border border-warning/15 rounded-xl text-xs text-foreground/70 flex items-start gap-2.5">
+          <AlertCircle size={14} className="flex-shrink-0 mt-0.5 text-warning" />
+          <span>Set <code className="font-mono bg-surface-active/60 px-1 py-0.5 rounded text-[10px]">DEEPSEEK_API_KEY</code> in .env.local to enable AI.</span>
         </div>
       )}
 
-      {selectedText?.trim() && (
-        <div className="mb-2 px-3 py-2 bg-alpine-600/5 border border-alpine-600/15 rounded-xl text-xs flex items-start gap-2">
-          <MousePointerClick size={11} className="flex-shrink-0 mt-0.5 text-alpine-500" />
-          <div className="flex-1 min-w-0">
-            <span className="font-medium text-foreground/70">Selected: </span>
-            <span className="text-muted italic">
-              &ldquo;{selectedText.length > TEXT_TRUNCATION_MEDIUM ? selectedText.slice(0, TEXT_TRUNCATION_MEDIUM) + '…' : selectedText}&rdquo;
-            </span>
+      <div className="p-3">
+        {renderContextBar()}
+
+        {/* Input container */}
+        <div className="relative rounded-xl border border-border/60 bg-surface-hover/30 focus-within:border-alpine-500/40 focus-within:ring-2 focus-within:ring-alpine-500/10 transition-all">
+          <textarea
+            ref={inputRef}
+            value={inputValue}
+            onChange={(e) => setInputValue(e.target.value)}
+            onKeyDown={handleKeyDown}
+            placeholder={isConfigured ? (selectedText ? 'Ask about the selection…' : 'Ask anything…') : 'Configure API key to start…'}
+            disabled={isLoading || !isConfigured}
+            rows={1}
+            className="w-full px-3.5 pt-3 pb-10 text-[13px] bg-transparent resize-none focus:outline-none disabled:opacity-50 disabled:cursor-not-allowed text-foreground placeholder:text-muted/60"
+            style={{ minHeight: '56px', maxHeight: '160px' }}
+          />
+
+          {/* Bottom toolbar inside input */}
+          <div className="absolute bottom-0 left-0 right-0 flex items-center justify-between px-2.5 pb-2">
+            <div className="flex items-center gap-1">
+              {/* Model toggle */}
+              <div className="flex items-center bg-surface-active/40 rounded-lg p-0.5">
+                <button
+                  onClick={() => setModel('deepseek-chat')}
+                  className={`px-2 py-1 text-[10px] font-medium rounded-md transition-all ${
+                    model === 'deepseek-chat'
+                      ? 'bg-surface text-foreground shadow-sm'
+                      : 'text-muted hover:text-foreground'
+                  }`}
+                >
+                  Chat
+                </button>
+                <button
+                  onClick={() => setModel('deepseek-reasoner')}
+                  className={`px-2 py-1 text-[10px] font-medium rounded-md transition-all flex items-center gap-1 ${
+                    model === 'deepseek-reasoner'
+                      ? 'bg-surface text-foreground shadow-sm'
+                      : 'text-muted hover:text-foreground'
+                  }`}
+                >
+                  <Cpu size={9} />
+                  R1
+                </button>
+              </div>
+
+              {/* Quick actions toggle */}
+              <button
+                onClick={() => setShowQuickActions(v => !v)}
+                className={`p-1.5 rounded-lg transition-all ${
+                  showQuickActions ? 'bg-alpine-600/10 text-alpine-500' : 'text-muted hover:text-foreground hover:bg-surface-active/40'
+                }`}
+                title="Quick actions"
+              >
+                <Zap size={13} />
+              </button>
+
+              {/* Note context settings */}
+              <div className="relative" ref={notePickerRef}>
+                <button
+                  onClick={() => setShowContextSettings(v => !v)}
+                  className={`p-1.5 rounded-lg transition-all ${
+                    showContextSettings ? 'bg-alpine-600/10 text-alpine-500' : 'text-muted hover:text-foreground hover:bg-surface-active/40'
+                  }`}
+                  title="Context settings"
+                >
+                  <Settings2 size={13} />
+                </button>
+
+                {showContextSettings && (
+                  <div className="absolute bottom-full left-0 mb-2 w-64 bg-surface border border-border-strong rounded-xl shadow-xl z-50 overflow-hidden">
+                    <div className="p-3 border-b border-border/50">
+                      <div className="text-[11px] font-semibold text-foreground mb-0.5">Context Settings</div>
+                      <div className="text-[10px] text-muted">Choose what the AI can see</div>
+                    </div>
+
+                    <div className="p-2">
+                      {note && (
+                        <button
+                          onClick={() => setIncludeCurrentNote(v => !v)}
+                          className="w-full flex items-center gap-2.5 px-2.5 py-2 rounded-lg hover:bg-surface-hover transition-colors text-left"
+                        >
+                          <div className={`w-4 h-4 rounded border-2 flex items-center justify-center flex-shrink-0 transition-all ${
+                            includeCurrentNote ? 'border-alpine-600 bg-alpine-600' : 'border-border-strong'
+                          }`}>
+                            {includeCurrentNote && <Check size={10} className="text-white" />}
+                          </div>
+                          <div className="flex-1 min-w-0">
+                            <div className="text-xs text-foreground truncate">{note.title || 'Untitled'}</div>
+                            <div className="text-[10px] text-muted">Current note</div>
+                          </div>
+                        </button>
+                      )}
+
+                      {allNotes && allNotes.filter(n => n.id !== note?.id).length > 0 && (
+                        <div className="mt-1 pt-1 border-t border-border/30">
+                          <div className="px-2.5 py-1.5">
+                            <div className="relative">
+                              <Search size={11} className="absolute left-2 top-1/2 -translate-y-1/2 text-muted" />
+                              <input
+                                value={notePickerSearch}
+                                onChange={(e) => setNotePickerSearch(e.target.value)}
+                                placeholder="Search notes…"
+                                className="w-full h-7 rounded-lg bg-surface-hover border border-border pl-7 pr-2 text-[11px] text-foreground placeholder:text-muted focus:outline-none focus:ring-1 focus:ring-alpine-500/30"
+                              />
+                            </div>
+                            <div className="text-[10px] text-muted mt-1">
+                              {selectedNoteIds.length}/{AI_NOTE_CONTEXT_LIMITS.maxSelectedNotes} selected
+                            </div>
+                          </div>
+                          <div className="max-h-32 overflow-y-auto">
+                            {filteredSelectableNotes.length === 0 && (
+                              <div className="px-2.5 py-2 text-[11px] text-muted">No notes found</div>
+                            )}
+                            {filteredSelectableNotes.map(n => (
+                              <button
+                                key={n.id}
+                                onClick={() => setSelectedNoteIds(prev =>
+                                  prev.includes(n.id) ? prev.filter(id => id !== n.id) : [...prev, n.id]
+                                )}
+                                className="w-full flex items-center gap-2.5 px-2.5 py-1.5 hover:bg-surface-hover transition-colors text-left"
+                              >
+                                <div className={`w-3.5 h-3.5 rounded border-2 flex items-center justify-center flex-shrink-0 transition-all ${
+                                  selectedNoteIds.includes(n.id) ? 'border-alpine-600 bg-alpine-600' : 'border-border-strong'
+                                }`}>
+                                  {selectedNoteIds.includes(n.id) && <Check size={8} className="text-white" />}
+                                </div>
+                                <span className="text-[11px] text-foreground truncate">{n.title || 'Untitled'}</span>
+                              </button>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+                    </div>
+
+                    {/* Context diagnostics */}
+                    <div className="px-3 py-2 border-t border-border/30 bg-surface-hover/30">
+                      <div className="flex items-center justify-between text-[10px] text-muted">
+                        <span>{contextDiagnostics.totalIncludedChars.toLocaleString()} chars in context</span>
+                        {contextDiagnostics.nearLimit && <span className="text-warning">Near limit</span>}
+                      </div>
+                      {model === 'deepseek-reasoner' && !isReasonerToolCallingEnabled() && (
+                        <div className="text-[10px] text-muted mt-1">R1 tools disabled by default</div>
+                      )}
+                    </div>
+                  </div>
+                )}
+              </div>
+            </div>
+
+            {/* Send / Stop */}
+            <div className="flex items-center gap-1.5">
+              <span className="text-[10px] text-muted/40 hidden sm:inline-flex items-center gap-1">
+                <CornerDownLeft size={9} />
+              </span>
+              {isLoading ? (
+                <button
+                  onClick={handleCancelResponse}
+                  className="p-1.5 bg-danger/10 text-danger rounded-lg hover:bg-danger/20 transition-all active:scale-95"
+                  title="Stop generating"
+                >
+                  <StopCircle size={16} />
+                </button>
+              ) : (
+                <button
+                  onClick={handleSendClick}
+                  disabled={!inputValue.trim() || !isConfigured}
+                  className="p-1.5 bg-alpine-600 text-white rounded-lg hover:bg-alpine-700 disabled:opacity-20 disabled:cursor-not-allowed transition-all active:scale-95 shadow-sm"
+                >
+                  <Send size={16} />
+                </button>
+              )}
+            </div>
           </div>
         </div>
-      )}
-
-      <div className="relative">
-        <textarea
-          ref={inputRef}
-          value={inputValue}
-          onChange={(e) => setInputValue(e.target.value)}
-          onKeyDown={handleKeyDown}
-          placeholder={isConfigured ? (selectedText ? 'Ask about the selection…' : 'Ask anything…') : 'Configure API key to start…'}
-          disabled={isLoading || !isConfigured}
-          rows={1}
-          className="w-full px-3 py-2.5 pr-11 text-sm bg-surface-hover border border-border rounded-xl resize-none focus:ring-2 focus:ring-alpine-500/30 focus:border-alpine-500 focus:outline-none disabled:opacity-50 disabled:cursor-not-allowed transition-all text-foreground placeholder:text-muted"
-          style={{ minHeight: '44px', maxHeight: '120px' }}
-        />
-        {isLoading ? (
-          <button
-            onClick={handleCancelResponse}
-            className="absolute right-2 top-1/2 -translate-y-1/2 p-1.5 bg-danger text-white rounded-lg hover:bg-danger/90 transition-colors"
-            title="Cancel response"
-          >
-            <X size={14} />
-          </button>
-        ) : (
-          <button
-            onClick={handleSendClick}
-            disabled={!inputValue.trim() || !isConfigured}
-            className="absolute right-2 top-1/2 -translate-y-1/2 p-1.5 bg-alpine-600 text-white rounded-lg hover:bg-alpine-700 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
-          >
-            <Send size={14} />
-          </button>
-        )}
-      </div>
-
-      <div className="flex items-center justify-between mt-2 text-[10px] text-muted">
-        <span>Enter to send · Shift+Enter for new line</span>
-        <button
-          onClick={handleClearChat}
-          disabled={messages.length === 0}
-          className="p-1 hover:bg-surface-hover hover:text-foreground disabled:opacity-30 rounded-lg transition-all"
-          title="Clear chat"
-        >
-          <Trash2 size={12} />
-        </button>
       </div>
     </div>
   )
@@ -1832,12 +1951,12 @@ export default function AIAssistant({
     if (!showMindmapPromptModal) return null
 
     return (
-      <div className="absolute inset-0 z-50 flex items-center justify-center bg-black/45 p-4">
+      <div className="absolute inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm p-4">
         <div className="w-full max-w-lg rounded-2xl border border-border-strong bg-surface shadow-2xl">
-          <div className="flex items-center justify-between border-b border-border px-4 py-3">
+          <div className="flex items-center justify-between border-b border-border/50 px-5 py-3.5">
             <div>
               <h4 className="text-sm font-semibold text-foreground">Create Mindmap</h4>
-              <p className="text-xs text-muted mt-0.5">Add optional instructions to guide AI node generation.</p>
+              <p className="text-xs text-muted mt-0.5">Optionally guide the AI with instructions</p>
             </div>
             <button
               onClick={() => {
@@ -1849,29 +1968,27 @@ export default function AIAssistant({
               className="p-1.5 text-muted hover:text-foreground hover:bg-surface-hover rounded-lg transition-colors"
               aria-label="Close modal"
             >
-              <X size={14} />
+              <X size={16} />
             </button>
           </div>
 
-          <div className="px-4 py-3 space-y-2.5">
+          <div className="px-5 py-4 space-y-3">
             <label htmlFor="mindmap-additional-prompt" className="text-xs font-medium text-foreground/80">
-              Extra instructions (optional)
+              Instructions (optional)
             </label>
             <textarea
               id="mindmap-additional-prompt"
               value={mindmapPromptInput}
               onChange={(e) => setMindmapPromptInput(e.target.value)}
-              placeholder="Example: Focus on implementation steps, risks, and timeline; keep labels concise for stakeholders."
+              placeholder="e.g., Focus on implementation steps, risks, and timeline"
               rows={4}
               disabled={isLoading}
-              className="w-full px-3 py-2.5 text-sm bg-surface-hover border border-border rounded-xl resize-y focus:ring-2 focus:ring-alpine-500/30 focus:border-alpine-500 focus:outline-none disabled:opacity-50 disabled:cursor-not-allowed text-foreground placeholder:text-muted"
+              className="w-full px-3.5 py-2.5 text-[13px] bg-surface-hover/50 border border-border rounded-xl resize-y focus:ring-2 focus:ring-alpine-500/20 focus:border-alpine-500/50 focus:outline-none disabled:opacity-50 disabled:cursor-not-allowed text-foreground placeholder:text-muted/60"
             />
-            <p className="text-[11px] text-muted">
-              Leave empty to create from context only.
-            </p>
+            <p className="text-[11px] text-muted">Leave empty to use context only.</p>
           </div>
 
-          <div className="flex items-center justify-end gap-2 border-t border-border px-4 py-3">
+          <div className="flex items-center justify-end gap-2 border-t border-border/50 px-5 py-3.5">
             <button
               onClick={() => {
                 if (isLoading) return
@@ -1880,17 +1997,17 @@ export default function AIAssistant({
                 setMindmapPromptInput('')
               }}
               disabled={isLoading}
-              className="px-3 py-1.5 text-xs font-medium rounded-lg border border-border text-muted hover:text-foreground hover:bg-surface-hover transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+              className="px-4 py-2 text-xs font-medium rounded-xl border border-border text-muted hover:text-foreground hover:bg-surface-hover transition-all disabled:opacity-50"
             >
               Cancel
             </button>
             <button
               onClick={() => void handleSubmitMindmapCreation()}
               disabled={isLoading || !pendingMindmapPayload}
-              className="px-3 py-1.5 text-xs font-medium rounded-lg bg-alpine-600 text-white hover:bg-alpine-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-1.5"
+              className="px-4 py-2 text-xs font-medium rounded-xl bg-alpine-600 text-white hover:bg-alpine-700 transition-all disabled:opacity-50 flex items-center gap-1.5 active:scale-[0.98] shadow-sm"
             >
               {isLoading ? <Loader2 size={12} className="animate-spin" /> : <Network size={12} />}
-              Create Mindmap
+              Create
             </button>
           </div>
         </div>
@@ -1902,36 +2019,36 @@ export default function AIAssistant({
     if (!showNoteContextConsentModal) return null
 
     return (
-      <div className="absolute inset-0 z-[60] flex items-center justify-center bg-black/45 p-4">
+      <div className="absolute inset-0 z-[60] flex items-center justify-center bg-black/40 backdrop-blur-sm p-4">
         <div className="w-full max-w-md rounded-2xl border border-border-strong bg-surface shadow-2xl">
-          <div className="px-4 py-3 border-b border-border">
-            <h3 className="text-sm font-semibold text-foreground">Share selected note context with AI?</h3>
+          <div className="px-5 py-3.5 border-b border-border/50">
+            <h3 className="text-sm font-semibold text-foreground">Share note context with AI?</h3>
           </div>
-          <div className="px-4 py-3">
+          <div className="px-5 py-4">
             <p className="text-xs text-muted leading-relaxed">
-              This message includes note content from your workspace and sends it to the configured AI provider.
-              Continue only if this context is safe to share.
+              This message includes note content from your workspace and sends it to the AI provider.
+              Continue only if the content is safe to share.
             </p>
-            <label className="mt-3 flex items-center gap-2 text-xs text-foreground/80 cursor-pointer select-none">
+            <label className="mt-3 flex items-center gap-2.5 text-xs text-foreground/80 cursor-pointer select-none">
               <input
                 type="checkbox"
                 checked={rememberNoteContextConsent}
                 onChange={(e) => setRememberNoteContextConsent(e.target.checked)}
-                className="rounded border-border bg-surface"
+                className="rounded border-border-strong bg-surface accent-alpine-600"
               />
-              Remember this choice on this device
+              Remember my choice
             </label>
           </div>
-          <div className="px-4 py-3 border-t border-border flex items-center justify-end gap-2">
+          <div className="px-5 py-3.5 border-t border-border/50 flex items-center justify-end gap-2">
             <button
               onClick={handleCancelNoteContextConsent}
-              className="px-3 py-1.5 text-xs rounded-lg border border-border text-muted hover:text-foreground hover:bg-surface-hover transition-colors"
+              className="px-4 py-2 text-xs rounded-xl border border-border text-muted hover:text-foreground hover:bg-surface-hover transition-all"
             >
               Cancel
             </button>
             <button
               onClick={handleConfirmNoteContextConsent}
-              className="px-3 py-1.5 text-xs rounded-lg bg-alpine-600 text-white hover:bg-alpine-700 transition-colors"
+              className="px-4 py-2 text-xs rounded-xl bg-alpine-600 text-white hover:bg-alpine-700 transition-all active:scale-[0.98] shadow-sm"
             >
               Continue
             </button>
@@ -1946,7 +2063,7 @@ export default function AIAssistant({
   return (
     <div className="relative flex flex-col h-full bg-surface overflow-hidden">
       {/* Header */}
-      <div className="flex items-center justify-between border-b border-border px-3 py-2.5 shrink-0">
+      <div className="flex items-center justify-between px-3 py-2 shrink-0 border-b border-border/40">
         <div className="flex items-center gap-2.5">
           {showChatHistory ? (
             <button
@@ -1956,19 +2073,29 @@ export default function AIAssistant({
               <ChevronLeft size={16} className="text-muted" />
             </button>
           ) : (
-            <div className="w-8 h-8 rounded-lg bg-alpine-600 flex items-center justify-center flex-shrink-0">
-              <Sparkles size={15} className="text-white" />
+            <div className="w-8 h-8 rounded-xl bg-gradient-to-br from-alpine-500 to-alpine-700 flex items-center justify-center flex-shrink-0 shadow-sm">
+              <Sparkles size={14} className="text-white" />
             </div>
           )}
           <div>
             <h3 className="font-semibold text-sm text-foreground leading-tight">
               {showChatHistory ? 'History' : 'AI Assistant'}
             </h3>
-            <p className="text-[10px] text-muted leading-tight">
-              {showChatHistory
-                ? `${chatHistory.length} conversation${chatHistory.length !== 1 ? 's' : ''}`
-                : 'Powered by DeepSeek'}
-            </p>
+            {!showChatHistory && (
+              <p className="text-[10px] text-muted leading-tight mt-0.5">
+                {model === 'deepseek-reasoner' ? 'DeepSeek R1' : 'DeepSeek Chat'}
+                {quotaInfo && (
+                  <span className={`ml-1.5 ${quotaInfo.low ? 'text-warning' : ''}`}>
+                    · {quotaInfo.remaining} left
+                  </span>
+                )}
+              </p>
+            )}
+            {showChatHistory && (
+              <p className="text-[10px] text-muted leading-tight mt-0.5">
+                {chatHistory.length} conversation{chatHistory.length !== 1 ? 's' : ''}
+              </p>
+            )}
           </div>
         </div>
 
@@ -1989,13 +2116,22 @@ export default function AIAssistant({
               >
                 <Plus size={15} />
               </button>
+              {messages.length > 0 && (
+                <button
+                  onClick={handleClearChat}
+                  className="p-1.5 text-muted hover:text-foreground hover:bg-surface-hover rounded-lg transition-all"
+                  title="Clear chat"
+                >
+                  <Trash2 size={14} />
+                </button>
+              )}
             </>
           )}
           {onToggleSize && !showChatHistory && (
             <button
               onClick={onToggleSize}
               className="p-1.5 text-muted hover:text-foreground hover:bg-surface-hover rounded-lg transition-all"
-              title={isLargeWindow ? 'Use default size' : 'Use large size'}
+              title={isLargeWindow ? 'Default size' : 'Expand'}
             >
               {isLargeWindow ? <Minimize2 size={15} /> : <Maximize2 size={15} />}
             </button>
@@ -2004,55 +2140,16 @@ export default function AIAssistant({
             <button
               onClick={onClose}
               className="p-1.5 text-muted hover:text-foreground hover:bg-surface-hover rounded-lg transition-all"
-              title="Close AI Assistant"
+              title="Close"
               aria-label="Close AI Assistant"
             >
               <X size={15} />
             </button>
           )}
-          {isConfigured && !showChatHistory && (
-            <span className="px-2 py-0.5 bg-accent-light text-accent text-[10px] font-medium rounded-full ml-1">
-              Connected
-            </span>
-          )}
-          {quotaInfo && !showChatHistory && (
-            <div className="relative ml-1" ref={quotaPopoverRef}>
-              <button
-                onClick={() => setShowQuotaPopover(v => !v)}
-                className={`px-2 py-0.5 text-[10px] font-medium rounded-full transition-colors ${
-                  quotaInfo.low
-                    ? 'bg-warning-light text-warning hover:bg-warning-light/80'
-                    : 'bg-surface-hover text-muted hover:text-foreground'
-                }`}
-                title="Show quota details"
-              >
-                Quota {quotaInfo.remaining}/{quotaInfo.limit}
-              </button>
-              {showQuotaPopover && (
-                <div className="absolute right-0 top-full mt-1.5 w-48 rounded-xl border border-border bg-surface shadow-lg p-2.5 z-50">
-                  <div className="text-[10px] font-semibold text-muted uppercase tracking-wider mb-2">AI Quota</div>
-                  <div className="space-y-1 text-[11px] text-foreground/80">
-                    <div className="flex items-center justify-between">
-                      <span className="text-muted">Remaining</span>
-                      <span className="font-medium">{quotaInfo.remaining}/{quotaInfo.limit}</span>
-                    </div>
-                    <div className="flex items-center justify-between">
-                      <span className="text-muted">Resets in</span>
-                      <span className="font-medium">{quotaInfo.resetInSeconds ?? 0}s</span>
-                    </div>
-                    <div className="flex items-center justify-between">
-                      <span className="text-muted">Window</span>
-                      <span className="font-medium">{quotaWindowLabel}</span>
-                    </div>
-                  </div>
-                </div>
-              )}
-            </div>
-          )}
           {onToggleExpand && (
             <button
               onClick={onToggleExpand}
-              className="p-1.5 text-muted hover:text-foreground hover:bg-surface-hover rounded-lg transition-all ml-0.5"
+              className="p-1.5 text-muted hover:text-foreground hover:bg-surface-hover rounded-lg transition-all"
             >
               {isExpanded ? <ChevronDown size={15} /> : <ChevronUp size={15} />}
             </button>
