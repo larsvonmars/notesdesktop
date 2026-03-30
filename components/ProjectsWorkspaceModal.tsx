@@ -4,7 +4,6 @@ import { useCallback, useEffect, useMemo, useState, useRef } from 'react'
 import { usePathname, useRouter } from 'next/navigation'
 import {
   Target,
-  X,
   Plus,
   Loader2,
   FolderPlus,
@@ -53,6 +52,7 @@ import {
   deleteNote,
 } from '@/lib/notes'
 import { getNoteTypePresentation, type NoteTypeIconKey } from '@/lib/note-types'
+import BaseModal, { ModalHeader } from './BaseModal'
 
 /* ─── Types ───────────────────────────────────────────────────── */
 
@@ -461,14 +461,8 @@ export default function ProjectsWorkspaceModal({
   /* ─── Main render ───────────────────────────────────────────── */
 
   return (
-    <div className={asView ? 'h-full w-full' : 'fixed inset-0 z-[70] flex items-center justify-center bg-black/50 p-4'}>
-      <div
-        className={
-          asView
-            ? 'relative flex h-full w-full flex-col overflow-hidden border border-gray-200 bg-white'
-            : 'relative flex w-full max-w-5xl max-h-[calc(100vh-3rem)] flex-col overflow-hidden rounded-xl border border-gray-200 bg-white shadow-2xl'
-        }
-      >
+    <>
+    <BaseModal isOpen={isOpen} onClose={onClose} size="5xl" maxHeight="calc(100vh - 3rem)" zIndex={70} asView={asView}>
 
         {/* Loading overlay */}
         {isLoading && (
@@ -478,13 +472,11 @@ export default function ProjectsWorkspaceModal({
         )}
 
         {/* ─── Header ─────────────────────────────────────────── */}
-        <div className="flex items-center justify-between border-b border-gray-200 px-4 py-3">
-          <div className="flex items-center gap-2">
-            <Target size={18} className="text-alpine-500" />
-            <h2 className="text-base font-semibold text-gray-900">Projects</h2>
-            <span className="text-xs text-gray-400">{folders.length} folders · {notes.length} notes</span>
-          </div>
-          <div className="flex items-center gap-2">
+        <ModalHeader onClose={onClose} closeAriaLabel="Close projects" gradient={false}>
+          <Target size={18} className="text-alpine-500" />
+          <h2 className="text-base font-semibold text-gray-900">Projects</h2>
+          <span className="text-xs text-gray-400">{folders.length} folders · {notes.length} notes</span>
+          <div className="flex items-center gap-2 ml-auto">
             <div className="relative flex items-center">
               <Search size={14} className="absolute left-2.5 text-gray-400" />
               <input
@@ -503,11 +495,8 @@ export default function ProjectsWorkspaceModal({
             <button type="button" onClick={() => { setIsLoading(true); loadAll() }} className="rounded-md p-1.5 text-gray-400 hover:bg-gray-100 hover:text-gray-600" title="Refresh">
               <RefreshCw size={14} />
             </button>
-            <button type="button" onClick={onClose} className="rounded-md p-1.5 text-gray-400 hover:bg-gray-100 hover:text-gray-600" title="Close (Esc)">
-              <X size={16} />
-            </button>
           </div>
-        </div>
+        </ModalHeader>
 
         {/* ─── Body — 2-panel layout ──────────────────────────── */}
         <div className="flex flex-1 overflow-hidden">
@@ -692,7 +681,7 @@ export default function ProjectsWorkspaceModal({
             </div>
           </div>
         </div>
-      </div>
+      </BaseModal>
 
       {/* ─── Dialogs (single slot) ────────────────────────────── */}
       {dialog && (
@@ -848,6 +837,6 @@ export default function ProjectsWorkspaceModal({
           </div>
         </div>
       )}
-    </div>
+    </>
   )
 }

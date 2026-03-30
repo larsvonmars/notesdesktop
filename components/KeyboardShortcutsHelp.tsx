@@ -1,7 +1,8 @@
 'use client'
 
-import { X, Keyboard } from 'lucide-react'
+import { Keyboard } from 'lucide-react'
 import { KEYBOARD_SHORTCUTS, AUTOFORMAT_HELP, formatShortcutKeys, getShortcutsByCategory } from '@/lib/editor/keyboardShortcuts'
+import BaseModal, { ModalHeader, ModalBody, ModalFooter, ModalTitle } from './BaseModal'
 
 interface KeyboardShortcutsHelpProps {
   isOpen: boolean
@@ -18,25 +19,13 @@ export default function KeyboardShortcutsHelp({ isOpen, onClose }: KeyboardShort
   ] as const
 
   return (
-    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-      <div className="bg-white rounded-lg shadow-xl w-full max-w-3xl max-h-[80vh] overflow-hidden flex flex-col">
-        {/* Header */}
-        <div className="flex items-center justify-between p-6 border-b">
-          <div className="flex items-center gap-2">
-            <Keyboard size={24} className="text-alpine-600" />
-            <h2 className="text-xl font-semibold text-gray-900">Keyboard Shortcuts</h2>
-          </div>
-          <button
-            onClick={onClose}
-            className="text-gray-400 hover:text-gray-600 transition-colors"
-            aria-label="Close"
-          >
-            <X size={24} />
-          </button>
-        </div>
+    <BaseModal isOpen={isOpen} onClose={onClose} size="3xl" maxHeight="80vh">
+        <ModalHeader onClose={onClose} closeAriaLabel="Close keyboard shortcuts">
+          <Keyboard size={24} className="text-alpine-600" />
+          <ModalTitle>Keyboard Shortcuts</ModalTitle>
+        </ModalHeader>
 
-        {/* Content */}
-        <div className="overflow-y-auto p-6 space-y-6">
+        <ModalBody className="space-y-6">
           {/* Keyboard Shortcuts */}
           <div className="space-y-4">
             {categories.map(({ id, title }) => {
@@ -93,18 +82,16 @@ export default function KeyboardShortcutsHelp({ isOpen, onClose }: KeyboardShort
               <li>• Use the slash command <code className="px-1 py-0.5 bg-alpine-100 rounded">/</code> for quick access to all features</li>
             </ul>
           </div>
-        </div>
+        </ModalBody>
 
-        {/* Footer */}
-        <div className="border-t p-4 bg-gray-50">
+        <ModalFooter className="bg-gray-50">
           <button
             onClick={onClose}
             className="w-full px-4 py-2 bg-alpine-600 text-white rounded-md hover:bg-alpine-700 transition-colors"
           >
             Got it!
           </button>
-        </div>
-      </div>
-    </div>
+        </ModalFooter>
+    </BaseModal>
   )
 }

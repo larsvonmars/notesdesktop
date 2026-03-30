@@ -30,6 +30,7 @@ import {
   Pencil,
 } from 'lucide-react'
 import ModalCloseButton from './ModalCloseButton'
+import BaseModal, { ModalHeader } from './BaseModal'
 import {
   listItems,
   uploadFiles,
@@ -568,25 +569,16 @@ export default function FileExplorerModal({
 
   return (
     <>
-      <div
-        className={
-          asView
-            ? 'h-full w-full'
-            : 'fixed inset-0 z-[100] flex items-center justify-center bg-black/60 p-4 sm:p-6'
-        }
-        onClick={(e) => {
-          if (!asView && e.target === e.currentTarget) onClose()
-        }}
+      <BaseModal
+        isOpen={isOpen}
+        onClose={onClose}
+        size="5xl"
+        maxHeight="calc(100vh - 3rem)"
+        zIndex={100}
+        asView={asView}
       >
-        <div
-          className={
-            asView
-              ? 'flex h-full w-full flex-col overflow-hidden border border-gray-200 bg-white dark:border-slate-700 dark:bg-slate-900'
-              : 'flex w-full max-w-5xl max-h-[calc(100vh-2rem)] sm:max-h-[calc(100vh-3rem)] flex-col overflow-hidden rounded-2xl border border-gray-200 dark:border-slate-700 bg-white dark:bg-slate-900 shadow-2xl'
-          }
-        >
           {/* ============ HEADER ============ */}
-          <div className="flex items-center justify-between border-b border-gray-200 dark:border-slate-700 px-4 sm:px-5 py-3 sm:py-3.5 bg-gradient-to-r from-white to-gray-50 dark:from-slate-900 dark:to-slate-800">
+          <ModalHeader onClose={onClose} closeAriaLabel="Close file explorer">
             <div className="flex items-center gap-3">
               <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-alpine-100">
                 <FolderOpen size={18} className="text-alpine-600" />
@@ -598,13 +590,7 @@ export default function FileExplorerModal({
                 </p>
               </div>
             </div>
-            <ModalCloseButton
-              onClick={onClose}
-              ariaLabel="Close file explorer"
-              className="text-gray-400 dark:text-slate-400 hover:text-gray-600 dark:hover:text-slate-200"
-              size={20}
-            />
-          </div>
+          </ModalHeader>
 
           {uploadPathSegments.length > 0 && (
             <div className="border-b border-alpine-100 dark:border-slate-700 bg-alpine-50/60 dark:bg-slate-800/60 px-4 sm:px-5 py-2">
@@ -948,7 +934,6 @@ export default function FileExplorerModal({
               )}
             </div>
           </div>
-        </div>
 
         {/* Hidden file input */}
         <input
@@ -958,7 +943,7 @@ export default function FileExplorerModal({
           onChange={handleFileInputChange}
           className="hidden"
         />
-      </div>
+      </BaseModal>
 
       {/* ============ CONTEXT MENU ============ */}
       {contextMenu && (

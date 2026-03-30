@@ -5,6 +5,7 @@ import ModalCloseButton from './ModalCloseButton'
 import { getFileSignedUrl, getFileUrl } from '@/lib/file-storage'
 import mammoth from 'mammoth'
 import DOMPurify from 'dompurify'
+import BaseModal, { ModalHeader } from './BaseModal'
 
 interface DocxPreviewModalProps {
   isOpen: boolean
@@ -75,14 +76,8 @@ export default function DocxPreviewModal({
   if (!isOpen || !filePath) return null
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 sm:p-6 bg-black/60 backdrop-blur-sm animate-in fade-in duration-200">
-      <div 
-        className="w-full max-w-4xl bg-white dark:bg-slate-900 rounded-xl shadow-2xl flex flex-col overflow-hidden border border-slate-200 dark:border-slate-700 animate-in zoom-in-95 duration-200"
-        style={{ height: '90vh' }}
-      >
-        {/* Header */}
-        <div className="flex items-center justify-between px-4 py-3 border-b border-gray-200 dark:border-slate-800 bg-gray-50 dark:bg-slate-800/50">
-          <div className="flex items-center gap-3 min-w-0">
+    <BaseModal isOpen={isOpen} onClose={onClose} size="4xl" maxHeight="90vh" backdropBlur animation="zoom">
+        <ModalHeader onClose={onClose} closeAriaLabel="Close preview" gradient={false} className="bg-gray-50 dark:bg-slate-800/50">
             <div className="flex h-8 w-8 flex-shrink-0 items-center justify-center rounded bg-blue-100 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400">
               <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                 <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
@@ -95,22 +90,16 @@ export default function DocxPreviewModal({
             <h3 className="text-sm font-semibold text-gray-900 dark:text-slate-100 truncate">
               {fileName || 'Word Document'}
             </h3>
-          </div>
-          <div className="flex items-center gap-2">
-            <button
-              onClick={() => downloadUrl && window.open(downloadUrl, '_blank')}
-              className="px-3 py-1.5 text-xs font-medium bg-white dark:bg-slate-800 border border-gray-200 dark:border-slate-700 text-gray-700 dark:text-slate-200 rounded-md hover:bg-gray-50 dark:hover:bg-slate-700 transition-colors"
-              disabled={!downloadUrl}
-            >
-              Open in new tab
-            </button>
-            <ModalCloseButton
-              onClick={onClose}
-              ariaLabel="Close preview"
-              className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300"
-            />
-          </div>
-        </div>
+            <div className="ml-auto flex items-center gap-2">
+              <button
+                onClick={() => downloadUrl && window.open(downloadUrl, '_blank')}
+                className="px-3 py-1.5 text-xs font-medium bg-white dark:bg-slate-800 border border-gray-200 dark:border-slate-700 text-gray-700 dark:text-slate-200 rounded-md hover:bg-gray-50 dark:hover:bg-slate-700 transition-colors"
+                disabled={!downloadUrl}
+              >
+                Open in new tab
+              </button>
+            </div>
+        </ModalHeader>
 
         {/* Content */}
         <div className="flex-1 overflow-auto bg-gray-100 dark:bg-slate-950 flex justify-center p-4 sm:p-8">
@@ -141,7 +130,6 @@ export default function DocxPreviewModal({
             />
           ) : null}
         </div>
-      </div>
-    </div>
+    </BaseModal>
   )
 }

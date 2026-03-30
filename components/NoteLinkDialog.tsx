@@ -1,11 +1,12 @@
 'use client'
 
 import React, { useState, useEffect, useMemo } from 'react'
-import { X, Search, FileText, Folder } from 'lucide-react'
+import { Search, FileText, Folder } from 'lucide-react'
 import { getNotes } from '@/lib/notes'
 import { getFolders } from '@/lib/folders'
 import type { Note } from '@/lib/notes'
 import type { Folder as FolderType } from '@/lib/folders'
+import BaseModal, { ModalHeader, ModalBody, ModalFooter, ModalTitle } from './BaseModal'
 
 interface NoteLinkDialogProps {
   isOpen: boolean
@@ -86,22 +87,11 @@ export default function NoteLinkDialog({
   if (!isOpen) return null
 
   return (
-    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-      <div className="bg-white rounded-lg shadow-xl w-full max-w-2xl max-h-[80vh] flex flex-col">
-        {/* Header */}
-        <div className="flex items-center justify-between p-4 border-b border-gray-200">
-          <div className="flex items-center gap-2">
-            <FileText size={20} className="text-alpine-600" />
-            <h2 className="text-lg font-semibold">Link to Note</h2>
-          </div>
-          <button
-            onClick={handleClose}
-            className="text-gray-400 hover:text-gray-600 transition-colors"
-            aria-label="Close"
-          >
-            <X size={20} />
-          </button>
-        </div>
+    <BaseModal isOpen={isOpen} onClose={handleClose} size="2xl" maxHeight="80vh">
+        <ModalHeader onClose={handleClose} closeAriaLabel="Close note link dialog" gradient={false}>
+          <FileText size={20} className="text-alpine-600" />
+          <ModalTitle>Link to Note</ModalTitle>
+        </ModalHeader>
 
         {/* Search */}
         <div className="p-4 border-b border-gray-100">
@@ -121,8 +111,7 @@ export default function NoteLinkDialog({
           </div>
         </div>
 
-        {/* Notes List */}
-        <div className="flex-1 overflow-y-auto p-4">
+        <ModalBody noPadding>
           {loading ? (
             <div className="flex items-center justify-center py-8 text-gray-500">
               Loading notes...
@@ -174,15 +163,13 @@ export default function NoteLinkDialog({
               ))}
             </div>
           )}
-        </div>
+        </ModalBody>
 
-        {/* Footer */}
-        <div className="p-4 border-t border-gray-100 bg-gray-50">
+        <ModalFooter className="bg-gray-50">
           <p className="text-xs text-gray-500 text-center">
             Select a note to create a link
           </p>
-        </div>
-      </div>
-    </div>
+        </ModalFooter>
+    </BaseModal>
   )
 }

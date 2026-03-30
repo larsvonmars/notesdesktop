@@ -1,11 +1,12 @@
 "use client"
 
 import React, { useState, useEffect, useRef, useMemo } from 'react'
-import { X, ZoomIn, ZoomOut, Maximize2, FolderTree, Loader2, RefreshCw, Crosshair } from 'lucide-react'
+import { ZoomIn, ZoomOut, Maximize2, FolderTree, Loader2, RefreshCw, Crosshair } from 'lucide-react'
 import type { Note } from '@/lib/notes'
 import { getNotes } from '@/lib/notes'
 import type { FolderNode } from '@/lib/folders'
 import { getNoteTypePresentation, getOrderedNoteTypePresentations } from '@/lib/note-types'
+import BaseModal, { ModalHeader } from './BaseModal'
 
 interface KnowledgeGraphModalProps {
   isOpen: boolean
@@ -722,62 +723,53 @@ export default function KnowledgeGraphModal({
   }
 
   return (
-    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-      <div className="bg-white rounded-lg shadow-xl w-full h-full max-w-7xl max-h-[90vh] flex flex-col">
-        {/* Header */}
-        <div className="flex items-center justify-between p-4 border-b border-gray-200">
-          <div className="flex items-start gap-4 flex-1">
-            <div>
-              <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-alpine-50 text-alpine-700 text-xs font-semibold uppercase tracking-wide">
-                Knowledge Graph
+    <BaseModal isOpen={isOpen} onClose={onClose} size="full" maxHeight="90vh">
+        <ModalHeader onClose={onClose} closeAriaLabel="Close knowledge graph" gradient={false}>
+            <div className="flex items-start gap-4 flex-1">
+              <div>
+                <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-alpine-50 text-alpine-700 text-xs font-semibold uppercase tracking-wide">
+                  Knowledge Graph
+                </div>
+                <div className="mt-2 flex items-center gap-4 text-sm text-gray-700" style={{ fontFamily: 'Inter, system-ui, sans-serif' }}>
+                  <span>{stats.totalNotes} notes</span>
+                  <span>•</span>
+                  <span>{stats.totalLinks} links</span>
+                  <span>•</span>
+                  <span>{stats.connectedNotes} connected</span>
+                </div>
               </div>
-              <div className="mt-2 flex items-center gap-4 text-sm text-gray-700" style={{ fontFamily: 'Inter, system-ui, sans-serif' }}>
-                <span>{stats.totalNotes} notes</span>
-                <span>•</span>
-                <span>{stats.totalLinks} links</span>
-                <span>•</span>
-                <span>{stats.connectedNotes} connected</span>
-              </div>
-            </div>
 
-            <div className="flex items-center gap-2 ml-auto">
-              <FolderTree size={16} className="text-gray-500" />
-              <select
-                value={filterFolderId === null ? 'root' : filterFolderId}
-                onChange={(e) => {
-                  const value = e.target.value
-                  if (value === 'all') setFilterFolderId('all')
-                  else if (value === 'root') setFilterFolderId(null)
-                  else setFilterFolderId(value)
-                }}
-                className="text-sm px-3 py-1.5 border border-gray-300 rounded-md bg-white hover:border-gray-400 focus:outline-none focus:ring-2 focus:ring-alpine-500 focus:border-transparent"
-              >
-                {folderOptions.map(option => (
-                  <option
-                    key={option.id === null ? 'root' : option.id}
-                    value={option.id === null ? 'root' : option.id}
-                  >
-                    {'\u00A0'.repeat(option.depth * 2)}{option.name}
-                  </option>
-                ))}
-              </select>
-              <button
-                onClick={() => setHasAutoFit(false)}
-                className="p-2 rounded-md border border-gray-200 text-gray-600 hover:border-gray-300 hover:text-gray-800"
-                title="Re-center graph"
-              >
-                <Crosshair size={16} />
-              </button>
+              <div className="flex items-center gap-2 ml-auto">
+                <FolderTree size={16} className="text-gray-500" />
+                <select
+                  value={filterFolderId === null ? 'root' : filterFolderId}
+                  onChange={(e) => {
+                    const value = e.target.value
+                    if (value === 'all') setFilterFolderId('all')
+                    else if (value === 'root') setFilterFolderId(null)
+                    else setFilterFolderId(value)
+                  }}
+                  className="text-sm px-3 py-1.5 border border-gray-300 rounded-md bg-white hover:border-gray-400 focus:outline-none focus:ring-2 focus:ring-alpine-500 focus:border-transparent"
+                >
+                  {folderOptions.map(option => (
+                    <option
+                      key={option.id === null ? 'root' : option.id}
+                      value={option.id === null ? 'root' : option.id}
+                    >
+                      {'\u00A0'.repeat(option.depth * 2)}{option.name}
+                    </option>
+                  ))}
+                </select>
+                <button
+                  onClick={() => setHasAutoFit(false)}
+                  className="p-2 rounded-md border border-gray-200 text-gray-600 hover:border-gray-300 hover:text-gray-800"
+                  title="Re-center graph"
+                >
+                  <Crosshair size={16} />
+                </button>
+              </div>
             </div>
-          </div>
-          <button
-            onClick={onClose}
-            className="text-gray-400 hover:text-gray-600 transition-colors flex-shrink-0"
-            aria-label="Close"
-          >
-            <X size={20} />
-          </button>
-        </div>
+        </ModalHeader>
 
         {/* Graph Canvas */}
         <div ref={containerRef} className="flex-1 relative bg-gray-50">
@@ -868,7 +860,6 @@ export default function KnowledgeGraphModal({
             </div>
           </>
         )}
-      </div>
-    </div>
+    </BaseModal>
   )
 }

@@ -6,6 +6,7 @@ import {
   Zap, ArrowRight, type LucideIcon,
 } from 'lucide-react'
 import ModalCloseButton from './ModalCloseButton'
+import BaseModal from './BaseModal'
 import { getNotes, type Note, type NoteType } from '@/lib/notes'
 import { getNoteTypePresentation, type NoteTypeIconKey } from '@/lib/note-types'
 
@@ -96,17 +97,16 @@ export default function WelcomeBackModal({
 
   if (!isOpen && !asView) return null
 
-  const containerCls = asView
-    ? 'h-full w-full flex flex-col overflow-hidden bg-background'
-    : 'fixed inset-0 z-[100] flex items-center justify-center bg-black/60 p-3 sm:p-6'
-
-  const cardCls = asView
-    ? 'flex h-full w-full flex-col overflow-hidden'
-    : 'flex w-full max-w-5xl max-h-[calc(100vh-2rem)] flex-col overflow-hidden rounded-2xl border border-border bg-surface/95 backdrop-blur-sm shadow-2xl sm:max-h-[calc(100vh-4rem)]'
-
   return (
-    <div className={containerCls}>
-      <div className={cardCls}>
+    <BaseModal
+      isOpen={isOpen}
+      onClose={onClose}
+      size="5xl"
+      maxHeight="calc(100vh - 4rem)"
+      zIndex={100}
+      asView={asView}
+      className={asView ? '' : 'border-border bg-surface/95 backdrop-blur-sm'}
+    >
 
         {/* ── Hero header ──────────────────────────────────────────────── */}
         <header className="relative overflow-hidden shrink-0 border-b border-border bg-gradient-to-br from-alpine-600 via-alpine-500 to-peak-500 dark:from-slate-900 dark:via-slate-800 dark:to-slate-900 px-6 py-6 sm:px-8 sm:py-8">
@@ -252,7 +252,6 @@ export default function WelcomeBackModal({
           </div>
         </div>
 
-      </div>
-    </div>
+    </BaseModal>
   )
 }

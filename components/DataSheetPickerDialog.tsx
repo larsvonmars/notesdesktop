@@ -1,13 +1,14 @@
 'use client'
 
 import React, { useState, useEffect, useMemo } from 'react'
-import { X, Search, Table2, Folder } from 'lucide-react'
+import { Search, Table2, Folder } from 'lucide-react'
 import { getNotes } from '@/lib/notes'
 import { getFolders } from '@/lib/folders'
 import type { Note } from '@/lib/notes'
 import type { Folder as FolderType } from '@/lib/folders'
 import type { DataSheetData } from './DataSheetEditor'
 import type { DataSheetTablePayload } from '@/lib/editor/dataSheetTableBlock'
+import BaseModal, { ModalHeader, ModalFooter, ModalTitle } from './BaseModal'
 
 interface DataSheetPickerDialogProps {
   isOpen: boolean
@@ -169,22 +170,11 @@ export default function DataSheetPickerDialog({
   const PREVIEW_MAX_ROWS = 10
 
   return (
-    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-      <div className="bg-white rounded-lg shadow-xl w-full max-w-4xl max-h-[85vh] flex flex-col">
-        {/* Header */}
-        <div className="flex items-center justify-between p-4 border-b border-gray-200">
-          <div className="flex items-center gap-2">
-            <Table2 size={20} className="text-alpine-600" />
-            <h2 className="text-lg font-semibold">Insert Data Sheet Table</h2>
-          </div>
-          <button
-            onClick={handleClose}
-            className="text-gray-400 hover:text-gray-600 transition-colors"
-            aria-label="Close"
-          >
-            <X size={20} />
-          </button>
-        </div>
+    <BaseModal isOpen={isOpen} onClose={handleClose} size="4xl" maxHeight="85vh">
+        <ModalHeader onClose={handleClose} closeAriaLabel="Close data sheet picker" gradient={false}>
+          <Table2 size={20} className="text-alpine-600" />
+          <ModalTitle>Insert Data Sheet Table</ModalTitle>
+        </ModalHeader>
 
         <div className="flex flex-1 min-h-0">
           {/* Left: sheet list */}
@@ -341,8 +331,7 @@ export default function DataSheetPickerDialog({
           </div>
         </div>
 
-        {/* Footer */}
-        <div className="flex items-center justify-between p-4 border-t border-gray-200 bg-gray-50">
+        <ModalFooter className="bg-gray-50 flex items-center justify-between">
           <p className="text-xs text-gray-500">
             The table will be inserted as a static snapshot
           </p>
@@ -361,8 +350,7 @@ export default function DataSheetPickerDialog({
               Insert Table
             </button>
           </div>
-        </div>
-      </div>
-    </div>
+        </ModalFooter>
+    </BaseModal>
   )
 }
