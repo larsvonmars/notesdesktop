@@ -1481,6 +1481,23 @@ aside[class*="backdrop-blur"] {
   }
 }
 
+/* Dark mode overrides for file blocks (supplement Tailwind dark: utilities) */
+:is(.dark, [data-theme="dark"]) .file-block-container .file-block-card:hover .file-block-path-pill,
+:is(.dark, [data-theme="dark"]) .file-block-container .file-block-card:focus-within .file-block-path-pill {
+  background-color: #334155; /* slate-700 */
+  color: #e2e8f0;           /* slate-200 */
+}
+
+:is(.dark, [data-theme="dark"]) .file-block-container .file-block-card:hover .file-block-actions-row,
+:is(.dark, [data-theme="dark"]) .file-block-container .file-block-card:focus-within .file-block-actions-row {
+  background-color: rgba(30, 41, 59, 0.95); /* slate-800 */
+}
+
+:is(.dark, [data-theme="dark"]) .file-block-container .file-block-card:hover .file-block-icon-wrap,
+:is(.dark, [data-theme="dark"]) .file-block-container .file-block-card:focus-within .file-block-icon-wrap {
+  box-shadow: 0 8px 18px -12px rgba(0, 0, 0, 0.6);
+}
+
 /* File blocks: prevent prose from restyling their internals */
 .share-note-content .file-block-container,
 .share-note-content .file-block-container * {

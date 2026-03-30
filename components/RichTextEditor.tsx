@@ -145,7 +145,9 @@ const SANITIZE_CONFIG: Config = {
     'a', 'b', 'strong', 'i', 'em', 'u', 's', 'code', 'pre', 'p', 'br',
     'div', 'span', 'blockquote', 'ul', 'ol', 'li', 'hr', 'input',
     'h1', 'h2', 'h3', 'h4', 'h5', 'h6', 'mark', 'img', 'button', 'svg', 'path', 'table',
-    'thead', 'tbody', 'tr', 'td', 'th'
+    'thead', 'tbody', 'tr', 'td', 'th',
+    // SVG shape elements used by file-block / annotation-embed icons
+    'line', 'polyline', 'polygon', 'circle', 'rect', 'ellipse', 'g'
   ],
   ALLOWED_ATTR: [
     'href', 'target', 'rel', 'type', 'checked', 'data-checked',
@@ -155,7 +157,10 @@ const SANITIZE_CONFIG: Config = {
     'data-direction', 'aria-label', 'title', 'draggable',
     'contenteditable', 'xmlns', 'viewBox', 'fill', 'stroke',
     'stroke-width', 'stroke-linecap', 'stroke-linejoin', 'd',
-    'colspan', 'rowspan', 'data-checklist', 'style'
+    'colspan', 'rowspan', 'data-checklist', 'style',
+    // SVG geometry attributes used by block icons
+    'points', 'x1', 'y1', 'x2', 'y2', 'cx', 'cy', 'r', 'rx', 'ry',
+    'x', 'y'
   ],
   ALLOW_DATA_ATTR: true
 }
@@ -850,7 +855,9 @@ const RichTextEditor = forwardRef<RichTextEditorHandle, RichTextEditorProps>(
       [insertCustomBlockAtSelection, emitChange]
     )
 
-    // Rehydrate existing custom blocks in the editor
+    // Rehydrate existing custom blocks in the editor.
+    // Parse each block's payload from the DOM, then re-render so SVG icons
+    // and interactive buttons survive DOMPurify sanitisation.
     const rehydrateExistingBlocks = useCallback(() => {
       if (!editorRef.current) return
       const descriptors = customBlocksRef.current || []
@@ -858,16 +865,44 @@ const RichTextEditor = forwardRef<RichTextEditorHandle, RichTextEditorProps>(
       nodes.forEach((node) => {
         const type = node.getAttribute('data-block-type') || ''
         const desc = descriptors.find((d) => d.type === type)
-        if (desc && typeof desc.parse === 'function') {
+        if (!desc) return
+
+        // 1. Recover the payload – prefer the encoded attribute, fall back to parse()
+        let payload: any
+        const encodedPayload = node.getAttribute('data-block-payload')
+        if (encodedPayload) {
+          try { payload = JSON.parse(decodeURIComponent(encodedPayload)) } catch { /* ignore */ }
+        }
+        if (payload === undefined && typeof desc.parse === 'function') {
+          try { payload = desc.parse(node as HTMLElement) } catch { /* ignore */ }
+        }
+
+        // 2. Re-render from payload to restore icons / buttons stripped by DOMPurify
+        if (payload !== undefined) {
           try {
-            const parsed = desc.parse(node as HTMLElement)
-            if (parsed !== undefined) {
-              try {
-                node.setAttribute('data-block-payload', encodeURIComponent(JSON.stringify(parsed)))
-              } catch {}
+            const freshHtml = desc.render(payload)
+            const temp = document.createElement('div')
+            temp.innerHTML = freshHtml
+            const freshNode = temp.firstElementChild
+
+            if (freshNode) {
+              // Carry over the canonical payload attribute
+              freshNode.setAttribute(
+                'data-block-payload',
+                encodeURIComponent(JSON.stringify(payload))
+              )
+
+              // For inline blocks (e.g. note-link spans), maintain position correctly
+              node.replaceWith(freshNode)
+            } else {
+              // Couldn't build a DOM node – just sync the attribute
+              node.setAttribute('data-block-payload', encodeURIComponent(JSON.stringify(payload)))
             }
-          } catch (e) {
-            // parsing failed - ignore
+          } catch {
+            // Re-render failed – at minimum sync the payload attribute
+            try {
+              node.setAttribute('data-block-payload', encodeURIComponent(JSON.stringify(payload)))
+            } catch { /* ignore */ }
           }
         }
       })
