@@ -27,6 +27,7 @@ import {
   Copy,
   ExternalLink,
   Globe,
+  FileOutput,
   type LucideIcon,
 } from 'lucide-react'
 import type { NoteType } from '@/lib/notes'
@@ -161,6 +162,9 @@ export default function NoteDetailsSidebar({
   const [wordGoalValue, setWordGoalValue] = useState('')
   const wordGoalInputRef = useRef<HTMLInputElement>(null)
   const [tocExpanded, setTocExpanded] = useState(true)
+  const [showFileModal, setShowFileModal] = useState(false)
+
+  const hasFileActions = !!(onExportMarkdown || onExportPdf || onExportDocx || onImportDocx || onPublish || shareUrl || shareHint)
 
   // Focus word goal input when it opens
   useEffect(() => {
@@ -251,45 +255,18 @@ export default function NoteDetailsSidebar({
             <Settings size={14} />
           </button>
 
-          {/* Export */}
-          {(onExportMarkdown || onExportPdf || onExportDocx || onImportDocx) && (
-            <div className="mt-1.5 h-px w-5 bg-border/40 rounded-full" />
-          )}
-          {onExportMarkdown && (
-            <button
-              onClick={onExportMarkdown}
-              className="p-1.5 rounded-xl text-muted/70 hover:bg-surface-hover/60 hover:text-foreground transition-all duration-200"
-              title="Export Markdown"
-            >
-              <FileText size={14} />
-            </button>
-          )}
-          {onExportPdf && (
-            <button
-              onClick={onExportPdf}
-              className="p-1.5 rounded-xl text-muted/70 hover:bg-surface-hover/60 hover:text-foreground transition-all duration-200"
-              title="Export PDF"
-            >
-              <Download size={14} />
-            </button>
-          )}
-          {onExportDocx && (
-            <button
-              onClick={onExportDocx}
-              className="p-1.5 rounded-xl text-muted/70 hover:bg-surface-hover/60 hover:text-foreground transition-all duration-200"
-              title="Export DOCX"
-            >
-              <FileDown size={14} />
-            </button>
-          )}
-          {onImportDocx && (
-            <button
-              onClick={onImportDocx}
-              className="p-1.5 rounded-xl text-muted/70 hover:bg-surface-hover/60 hover:text-foreground transition-all duration-200"
-              title="Import DOCX"
-            >
-              <FileUp size={14} />
-            </button>
+          {/* File (export/share) */}
+          {hasFileActions && (
+            <>
+              <div className="mt-1.5 h-px w-5 bg-border/40 rounded-full" />
+              <button
+                onClick={() => { onToggleCollapsed(); setTimeout(() => setShowFileModal(true), 200) }}
+                className="p-1.5 rounded-xl text-muted/70 hover:bg-surface-hover/60 hover:text-foreground transition-all duration-200"
+                title="File actions"
+              >
+                <FileOutput size={14} />
+              </button>
+            </>
           )}
 
           {/* Connections */}
@@ -302,16 +279,6 @@ export default function NoteDetailsSidebar({
               <Network size={14} />
             </button>
           )}
-
-          {shareUrl && onCopyShareLink && (
-            <button
-              onClick={onCopyShareLink}
-              className="p-1.5 rounded-xl text-muted/70 hover:bg-surface-hover/60 hover:text-foreground transition-all duration-200"
-              title="Copy share link"
-            >
-              <Globe size={14} />
-            </button>
-          )}
         </nav>
       </aside>
     )
@@ -319,6 +286,7 @@ export default function NoteDetailsSidebar({
 
   // ---- EXPANDED VIEW ----
   return (
+    <>
     <aside className="fixed inset-y-0 right-0 z-30 hidden w-[280px] border-l border-border/40 bg-surface/95 backdrop-blur-xl transition-all duration-300 lg:flex lg:flex-col">
       {/* Header */}
       <div className="flex items-center justify-between px-4 py-3.5">
@@ -436,127 +404,6 @@ export default function NoteDetailsSidebar({
             </div>
           )}
         </div>
-
-        {/* Export Section */}
-        {(onExportMarkdown || onExportPdf || onExportDocx || onImportDocx) && (
-          <div className="px-4 py-3">
-            <label className="text-[10px] font-semibold text-muted/60 uppercase tracking-widest mb-2.5 block">Export</label>
-            <div className="space-y-1">
-              {onExportMarkdown && (
-                <button
-                  onClick={onExportMarkdown}
-                  className="flex w-full items-center gap-2.5 rounded-xl px-2.5 py-2 text-xs text-foreground/70 transition-all duration-200 hover:bg-surface-hover/60 hover:text-foreground"
-                >
-                  <FileText size={13} className="text-muted/70" />
-                  <span>Export as Markdown</span>
-                </button>
-              )}
-              {onExportPdf && (
-                <button
-                  onClick={onExportPdf}
-                  className="flex w-full items-center gap-2.5 rounded-xl px-2.5 py-2 text-xs text-foreground/70 transition-all duration-200 hover:bg-surface-hover/60 hover:text-foreground"
-                >
-                  <Download size={13} className="text-muted/70" />
-                  <span>Export as PDF</span>
-                </button>
-              )}
-              {onExportDocx && (
-                <button
-                  onClick={onExportDocx}
-                  className="flex w-full items-center gap-2.5 rounded-xl px-2.5 py-2 text-xs text-foreground/70 transition-all duration-200 hover:bg-surface-hover/60 hover:text-foreground"
-                >
-                  <FileDown size={13} className="text-muted/70" />
-                  <span>Export as DOCX</span>
-                </button>
-              )}
-              {onImportDocx && (
-                <button
-                  onClick={onImportDocx}
-                  className="flex w-full items-center gap-2.5 rounded-xl px-2.5 py-2 text-xs text-foreground/70 transition-all duration-200 hover:bg-surface-hover/60 hover:text-foreground"
-                >
-                  <FileUp size={13} className="text-muted/70" />
-                  <span>Import from DOCX</span>
-                </button>
-              )}
-            </div>
-          </div>
-        )}
-
-        {/* Share Section */}
-        {(onPublish || shareUrl || shareHint) && (
-          <div className="px-4 py-3">
-            <label className="text-[10px] font-semibold text-muted/60 uppercase tracking-widest mb-2.5 block">Share</label>
-            <div className="rounded-2xl border border-border/40 bg-surface-hover/25 p-3.5">
-              <div className="flex items-start gap-2">
-                <div className={`mt-0.5 rounded-lg p-1.5 ${shareUrl ? 'bg-alpine-100 text-alpine-700' : 'bg-surface text-muted'}`}>
-                  <Globe size={13} />
-                </div>
-                <div className="min-w-0 flex-1">
-                  <div className="text-xs font-medium text-foreground">
-                    {shareUrl ? 'Published via link' : 'Private note'}
-                  </div>
-                  <div className="mt-1 text-[11px] leading-5 text-muted">
-                    {sharePublishedDisplay
-                      ? `Last published ${sharePublishedDisplay}`
-                      : shareHint || 'Create a read-only share page for this note.'}
-                  </div>
-                </div>
-              </div>
-
-              {shareUrl && (
-                <div className="mt-3 rounded-xl border border-border/40 bg-surface/80 px-2.5 py-2 text-[11px] text-foreground/70 truncate font-mono">
-                  {shareUrl}
-                </div>
-              )}
-
-              <div className="mt-3 flex flex-wrap gap-1.5">
-                {onPublish && (
-                  <button
-                    onClick={onPublish}
-                    disabled={!canPublish || isPublishing || isUnpublishing}
-                    className="inline-flex items-center gap-1.5 rounded-xl bg-gradient-to-r from-alpine-600 to-alpine-500 px-3 py-2 text-xs font-semibold text-white transition-all duration-200 hover:from-alpine-700 hover:to-alpine-600 hover:shadow-md disabled:cursor-not-allowed disabled:opacity-50"
-                  >
-                    {isPublishing ? <Loader2 size={12} className="animate-spin" /> : <Globe size={12} />}
-                    <span>{shareUrl ? 'Update share' : 'Publish note'}</span>
-                  </button>
-                )}
-
-                {shareUrl && onCopyShareLink && (
-                  <button
-                    onClick={onCopyShareLink}
-                    disabled={isPublishing || isUnpublishing}
-                    className="inline-flex items-center gap-1.5 rounded-xl border border-border/50 px-3 py-2 text-xs font-medium text-foreground/70 transition-all duration-200 hover:bg-surface-hover/50 hover:text-foreground disabled:cursor-not-allowed disabled:opacity-50"
-                  >
-                    <Copy size={12} />
-                    <span>Copy link</span>
-                  </button>
-                )}
-
-                {shareUrl && onOpenSharePage && (
-                  <button
-                    onClick={onOpenSharePage}
-                    disabled={isPublishing || isUnpublishing}
-                    className="inline-flex items-center gap-1.5 rounded-xl border border-border/50 px-3 py-2 text-xs font-medium text-foreground/70 transition-all duration-200 hover:bg-surface-hover/50 hover:text-foreground disabled:cursor-not-allowed disabled:opacity-50"
-                  >
-                    <ExternalLink size={12} />
-                    <span>Open page</span>
-                  </button>
-                )}
-
-                {shareUrl && onUnpublish && (
-                  <button
-                    onClick={onUnpublish}
-                    disabled={isPublishing || isUnpublishing}
-                    className="inline-flex items-center gap-1.5 rounded-xl border border-danger/20 px-3 py-2 text-xs font-medium text-danger transition-all duration-200 hover:bg-danger-light/60 disabled:cursor-not-allowed disabled:opacity-50"
-                  >
-                    {isUnpublishing ? <Loader2 size={12} className="animate-spin" /> : <X size={12} />}
-                    <span>Unpublish</span>
-                  </button>
-                )}
-              </div>
-            </div>
-          </div>
-        )}
 
         {/* Stats Section (rich-text only) */}
         {noteType === 'rich-text' && (
@@ -755,6 +602,20 @@ export default function NoteDetailsSidebar({
 
       {/* Footer */}
       <div className="px-4 py-3 space-y-1">
+        {hasFileActions && (
+          <button
+            onClick={() => setShowFileModal(true)}
+            className="group flex w-full items-center gap-2.5 rounded-xl px-2.5 py-2 text-xs font-medium text-muted/70 transition-all duration-200 hover:bg-surface-hover/60 hover:text-foreground"
+          >
+            <FileOutput className="h-3.5 w-3.5 shrink-0" />
+            <span>File</span>
+            {shareUrl && (
+              <span className="ml-auto flex h-4 w-4 items-center justify-center rounded-full bg-alpine-100 dark:bg-alpine-900/40">
+                <Globe size={9} className="text-alpine-600 dark:text-alpine-400" />
+              </span>
+            )}
+          </button>
+        )}
         {onOpenAIAssistant && (
           <button
             onClick={onOpenAIAssistant}
@@ -773,5 +634,174 @@ export default function NoteDetailsSidebar({
         </button>
       </div>
     </aside>
+
+    {/* ---- FILE MODAL (Export / Import / Share) ---- */}
+    {showFileModal && (
+      <div className="fixed inset-0 z-[70] flex items-center justify-center p-4 bg-black/40 backdrop-blur-sm" onClick={() => setShowFileModal(false)}>
+        <div
+          className="bg-surface/95 backdrop-blur-xl rounded-2xl shadow-2xl border border-border/40 w-full max-w-md overflow-hidden"
+          onClick={(e) => e.stopPropagation()}
+        >
+          {/* Modal Header */}
+          <div className="flex items-center justify-between px-5 py-4">
+            <div className="flex items-center gap-2.5">
+              <div className="flex h-8 w-8 items-center justify-center rounded-xl bg-surface-hover/60">
+                <FileOutput size={15} className="text-foreground/70" />
+              </div>
+              <div>
+                <h3 className="text-sm font-bold text-foreground tracking-tight">File</h3>
+                <p className="text-[11px] text-muted/70 mt-0.5 truncate max-w-[260px]">{displayName}</p>
+              </div>
+            </div>
+            <button
+              onClick={() => setShowFileModal(false)}
+              className="rounded-xl p-1.5 text-muted/60 hover:bg-surface-hover/60 hover:text-foreground transition-all duration-200"
+            >
+              <X size={16} />
+            </button>
+          </div>
+
+          {/* Modal Body */}
+          <div className="px-5 pb-5 space-y-5 max-h-[70vh] overflow-y-auto">
+            {/* Export / Import Section */}
+            {(onExportMarkdown || onExportPdf || onExportDocx || onImportDocx) && (
+              <div>
+                <label className="text-[10px] font-semibold text-muted/60 uppercase tracking-widest mb-2 block">Export &amp; Import</label>
+                <div className="rounded-2xl border border-border/40 bg-surface-hover/20 divide-y divide-border/30 overflow-hidden">
+                  {onExportMarkdown && (
+                    <button
+                      onClick={() => { onExportMarkdown(); setShowFileModal(false) }}
+                      className="flex w-full items-center gap-3 px-4 py-3 text-xs text-foreground/80 transition-all duration-200 hover:bg-surface-hover/50 hover:text-foreground"
+                    >
+                      <div className="flex h-8 w-8 items-center justify-center rounded-xl bg-blue-50 dark:bg-blue-900/30">
+                        <FileText size={14} className="text-blue-600 dark:text-blue-400" />
+                      </div>
+                      <div className="text-left">
+                        <div className="font-medium">Export as Markdown</div>
+                        <div className="text-[10px] text-muted/60 mt-0.5">.md file</div>
+                      </div>
+                    </button>
+                  )}
+                  {onExportPdf && (
+                    <button
+                      onClick={() => { onExportPdf(); setShowFileModal(false) }}
+                      className="flex w-full items-center gap-3 px-4 py-3 text-xs text-foreground/80 transition-all duration-200 hover:bg-surface-hover/50 hover:text-foreground"
+                    >
+                      <div className="flex h-8 w-8 items-center justify-center rounded-xl bg-red-50 dark:bg-red-900/30">
+                        <Download size={14} className="text-red-600 dark:text-red-400" />
+                      </div>
+                      <div className="text-left">
+                        <div className="font-medium">Export as PDF</div>
+                        <div className="text-[10px] text-muted/60 mt-0.5">.pdf document</div>
+                      </div>
+                    </button>
+                  )}
+                  {onExportDocx && (
+                    <button
+                      onClick={() => { onExportDocx(); setShowFileModal(false) }}
+                      className="flex w-full items-center gap-3 px-4 py-3 text-xs text-foreground/80 transition-all duration-200 hover:bg-surface-hover/50 hover:text-foreground"
+                    >
+                      <div className="flex h-8 w-8 items-center justify-center rounded-xl bg-indigo-50 dark:bg-indigo-900/30">
+                        <FileDown size={14} className="text-indigo-600 dark:text-indigo-400" />
+                      </div>
+                      <div className="text-left">
+                        <div className="font-medium">Export as DOCX</div>
+                        <div className="text-[10px] text-muted/60 mt-0.5">Word document</div>
+                      </div>
+                    </button>
+                  )}
+                  {onImportDocx && (
+                    <button
+                      onClick={() => { onImportDocx(); setShowFileModal(false) }}
+                      className="flex w-full items-center gap-3 px-4 py-3 text-xs text-foreground/80 transition-all duration-200 hover:bg-surface-hover/50 hover:text-foreground"
+                    >
+                      <div className="flex h-8 w-8 items-center justify-center rounded-xl bg-amber-50 dark:bg-amber-900/30">
+                        <FileUp size={14} className="text-amber-600 dark:text-amber-400" />
+                      </div>
+                      <div className="text-left">
+                        <div className="font-medium">Import from DOCX</div>
+                        <div className="text-[10px] text-muted/60 mt-0.5">Replace content from Word file</div>
+                      </div>
+                    </button>
+                  )}
+                </div>
+              </div>
+            )}
+
+            {/* Share Section */}
+            {(onPublish || shareUrl || shareHint) && (
+              <div>
+                <label className="text-[10px] font-semibold text-muted/60 uppercase tracking-widest mb-2 block">Share</label>
+                <div className="rounded-2xl border border-border/40 bg-surface-hover/20 p-4">
+                  <div className="flex items-start gap-3">
+                    <div className={`flex h-9 w-9 items-center justify-center rounded-xl ${shareUrl ? 'bg-alpine-100 dark:bg-alpine-900/30' : 'bg-surface-hover/60'}`}>
+                      <Globe size={15} className={shareUrl ? 'text-alpine-600 dark:text-alpine-400' : 'text-muted/70'} />
+                    </div>
+                    <div className="min-w-0 flex-1">
+                      <div className="text-xs font-semibold text-foreground">
+                        {shareUrl ? 'Published via link' : 'Private note'}
+                      </div>
+                      <div className="mt-0.5 text-[11px] leading-relaxed text-muted/70">
+                        {sharePublishedDisplay
+                          ? `Last published ${sharePublishedDisplay}`
+                          : shareHint || 'Create a read-only share page for this note.'}
+                      </div>
+                    </div>
+                  </div>
+
+                  {shareUrl && (
+                    <div className="mt-3 rounded-xl border border-border/30 bg-surface/70 px-3 py-2.5 text-[11px] text-foreground/60 truncate font-mono">
+                      {shareUrl}
+                    </div>
+                  )}
+
+                  <div className="mt-3 flex flex-wrap gap-2">
+                    {onPublish && (
+                      <button
+                        onClick={onPublish}
+                        disabled={!canPublish || isPublishing || isUnpublishing}
+                        className="inline-flex items-center gap-1.5 rounded-xl bg-gradient-to-r from-alpine-600 to-alpine-500 px-3.5 py-2 text-xs font-semibold text-white transition-all duration-200 hover:from-alpine-700 hover:to-alpine-600 hover:shadow-md disabled:cursor-not-allowed disabled:opacity-50"
+                      >
+                        {isPublishing ? <Loader2 size={12} className="animate-spin" /> : <Globe size={12} />}
+                        <span>{shareUrl ? 'Update share' : 'Publish note'}</span>
+                      </button>
+                    )}
+                    {shareUrl && onCopyShareLink && (
+                      <button
+                        onClick={onCopyShareLink}
+                        className="inline-flex items-center gap-1.5 rounded-xl border border-border/40 px-3.5 py-2 text-xs font-medium text-foreground/70 transition-all duration-200 hover:bg-surface-hover/50 hover:text-foreground"
+                      >
+                        <Copy size={12} />
+                        <span>Copy link</span>
+                      </button>
+                    )}
+                    {shareUrl && onOpenSharePage && (
+                      <button
+                        onClick={onOpenSharePage}
+                        className="inline-flex items-center gap-1.5 rounded-xl border border-border/40 px-3.5 py-2 text-xs font-medium text-foreground/70 transition-all duration-200 hover:bg-surface-hover/50 hover:text-foreground"
+                      >
+                        <ExternalLink size={12} />
+                        <span>Open page</span>
+                      </button>
+                    )}
+                    {shareUrl && onUnpublish && (
+                      <button
+                        onClick={onUnpublish}
+                        disabled={isPublishing || isUnpublishing}
+                        className="inline-flex items-center gap-1.5 rounded-xl border border-danger/20 px-3.5 py-2 text-xs font-medium text-danger transition-all duration-200 hover:bg-danger-light/60 disabled:cursor-not-allowed disabled:opacity-50"
+                      >
+                        {isUnpublishing ? <Loader2 size={12} className="animate-spin" /> : <X size={12} />}
+                        <span>Unpublish</span>
+                      </button>
+                    )}
+                  </div>
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
+      </div>
+    )}
+  </>
   )
 }
