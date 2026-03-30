@@ -544,10 +544,10 @@ export default function SidebarTree({
           }
         }}
         onContextMenu={(e) => handleNoteContextMenu(e, n)}
-        className={`group w-full text-left px-2 py-1.5 rounded-md transition-all duration-150 flex items-start justify-between ${
+        className={`group w-full text-left px-2.5 py-2 rounded-xl transition-all duration-200 flex items-start justify-between ${
           isActive
-            ? 'bg-alpine-100 dark:bg-alpine-900/40 text-alpine-800 dark:text-alpine-200 font-medium ring-1 ring-alpine-300 dark:ring-alpine-700'
-            : 'hover:bg-surface-hover text-foreground/80 hover:text-foreground'
+            ? 'bg-alpine-50 dark:bg-alpine-900/30 text-alpine-800 dark:text-alpine-200 font-medium shadow-sm'
+            : 'hover:bg-surface-hover/60 text-foreground/70 hover:text-foreground'
         }`}
         style={isActive ? { borderLeft: `3px solid ${accentColor}`, paddingLeft: '5px' } : {}}
         title={n.title || 'Untitled'}
@@ -606,9 +606,9 @@ export default function SidebarTree({
               toggleFolder(folder.id)
             }
           }}
-          className={`group flex items-center gap-1 px-2 py-1 rounded-md transition-all duration-150 ${
-            isSelected ? 'bg-accent text-accent-foreground font-medium' : 'hover:bg-surface-hover text-foreground/80'
-          } ${hoverFolderId === folder.id ? 'ring-1 ring-alpine-400' : ''}`}
+          className={`group flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl transition-all duration-200 ${
+            isSelected ? 'bg-accent/10 text-accent font-medium shadow-sm' : 'hover:bg-surface-hover/60 text-foreground/70 hover:text-foreground'
+          } ${hoverFolderId === folder.id ? 'ring-2 ring-alpine-400/30 bg-alpine-50/50 dark:bg-alpine-900/20' : ''}`}
           style={{
             paddingLeft: `${level * 12 + 8}px`,
             ...(isOnActivePath ? { borderLeft: `2px solid ${accentColor}`, paddingLeft: `${level * 12 + 6}px` } : {}),
@@ -713,8 +713,8 @@ export default function SidebarTree({
               toggleProject(projectKey)
             }
           }}
-          className={`group flex items-center gap-1.5 px-2 py-1.5 rounded-md transition-all duration-150 hover:bg-surface-hover ${
-            isActiveProject ? 'bg-accent/30' : selectedProjectId === node.project?.id ? 'bg-accent/50' : ''
+          className={`group flex items-center gap-2 px-3 py-2 rounded-xl transition-all duration-200 hover:bg-surface-hover/60 ${
+            isActiveProject ? 'bg-accent/8 shadow-sm' : selectedProjectId === node.project?.id ? 'bg-accent/10' : ''
           }`}
         >
           <ChevronRight
@@ -807,7 +807,7 @@ export default function SidebarTree({
           </div>
         )}
         {/* Section separator between projects */}
-        <div className="border-b border-border/40 mx-1 mt-1" />
+        <div className="mx-2 mt-1.5 mb-0.5" />
       </div>
     )
   }
@@ -815,23 +815,23 @@ export default function SidebarTree({
   // ---- COLLAPSED VIEW ----
   if (collapsed) {
     return (
-      <aside className="fixed inset-y-0 left-0 z-40 hidden w-14 border-r border-border bg-surface transition-all duration-200 lg:flex lg:flex-col">
-        <div className="flex items-center justify-center border-b border-border px-3 py-3">
-          <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-accent text-sm font-bold text-accent-foreground">
+      <aside className="fixed inset-y-0 left-0 z-40 hidden w-14 border-r border-border/40 bg-surface/95 backdrop-blur-xl transition-all duration-300 lg:flex lg:flex-col">
+        <div className="flex items-center justify-center px-3 py-4">
+          <div className="flex h-8 w-8 items-center justify-center rounded-xl bg-gradient-to-br from-alpine-500 to-alpine-600 text-sm font-bold text-white shadow-sm">
             N
           </div>
         </div>
         {/* Project dots */}
-        <nav className="flex-1 flex flex-col items-center gap-2 px-2 py-3 overflow-y-auto">
+        <nav className="flex-1 flex flex-col items-center gap-2.5 px-2 py-4 overflow-y-auto scrollbar-hide">
           {projects.map(p => (
             <button
               key={p.id}
               onClick={onToggleCollapsed}
               title={p.name}
-              className={`w-8 h-8 rounded-full flex items-center justify-center transition-all hover:scale-110 flex-shrink-0 ${
+              className={`w-9 h-9 rounded-2xl flex items-center justify-center transition-all duration-200 hover:scale-105 flex-shrink-0 shadow-sm ${
                 p.id === activeNote?.project_id
-                  ? 'ring-2 ring-offset-2 ring-offset-surface shadow-md'
-                  : 'opacity-70 hover:opacity-100'
+                  ? 'ring-2 ring-offset-2 ring-offset-surface shadow-md scale-105'
+                  : 'opacity-60 hover:opacity-100 hover:shadow-md'
               }`}
               style={{
                 backgroundColor: p.color ?? '#6B7280',
@@ -847,19 +847,19 @@ export default function SidebarTree({
           <button
             onClick={onToggleCollapsed}
             title="Unfiled"
-            className="w-8 h-8 rounded-full flex items-center justify-center transition-all hover:scale-110 flex-shrink-0 bg-surface-hover border border-border opacity-70 hover:opacity-100"
+            className="w-9 h-9 rounded-2xl flex items-center justify-center transition-all duration-200 hover:scale-105 flex-shrink-0 bg-surface-hover/70 border border-border/50 opacity-60 hover:opacity-100 hover:shadow-sm"
           >
             <Home size={13} className="text-muted" />
           </button>
         </nav>
-        <div className="border-t border-border px-2 py-3 flex flex-col items-center gap-1">
+        <div className="px-2 py-3 flex flex-col items-center gap-1">
           <button
             onClick={onToggleCollapsed}
-            className="rounded-lg p-1.5 text-muted transition-colors hover:bg-surface-hover hover:text-foreground"
+            className="rounded-xl p-2 text-muted/70 transition-all duration-200 hover:bg-surface-hover/70 hover:text-foreground hover:shadow-sm"
             aria-label="Expand sidebar"
             title="Expand sidebar"
           >
-            <ChevronRight size={16} />
+            <ChevronRight size={15} />
           </button>
         </div>
       </aside>
@@ -869,36 +869,36 @@ export default function SidebarTree({
   // ---- EXPANDED VIEW ----
   return (
     <>
-      <aside className="fixed inset-y-0 left-0 z-40 hidden w-[280px] border-r border-border bg-surface transition-all duration-200 lg:flex lg:flex-col">
+      <aside className="fixed inset-y-0 left-0 z-40 hidden w-[280px] border-r border-border/40 bg-surface/95 backdrop-blur-xl transition-all duration-300 lg:flex lg:flex-col">
         {/* Header */}
-        <div className="flex items-center justify-between border-b border-border px-3 py-3">
-          <div className="flex items-center gap-3 overflow-hidden">
-            <img src="/icon-192.png" alt="MindViz Notes" className="h-8 w-8 rounded-lg flex-shrink-0" />
-            <span className="truncate text-sm font-semibold text-foreground">MindViz Notes</span>
+        <div className="flex items-center justify-between px-4 py-3.5">
+          <div className="flex items-center gap-2.5 overflow-hidden">
+            <img src="/icon-192.png" alt="MindViz Notes" className="h-7 w-7 rounded-xl flex-shrink-0 shadow-sm" />
+            <span className="truncate text-[13px] font-bold text-foreground tracking-tight">MindViz Notes</span>
           </div>
           <button
             onClick={onToggleCollapsed}
-            className="rounded-lg p-1.5 text-muted transition-colors hover:bg-surface-hover hover:text-foreground"
+            className="rounded-xl p-1.5 text-muted/70 transition-all duration-200 hover:bg-surface-hover/70 hover:text-foreground"
             aria-label="Collapse sidebar"
             title="Collapse sidebar"
           >
-            <ChevronLeft size={16} />
+            <ChevronLeft size={15} />
           </button>
         </div>
 
         {/* Search */}
-        <div className="px-3 pt-2 pb-1.5 border-b border-border space-y-1.5">
+        <div className="px-3 pt-1 pb-2 space-y-2">
           {/* Row: text input + filter toggle */}
           <div className="flex items-center gap-1.5">
             <div className="relative flex-1">
-              <Search size={13} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-muted" />
+              <Search size={13} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-muted/60" />
               <input
                 ref={searchInputRef}
                 type="text"
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
                 placeholder="Search notes..."
-                className="w-full pl-8 pr-7 py-1.5 text-xs border border-border rounded-lg bg-surface-hover/50 focus:outline-none focus:ring-1 focus:ring-alpine-500 focus:border-alpine-500 text-foreground placeholder:text-muted"
+                className="w-full pl-8 pr-7 py-2 text-xs border-0 rounded-xl bg-surface-hover/50 focus:outline-none focus:ring-2 focus:ring-alpine-500/25 focus:bg-surface-hover/80 text-foreground placeholder:text-muted/60 transition-all duration-200"
               />
               {searchQuery && (
                 <button
@@ -912,10 +912,10 @@ export default function SidebarTree({
             <button
               onClick={() => setShowFilterPanel(v => !v)}
               title="Toggle filters"
-              className={`relative flex-shrink-0 rounded-lg p-1.5 transition-colors ${
+              className={`relative flex-shrink-0 rounded-xl p-2 transition-all duration-200 ${
                 showFilterPanel || activeFilterCount > 0
-                  ? 'bg-alpine-100 dark:bg-alpine-900/40 text-alpine-600 dark:text-alpine-300'
-                  : 'text-muted hover:bg-surface-hover hover:text-foreground'
+                  ? 'bg-alpine-100 dark:bg-alpine-900/40 text-alpine-600 dark:text-alpine-300 shadow-sm'
+                  : 'text-muted/60 hover:bg-surface-hover/70 hover:text-foreground'
               }`}
             >
               <SlidersHorizontal size={14} />
@@ -942,10 +942,10 @@ export default function SidebarTree({
                         key={tp.id}
                         onClick={() => toggleNoteTypeFilter(tp.id)}
                         title={tp.label}
-                        className={`flex items-center gap-1 px-1.5 py-0.5 rounded-full text-[10px] font-medium border transition-all ${
+                        className={`flex items-center gap-1 px-2 py-1 rounded-lg text-[10px] font-medium border transition-all duration-200 ${
                           active
-                            ? 'border-alpine-500 bg-alpine-100 dark:bg-alpine-900/40 text-alpine-700 dark:text-alpine-300'
-                            : 'border-border bg-surface-hover text-muted hover:border-alpine-400 hover:text-foreground'
+                            ? 'border-alpine-500/50 bg-alpine-50 dark:bg-alpine-900/30 text-alpine-700 dark:text-alpine-300 shadow-sm'
+                            : 'border-border/50 bg-surface-hover/40 text-muted/80 hover:border-alpine-400/50 hover:text-foreground'
                         }`}
                       >
                         <Icon size={10} className={active ? '' : 'opacity-70'} />
@@ -964,10 +964,10 @@ export default function SidebarTree({
                     {/* Unfiled chip */}
                     <button
                       onClick={() => toggleProjectFilter('__UNFILED__')}
-                      className={`flex items-center gap-1 px-1.5 py-0.5 rounded-full text-[10px] font-medium border transition-all ${
+                      className={`flex items-center gap-1 px-2 py-1 rounded-lg text-[10px] font-medium border transition-all duration-200 ${
                         filterProjectIds.has('__UNFILED__')
-                          ? 'border-alpine-500 bg-alpine-100 dark:bg-alpine-900/40 text-alpine-700 dark:text-alpine-300'
-                          : 'border-border bg-surface-hover text-muted hover:border-alpine-400 hover:text-foreground'
+                          ? 'border-alpine-500/50 bg-alpine-50 dark:bg-alpine-900/30 text-alpine-700 dark:text-alpine-300 shadow-sm'
+                          : 'border-border/50 bg-surface-hover/40 text-muted/80 hover:border-alpine-400/50 hover:text-foreground'
                       }`}
                     >
                       <Home size={9} />
@@ -980,10 +980,10 @@ export default function SidebarTree({
                           key={p.id}
                           onClick={() => toggleProjectFilter(p.id)}
                           title={p.name}
-                          className={`flex items-center gap-1 px-1.5 py-0.5 rounded-full text-[10px] font-medium border transition-all ${
+                          className={`flex items-center gap-1 px-2 py-1 rounded-lg text-[10px] font-medium border transition-all duration-200 ${
                             active
-                              ? 'border-alpine-500 bg-alpine-100 dark:bg-alpine-900/40 text-alpine-700 dark:text-alpine-300'
-                              : 'border-border bg-surface-hover text-muted hover:border-alpine-400 hover:text-foreground'
+                              ? 'border-alpine-500/50 bg-alpine-50 dark:bg-alpine-900/30 text-alpine-700 dark:text-alpine-300 shadow-sm'
+                              : 'border-border/50 bg-surface-hover/40 text-muted/80 hover:border-alpine-400/50 hover:text-foreground'
                           }`}
                         >
                           <span className="w-2 h-2 rounded-full flex-shrink-0" style={{ backgroundColor: p.color ?? '#6B7280' }} />
@@ -1011,7 +1011,7 @@ export default function SidebarTree({
         {/* Breadcrumb context strip */}
         {activeNote && breadcrumb.length > 0 && (
           <div
-            className="px-3 py-1.5 border-b border-border flex items-center gap-1 min-w-0 overflow-hidden"
+            className="mx-3 my-1.5 px-3 py-2 rounded-xl bg-surface-hover/30 flex items-center gap-1 min-w-0 overflow-hidden"
             style={{ borderLeftColor: activeProject?.color ?? '#6B7280', borderLeftWidth: '3px' }}
           >
             <div className="flex items-center gap-1 text-[10px] text-muted truncate flex-1 min-w-0">
@@ -1060,15 +1060,15 @@ export default function SidebarTree({
                         onClick={() => onSelectNote(note)}
                         onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onSelectNote(note) } }}
                         onContextMenu={(e) => handleNoteContextMenu(e, note)}
-                        className={`group w-full text-left px-2 py-2 rounded-lg transition-all duration-150 flex items-start gap-2 ${
+                        className={`group w-full text-left px-2.5 py-2.5 rounded-xl transition-all duration-200 flex items-start gap-2.5 ${
                           isActive
-                            ? 'bg-alpine-100 dark:bg-alpine-900/40 ring-1 ring-alpine-300 dark:ring-alpine-700'
-                            : 'hover:bg-surface-hover'
+                            ? 'bg-alpine-50 dark:bg-alpine-900/30 shadow-sm'
+                            : 'hover:bg-surface-hover/60'
                         }`}
-                        style={isActive ? { borderLeft: `3px solid ${projectColor}`, paddingLeft: '5px' } : {}}
+                        style={isActive ? { borderLeft: `3px solid ${projectColor}`, paddingLeft: '7px' } : {}}
                       >
                         {/* Type icon */}
-                        <div className={`mt-0.5 flex-shrink-0 w-6 h-6 rounded-md flex items-center justify-center ${presentation.iconBgClassName}`}>
+                        <div className={`mt-0.5 flex-shrink-0 w-7 h-7 rounded-xl flex items-center justify-center ${presentation.iconBgClassName}`}>
                           <Icon size={12} />
                         </div>
                         <div className="flex-1 min-w-0">
@@ -1114,10 +1114,10 @@ export default function SidebarTree({
         </div>
 
         {/* Footer with New Folder / New Project buttons */}
-        <div className="border-t border-border px-3 py-2 space-y-0.5">
+        <div className="px-3 py-2.5 space-y-0.5">
           <button
             onClick={() => onCreateFolder(null)}
-            className="group flex w-full items-center gap-2 rounded-lg px-2 py-1.5 text-xs font-medium text-muted transition-all hover:bg-surface-hover hover:text-foreground"
+            className="group flex w-full items-center gap-2.5 rounded-xl px-2.5 py-2 text-xs font-medium text-muted/70 transition-all duration-200 hover:bg-surface-hover/60 hover:text-foreground"
           >
             <FolderPlus className="h-3.5 w-3.5 shrink-0" />
             <span>New Folder</span>
@@ -1125,7 +1125,7 @@ export default function SidebarTree({
           {onCreateProject && (
             <button
               onClick={() => onCreateProject()}
-              className="group flex w-full items-center gap-2 rounded-lg px-2 py-1.5 text-xs font-medium text-muted transition-all hover:bg-surface-hover hover:text-foreground"
+              className="group flex w-full items-center gap-2.5 rounded-xl px-2.5 py-2 text-xs font-medium text-muted/70 transition-all duration-200 hover:bg-surface-hover/60 hover:text-foreground"
             >
               <Plus className="h-3.5 w-3.5 shrink-0" />
               <span>New Project</span>
@@ -1142,7 +1142,7 @@ export default function SidebarTree({
             onClick={() => setContextMenu(null)}
           />
           <div
-            className="fixed z-[60] bg-surface rounded-lg shadow-2xl border border-border py-1 min-w-[180px] max-h-[400px] overflow-y-auto"
+            className="fixed z-[60] bg-surface/95 backdrop-blur-xl rounded-2xl shadow-2xl border border-border/40 py-1.5 min-w-[200px] max-h-[400px] overflow-y-auto"
             style={{ left: contextMenu.x, top: contextMenu.y }}
             onClick={(e) => e.stopPropagation()}
           >
@@ -1395,8 +1395,8 @@ export default function SidebarTree({
 
       {/* Delete Confirmation Modal */}
       {showDeleteModal && (
-        <div className="fixed inset-0 z-[70] flex items-center justify-center p-4 bg-black/50">
-          <div className="bg-surface rounded-xl shadow-2xl border border-border max-w-md w-full p-6">
+        <div className="fixed inset-0 z-[70] flex items-center justify-center p-4 bg-black/40 backdrop-blur-sm">
+          <div className="bg-surface/95 backdrop-blur-xl rounded-2xl shadow-2xl border border-border/40 max-w-md w-full p-6">
             <div className="flex items-start gap-4 mb-4">
               <div className="flex-shrink-0 w-12 h-12 rounded-full bg-danger-light flex items-center justify-center">
                 <Trash2 size={24} className="text-danger" />
@@ -1439,8 +1439,8 @@ export default function SidebarTree({
 
       {/* Rename Modal (Folder or Project) */}
       {showRenameModal && (
-        <div className="fixed inset-0 z-[70] flex items-center justify-center p-4 bg-black/50">
-          <div className="bg-surface rounded-xl shadow-2xl border border-border max-w-md w-full p-6">
+        <div className="fixed inset-0 z-[70] flex items-center justify-center p-4 bg-black/40 backdrop-blur-sm">
+          <div className="bg-surface/95 backdrop-blur-xl rounded-2xl shadow-2xl border border-border/40 max-w-md w-full p-6">
             <h3 className="text-lg font-semibold text-foreground mb-1">
               Rename {showRenameModal.type === 'project' ? 'Project' : 'Folder'}
             </h3>
@@ -1480,8 +1480,8 @@ export default function SidebarTree({
 
       {/* Color Picker Modal (Projects) */}
       {showColorPicker && onUpdateProjectColor && (
-        <div className="fixed inset-0 z-[70] flex items-center justify-center p-4 bg-black/50">
-          <div className="bg-surface rounded-xl shadow-2xl border border-border max-w-sm w-full p-6">
+        <div className="fixed inset-0 z-[70] flex items-center justify-center p-4 bg-black/40 backdrop-blur-sm">
+          <div className="bg-surface/95 backdrop-blur-xl rounded-2xl shadow-2xl border border-border/40 max-w-sm w-full p-6">
             <h3 className="text-lg font-semibold text-foreground mb-1">Project Color</h3>
             <p className="text-sm text-muted mb-4">Choose a color for this project</p>
             <div className="grid grid-cols-6 gap-2 mb-4">

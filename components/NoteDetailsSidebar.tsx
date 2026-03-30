@@ -187,18 +187,18 @@ export default function NoteDetailsSidebar({
   // ---- COLLAPSED VIEW ----
   if (collapsed) {
     return (
-      <aside className="fixed inset-y-0 right-0 z-30 hidden w-12 border-l border-border bg-surface transition-all duration-200 lg:flex lg:flex-col" title={displayName}>
-        <div className="flex items-center justify-center border-b border-border px-2 py-3">
+      <aside className="fixed inset-y-0 right-0 z-30 hidden w-12 border-l border-border/40 bg-surface/95 backdrop-blur-xl transition-all duration-300 lg:flex lg:flex-col" title={displayName}>
+        <div className="flex items-center justify-center px-2 py-4">
           <button
             onClick={onToggleCollapsed}
-            className="rounded-lg p-1.5 text-muted transition-colors hover:bg-surface-hover hover:text-foreground"
+            className="rounded-xl p-1.5 text-muted/70 transition-all duration-200 hover:bg-surface-hover/70 hover:text-foreground"
             aria-label="Expand details"
             title="Expand details"
           >
-            <ChevronLeft size={16} />
+            <ChevronLeft size={15} />
           </button>
         </div>
-        <nav className="flex-1 flex flex-col items-center gap-2 px-1 py-3">
+        <nav className="flex-1 flex flex-col items-center gap-2.5 px-1.5 py-3">
           {/* Save indicator */}
           {isSaving ? (
             <div className="p-1.5 text-alpine-500" title="Saving...">
@@ -226,7 +226,7 @@ export default function NoteDetailsSidebar({
           {noteType === 'rich-text' && headings.length > 0 && (
             <button
               onClick={onToggleCollapsed}
-              className="p-1.5 rounded-lg text-muted hover:bg-surface-hover hover:text-foreground transition-colors"
+              className="p-1.5 rounded-xl text-muted/70 hover:bg-surface-hover/60 hover:text-foreground transition-all duration-200"
               title={`${headings.length} headings`}
             >
               <ListTree size={16} />
@@ -236,7 +236,7 @@ export default function NoteDetailsSidebar({
           {onOpenAIAssistant && (
             <button
               onClick={onOpenAIAssistant}
-              className="p-1.5 rounded-lg text-muted hover:bg-surface-hover hover:text-alpine-500 transition-colors"
+              className="p-1.5 rounded-xl text-muted/70 hover:bg-surface-hover/60 hover:text-alpine-500 transition-all duration-200"
               title="Open AI Assistant"
             >
               <Sparkles size={14} />
@@ -245,7 +245,7 @@ export default function NoteDetailsSidebar({
           {/* Settings */}
           <button
             onClick={onOpenSettings}
-            className="p-1.5 rounded-lg text-muted hover:bg-surface-hover hover:text-foreground transition-colors"
+            className="p-1.5 rounded-xl text-muted/70 hover:bg-surface-hover/60 hover:text-foreground transition-all duration-200"
             title="Settings"
           >
             <Settings size={14} />
@@ -253,12 +253,12 @@ export default function NoteDetailsSidebar({
 
           {/* Export */}
           {(onExportMarkdown || onExportPdf || onExportDocx || onImportDocx) && (
-            <div className="mt-1 h-px w-6 bg-border" />
+            <div className="mt-1.5 h-px w-5 bg-border/40 rounded-full" />
           )}
           {onExportMarkdown && (
             <button
               onClick={onExportMarkdown}
-              className="p-1.5 rounded-lg text-muted hover:bg-surface-hover hover:text-foreground transition-colors"
+              className="p-1.5 rounded-xl text-muted/70 hover:bg-surface-hover/60 hover:text-foreground transition-all duration-200"
               title="Export Markdown"
             >
               <FileText size={14} />
@@ -267,7 +267,7 @@ export default function NoteDetailsSidebar({
           {onExportPdf && (
             <button
               onClick={onExportPdf}
-              className="p-1.5 rounded-lg text-muted hover:bg-surface-hover hover:text-foreground transition-colors"
+              className="p-1.5 rounded-xl text-muted/70 hover:bg-surface-hover/60 hover:text-foreground transition-all duration-200"
               title="Export PDF"
             >
               <Download size={14} />
@@ -276,7 +276,7 @@ export default function NoteDetailsSidebar({
           {onExportDocx && (
             <button
               onClick={onExportDocx}
-              className="p-1.5 rounded-lg text-muted hover:bg-surface-hover hover:text-foreground transition-colors"
+              className="p-1.5 rounded-xl text-muted/70 hover:bg-surface-hover/60 hover:text-foreground transition-all duration-200"
               title="Export DOCX"
             >
               <FileDown size={14} />
@@ -285,7 +285,7 @@ export default function NoteDetailsSidebar({
           {onImportDocx && (
             <button
               onClick={onImportDocx}
-              className="p-1.5 rounded-lg text-muted hover:bg-surface-hover hover:text-foreground transition-colors"
+              className="p-1.5 rounded-xl text-muted/70 hover:bg-surface-hover/60 hover:text-foreground transition-all duration-200"
               title="Import DOCX"
             >
               <FileUp size={14} />
@@ -296,7 +296,7 @@ export default function NoteDetailsSidebar({
           {onOpenConnections && (
             <button
               onClick={onOpenConnections}
-              className="p-1.5 rounded-lg text-muted hover:bg-surface-hover hover:text-foreground transition-colors"
+              className="p-1.5 rounded-xl text-muted/70 hover:bg-surface-hover/60 hover:text-foreground transition-all duration-200"
               title={`Connections (${connectionsCount})`}
             >
               <Network size={14} />
@@ -306,7 +306,7 @@ export default function NoteDetailsSidebar({
           {shareUrl && onCopyShareLink && (
             <button
               onClick={onCopyShareLink}
-              className="p-1.5 rounded-lg text-muted hover:bg-surface-hover hover:text-foreground transition-colors"
+              className="p-1.5 rounded-xl text-muted/70 hover:bg-surface-hover/60 hover:text-foreground transition-all duration-200"
               title="Copy share link"
             >
               <Globe size={14} />
@@ -319,45 +319,45 @@ export default function NoteDetailsSidebar({
 
   // ---- EXPANDED VIEW ----
   return (
-    <aside className="fixed inset-y-0 right-0 z-30 hidden w-[280px] border-l border-border bg-surface transition-all duration-200 lg:flex lg:flex-col">
+    <aside className="fixed inset-y-0 right-0 z-30 hidden w-[280px] border-l border-border/40 bg-surface/95 backdrop-blur-xl transition-all duration-300 lg:flex lg:flex-col">
       {/* Header */}
-      <div className="flex items-center justify-between border-b border-border px-3 py-3">
+      <div className="flex items-center justify-between px-4 py-3.5">
         <div className="min-w-0">
-          <div className="text-[10px] font-semibold text-muted uppercase tracking-wider">Note Details</div>
-          <div className="truncate text-xs font-medium text-foreground" title={displayName}>{displayName}</div>
+          <div className="text-[10px] font-semibold text-muted/60 uppercase tracking-widest">Details</div>
+          <div className="truncate text-[13px] font-bold text-foreground tracking-tight mt-0.5" title={displayName}>{displayName}</div>
         </div>
         <button
           onClick={onToggleCollapsed}
-          className="rounded-lg p-1.5 text-muted transition-colors hover:bg-surface-hover hover:text-foreground"
+          className="rounded-xl p-1.5 text-muted/70 transition-all duration-200 hover:bg-surface-hover/70 hover:text-foreground"
           aria-label="Collapse details"
           title="Collapse details"
         >
-          <ChevronRight size={16} />
+          <ChevronRight size={15} />
         </button>
       </div>
 
       {/* Scrollable Content */}
       <div className="flex-1 overflow-y-auto">
         {/* Title Section */}
-        <div className="px-3 py-3 border-b border-border">
-          <label className="text-[10px] font-semibold text-muted uppercase tracking-wider mb-1.5 block">Title</label>
+        <div className="px-4 py-3">
+          <label className="text-[10px] font-semibold text-muted/60 uppercase tracking-widest mb-2 block">Title</label>
           <input
             ref={titleInputRef}
             type="text"
             value={title}
             onChange={(e) => onTitleChange(e.target.value)}
             placeholder="Note title..."
-            className="w-full px-2.5 py-1.5 text-sm border border-border rounded-lg bg-surface-hover/50 focus:outline-none focus:ring-1 focus:ring-alpine-500 focus:border-alpine-500 text-foreground placeholder:text-muted"
+            className="w-full px-3 py-2 text-sm border-0 rounded-xl bg-surface-hover/40 focus:outline-none focus:ring-2 focus:ring-alpine-500/25 focus:bg-surface-hover/70 text-foreground placeholder:text-muted/60 transition-all duration-200"
           />
         </div>
 
         {/* Save Section */}
-        <div className="px-3 py-3 border-b border-border">
-          <div className="flex items-center gap-2 mb-2">
+        <div className="px-4 py-3">
+          <div className="flex items-center gap-2 mb-2.5">
             <button
               onClick={onSave}
               disabled={isSaving || !title.trim()}
-              className="flex-1 flex items-center justify-center gap-1.5 px-3 py-1.5 text-xs font-medium text-white bg-alpine-600 rounded-lg hover:bg-alpine-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+              className="flex-1 flex items-center justify-center gap-1.5 px-3 py-2 text-xs font-semibold text-white bg-gradient-to-r from-alpine-600 to-alpine-500 rounded-xl hover:from-alpine-700 hover:to-alpine-600 hover:shadow-md disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-200"
             >
               {isSaving ? (
                 <>
@@ -375,7 +375,7 @@ export default function NoteDetailsSidebar({
               <button
                 onClick={onDelete}
                 disabled={isDeleting}
-                className="flex items-center justify-center gap-1.5 px-3 py-1.5 text-xs font-medium text-danger bg-danger-light rounded-lg hover:bg-danger hover:text-white disabled:opacity-50 transition-colors"
+                className="flex items-center justify-center gap-1.5 px-3 py-2 text-xs font-medium text-danger bg-danger-light/60 rounded-xl hover:bg-danger hover:text-white disabled:opacity-50 transition-all duration-200"
                 title="Delete note"
               >
                 {isDeleting ? (
@@ -410,8 +410,8 @@ export default function NoteDetailsSidebar({
         </div>
 
         {/* Metadata Section */}
-        <div className="px-3 py-3 border-b border-border space-y-2.5">
-          <label className="text-[10px] font-semibold text-muted uppercase tracking-wider block">Details</label>
+        <div className="px-4 py-3 space-y-2.5">
+          <label className="text-[10px] font-semibold text-muted/60 uppercase tracking-widest block">Details</label>
           
           {/* Note Type */}
           <div className="flex items-center gap-2 text-xs">
@@ -439,42 +439,42 @@ export default function NoteDetailsSidebar({
 
         {/* Export Section */}
         {(onExportMarkdown || onExportPdf || onExportDocx || onImportDocx) && (
-          <div className="px-3 py-3 border-b border-border">
-            <label className="text-[10px] font-semibold text-muted uppercase tracking-wider mb-2 block">Export</label>
-            <div className="space-y-1.5">
+          <div className="px-4 py-3">
+            <label className="text-[10px] font-semibold text-muted/60 uppercase tracking-widest mb-2.5 block">Export</label>
+            <div className="space-y-1">
               {onExportMarkdown && (
                 <button
                   onClick={onExportMarkdown}
-                  className="flex w-full items-center gap-2 rounded-lg px-2.5 py-1.5 text-xs text-foreground/80 transition-colors hover:bg-surface-hover hover:text-foreground"
+                  className="flex w-full items-center gap-2.5 rounded-xl px-2.5 py-2 text-xs text-foreground/70 transition-all duration-200 hover:bg-surface-hover/60 hover:text-foreground"
                 >
-                  <FileText size={13} className="text-muted" />
+                  <FileText size={13} className="text-muted/70" />
                   <span>Export as Markdown</span>
                 </button>
               )}
               {onExportPdf && (
                 <button
                   onClick={onExportPdf}
-                  className="flex w-full items-center gap-2 rounded-lg px-2.5 py-1.5 text-xs text-foreground/80 transition-colors hover:bg-surface-hover hover:text-foreground"
+                  className="flex w-full items-center gap-2.5 rounded-xl px-2.5 py-2 text-xs text-foreground/70 transition-all duration-200 hover:bg-surface-hover/60 hover:text-foreground"
                 >
-                  <Download size={13} className="text-muted" />
+                  <Download size={13} className="text-muted/70" />
                   <span>Export as PDF</span>
                 </button>
               )}
               {onExportDocx && (
                 <button
                   onClick={onExportDocx}
-                  className="flex w-full items-center gap-2 rounded-lg px-2.5 py-1.5 text-xs text-foreground/80 transition-colors hover:bg-surface-hover hover:text-foreground"
+                  className="flex w-full items-center gap-2.5 rounded-xl px-2.5 py-2 text-xs text-foreground/70 transition-all duration-200 hover:bg-surface-hover/60 hover:text-foreground"
                 >
-                  <FileDown size={13} className="text-muted" />
+                  <FileDown size={13} className="text-muted/70" />
                   <span>Export as DOCX</span>
                 </button>
               )}
               {onImportDocx && (
                 <button
                   onClick={onImportDocx}
-                  className="flex w-full items-center gap-2 rounded-lg px-2.5 py-1.5 text-xs text-foreground/80 transition-colors hover:bg-surface-hover hover:text-foreground"
+                  className="flex w-full items-center gap-2.5 rounded-xl px-2.5 py-2 text-xs text-foreground/70 transition-all duration-200 hover:bg-surface-hover/60 hover:text-foreground"
                 >
-                  <FileUp size={13} className="text-muted" />
+                  <FileUp size={13} className="text-muted/70" />
                   <span>Import from DOCX</span>
                 </button>
               )}
@@ -484,9 +484,9 @@ export default function NoteDetailsSidebar({
 
         {/* Share Section */}
         {(onPublish || shareUrl || shareHint) && (
-          <div className="px-3 py-3 border-b border-border">
-            <label className="text-[10px] font-semibold text-muted uppercase tracking-wider mb-2 block">Share</label>
-            <div className="rounded-xl border border-border bg-surface-hover/40 p-3">
+          <div className="px-4 py-3">
+            <label className="text-[10px] font-semibold text-muted/60 uppercase tracking-widest mb-2.5 block">Share</label>
+            <div className="rounded-2xl border border-border/40 bg-surface-hover/25 p-3.5">
               <div className="flex items-start gap-2">
                 <div className={`mt-0.5 rounded-lg p-1.5 ${shareUrl ? 'bg-alpine-100 text-alpine-700' : 'bg-surface text-muted'}`}>
                   <Globe size={13} />
@@ -504,7 +504,7 @@ export default function NoteDetailsSidebar({
               </div>
 
               {shareUrl && (
-                <div className="mt-3 rounded-lg border border-border bg-surface px-2.5 py-2 text-[11px] text-foreground/80 truncate">
+                <div className="mt-3 rounded-xl border border-border/40 bg-surface/80 px-2.5 py-2 text-[11px] text-foreground/70 truncate font-mono">
                   {shareUrl}
                 </div>
               )}
@@ -514,7 +514,7 @@ export default function NoteDetailsSidebar({
                   <button
                     onClick={onPublish}
                     disabled={!canPublish || isPublishing || isUnpublishing}
-                    className="inline-flex items-center gap-1.5 rounded-lg bg-alpine-600 px-3 py-1.5 text-xs font-medium text-white transition-colors hover:bg-alpine-700 disabled:cursor-not-allowed disabled:opacity-50"
+                    className="inline-flex items-center gap-1.5 rounded-xl bg-gradient-to-r from-alpine-600 to-alpine-500 px-3 py-2 text-xs font-semibold text-white transition-all duration-200 hover:from-alpine-700 hover:to-alpine-600 hover:shadow-md disabled:cursor-not-allowed disabled:opacity-50"
                   >
                     {isPublishing ? <Loader2 size={12} className="animate-spin" /> : <Globe size={12} />}
                     <span>{shareUrl ? 'Update share' : 'Publish note'}</span>
@@ -525,7 +525,7 @@ export default function NoteDetailsSidebar({
                   <button
                     onClick={onCopyShareLink}
                     disabled={isPublishing || isUnpublishing}
-                    className="inline-flex items-center gap-1.5 rounded-lg border border-border px-3 py-1.5 text-xs font-medium text-foreground/80 transition-colors hover:bg-surface hover:text-foreground disabled:cursor-not-allowed disabled:opacity-50"
+                    className="inline-flex items-center gap-1.5 rounded-xl border border-border/50 px-3 py-2 text-xs font-medium text-foreground/70 transition-all duration-200 hover:bg-surface-hover/50 hover:text-foreground disabled:cursor-not-allowed disabled:opacity-50"
                   >
                     <Copy size={12} />
                     <span>Copy link</span>
@@ -536,7 +536,7 @@ export default function NoteDetailsSidebar({
                   <button
                     onClick={onOpenSharePage}
                     disabled={isPublishing || isUnpublishing}
-                    className="inline-flex items-center gap-1.5 rounded-lg border border-border px-3 py-1.5 text-xs font-medium text-foreground/80 transition-colors hover:bg-surface hover:text-foreground disabled:cursor-not-allowed disabled:opacity-50"
+                    className="inline-flex items-center gap-1.5 rounded-xl border border-border/50 px-3 py-2 text-xs font-medium text-foreground/70 transition-all duration-200 hover:bg-surface-hover/50 hover:text-foreground disabled:cursor-not-allowed disabled:opacity-50"
                   >
                     <ExternalLink size={12} />
                     <span>Open page</span>
@@ -547,7 +547,7 @@ export default function NoteDetailsSidebar({
                   <button
                     onClick={onUnpublish}
                     disabled={isPublishing || isUnpublishing}
-                    className="inline-flex items-center gap-1.5 rounded-lg border border-danger/30 px-3 py-1.5 text-xs font-medium text-danger transition-colors hover:bg-danger-light disabled:cursor-not-allowed disabled:opacity-50"
+                    className="inline-flex items-center gap-1.5 rounded-xl border border-danger/20 px-3 py-2 text-xs font-medium text-danger transition-all duration-200 hover:bg-danger-light/60 disabled:cursor-not-allowed disabled:opacity-50"
                   >
                     {isUnpublishing ? <Loader2 size={12} className="animate-spin" /> : <X size={12} />}
                     <span>Unpublish</span>
@@ -560,17 +560,17 @@ export default function NoteDetailsSidebar({
 
         {/* Stats Section (rich-text only) */}
         {noteType === 'rich-text' && (
-          <div className="px-3 py-3 border-b border-border">
-            <label className="text-[10px] font-semibold text-muted uppercase tracking-wider mb-2 block">Statistics</label>
+          <div className="px-4 py-3">
+            <label className="text-[10px] font-semibold text-muted/60 uppercase tracking-widest mb-2.5 block">Statistics</label>
             
-            <div className="grid grid-cols-2 gap-2 mb-2">
-              <div className="bg-surface-hover/50 rounded-lg px-2.5 py-2 text-center">
-                <div className="text-sm font-semibold text-foreground">{stats.words}</div>
-                <div className="text-[10px] text-muted">{stats.words === 1 ? 'word' : 'words'}</div>
+            <div className="grid grid-cols-2 gap-2 mb-2.5">
+              <div className="bg-surface-hover/30 rounded-xl px-2.5 py-2.5 text-center">
+                <div className="text-sm font-bold text-foreground">{stats.words}</div>
+                <div className="text-[10px] text-muted/60">{stats.words === 1 ? 'word' : 'words'}</div>
               </div>
-              <div className="bg-surface-hover/50 rounded-lg px-2.5 py-2 text-center">
-                <div className="text-sm font-semibold text-foreground">{stats.characters}</div>
-                <div className="text-[10px] text-muted">{stats.characters === 1 ? 'char' : 'chars'}</div>
+              <div className="bg-surface-hover/30 rounded-xl px-2.5 py-2.5 text-center">
+                <div className="text-sm font-bold text-foreground">{stats.characters}</div>
+                <div className="text-[10px] text-muted/60">{stats.characters === 1 ? 'char' : 'chars'}</div>
               </div>
             </div>
 
@@ -589,7 +589,7 @@ export default function NoteDetailsSidebar({
                     <Edit2 size={10} />
                   </button>
                 </div>
-                <div className="relative w-full h-2 bg-surface-hover rounded-full overflow-hidden">
+                <div className="relative w-full h-2.5 bg-surface-hover/50 rounded-full overflow-hidden">
                   <div
                     className={`absolute left-0 top-0 h-full transition-all duration-300 rounded-full ${
                       wordGoalProgress.isComplete
@@ -655,7 +655,7 @@ export default function NoteDetailsSidebar({
 
         {/* Table of Contents (rich-text only) */}
         {noteType === 'rich-text' && headings.length > 0 && (
-          <div className="px-3 py-3">
+          <div className="px-4 py-3">
             <button
               onClick={() => setTocExpanded(prev => !prev)}
               className="flex items-center gap-1.5 w-full text-left mb-2"
@@ -674,7 +674,7 @@ export default function NoteDetailsSidebar({
                   <button
                     key={heading.id || `${heading.level}-${heading.text}-${index}`}
                     onClick={() => onScrollToHeading?.(heading.id)}
-                    className="w-full text-left px-2 py-1 rounded-md text-xs hover:bg-surface-hover text-foreground/80 hover:text-foreground transition-colors truncate"
+                    className="w-full text-left px-2.5 py-1.5 rounded-xl text-xs hover:bg-surface-hover/60 text-foreground/70 hover:text-foreground transition-all duration-200 truncate"
                     style={{ paddingLeft: `${(heading.level - 1) * 12 + 8}px` }}
                     title={heading.text}
                   >
@@ -690,13 +690,13 @@ export default function NoteDetailsSidebar({
 
         {/* Connections */}
         {onOpenConnections && (
-          <div className="px-3 py-3 border-t border-border">
+          <div className="px-4 py-3">
             <button
               onClick={onOpenConnections}
-              className="mb-2 flex w-full items-center gap-1.5 text-left"
+              className="mb-2.5 flex w-full items-center gap-1.5 text-left"
             >
-              <Network size={13} className="text-muted" />
-              <span className="text-[10px] font-semibold text-muted uppercase tracking-wider">Connections</span>
+              <Network size={13} className="text-muted/70" />
+              <span className="text-[10px] font-semibold text-muted/60 uppercase tracking-widest">Connections</span>
               <span className="ml-auto text-[10px] text-muted">{connectionsCount}</span>
             </button>
 
@@ -706,7 +706,7 @@ export default function NoteDetailsSidebar({
                   <button
                     key={item.id}
                     onClick={() => onSelectBacklink?.(item.id)}
-                    className="w-full rounded-md px-2 py-1 text-left text-xs text-foreground/80 transition-colors hover:bg-surface-hover hover:text-foreground"
+                    className="w-full rounded-xl px-2.5 py-1.5 text-left text-xs text-foreground/70 transition-all duration-200 hover:bg-surface-hover/60 hover:text-foreground"
                     title={`${item.title}${item.folderPath ? ` · ${item.folderPath}` : ''}`}
                   >
                     <div className="truncate font-medium">{item.title || 'Untitled note'}</div>
@@ -725,14 +725,14 @@ export default function NoteDetailsSidebar({
 
             {/* Outgoing Links */}
             <div className="mt-4">
-              <div className="text-[10px] font-semibold text-muted uppercase tracking-wider mb-1">Outgoing Links</div>
+              <div className="text-[10px] font-semibold text-muted/60 uppercase tracking-widest mb-1.5">Outgoing Links</div>
               {outgoingLinks.length > 0 ? (
                 <div className="space-y-0.5">
                   {outgoingLinks.slice(0, 8).map((item) => (
                     <button
                       key={item.id}
                       onClick={() => onSelectOutgoing?.(item.id)}
-                      className="w-full rounded-md px-2 py-1 text-left text-xs text-foreground/80 transition-colors hover:bg-surface-hover hover:text-foreground"
+                      className="w-full rounded-xl px-2.5 py-1.5 text-left text-xs text-foreground/70 transition-all duration-200 hover:bg-surface-hover/60 hover:text-foreground"
                       title={`${item.title}${item.folderPath ? ` · ${item.folderPath}` : ''}`}
                     >
                       <div className="truncate font-medium">{item.title || 'Untitled note'}</div>
@@ -754,11 +754,11 @@ export default function NoteDetailsSidebar({
       </div>
 
       {/* Footer */}
-      <div className="border-t border-border px-3 py-2 space-y-1">
+      <div className="px-4 py-3 space-y-1">
         {onOpenAIAssistant && (
           <button
             onClick={onOpenAIAssistant}
-            className="group flex w-full items-center gap-2 rounded-lg px-2 py-1.5 text-xs font-medium text-muted transition-all hover:bg-surface-hover hover:text-alpine-500"
+            className="group flex w-full items-center gap-2.5 rounded-xl px-2.5 py-2 text-xs font-medium text-muted/70 transition-all duration-200 hover:bg-surface-hover/60 hover:text-alpine-500"
           >
             <Sparkles className="h-3.5 w-3.5 shrink-0" />
             <span>AI Assistant</span>
@@ -766,7 +766,7 @@ export default function NoteDetailsSidebar({
         )}
         <button
           onClick={onOpenSettings}
-          className="group flex w-full items-center gap-2 rounded-lg px-2 py-1.5 text-xs font-medium text-muted transition-all hover:bg-surface-hover hover:text-foreground"
+          className="group flex w-full items-center gap-2.5 rounded-xl px-2.5 py-2 text-xs font-medium text-muted/70 transition-all duration-200 hover:bg-surface-hover/60 hover:text-foreground"
         >
           <Settings className="h-3.5 w-3.5 shrink-0" />
           <span>Settings</span>
