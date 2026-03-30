@@ -580,7 +580,7 @@ export default function FileExplorerModal({
           {/* ============ HEADER ============ */}
           <ModalHeader onClose={onClose} closeAriaLabel="Close file explorer">
             <div className="flex items-center gap-3">
-              <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-alpine-100">
+              <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-alpine-100 dark:bg-alpine-900/30">
                 <FolderOpen size={18} className="text-alpine-600" />
               </div>
               <div>

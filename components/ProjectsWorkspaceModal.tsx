@@ -403,7 +403,7 @@ export default function ProjectsWorkspaceModal({
       <div key={node.id}>
         <div
           className={`group flex items-center gap-1.5 rounded-md px-2 py-1 text-sm cursor-pointer transition-colors ${
-            isSelected ? 'bg-alpine-100 text-alpine-800 font-medium' : 'text-gray-700 hover:bg-gray-100'
+            isSelected ? 'bg-alpine-100 dark:bg-alpine-900/30 text-alpine-800 dark:text-alpine-300 font-medium' : 'text-gray-700 dark:text-slate-200 hover:bg-gray-100 dark:hover:bg-slate-800'
           }`}
           style={{ paddingLeft: `${depth * 16 + 8}px` }}
           onClick={() => setSelectedFolderId(isSelected ? null : node.id)}
@@ -417,31 +417,31 @@ export default function ProjectsWorkspaceModal({
           </button>
           <FolderTree size={13} className="text-amber-500 flex-shrink-0" />
           <span className="flex-1 truncate">{node.name}</span>
-          {noteCount > 0 && <span className="text-xs text-gray-400">{noteCount}</span>}
+          {noteCount > 0 && <span className="text-xs text-gray-400 dark:text-slate-500">{noteCount}</span>}
 
           {/* Inline actions on hover */}
           <span className="hidden items-center gap-0.5 group-hover:flex">
             <button
               type="button"
-              className="rounded p-0.5 hover:bg-gray-200"
+              className="rounded p-0.5 hover:bg-gray-200 dark:hover:bg-slate-700"
               title="Open in workspace"
               onClick={(e) => { e.stopPropagation(); handleFolderOpen(node.id) }}
-            ><FolderOpen size={12} className="text-gray-500" /></button>
+            ><FolderOpen size={12} className="text-gray-500 dark:text-slate-400" /></button>
             <button
               type="button"
-              className="rounded p-0.5 hover:bg-gray-200"
+              className="rounded p-0.5 hover:bg-gray-200 dark:hover:bg-slate-700"
               title="Rename"
               onClick={(e) => { e.stopPropagation(); openFolderDialog('rename', { folderId: node.id, projectId: node.project_id, currentName: node.name }) }}
-            ><Edit2 size={12} className="text-gray-500" /></button>
+            ><Edit2 size={12} className="text-gray-500 dark:text-slate-400" /></button>
             <button
               type="button"
-              className="rounded p-0.5 hover:bg-gray-200"
+              className="rounded p-0.5 hover:bg-gray-200 dark:hover:bg-slate-700"
               title="New subfolder"
               onClick={(e) => { e.stopPropagation(); openFolderDialog('create', { parentId: node.id, projectId: node.project_id }) }}
-            ><FolderPlus size={12} className="text-gray-500" /></button>
+            ><FolderPlus size={12} className="text-gray-500 dark:text-slate-400" /></button>
             <button
               type="button"
-              className="rounded p-0.5 hover:bg-red-100"
+              className="rounded p-0.5 hover:bg-red-100 dark:hover:bg-red-900/30"
               title="Delete"
               onClick={(e) => { e.stopPropagation(); setDialog({ type: 'delete-folder', folder: folderMap.get(node.id)! }) }}
             ><Trash2 size={12} className="text-red-400" /></button>
@@ -466,7 +466,7 @@ export default function ProjectsWorkspaceModal({
 
         {/* Loading overlay */}
         {isLoading && (
-          <div className="absolute inset-0 z-20 flex items-center justify-center bg-white/80">
+          <div className="absolute inset-0 z-20 flex items-center justify-center bg-white/80 dark:bg-slate-900/80">
             <Loader2 className="h-6 w-6 animate-spin text-alpine-500" />
           </div>
         )}
@@ -474,25 +474,25 @@ export default function ProjectsWorkspaceModal({
         {/* ─── Header ─────────────────────────────────────────── */}
         <ModalHeader onClose={onClose} closeAriaLabel="Close projects" gradient={false}>
           <Target size={18} className="text-alpine-500" />
-          <h2 className="text-base font-semibold text-gray-900">Projects</h2>
-          <span className="text-xs text-gray-400">{folders.length} folders · {notes.length} notes</span>
+          <h2 className="text-base font-semibold text-gray-900 dark:text-slate-100">Projects</h2>
+          <span className="text-xs text-gray-400 dark:text-slate-500">{folders.length} folders · {notes.length} notes</span>
           <div className="flex items-center gap-2 ml-auto">
             <div className="relative flex items-center">
-              <Search size={14} className="absolute left-2.5 text-gray-400" />
+              <Search size={14} className="absolute left-2.5 text-gray-400 dark:text-slate-500" />
               <input
                 ref={searchInputRef}
                 value={searchTerm}
                 onChange={e => setSearchTerm(e.target.value)}
                 placeholder="Search… (/ or ⌘K)"
-                className="w-52 rounded-md border border-gray-200 bg-gray-50 py-1.5 pl-8 pr-7 text-sm text-gray-700 focus:border-alpine-400 focus:outline-none focus:ring-1 focus:ring-alpine-400"
+                className="w-52 rounded-md border border-gray-200 dark:border-slate-600 bg-gray-50 dark:bg-slate-800 py-1.5 pl-8 pr-7 text-sm text-gray-700 dark:text-slate-200 placeholder:text-gray-400 dark:placeholder:text-slate-500 focus:border-alpine-400 focus:outline-none focus:ring-1 focus:ring-alpine-400"
               />
               {searchTerm && (
-                <button type="button" onClick={() => setSearchTerm('')} className="absolute right-2 text-gray-400 hover:text-gray-600">
+                <button type="button" onClick={() => setSearchTerm('')} className="absolute right-2 text-gray-400 hover:text-gray-600 dark:hover:text-slate-200">
                   <XCircle size={14} />
                 </button>
               )}
             </div>
-            <button type="button" onClick={() => { setIsLoading(true); loadAll() }} className="rounded-md p-1.5 text-gray-400 hover:bg-gray-100 hover:text-gray-600" title="Refresh">
+            <button type="button" onClick={() => { setIsLoading(true); loadAll() }} className="rounded-md p-1.5 text-gray-400 hover:bg-gray-100 dark:hover:bg-slate-800 hover:text-gray-600 dark:hover:text-slate-200" title="Refresh">
               <RefreshCw size={14} />
             </button>
           </div>
@@ -502,15 +502,15 @@ export default function ProjectsWorkspaceModal({
         <div className="flex flex-1 overflow-hidden">
 
           {/* Left sidebar: Projects + Folders */}
-          <div className="flex w-64 flex-shrink-0 flex-col border-r border-gray-200 overflow-y-auto">
+          <div className="flex w-64 flex-shrink-0 flex-col border-r border-gray-200 dark:border-slate-700 overflow-y-auto">
 
             {/* Project list */}
-            <div className="border-b border-gray-100 px-3 py-2">
+            <div className="border-b border-gray-100 dark:border-slate-700 px-3 py-2">
               <div className="mb-1.5 flex items-center justify-between">
-                <span className="text-[11px] font-semibold uppercase tracking-wider text-gray-400">Projects</span>
+                <span className="text-[11px] font-semibold uppercase tracking-wider text-gray-400 dark:text-slate-500">Projects</span>
                 <button
                   type="button"
-                  className="rounded p-0.5 text-alpine-500 hover:bg-alpine-50"
+                  className="rounded p-0.5 text-alpine-500 hover:bg-alpine-50 dark:hover:bg-alpine-900/30"
                   onClick={() => openProjectDialog('create')}
                   title="New project"
                 ><Plus size={14} /></button>
@@ -523,27 +523,27 @@ export default function ProjectsWorkspaceModal({
                     <div
                       key={entry.id}
                       className={`group flex items-center gap-2 rounded-md px-2 py-1.5 text-sm cursor-pointer transition-colors ${
-                        isActive ? 'bg-alpine-100 text-alpine-800 font-medium' : 'text-gray-700 hover:bg-gray-50'
+                        isActive ? 'bg-alpine-100 dark:bg-alpine-900/30 text-alpine-800 dark:text-alpine-300 font-medium' : 'text-gray-700 dark:text-slate-200 hover:bg-gray-50 dark:hover:bg-slate-800'
                       }`}
                       onClick={() => { setActiveProjectId(entry.id); setSelectedFolderId(null) }}
                     >
                       {entry.id === 'all' ? (
                         <Target size={12} className="text-alpine-500 flex-shrink-0" />
                       ) : entry.id === 'unassigned' ? (
-                        <FolderTree size={12} className="text-gray-400 flex-shrink-0" />
+                        <FolderTree size={12} className="text-gray-400 dark:text-slate-500 flex-shrink-0" />
                       ) : (
                         <span className="h-2.5 w-2.5 rounded-full flex-shrink-0" style={{ backgroundColor: entry.color }} />
                       )}
                       <span className="flex-1 truncate">{entry.name}</span>
-                      <span className="text-[11px] text-gray-400">{entry.noteCount}</span>
+                      <span className="text-[11px] text-gray-400 dark:text-slate-500">{entry.noteCount}</span>
 
                       {/* Edit/delete on hover for real projects */}
                       {project && (
                         <span className="hidden items-center gap-0.5 group-hover:flex">
-                          <button type="button" className="rounded p-0.5 hover:bg-gray-200" onClick={(e) => { e.stopPropagation(); openProjectDialog('edit', project) }} title="Edit">
-                            <Edit2 size={10} className="text-gray-500" />
+                          <button type="button" className="rounded p-0.5 hover:bg-gray-200 dark:hover:bg-slate-700" onClick={(e) => { e.stopPropagation(); openProjectDialog('edit', project) }} title="Edit">
+                            <Edit2 size={10} className="text-gray-500 dark:text-slate-400" />
                           </button>
-                          <button type="button" className="rounded p-0.5 hover:bg-red-100" onClick={(e) => { e.stopPropagation(); setDialog({ type: 'delete-project', project }) }} title="Delete">
+                          <button type="button" className="rounded p-0.5 hover:bg-red-100 dark:hover:bg-red-900/30" onClick={(e) => { e.stopPropagation(); setDialog({ type: 'delete-project', project }) }} title="Delete">
                             <Trash2 size={10} className="text-red-400" />
                           </button>
                         </span>
@@ -557,20 +557,20 @@ export default function ProjectsWorkspaceModal({
             {/* Folder tree */}
             <div className="flex-1 overflow-y-auto px-2 py-2">
               <div className="mb-1.5 flex items-center justify-between px-1">
-                <span className="text-[11px] font-semibold uppercase tracking-wider text-gray-400">Folders</span>
+                <span className="text-[11px] font-semibold uppercase tracking-wider text-gray-400 dark:text-slate-500">Folders</span>
                 {activeProjectId !== 'all' && (
                   <button
                     type="button"
-                    className="rounded p-0.5 text-gray-400 hover:bg-gray-100 hover:text-gray-600"
+                    className="rounded p-0.5 text-gray-400 hover:bg-gray-100 dark:hover:bg-slate-800 hover:text-gray-600 dark:hover:text-slate-200"
                     onClick={() => openFolderDialog('create', { parentId: null, projectId: resolveProjectId(activeProjectId) ?? null })}
                     title="New folder"
                   ><FolderPlus size={13} /></button>
                 )}
               </div>
               {activeProjectId === 'all' ? (
-                <p className="px-2 py-4 text-center text-xs text-gray-400">Select a project to browse folders</p>
+                <p className="px-2 py-4 text-center text-xs text-gray-400 dark:text-slate-500">Select a project to browse folders</p>
               ) : folderTree.length === 0 ? (
-                <p className="px-2 py-4 text-center text-xs text-gray-400">No folders yet</p>
+                <p className="px-2 py-4 text-center text-xs text-gray-400 dark:text-slate-500">No folders yet</p>
               ) : (
                 <div className="space-y-px">{folderTree.map(n => renderFolder(n))}</div>
               )}
@@ -579,7 +579,7 @@ export default function ProjectsWorkspaceModal({
               {selectedFolderId && (
                 <button
                   type="button"
-                  className="mt-2 flex w-full items-center gap-1.5 rounded-md px-2 py-1 text-xs text-alpine-600 hover:bg-alpine-50"
+                  className="mt-2 flex w-full items-center gap-1.5 rounded-md px-2 py-1 text-xs text-alpine-600 dark:text-alpine-400 hover:bg-alpine-50 dark:hover:bg-alpine-900/30"
                   onClick={() => setSelectedFolderId(null)}
                 >
                   <XCircle size={12} />
@@ -591,13 +591,13 @@ export default function ProjectsWorkspaceModal({
 
           {/* Right panel: Notes list */}
           <div className="flex flex-1 flex-col overflow-hidden">
-            <div className="flex items-center justify-between border-b border-gray-100 px-4 py-2">
+            <div className="flex items-center justify-between border-b border-gray-100 dark:border-slate-700 px-4 py-2">
               <div className="text-sm">
-                <span className="font-medium text-gray-800">{activeProjectName}</span>
+                <span className="font-medium text-gray-800 dark:text-slate-200">{activeProjectName}</span>
                 {selectedFolderId && (
-                  <span className="text-gray-400"> / {folderMap.get(selectedFolderId)?.name}</span>
+                  <span className="text-gray-400 dark:text-slate-500"> / {folderMap.get(selectedFolderId)?.name}</span>
                 )}
-                <span className="ml-2 text-xs text-gray-400">{filteredNotes.length} notes</span>
+                <span className="ml-2 text-xs text-gray-400 dark:text-slate-500">{filteredNotes.length} notes</span>
               </div>
               <div className="flex items-center gap-1.5">
                 <button
@@ -612,7 +612,7 @@ export default function ProjectsWorkspaceModal({
                 </button>
                 <button
                   type="button"
-                  className="inline-flex items-center gap-1.5 rounded-md border border-gray-200 px-2.5 py-1 text-xs font-medium text-gray-600 hover:bg-gray-50 disabled:opacity-50"
+                  className="inline-flex items-center gap-1.5 rounded-md border border-gray-200 dark:border-slate-700 px-2.5 py-1 text-xs font-medium text-gray-600 dark:text-slate-300 hover:bg-gray-50 dark:hover:bg-slate-800 disabled:opacity-50"
                   onClick={() => handleCreateNote('mindmap')}
                   disabled={resolveProjectId(activeProjectId) === undefined}
                   title="New mind map"
@@ -622,7 +622,7 @@ export default function ProjectsWorkspaceModal({
                 </button>
                 <button
                   type="button"
-                  className="inline-flex items-center gap-1.5 rounded-md border border-gray-200 px-2.5 py-1 text-xs font-medium text-gray-600 hover:bg-gray-50 disabled:opacity-50"
+                  className="inline-flex items-center gap-1.5 rounded-md border border-gray-200 dark:border-slate-700 px-2.5 py-1 text-xs font-medium text-gray-600 dark:text-slate-300 hover:bg-gray-50 dark:hover:bg-slate-800 disabled:opacity-50"
                   onClick={() => handleCreateNote('drawing')}
                   disabled={resolveProjectId(activeProjectId) === undefined}
                   title="New drawing"
@@ -635,26 +635,26 @@ export default function ProjectsWorkspaceModal({
 
             <div className="flex-1 overflow-y-auto">
               {filteredNotes.length === 0 ? (
-                <div className="flex flex-col items-center justify-center py-16 text-sm text-gray-400">
-                  <FileText size={32} className="mb-2 text-gray-300" />
+                <div className="flex flex-col items-center justify-center py-16 text-sm text-gray-400 dark:text-slate-500">
+                  <FileText size={32} className="mb-2 text-gray-300 dark:text-slate-600" />
                   {searchTerm ? 'No notes match your search' : 'No notes yet'}
                 </div>
               ) : (
-                <div className="divide-y divide-gray-100">
+                <div className="divide-y divide-gray-100 dark:divide-slate-700">
                   {filteredNotes.map(note => {
                     const folderName = note.folder_id ? folderMap.get(note.folder_id)?.name : null
                     return (
                       <div
                         key={note.id}
-                        className="group flex items-center gap-3 px-4 py-2.5 cursor-pointer hover:bg-gray-50 transition-colors"
+                        className="group flex items-center gap-3 px-4 py-2.5 cursor-pointer hover:bg-gray-50 dark:hover:bg-slate-800 transition-colors"
                         onClick={() => handleNoteSelect(note)}
                       >
-                        <span className="flex h-7 w-7 flex-shrink-0 items-center justify-center rounded-md bg-gray-100">
+                        <span className="flex h-7 w-7 flex-shrink-0 items-center justify-center rounded-md bg-gray-100 dark:bg-slate-800">
                           {noteTypeIcon(note.note_type)}
                         </span>
                         <div className="flex-1 min-w-0">
-                          <p className="truncate text-sm font-medium text-gray-900">{note.title || 'Untitled'}</p>
-                          <p className="flex items-center gap-2 text-xs text-gray-400">
+                          <p className="truncate text-sm font-medium text-gray-900 dark:text-slate-100">{note.title || 'Untitled'}</p>
+                          <p className="flex items-center gap-2 text-xs text-gray-400 dark:text-slate-500">
                             <span>{updatedAtFormatter.format(new Date(note.updated_at))}</span>
                             {folderName && <span className="flex items-center gap-0.5"><FolderTree size={10} />{folderName}</span>}
                           </p>
@@ -662,14 +662,14 @@ export default function ProjectsWorkspaceModal({
                         {/* Inline actions */}
                         <span className="hidden items-center gap-0.5 group-hover:flex" onClick={e => e.stopPropagation()}>
                           {onDuplicateNote && (
-                            <button type="button" className="rounded p-1 text-gray-400 hover:bg-gray-200 hover:text-gray-600" title="Duplicate" onClick={() => { onDuplicateNote(note); onClose() }}>
+                            <button type="button" className="rounded p-1 text-gray-400 hover:bg-gray-200 dark:hover:bg-slate-700 hover:text-gray-600 dark:hover:text-slate-200" title="Duplicate" onClick={() => { onDuplicateNote(note); onClose() }}>
                               <Plus size={12} />
                             </button>
                           )}
-                          <button type="button" className="rounded p-1 text-gray-400 hover:bg-gray-200 hover:text-gray-600" title="Move to project" onClick={() => setDialog({ type: 'move', target: { kind: 'note', id: note.id } })}>
+                          <button type="button" className="rounded p-1 text-gray-400 hover:bg-gray-200 dark:hover:bg-slate-700 hover:text-gray-600 dark:hover:text-slate-200" title="Move to project" onClick={() => setDialog({ type: 'move', target: { kind: 'note', id: note.id } })}>
                             <Target size={12} />
                           </button>
-                          <button type="button" className="rounded p-1 text-red-300 hover:bg-red-50 hover:text-red-500" title="Delete" onClick={() => setDialog({ type: 'delete-note', note })}>
+                          <button type="button" className="rounded p-1 text-red-300 hover:bg-red-50 dark:hover:bg-red-900/30 hover:text-red-500" title="Delete" onClick={() => setDialog({ type: 'delete-note', note })}>
                             <Trash2 size={12} />
                           </button>
                         </span>

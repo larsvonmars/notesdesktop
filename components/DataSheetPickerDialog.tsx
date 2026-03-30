@@ -178,20 +178,20 @@ export default function DataSheetPickerDialog({
 
         <div className="flex flex-1 min-h-0">
           {/* Left: sheet list */}
-          <div className="w-72 border-r border-gray-200 flex flex-col">
+          <div className="w-72 border-r border-gray-200 dark:border-slate-700 flex flex-col">
             {/* Search */}
-            <div className="p-3 border-b border-gray-100">
+            <div className="p-3 border-b border-gray-100 dark:border-slate-700">
               <div className="relative">
                 <Search
                   size={16}
-                  className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400"
+                  className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 dark:text-slate-500"
                 />
                 <input
                   type="text"
                   placeholder="Search data sheets..."
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
-                  className="w-full pl-9 pr-3 py-2 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-alpine-500"
+                  className="w-full pl-9 pr-3 py-2 text-sm border border-gray-300 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-800 text-gray-900 dark:text-slate-100 placeholder:text-gray-400 dark:placeholder:text-slate-500 focus:outline-none focus:ring-2 focus:ring-alpine-500"
                   autoFocus
                 />
               </div>
@@ -200,12 +200,12 @@ export default function DataSheetPickerDialog({
             {/* Sheet list */}
             <div className="flex-1 overflow-y-auto p-2">
               {loading ? (
-                <div className="flex items-center justify-center py-8 text-gray-500 text-sm">
+                <div className="flex items-center justify-center py-8 text-gray-500 dark:text-slate-400 text-sm">
                   Loading data sheets...
                 </div>
               ) : filteredNotes.length === 0 ? (
-                <div className="flex flex-col items-center justify-center py-8 text-gray-500">
-                  <Table2 size={36} className="mb-2 text-gray-300" />
+                <div className="flex flex-col items-center justify-center py-8 text-gray-500 dark:text-slate-400">
+                  <Table2 size={36} className="mb-2 text-gray-300 dark:text-slate-600" />
                   <p className="text-sm">
                     {searchQuery.trim() ? 'No data sheets found' : 'No data sheets available'}
                   </p>
@@ -221,21 +221,21 @@ export default function DataSheetPickerDialog({
                         onClick={() => handleSelectSheet(note)}
                         className={`w-full text-left p-2.5 rounded-lg transition-colors ${
                           isSelected
-                            ? 'bg-alpine-50 border border-alpine-300'
-                            : 'border border-transparent hover:bg-gray-50'
+                            ? 'bg-alpine-50 dark:bg-alpine-900/30 border border-alpine-300 dark:border-alpine-700'
+                            : 'border border-transparent hover:bg-gray-50 dark:hover:bg-slate-800'
                         }`}
                       >
                         <div className="flex items-center gap-2">
                           <Table2
                             size={16}
-                            className={`flex-shrink-0 ${isSelected ? 'text-alpine-600' : 'text-gray-400'}`}
+                            className={`flex-shrink-0 ${isSelected ? 'text-alpine-600 dark:text-alpine-400' : 'text-gray-400 dark:text-slate-500'}`}
                           />
                           <div className="flex-1 min-w-0">
-                            <div className="font-medium text-gray-900 text-sm truncate">
+                            <div className="font-medium text-gray-900 dark:text-slate-100 text-sm truncate">
                               {note.title || 'Untitled Data Sheet'}
                             </div>
                             {folderName && (
-                              <div className="flex items-center gap-1 text-xs text-gray-400 mt-0.5">
+                              <div className="flex items-center gap-1 text-xs text-gray-400 dark:text-slate-500 mt-0.5">
                                 <Folder size={10} />
                                 <span className="truncate">{folderName}</span>
                               </div>
@@ -253,24 +253,24 @@ export default function DataSheetPickerDialog({
           {/* Right: preview */}
           <div className="flex-1 flex flex-col min-w-0">
             {!selectedSheet ? (
-              <div className="flex-1 flex flex-col items-center justify-center text-gray-400 p-8">
-                <Table2 size={48} className="mb-3 text-gray-200" />
+              <div className="flex-1 flex flex-col items-center justify-center text-gray-400 dark:text-slate-500 p-8">
+                <Table2 size={48} className="mb-3 text-gray-200 dark:text-slate-700" />
                 <p className="text-sm font-medium">Select a data sheet</p>
                 <p className="text-xs mt-1">A preview of the table will appear here</p>
               </div>
             ) : !previewData ? (
-              <div className="flex-1 flex items-center justify-center text-gray-400 p-8">
+              <div className="flex-1 flex items-center justify-center text-gray-400 dark:text-slate-500 p-8">
                 <p className="text-sm">Could not parse data sheet content</p>
               </div>
             ) : (
               <div className="flex-1 flex flex-col min-h-0">
                 {/* Preview header */}
-                <div className="flex items-center justify-between px-4 py-3 border-b border-gray-100 bg-gray-50/50">
+                <div className="flex items-center justify-between px-4 py-3 border-b border-gray-100 dark:border-slate-700 bg-gray-50/50 dark:bg-slate-800/50">
                   <div>
-                    <h3 className="text-sm font-semibold text-gray-800">
+                    <h3 className="text-sm font-semibold text-gray-800 dark:text-slate-200">
                       {selectedSheet.title || 'Untitled Data Sheet'}
                     </h3>
-                    <p className="text-xs text-gray-500 mt-0.5">
+                    <p className="text-xs text-gray-500 dark:text-slate-400 mt-0.5">
                       {previewData.columns.length} columns × {previewData.rows.length} rows
                     </p>
                   </div>
@@ -278,14 +278,14 @@ export default function DataSheetPickerDialog({
 
                 {/* Table preview */}
                 <div className="flex-1 overflow-auto p-4">
-                  <div className="border border-gray-200 rounded-lg overflow-hidden">
+                  <div className="border border-gray-200 dark:border-slate-700 rounded-lg overflow-hidden">
                     <table className="min-w-full border-collapse text-sm">
                       <thead>
-                        <tr className="bg-gray-50 border-b border-gray-200">
+                        <tr className="bg-gray-50 dark:bg-slate-800 border-b border-gray-200 dark:border-slate-700">
                           {previewData.columns.map((col, ci) => (
                             <th
                               key={ci}
-                              className="px-3 py-2 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider border-r border-gray-100 last:border-r-0"
+                              className="px-3 py-2 text-left text-xs font-semibold text-gray-600 dark:text-slate-300 uppercase tracking-wider border-r border-gray-100 dark:border-slate-700 last:border-r-0"
                             >
                               {col}
                             </th>
@@ -298,18 +298,18 @@ export default function DataSheetPickerDialog({
                           return (
                             <tr
                               key={ri}
-                              className={`border-b border-gray-100 last:border-b-0 ${
+                              className={`border-b border-gray-100 dark:border-slate-700 last:border-b-0 ${
                                 isHeaderRow
-                                  ? 'bg-blue-50 font-semibold'
+                                  ? 'bg-blue-50 dark:bg-blue-900/20 font-semibold'
                                   : ri % 2 === 0
-                                    ? 'bg-white'
-                                    : 'bg-gray-50/50'
+                                    ? 'bg-white dark:bg-slate-900'
+                                    : 'bg-gray-50/50 dark:bg-slate-800/50'
                               }`}
                             >
                               {previewData.columns.map((_, ci) => (
                                 <td
                                   key={ci}
-                                  className="px-3 py-1.5 text-gray-700 border-r border-gray-100 last:border-r-0 whitespace-nowrap"
+                                  className="px-3 py-1.5 text-gray-700 dark:text-slate-200 border-r border-gray-100 dark:border-slate-700 last:border-r-0 whitespace-nowrap"
                                 >
                                   {row[ci] ?? ''}
                                 </td>
@@ -320,7 +320,7 @@ export default function DataSheetPickerDialog({
                       </tbody>
                     </table>
                     {previewData.rows.length > PREVIEW_MAX_ROWS && (
-                      <div className="px-3 py-2 bg-gray-50 border-t border-gray-200 text-xs text-gray-500 text-center">
+                      <div className="px-3 py-2 bg-gray-50 dark:bg-slate-800 border-t border-gray-200 dark:border-slate-700 text-xs text-gray-500 dark:text-slate-400 text-center">
                         Showing first {PREVIEW_MAX_ROWS} of {previewData.rows.length} rows. All rows will be inserted.
                       </div>
                     )}
@@ -331,14 +331,14 @@ export default function DataSheetPickerDialog({
           </div>
         </div>
 
-        <ModalFooter className="bg-gray-50 flex items-center justify-between">
-          <p className="text-xs text-gray-500">
+        <ModalFooter className="bg-gray-50 dark:bg-slate-800/50 flex items-center justify-between">
+          <p className="text-xs text-gray-500 dark:text-slate-400">
             The table will be inserted as a static snapshot
           </p>
           <div className="flex items-center gap-2">
             <button
               onClick={handleClose}
-              className="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors"
+              className="px-4 py-2 text-sm font-medium text-gray-700 dark:text-slate-200 bg-white dark:bg-slate-800 border border-gray-300 dark:border-slate-600 rounded-lg hover:bg-gray-50 dark:hover:bg-slate-700 transition-colors"
             >
               Cancel
             </button>

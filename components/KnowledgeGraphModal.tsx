@@ -727,10 +727,10 @@ export default function KnowledgeGraphModal({
         <ModalHeader onClose={onClose} closeAriaLabel="Close knowledge graph" gradient={false}>
             <div className="flex items-start gap-4 flex-1">
               <div>
-                <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-alpine-50 text-alpine-700 text-xs font-semibold uppercase tracking-wide">
+                <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-alpine-50 dark:bg-alpine-900/30 text-alpine-700 dark:text-alpine-300 text-xs font-semibold uppercase tracking-wide">
                   Knowledge Graph
                 </div>
-                <div className="mt-2 flex items-center gap-4 text-sm text-gray-700" style={{ fontFamily: 'Inter, system-ui, sans-serif' }}>
+                <div className="mt-2 flex items-center gap-4 text-sm text-gray-700 dark:text-slate-200" style={{ fontFamily: 'Inter, system-ui, sans-serif' }}>
                   <span>{stats.totalNotes} notes</span>
                   <span>•</span>
                   <span>{stats.totalLinks} links</span>
@@ -740,7 +740,7 @@ export default function KnowledgeGraphModal({
               </div>
 
               <div className="flex items-center gap-2 ml-auto">
-                <FolderTree size={16} className="text-gray-500" />
+                <FolderTree size={16} className="text-gray-500 dark:text-slate-400" />
                 <select
                   value={filterFolderId === null ? 'root' : filterFolderId}
                   onChange={(e) => {
@@ -749,7 +749,7 @@ export default function KnowledgeGraphModal({
                     else if (value === 'root') setFilterFolderId(null)
                     else setFilterFolderId(value)
                   }}
-                  className="text-sm px-3 py-1.5 border border-gray-300 rounded-md bg-white hover:border-gray-400 focus:outline-none focus:ring-2 focus:ring-alpine-500 focus:border-transparent"
+                  className="text-sm px-3 py-1.5 border border-gray-300 dark:border-slate-600 rounded-md bg-white dark:bg-slate-800 text-gray-700 dark:text-slate-200 hover:border-gray-400 dark:hover:border-slate-500 focus:outline-none focus:ring-2 focus:ring-alpine-500 focus:border-transparent"
                 >
                   {folderOptions.map(option => (
                     <option
@@ -762,7 +762,7 @@ export default function KnowledgeGraphModal({
                 </select>
                 <button
                   onClick={() => setHasAutoFit(false)}
-                  className="p-2 rounded-md border border-gray-200 text-gray-600 hover:border-gray-300 hover:text-gray-800"
+                  className="p-2 rounded-md border border-gray-200 dark:border-slate-700 text-gray-600 dark:text-slate-300 hover:border-gray-300 dark:hover:border-slate-600 hover:text-gray-800 dark:hover:text-slate-100"
                   title="Re-center graph"
                 >
                   <Crosshair size={16} />
@@ -772,12 +772,12 @@ export default function KnowledgeGraphModal({
         </ModalHeader>
 
         {/* Graph Canvas */}
-        <div ref={containerRef} className="flex-1 relative bg-gray-50">
+        <div ref={containerRef} className="flex-1 relative bg-gray-50 dark:bg-slate-800/50">
           {isLoadingNotes ? (
             <div className="absolute inset-0 flex items-center justify-center">
               <div className="text-center">
                 <Loader2 size={48} className="animate-spin text-alpine-500 mx-auto mb-4" />
-                <p className="text-gray-600">Loading all notes...</p>
+                <p className="text-gray-600 dark:text-slate-300">Loading all notes...</p>
               </div>
             </div>
           ) : loadError ? (
@@ -812,33 +812,33 @@ export default function KnowledgeGraphModal({
             <div className="absolute bottom-4 right-4 flex flex-col gap-1.5">
               <button
                 onClick={handleZoomIn}
-                className="p-1.5 bg-white rounded-md shadow-lg hover:bg-gray-50 transition-colors"
+                className="p-1.5 bg-white dark:bg-slate-800 rounded-md shadow-lg hover:bg-gray-50 dark:hover:bg-slate-700 transition-colors"
                 title="Zoom In"
               >
                 <ZoomIn size={16} />
               </button>
               <button
                 onClick={handleZoomOut}
-                className="p-1.5 bg-white rounded-md shadow-lg hover:bg-gray-50 transition-colors"
+                className="p-1.5 bg-white dark:bg-slate-800 rounded-md shadow-lg hover:bg-gray-50 dark:hover:bg-slate-700 transition-colors"
                 title="Zoom Out"
               >
                 <ZoomOut size={16} />
               </button>
               <button
                 onClick={handleReset}
-                className="p-1.5 bg-white rounded-md shadow-lg hover:bg-gray-50 transition-colors"
+                className="p-1.5 bg-white dark:bg-slate-800 rounded-md shadow-lg hover:bg-gray-50 dark:hover:bg-slate-700 transition-colors"
                 title="Reset View"
               >
                 <Maximize2 size={16} />
               </button>
             </div>
 
-            <div className="absolute bottom-4 left-4 bg-white rounded-lg shadow-lg p-3 text-xs max-w-[200px]">
-              <div className="font-medium text-gray-900 mb-1.5 text-xs">Legend</div>
+            <div className="absolute bottom-4 left-4 bg-white dark:bg-slate-800 rounded-lg shadow-lg p-3 text-xs max-w-[200px]">
+              <div className="font-medium text-gray-900 dark:text-slate-100 mb-1.5 text-xs">Legend</div>
               <div className="space-y-1">
                 <div className="flex items-center gap-1.5">
                   <div className="w-2.5 h-2.5 rounded-full bg-yellow-100 border-[1.5px] border-orange-500 flex-shrink-0"></div>
-                  <span className="text-gray-600">Current Note</span>
+                  <span className="text-gray-600 dark:text-slate-300">Current Note</span>
                 </div>
                 {NOTE_TYPE_LEGEND.map((noteTypePresentation) => (
                   <div key={noteTypePresentation.id} className="flex items-center gap-1.5">
@@ -849,11 +849,11 @@ export default function KnowledgeGraphModal({
                         border: `1.5px solid ${noteTypePresentation.graphStroke}`,
                       }}
                     ></div>
-                    <span className="text-gray-600">{noteTypePresentation.pickerLabel}</span>
+                    <span className="text-gray-600 dark:text-slate-300">{noteTypePresentation.pickerLabel}</span>
                   </div>
                 ))}
               </div>
-              <div className="mt-2 pt-2 border-t border-gray-200 text-[10px] text-gray-500">
+              <div className="mt-2 pt-2 border-t border-gray-200 dark:border-slate-700 text-[10px] text-gray-500 dark:text-slate-400">
                 <div>Larger nodes = more connections</div>
                 <div className="mt-0.5">Drag to pan · Scroll to zoom · Click to open</div>
               </div>
