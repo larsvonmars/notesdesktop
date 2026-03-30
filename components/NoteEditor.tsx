@@ -2678,10 +2678,32 @@ export default function NoteEditor({
 
     try {
       const bodyHtml = editorRef.current?.getHTML() || content
-      const htmlContent = `<!DOCTYPE html><html><head><meta charset="utf-8"></head><body>${bodyHtml}</body></html>`
+      const htmlContent = `<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <style>
+    body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; font-size: 11pt; line-height: 1.5; color: #111827; }
+    h1 { font-size: 24pt; font-weight: bold; margin-top: 18pt; margin-bottom: 12pt; }
+    h2 { font-size: 18pt; font-weight: bold; margin-top: 16pt; margin-bottom: 10pt; }
+    h3 { font-size: 14pt; font-weight: bold; margin-top: 14pt; margin-bottom: 8pt; }
+    p { margin-bottom: 10pt; }
+    table { border-collapse: collapse; width: 100%; margin-bottom: 10pt; }
+    th, td { border: 1px solid #e5e7eb; padding: 6pt; }
+    blockquote { margin-left: 0; padding-left: 14pt; border-left: 4px solid #cbd5e1; color: #4b5563; font-style: italic; }
+    pre { font-family: monospace; background-color: #f8fafc; padding: 12pt; display: block; border-radius: 4px; border: 1px solid #e5e7eb; }
+    code { font-family: monospace; background-color: #f8fafc; padding: 2pt 4pt; border-radius: 3px; }
+  </style>
+</head>
+<body>
+  ${bodyHtml}
+</body>
+</html>`
       
       const { asBlob } = await import('html-docx-js-typescript')
-      const blob = await asBlob(htmlContent) as Blob
+      const blob = await asBlob(htmlContent, { 
+        margins: { top: 1440, right: 1440, bottom: 1440, left: 1440 } 
+      }) as Blob
       
       downloadBlobFile(`${fileBase}.docx`, blob)
       toast.push({ title: 'DOCX exported' })
@@ -2701,15 +2723,41 @@ export default function NoteEditor({
       try {
         const arrayBuffer = await file.arrayBuffer()
         const mammoth = (await import('mammoth')).default
-        const result = await mammoth.convertToHtml({ arrayBuffer })
+        
+        // Map common Word styles to HTML tags for better RichTextEditor compatibility
+        const options = {
+          styleMap: [
+            "p[style-name='Title'] => h1:fresh",
+            "p[style-name='Subtitle'] => h2:fresh",
+            "p[style-name='Quote'] => blockquote:fresh",
+            "p[style-name='Intense Quote'] => blockquote:fresh",
+            "p[style-name='Code'] => pre:fresh",
+            "r[style-name='Strong'] => strong",
+            "r[style-name='Emphasis'] => em",
+            "r[style-name='Strike'] => s",
+            "r[style-name='Code'] => code"
+          ]
+        }
+        
+        const result = await mammoth.convertToHtml({ arrayBuffer }, options)
         const DOMPurify = (await import('dompurify')).default
         
         // mammoth usually returns paragraphs, we need to clean them gently
         let plainHtml = result.value.replace(/<p><\/p>/g, '')
         
+        const allowedTags = [
+          'b', 'i', 'em', 'strong', 'a', 'p', 'h1', 'h2', 'h3', 'h4', 'h5', 'h6', 
+          'ul', 'ol', 'li', 'br', 'img', 'table', 'tr', 'td', 'th', 'tbody', 'thead', 
+          'hr', 'code', 'pre', 's', 'strike', 'blockquote', 'sub', 'sup'
+        ]
+        const allowedAttributes = ['href', 'target', 'src', 'alt', 'title']
+        
         let cleanHtml = ''
         if (typeof window !== 'undefined' && typeof DOMPurify.sanitize === 'function') {
-           cleanHtml = DOMPurify.sanitize(plainHtml)
+           cleanHtml = DOMPurify.sanitize(plainHtml, {
+             ALLOWED_TAGS: allowedTags,
+             ALLOWED_ATTR: allowedAttributes
+           })
         } else {
            cleanHtml = plainHtml
         }
