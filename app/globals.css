@@ -1357,7 +1357,7 @@
 @keyframes file-block-enter {
   from {
     opacity: 0;
-    transform: translateY(6px) scale(0.995);
+    transform: translateY(10px) scale(0.995);
   }
   to {
     opacity: 1;
@@ -1365,88 +1365,79 @@
   }
 }
 
+@keyframes file-block-action-enter {
+  from {
+    opacity: 0;
+    transform: translateY(4px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
 .file-block-container .file-block-card {
-  animation: file-block-enter 180ms cubic-bezier(0.2, 0.8, 0.2, 1) both;
-  transform-origin: 50% 12px;
+  animation: file-block-enter 240ms cubic-bezier(0.2, 0.8, 0.2, 1) both;
+  transform-origin: 50% 16px;
 }
 
 .file-block-container .file-block-surface-button {
-  transition: background-color 140ms ease;
+  transition: background-color 180ms ease, transform 180ms ease;
 }
 
 .file-block-container .file-block-icon-wrap {
-  transition: transform 160ms ease, box-shadow 160ms ease;
+  transition: transform 220ms ease, box-shadow 220ms ease;
 }
 
-.file-block-container .file-block-head-actions {
-  flex-shrink: 0;
+.file-block-container .file-block-path-pill {
+  transition: background-color 180ms ease, color 180ms ease;
 }
 
-.file-block-container .file-block-action-icon {
-  width: 1.25rem;
-  height: 1.25rem;
-  padding: 0;
-}
-
-.file-block-container .file-block-head {
-  min-height: 2rem;
-}
-
-.file-block-container .file-block-head .file-block-surface-button {
-  min-height: 1.5rem;
-}
-
-.file-block-container .file-block-head .file-block-icon-wrap svg {
-  width: 0.75rem;
-  height: 0.75rem;
+.file-block-container .file-block-actions-row {
+  transition: background-color 180ms ease;
 }
 
 .file-block-container .file-block-action {
-  transition: transform 140ms ease, box-shadow 140ms ease, border-color 140ms ease, background-color 140ms ease, color 140ms ease;
+  opacity: 0.92;
+  transform: translateY(2px);
+  transition: transform 180ms ease, box-shadow 180ms ease, opacity 180ms ease, border-color 180ms ease;
 }
 
-.file-block-container .file-block-expandable {
-  overflow: hidden;
-  max-height: 220px;
+.file-block-container .file-block-card:hover .file-block-action,
+.file-block-container .file-block-card:focus-within .file-block-action {
   opacity: 1;
-  transition: max-height 180ms ease, opacity 140ms ease, padding 180ms ease, border-color 180ms ease;
+  transform: translateY(0);
+  animation: file-block-action-enter 180ms ease both;
 }
 
-.file-block-container[data-file-collapsed='true'] .file-block-expandable {
-  max-height: 0;
-  opacity: 0;
-  padding-top: 0;
-  padding-bottom: 0;
-  border-top-color: transparent;
-  pointer-events: none;
+.file-block-container .file-block-card:hover .file-block-action:nth-child(1),
+.file-block-container .file-block-card:focus-within .file-block-action:nth-child(1) {
+  animation-delay: 10ms;
 }
 
-.file-block-container [data-file-chevron='true'] {
-  transition: transform 160ms ease;
-  transform: rotate(0deg);
+.file-block-container .file-block-card:hover .file-block-action:nth-child(2),
+.file-block-container .file-block-card:focus-within .file-block-action:nth-child(2) {
+  animation-delay: 35ms;
 }
 
-.file-block-container[data-file-collapsed='true'] [data-file-chevron='true'] {
-  transform: rotate(-90deg);
+.file-block-container .file-block-card:hover .file-block-action:nth-child(3),
+.file-block-container .file-block-card:focus-within .file-block-action:nth-child(3) {
+  animation-delay: 60ms;
 }
 
-.file-block-container[data-file-collapsed='false'] [data-file-chevron='true'] {
-  transform: rotate(0deg);
+.file-block-container .file-block-card:hover .file-block-action:nth-child(4),
+.file-block-container .file-block-card:focus-within .file-block-action:nth-child(4) {
+  animation-delay: 85ms;
 }
 
-.file-block-container .file-block-card:hover,
-.file-block-container .file-block-card:focus-within {
+.file-block-container .file-block-card:hover {
   transform: translateY(-1px);
 }
 
 .file-block-container .file-block-card:hover .file-block-icon-wrap,
 .file-block-container .file-block-card:focus-within .file-block-icon-wrap {
-  transform: scale(1.04);
-  box-shadow: 0 8px 14px -12px rgba(15, 23, 42, 0.65);
-}
-
-.file-block-container .file-block-path-pill {
-  transition: background-color 140ms ease, color 140ms ease;
+  transform: scale(1.03);
+  box-shadow: 0 8px 18px -12px rgba(15, 23, 42, 0.55);
 }
 
 .file-block-container .file-block-card:hover .file-block-path-pill,
@@ -1455,16 +1446,15 @@
   color: #334155;
 }
 
+.file-block-container .file-block-card:hover .file-block-actions-row,
+.file-block-container .file-block-card:focus-within .file-block-actions-row {
+  background-color: rgba(241, 245, 249, 0.95);
+}
+
 .file-block-container .file-block-action:hover,
 .file-block-container .file-block-action:focus-visible {
   transform: translateY(-1px);
-  box-shadow: 0 8px 14px -12px rgba(15, 23, 42, 0.72);
-}
-
-.file-block-container .file-block-action[data-file-state='success'] {
-  border-color: #86efac;
-  color: #166534;
-  background-color: #f0fdf4;
+  box-shadow: 0 8px 16px -12px rgba(15, 23, 42, 0.75);
 }
 
 .file-block-container .file-block-surface-button:active,
@@ -1476,40 +1466,10 @@
   .file-block-container .file-block-card,
   .file-block-container .file-block-surface-button,
   .file-block-container .file-block-icon-wrap,
-  .file-block-container [data-file-chevron='true'],
   .file-block-container .file-block-path-pill,
-  .file-block-container .file-block-expandable,
+  .file-block-container .file-block-actions-row,
   .file-block-container .file-block-action {
     animation: none !important;
-    transition: none !important;
-    transform: none !important;
-  }
-}
-
-.pdf-annotation-embed-block > div {
-  transition: border-color 180ms ease, box-shadow 180ms ease, transform 180ms ease;
-}
-
-.pdf-annotation-embed-block:hover > div,
-.pdf-annotation-embed-block:focus-within > div {
-  border-color: #a5b4fc;
-  box-shadow: 0 10px 26px -18px rgba(67, 56, 202, 0.55);
-  transform: translateY(-1px);
-}
-
-.pdf-annotation-embed-block [data-open-pdf-note-id] {
-  transition: transform 150ms ease, box-shadow 150ms ease;
-}
-
-.pdf-annotation-embed-block [data-open-pdf-note-id]:hover,
-.pdf-annotation-embed-block [data-open-pdf-note-id]:focus-visible {
-  transform: translateY(-1px);
-  box-shadow: 0 8px 16px -12px rgba(67, 56, 202, 0.75);
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .pdf-annotation-embed-block > div,
-  .pdf-annotation-embed-block [data-open-pdf-note-id] {
     transition: none !important;
     transform: none !important;
   }

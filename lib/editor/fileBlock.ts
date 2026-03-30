@@ -1,11 +1,21 @@
 /**
  * File Attachment Custom Block
  * Unified file element used for both previous "file" and "file-ref" blocks.
- * Renders a compact in-editor card with rich file actions.
+ * Renders a compact in-editor card with open/download/remove actions.
  */
 
 import type { CustomBlockDescriptor } from '../../components/RichTextEditor'
 import { formatFileSize, getFileIconHint, triggerDownload, getFileUrl } from '../file-storage'
+
+// Event and type for PDF annotation action
+export const FILE_BLOCK_ANNOTATE_PDF_EVENT = 'file-block-annotate-pdf'
+
+export interface FileBlockAnnotatePdfEventDetail {
+  filePath: string
+  fileName: string
+  fileType: string
+  occurrenceIndex?: number
+}
 
 export interface FileBlockPayload {
   /** File name */
@@ -20,17 +30,7 @@ export interface FileBlockPayload {
   attached_at?: string
 }
 
-export interface FileBlockAnnotatePdfEventDetail {
-  filePath: string
-  fileName: string
-  fileType?: string
-  attachedAt?: string
-  occurrenceIndex?: number
-}
-
-export const FILE_BLOCK_ANNOTATE_PDF_EVENT = 'file-block-annotate-pdf'
-
-type FileAction = 'open' | 'download' | 'copy-path' | 'remove' | 'annotate-pdf' | 'toggle-collapse'
+type FileAction = 'open' | 'download' | 'copy-path' | 'annotate-pdf' | 'remove'
 
 /**
  * Escape HTML entities to prevent XSS
@@ -109,10 +109,6 @@ function getPathHint(path: string): string {
   const parts = path.split('/').filter(Boolean)
   if (parts.length <= 2) return path
   return `${parts[0]}/.../${parts[parts.length - 1]}`
-}
-
-function isPdfType(mimeType: string): boolean {
-  return getFileIconHint(mimeType) === 'pdf' || mimeType.toLowerCase() === 'application/pdf'
 }
 
 function parsePayloadFromElement(el: HTMLElement): FileBlockPayload | undefined {
@@ -270,91 +266,45 @@ export const fileBlock: CustomBlockDescriptor = {
     const escapedType = escapeHtml(type)
 
     const ext = getFileExtension(payload.name)
-    const kindLabel = escapeHtml(getFileKindLabel(type))
-    const attachedLabel = escapeHtml(formatAttachedAtLabel(payload.attached_at))
-    const pathHint = escapeHtml(truncateMiddle(getPathHint(payload.path), 32))
     const attachedAtIso = payload.attached_at ? escapeHtml(payload.attached_at) : ''
-    const isPdf = isPdfType(type)
 
-    return `<div class="file-block-container file-block-compact my-1.5" data-block="true" data-block-type="file" data-file-path="${path}" data-file-name="${name}" data-file-size="${size}" data-file-type="${escapedType}" data-file-attached-at="${attachedAtIso}" data-file-collapsed="true" contenteditable="false">
-      <div class="file-block-card group relative overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm transition-all hover:border-slate-300 hover:shadow-md" data-file-path="${path}" data-file-name="${name}" data-file-size="${size}" data-file-type="${escapedType}" data-file-attached-at="${attachedAtIso}">
-        <div class="absolute inset-x-0 top-0 h-[2px] bg-gradient-to-r ${accentClass}"></div>
+    const isPdf = type === 'application/pdf'
+    const pdfButtonHtml = isPdf ? `
+      <button type="button" class="file-block-action file-block-annotate-pdf inline-flex items-center justify-center p-1.5 text-indigo-600 transition-colors hover:bg-indigo-50 hover:text-indigo-700" data-file-action="annotate-pdf" aria-label="Annotate PDF" title="Create PDF annotation" contenteditable="false">
+        <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M12 20h9"/>
+          <path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z"/>
+        </svg>
+      </button>
+    ` : ''
 
-        <div class="file-block-head flex items-center gap-1.5 px-2 py-1">
-          <button type="button" class="file-block-surface file-block-surface-button flex min-w-0 flex-1 items-center gap-2 text-left" aria-label="Open file" title="Open ${name}" contenteditable="false">
-            <div class="file-block-icon-wrap flex h-6 w-6 flex-shrink-0 items-center justify-center rounded-md border border-slate-200 bg-white text-slate-600 shadow-sm ${bgClass}">
-              ${iconSvg}
-            </div>
+    return `<div class="file-block-container my-1 inline-block select-none align-middle" data-block="true" data-block-type="file" data-file-path="${path}" data-file-name="${name}" data-file-size="${size}" data-file-type="${escapedType}" data-file-attached-at="${attachedAtIso}" contenteditable="false">
+      <div class="file-block-card flex max-w-sm items-center gap-2 rounded-full border border-slate-200 bg-white pr-1 pl-1.5 py-1 shadow-sm transition-all hover:border-slate-300 hover:shadow" data-file-path="${path}" data-file-name="${name}" data-file-size="${size}" data-file-type="${escapedType}" data-file-attached-at="${attachedAtIso}">
+        
+        <button type="button" class="file-block-surface file-block-surface-button flex min-w-0 items-center gap-1.5 outline-none" aria-label="Open file" title="Open ${name}" contenteditable="false">
+          <div class="file-block-icon-wrap flex h-6 w-6 flex-shrink-0 items-center justify-center rounded-full bg-slate-100 text-slate-500 [&>svg]:h-3.5 [&>svg]:w-3.5 ${bgClass}">
+            ${iconSvg}
+          </div>
+          <span class="truncate text-xs font-medium text-slate-700" title="${name}">${name}</span>
+          <span class="flex-shrink-0 text-[10px] text-slate-400" data-file-size-label="true">${sizeStr}</span>
+        </button>
 
-            <div class="min-w-0 flex-1">
-              <div class="flex min-w-0 items-center gap-1">
-                <span class="truncate text-[11px] font-semibold leading-4 text-slate-900" title="${name}">${name}</span>
-                <span class="inline-flex flex-shrink-0 items-center rounded border border-slate-200 bg-slate-50 px-1 py-0 text-[9px] font-semibold tracking-wide text-slate-600">${escapeHtml(ext)}</span>
-                <span class="flex-shrink-0 text-[9px] leading-4 text-slate-500" data-file-size-label="true">${sizeStr}</span>
-              </div>
-            </div>
+        <div class="flex items-center flex-shrink-0 ml-1 border-l border-slate-100 pl-1">
+          ${pdfButtonHtml}
+          <button type="button" class="file-block-action file-block-download inline-flex items-center justify-center p-1.5 text-slate-400 transition-colors hover:bg-slate-50 hover:text-slate-600" data-file-action="download" aria-label="Download file" title="Download ${name}" contenteditable="false">
+            <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+              <polyline points="7 10 12 15 17 10"/>
+              <line x1="12" y1="15" x2="12" y2="3"/>
+            </svg>
           </button>
-
-          <div class="file-block-head-actions flex items-center gap-1">
-            <button type="button" class="file-block-action file-block-download file-block-action-icon inline-flex items-center justify-center rounded-md border border-slate-200 bg-white text-slate-700 transition-colors hover:bg-slate-100" data-file-action="download" aria-label="Download file" title="Download ${name}" contenteditable="false">
-              <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
-                <polyline points="7 10 12 15 17 10"/>
-                <line x1="12" y1="15" x2="12" y2="3"/>
-              </svg>
-            </button>
-
-            <button type="button" class="file-block-action file-block-toggle file-block-action-icon inline-flex items-center justify-center rounded-md border border-slate-200 bg-white text-slate-700 transition-colors hover:bg-slate-100" data-file-action="toggle-collapse" aria-expanded="false" aria-label="Toggle attachment details" title="Expand attachment details" contenteditable="false">
-              <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" data-file-chevron="true">
-                <polyline points="6 9 12 15 18 9"/>
-              </svg>
-            </button>
-          </div>
-        </div>
-
-        <div class="file-block-expandable border-t border-slate-100 px-2.5 py-2">
-          <div class="file-block-path-pill inline-flex max-w-full items-center gap-1 rounded-md bg-slate-100 px-2 py-1 text-[10px] leading-4 text-slate-600" title="${path}">
-            <span class="font-medium text-slate-500">Path</span>
-            <span class="truncate">${pathHint}</span>
-          </div>
-
-          <div class="mt-1 flex items-center gap-1 text-[10px] leading-4 text-slate-500">
-            <span>${attachedLabel}</span>
-          </div>
-
-          <div class="mt-1.5 flex flex-wrap items-center gap-1">
-            <button type="button" class="file-block-action file-block-preview inline-flex items-center gap-1 rounded-md border border-slate-200 bg-white px-2 py-1 text-[10px] font-medium text-slate-700 transition-colors hover:bg-slate-100" data-file-action="open" aria-label="Open file" title="Open ${name}" contenteditable="false">
-              <svg xmlns="http://www.w3.org/2000/svg" width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/>
-                <circle cx="12" cy="12" r="3"/>
-              </svg>
-              <span>Open</span>
-            </button>
-
-            <button type="button" class="file-block-action inline-flex items-center gap-1 rounded-md border border-slate-200 bg-white px-2 py-1 text-[10px] font-medium text-slate-700 transition-colors hover:bg-slate-100" data-file-action="copy-path" aria-label="Copy file path" title="Copy file path" contenteditable="false">
-              <svg xmlns="http://www.w3.org/2000/svg" width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                <rect x="9" y="9" width="13" height="13" rx="2" ry="2"/>
-                <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/>
-              </svg>
-              <span>Copy</span>
-            </button>
-
-            ${isPdf ? `<button type="button" class="file-block-action file-block-annotate inline-flex items-center gap-1 rounded-md border border-indigo-200 bg-white px-2 py-1 text-[10px] font-medium text-indigo-700 transition-colors hover:bg-indigo-50" data-file-action="annotate-pdf" aria-label="Create embedded PDF annotation note" title="Annotate PDF" contenteditable="false">
-              <svg xmlns="http://www.w3.org/2000/svg" width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                <path d="M12 20h9"/>
-                <path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z"/>
-              </svg>
-              <span>Annotate</span>
-            </button>` : ''}
-
-            <button type="button" class="file-block-action file-block-delete ml-auto inline-flex items-center gap-1 rounded-md border border-red-200 bg-white px-2 py-1 text-[10px] font-medium text-red-600 transition-colors hover:bg-red-50" data-file-action="remove" aria-label="Remove file attachment" title="Remove from note" contenteditable="false">
-              <svg xmlns="http://www.w3.org/2000/svg" width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                <line x1="18" y1="6" x2="6" y2="18"/>
-                <line x1="6" y1="6" x2="18" y2="18"/>
-              </svg>
-              <span>Remove</span>
-            </button>
-          </div>
+          
+          <button type="button" class="file-block-action file-block-delete inline-flex items-center justify-center p-1.5 text-slate-400 transition-colors hover:bg-red-50 hover:text-red-500" data-file-action="remove" aria-label="Remove file attachment" title="Remove from note" contenteditable="false">
+            <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <line x1="18" y1="6" x2="6" y2="18"/>
+              <line x1="6" y1="6" x2="18" y2="18"/>
+            </svg>
+          </button>
         </div>
       </div>
     </div>`
@@ -391,6 +341,10 @@ export function initializeFileBlockInteractions(
     }
   })
 
+  if (hasMigratedLegacyRefs) {
+    onContentChange()
+  }
+
   const getContainer = (target: Element | null): HTMLElement | null => {
     if (!target) return null
     return target.closest('.file-block-container, [data-block-type="file"], [data-block-type="file-ref"]') as HTMLElement | null
@@ -406,85 +360,7 @@ export function initializeFileBlockInteractions(
     if (target.closest('.file-block-preview')) return 'open'
     if (target.closest('.file-block-download')) return 'download'
     if (target.closest('.file-block-delete')) return 'remove'
-    if (target.closest('.file-block-annotate')) return 'annotate-pdf'
-    if (target.closest('.file-block-toggle')) return 'toggle-collapse'
     return null
-  }
-
-  const setCollapsedState = (container: HTMLElement, collapsed: boolean) => {
-    container.setAttribute('data-file-collapsed', collapsed ? 'true' : 'false')
-    const toggleButtons = Array.from(
-      container.querySelectorAll('[data-file-action="toggle-collapse"]')
-    ) as HTMLElement[]
-
-    toggleButtons.forEach((button) => {
-      button.setAttribute('aria-expanded', String(!collapsed))
-      button.setAttribute('title', collapsed ? 'Expand attachment details' : 'Collapse attachment details')
-    })
-  }
-
-  const ensureCollapsedState = (container: HTMLElement) => {
-    if (!container.hasAttribute('data-file-collapsed')) {
-      setCollapsedState(container, true)
-    }
-  }
-
-  const flashActionState = (button: HTMLElement | null, doneLabel: string) => {
-    if (!button) return
-
-    const labelEl = button.querySelector('span')
-    const previousLabel = labelEl?.textContent || ''
-
-    button.setAttribute('data-file-state', 'success')
-    if (labelEl) {
-      labelEl.textContent = doneLabel
-    }
-
-    window.setTimeout(() => {
-      button.removeAttribute('data-file-state')
-      if (labelEl) {
-        labelEl.textContent = previousLabel
-      }
-    }, 1250)
-  }
-
-  const getOccurrenceIndex = (container: HTMLElement, filePath: string, fileName: string): number => {
-    const matches = Array.from(editorElement.querySelectorAll('[data-block-type="file"], [data-block-type="file-ref"]')) as HTMLElement[]
-    const filtered = matches.filter(
-      (node) =>
-        (node.getAttribute('data-file-path') || '') === filePath &&
-        (node.getAttribute('data-file-name') || '') === fileName
-    )
-    return Math.max(0, filtered.findIndex((node) => node === container))
-  }
-
-  const fileNodes = Array.from(editorElement.querySelectorAll('[data-block-type="file"]')) as HTMLElement[]
-  let hasMigratedLegacyFileBlocks = false
-  fileNodes.forEach((node) => {
-    const hasCompactStructure =
-      node.classList.contains('file-block-compact') &&
-      !!node.querySelector('.file-block-head') &&
-      !!node.querySelector('.file-block-expandable')
-
-    if (hasCompactStructure) {
-      ensureCollapsedState(node)
-      return
-    }
-
-    const parsed = parsePayloadFromElement(node)
-    if (!parsed) return
-
-    const wrapper = document.createElement('div')
-    wrapper.innerHTML = fileBlock.render(parsed)
-    const replacement = wrapper.firstElementChild
-    if (replacement) {
-      node.replaceWith(replacement)
-      hasMigratedLegacyFileBlocks = true
-    }
-  })
-
-  if (hasMigratedLegacyRefs || hasMigratedLegacyFileBlocks) {
-    onContentChange()
   }
 
   const openFileInNewTab = async (container: HTMLElement) => {
@@ -506,7 +382,6 @@ export function initializeFileBlockInteractions(
 
     const container = getContainer(target)
     if (!container) return
-    ensureCollapsedState(container)
 
     const action = getAction(target)
     const clickedSurface = !!target.closest('.file-block-surface')
@@ -514,8 +389,6 @@ export function initializeFileBlockInteractions(
     // Clicking the main surface opens the file by default.
     const effectiveAction: FileAction | null = action || (clickedSurface ? 'open' : null)
     if (!effectiveAction) return
-
-    const actionButton = target.closest('[data-file-action]') as HTMLElement | null
 
     e.preventDefault()
     e.stopPropagation()
@@ -525,21 +398,34 @@ export function initializeFileBlockInteractions(
       return
     }
 
-    if (effectiveAction === 'toggle-collapse') {
-      const currentlyCollapsed = container.getAttribute('data-file-collapsed') !== 'false'
-      setCollapsedState(container, !currentlyCollapsed)
-      return
-    }
-
     if (effectiveAction === 'download') {
       const filePath = container.getAttribute('data-file-path')
       if (!filePath) return
       try {
         await triggerDownload(filePath)
-        flashActionState(actionButton, 'Done')
       } catch (err) {
         console.error('[fileBlock] download failed:', err)
       }
+      return
+    }
+
+    if (effectiveAction === 'annotate-pdf') {
+      const filePath = container.getAttribute('data-file-path')
+      const fileName = container.getAttribute('data-file-name')
+      const fileType = container.getAttribute('data-file-type') || 'application/pdf'
+      
+      if (!filePath || !fileName) return
+
+      const allMatches = Array.from(document.querySelectorAll(`[data-block-type="file"][data-file-path="${filePath}"]`))
+      const occurrenceIndex = allMatches.indexOf(container) >= 0 ? allMatches.indexOf(container) : 0
+
+      const event = new CustomEvent<FileBlockAnnotatePdfEventDetail>(
+        FILE_BLOCK_ANNOTATE_PDF_EVENT,
+        {
+          detail: { filePath, fileName, fileType, occurrenceIndex }
+        }
+      )
+      window.dispatchEvent(event)
       return
     }
 
@@ -550,29 +436,10 @@ export function initializeFileBlockInteractions(
       try {
         if (navigator.clipboard?.writeText) {
           await navigator.clipboard.writeText(filePath)
-          flashActionState(actionButton, 'Copied')
         }
       } catch (err) {
         console.warn('[fileBlock] copy path failed:', err)
       }
-      return
-    }
-
-    if (effectiveAction === 'annotate-pdf') {
-      const filePath = container.getAttribute('data-file-path')
-      const fileName = container.getAttribute('data-file-name')
-      if (!filePath || !fileName) return
-
-      const detail: FileBlockAnnotatePdfEventDetail = {
-        filePath,
-        fileName,
-        fileType: container.getAttribute('data-file-type') || undefined,
-        attachedAt: container.getAttribute('data-file-attached-at') || undefined,
-        occurrenceIndex: getOccurrenceIndex(container, filePath, fileName),
-      }
-
-      window.dispatchEvent(new CustomEvent<FileBlockAnnotatePdfEventDetail>(FILE_BLOCK_ANNOTATE_PDF_EVENT, { detail }))
-      flashActionState(actionButton, 'Queued')
       return
     }
 

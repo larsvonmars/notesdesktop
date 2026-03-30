@@ -84,14 +84,6 @@ function postProcessNoteHtml(html: string): string {
     ;(fileBlock as HTMLElement).classList.add('not-prose')
   }
 
-  // 2b. Embedded PDF annotation cards are display-only in public notes
-  for (const embed of Array.from(doc.querySelectorAll('[data-block-type="pdf-annotation-embed"]'))) {
-    for (const action of Array.from(embed.querySelectorAll('[data-open-pdf-note-id]'))) {
-      action.remove()
-    }
-    ;(embed as HTMLElement).classList.add('not-prose')
-  }
-
   // 3. Disable all checkboxes (read-only in share view)
   for (const cb of Array.from(doc.querySelectorAll('input[type="checkbox"]'))) {
     cb.setAttribute('disabled', '')
