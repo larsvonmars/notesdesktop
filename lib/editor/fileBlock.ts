@@ -1,7 +1,7 @@
 /**
  * File Attachment Custom Block
  * Unified file element used for both previous "file" and "file-ref" blocks.
- * Renders a compact in-editor card with open/download/remove actions.
+ * Renders a compact in-editor card with rich file actions.
  */
 
 import type { CustomBlockDescriptor } from '../../components/RichTextEditor'
@@ -19,6 +19,18 @@ export interface FileBlockPayload {
   /** When the file was attached */
   attached_at?: string
 }
+
+export interface FileBlockAnnotatePdfEventDetail {
+  filePath: string
+  fileName: string
+  fileType?: string
+  attachedAt?: string
+  occurrenceIndex?: number
+}
+
+export const FILE_BLOCK_ANNOTATE_PDF_EVENT = 'file-block-annotate-pdf'
+
+type FileAction = 'open' | 'download' | 'copy-path' | 'remove' | 'annotate-pdf'
 
 /**
  * Escape HTML entities to prevent XSS
@@ -40,6 +52,67 @@ function inferMimeTypeFromName(name: string): string {
     mp3: 'audio/mpeg', mp4: 'video/mp4', zip: 'application/zip',
   }
   return mimeMap[ext] || 'application/octet-stream'
+}
+
+function truncateMiddle(value: string, maxLength: number): string {
+  if (value.length <= maxLength) return value
+  if (maxLength <= 5) return value.slice(0, maxLength)
+  const lead = Math.ceil((maxLength - 1) / 2)
+  const trail = Math.floor((maxLength - 1) / 2)
+  return `${value.slice(0, lead)}…${value.slice(value.length - trail)}`
+}
+
+function getFileExtension(fileName: string): string {
+  const ext = fileName.split('.').pop()?.trim() || ''
+  return ext ? ext.toUpperCase() : 'FILE'
+}
+
+function getFileKindLabel(mimeType: string): string {
+  const hint = getFileIconHint(mimeType)
+  switch (hint) {
+    case 'image':
+      return 'Image'
+    case 'pdf':
+      return 'PDF Document'
+    case 'spreadsheet':
+      return 'Spreadsheet'
+    case 'presentation':
+      return 'Presentation'
+    case 'audio':
+      return 'Audio'
+    case 'video':
+      return 'Video'
+    case 'archive':
+      return 'Archive'
+    case 'text':
+      return 'Text Document'
+    default:
+      return 'File'
+  }
+}
+
+function formatAttachedAtLabel(value?: string): string {
+  if (!value) return 'Added recently'
+
+  const date = new Date(value)
+  if (Number.isNaN(date.getTime())) return 'Added recently'
+
+  const sameYear = date.getFullYear() === new Date().getFullYear()
+  return `Added ${date.toLocaleDateString(undefined, {
+    month: sameYear ? 'short' : 'short',
+    day: 'numeric',
+    ...(sameYear ? {} : { year: 'numeric' }),
+  })}`
+}
+
+function getPathHint(path: string): string {
+  const parts = path.split('/').filter(Boolean)
+  if (parts.length <= 2) return path
+  return `${parts[0]}/.../${parts[parts.length - 1]}`
+}
+
+function isPdfType(mimeType: string): boolean {
+  return getFileIconHint(mimeType) === 'pdf' || mimeType.toLowerCase() === 'application/pdf'
 }
 
 function parsePayloadFromElement(el: HTMLElement): FileBlockPayload | undefined {
@@ -73,8 +146,12 @@ function parsePayloadFromElement(el: HTMLElement): FileBlockPayload | undefined 
 
   const typeAttr = el.getAttribute('data-file-type')
   const type = typeAttr || inferMimeTypeFromName(name)
+  const attachedAt =
+    el.getAttribute('data-file-attached-at') ||
+    el.getAttribute('data-attached-at') ||
+    undefined
 
-  return { name, path, size, type }
+  return { name, path, size, type, attached_at: attachedAt }
 }
 
 /**
@@ -157,6 +234,20 @@ function getFileBgClass(mimeType: string): string {
   }
 }
 
+function getFileAccentClass(mimeType: string): string {
+  const hint = getFileIconHint(mimeType)
+  switch (hint) {
+    case 'image': return 'from-pink-400 to-rose-400'
+    case 'pdf': return 'from-rose-500 to-red-500'
+    case 'spreadsheet': return 'from-emerald-500 to-green-500'
+    case 'audio': return 'from-violet-500 to-fuchsia-500'
+    case 'video': return 'from-sky-500 to-blue-500'
+    case 'archive': return 'from-amber-500 to-orange-500'
+    case 'text': return 'from-cyan-500 to-teal-500'
+    default: return 'from-slate-500 to-slate-400'
+  }
+}
+
 /**
  * Custom block descriptor for file attachments.
  */
@@ -175,45 +266,86 @@ export const fileBlock: CustomBlockDescriptor = {
     const sizeStr = escapeHtml(formatFileSize(size))
     const iconSvg = getFileIconSvg(type)
     const bgClass = getFileBgClass(type)
+    const accentClass = getFileAccentClass(type)
     const escapedType = escapeHtml(type)
 
-    const ext = payload.name.split('.').pop()?.toUpperCase() || ''
+    const ext = getFileExtension(payload.name)
+    const kindLabel = escapeHtml(getFileKindLabel(type))
+    const attachedLabel = escapeHtml(formatAttachedAtLabel(payload.attached_at))
+    const pathHint = escapeHtml(truncateMiddle(getPathHint(payload.path), 38))
+    const attachedAtIso = payload.attached_at ? escapeHtml(payload.attached_at) : ''
+    const isPdf = isPdfType(type)
 
-    return `<div class="file-block-container my-3 group relative" data-block="true" data-block-type="file" data-file-path="${path}" data-file-name="${name}" contenteditable="false">
-      <div class="flex items-center gap-3 rounded-xl border border-gray-200 ${bgClass} px-3.5 py-2.5 transition-colors hover:border-gray-300 hover:shadow-sm" data-file-path="${path}" data-file-name="${name}" data-file-size="${size}" data-file-type="${escapedType}">
-        <div class="flex-shrink-0 flex items-center justify-center w-9 h-9 rounded-lg bg-white border border-gray-100 shadow-sm text-gray-600">
-          ${iconSvg}
-        </div>
+    return `<div class="file-block-container my-3" data-block="true" data-block-type="file" data-file-path="${path}" data-file-name="${name}" data-file-size="${size}" data-file-type="${escapedType}" data-file-attached-at="${attachedAtIso}" contenteditable="false">
+      <div class="file-block-card group relative overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm transition-all hover:border-slate-300 hover:shadow-md" data-file-path="${path}" data-file-name="${name}" data-file-size="${size}" data-file-type="${escapedType}" data-file-attached-at="${attachedAtIso}">
+        <div class="absolute inset-x-0 top-0 h-1 bg-gradient-to-r ${accentClass}"></div>
 
-        <div class="flex-1 min-w-0">
-          <div class="font-medium text-sm text-gray-900 truncate" title="${name}">${name}</div>
-          <div class="flex items-center gap-2 mt-0.5 text-xs text-gray-500">
-            ${ext ? `<span class="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-semibold uppercase tracking-wide bg-white border border-gray-200 text-gray-500">${escapeHtml(ext)}</span>` : ''}
-            <span data-file-size-label="true">${sizeStr}</span>
-            <span class="text-gray-300">•</span>
-            <span>Click to open</span>
+        <button type="button" class="file-block-surface file-block-surface-button flex w-full items-start gap-3 px-4 pb-3 pt-4 text-left" aria-label="Open file" title="Open ${name}" contenteditable="false">
+          <div class="file-block-icon-wrap flex h-11 w-11 flex-shrink-0 items-center justify-center rounded-xl border border-slate-200 bg-white text-slate-600 shadow-sm ${bgClass}">
+            ${iconSvg}
           </div>
-        </div>
 
-        <div class="flex items-center gap-1 opacity-0 group-hover:opacity-100 group-focus-within:opacity-100 transition-opacity">
-          <button type="button" class="file-block-preview w-8 h-8 bg-white hover:bg-gray-100 text-gray-600 rounded-lg border border-gray-200 flex items-center justify-center transition-colors shadow-sm" aria-label="Open file" title="Open ${name}" contenteditable="false">
-            <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <div class="min-w-0 flex-1">
+            <div class="flex min-w-0 items-start gap-2">
+              <span class="min-w-0 flex-1 truncate text-sm font-semibold text-slate-900" title="${name}">${name}</span>
+              <span class="inline-flex flex-shrink-0 items-center rounded-md border border-slate-200 bg-slate-50 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-slate-600">${escapeHtml(ext)}</span>
+            </div>
+
+            <div class="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-slate-500">
+              <span>${kindLabel}</span>
+              <span>•</span>
+              <span data-file-size-label="true">${sizeStr}</span>
+              <span>•</span>
+              <span>${attachedLabel}</span>
+            </div>
+
+            <div class="file-block-path-pill mt-1.5 inline-flex max-w-full items-center gap-1 rounded-md bg-slate-100 px-2 py-1 text-[11px] text-slate-600">
+              <span class="font-medium text-slate-500">Path</span>
+              <span class="truncate" title="${path}">${pathHint}</span>
+            </div>
+          </div>
+        </button>
+
+        <div class="file-block-actions-row flex items-center gap-1 border-t border-slate-100 bg-slate-50/80 px-2 py-2">
+          <button type="button" class="file-block-action file-block-preview inline-flex items-center gap-1 rounded-md border border-slate-200 bg-white px-2.5 py-1.5 text-xs font-medium text-slate-700 transition-colors hover:bg-slate-100" data-file-action="open" aria-label="Open file" title="Open ${name}" contenteditable="false">
+            <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
               <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/>
               <circle cx="12" cy="12" r="3"/>
             </svg>
+            <span>Open</span>
           </button>
-          <button type="button" class="file-block-download w-8 h-8 bg-white hover:bg-gray-100 text-gray-600 rounded-lg border border-gray-200 flex items-center justify-center transition-colors shadow-sm" aria-label="Download file" title="Download ${name}" contenteditable="false">
-            <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+
+          <button type="button" class="file-block-action file-block-download inline-flex items-center gap-1 rounded-md border border-slate-200 bg-white px-2.5 py-1.5 text-xs font-medium text-slate-700 transition-colors hover:bg-slate-100" data-file-action="download" aria-label="Download file" title="Download ${name}" contenteditable="false">
+            <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
               <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
               <polyline points="7 10 12 15 17 10"/>
               <line x1="12" y1="15" x2="12" y2="3"/>
             </svg>
+            <span>Download</span>
           </button>
-          <button type="button" class="file-block-delete w-8 h-8 bg-white hover:bg-red-50 text-red-500 rounded-lg border border-gray-200 flex items-center justify-center transition-colors shadow-sm" aria-label="Remove file attachment" title="Remove from note" contenteditable="false">
-            <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+
+          <button type="button" class="file-block-action inline-flex items-center gap-1 rounded-md border border-slate-200 bg-white px-2.5 py-1.5 text-xs font-medium text-slate-700 transition-colors hover:bg-slate-100" data-file-action="copy-path" aria-label="Copy file path" title="Copy file path" contenteditable="false">
+            <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <rect x="9" y="9" width="13" height="13" rx="2" ry="2"/>
+              <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/>
+            </svg>
+            <span>Copy Path</span>
+          </button>
+
+          ${isPdf ? `<button type="button" class="file-block-action file-block-annotate inline-flex items-center gap-1 rounded-md border border-indigo-200 bg-white px-2.5 py-1.5 text-xs font-medium text-indigo-700 transition-colors hover:bg-indigo-50" data-file-action="annotate-pdf" aria-label="Create embedded PDF annotation note" title="Annotate PDF" contenteditable="false">
+            <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M12 20h9"/>
+              <path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z"/>
+            </svg>
+            <span>Annotate</span>
+          </button>` : ''}
+
+          <button type="button" class="file-block-action file-block-delete ml-auto inline-flex items-center gap-1 rounded-md border border-red-200 bg-white px-2.5 py-1.5 text-xs font-medium text-red-600 transition-colors hover:bg-red-50" data-file-action="remove" aria-label="Remove file attachment" title="Remove from note" contenteditable="false">
+            <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
               <line x1="18" y1="6" x2="6" y2="18"/>
               <line x1="6" y1="6" x2="18" y2="18"/>
             </svg>
+            <span>Remove</span>
           </button>
         </div>
       </div>
@@ -257,7 +389,50 @@ export function initializeFileBlockInteractions(
 
   const getContainer = (target: Element | null): HTMLElement | null => {
     if (!target) return null
-    return target.closest('.file-block-container, [data-block-type="file-ref"]') as HTMLElement | null
+    return target.closest('.file-block-container, [data-block-type="file"], [data-block-type="file-ref"]') as HTMLElement | null
+  }
+
+  const getAction = (target: HTMLElement): FileAction | null => {
+    const actionEl = target.closest('[data-file-action]') as HTMLElement | null
+    if (actionEl) {
+      const action = actionEl.getAttribute('data-file-action') as FileAction | null
+      if (action) return action
+    }
+
+    if (target.closest('.file-block-preview')) return 'open'
+    if (target.closest('.file-block-download')) return 'download'
+    if (target.closest('.file-block-delete')) return 'remove'
+    if (target.closest('.file-block-annotate')) return 'annotate-pdf'
+    return null
+  }
+
+  const flashActionState = (button: HTMLElement | null, doneLabel: string) => {
+    if (!button) return
+
+    const labelEl = button.querySelector('span')
+    const previousLabel = labelEl?.textContent || ''
+
+    button.setAttribute('data-file-state', 'success')
+    if (labelEl) {
+      labelEl.textContent = doneLabel
+    }
+
+    window.setTimeout(() => {
+      button.removeAttribute('data-file-state')
+      if (labelEl) {
+        labelEl.textContent = previousLabel
+      }
+    }, 1250)
+  }
+
+  const getOccurrenceIndex = (container: HTMLElement, filePath: string, fileName: string): number => {
+    const matches = Array.from(editorElement.querySelectorAll('[data-block-type="file"], [data-block-type="file-ref"]')) as HTMLElement[]
+    const filtered = matches.filter(
+      (node) =>
+        (node.getAttribute('data-file-path') || '') === filePath &&
+        (node.getAttribute('data-file-name') || '') === fileName
+    )
+    return Math.max(0, filtered.findIndex((node) => node === container))
   }
 
   const openFileInNewTab = async (container: HTMLElement) => {
@@ -273,91 +448,92 @@ export function initializeFileBlockInteractions(
     }
   }
 
-  const handleDownload = async (e: MouseEvent) => {
+  const handleFileBlockClick = async (e: MouseEvent) => {
     const target = e.target as HTMLElement
-    const downloadBtn = target.closest('.file-block-download')
-    if (!downloadBtn) return
-
-    e.preventDefault()
-    e.stopPropagation()
-
-    const container = getContainer(downloadBtn)
-    if (!container) return
-
-    const filePath = container.getAttribute('data-file-path')
-    if (!filePath) return
-
-    try {
-      // filePath is already relative to user root; triggerDownload prepends userId internally
-      await triggerDownload(filePath)
-    } catch (err) {
-      console.error('[fileBlock] download failed:', err)
-    }
-  }
-
-  const handlePreview = async (e: MouseEvent) => {
-    const target = e.target as HTMLElement
-    const previewBtn = target.closest('.file-block-preview')
-    if (!previewBtn) return
-
-    e.preventDefault()
-    e.stopPropagation()
-
-    const container = getContainer(previewBtn)
-    if (!container) return
-
-    await openFileInNewTab(container)
-  }
-
-  const handleContainerOpen = async (e: MouseEvent) => {
-    const target = e.target as HTMLElement
-    if (target.closest('.file-block-download, .file-block-preview, .file-block-delete')) {
-      return
-    }
+    if (!target) return
 
     const container = getContainer(target)
     if (!container) return
 
+    const action = getAction(target)
+    const clickedSurface = !!target.closest('.file-block-surface')
+
+    // Clicking the main surface opens the file by default.
+    const effectiveAction: FileAction | null = action || (clickedSurface ? 'open' : null)
+    if (!effectiveAction) return
+
+    const actionButton = target.closest('[data-file-action]') as HTMLElement | null
+
     e.preventDefault()
     e.stopPropagation()
-    await openFileInNewTab(container)
-  }
 
-  const handleDelete = (e: Event) => {
-    const target = e.target as HTMLElement
-    const deleteBtn = target.closest('.file-block-delete')
-    if (!deleteBtn) return
-
-    e.preventDefault()
-    e.stopPropagation()
-
-    const container = getContainer(deleteBtn)
-    if (!container) return
-
-    const nextElement = container.nextElementSibling
-
-    // Remove the block
-    container.remove()
-
-    // Ensure there's a paragraph after so the user can keep typing
-    if (!nextElement) {
-      const paragraph = document.createElement('p')
-      paragraph.appendChild(document.createElement('br'))
-      editorElement.appendChild(paragraph)
+    if (effectiveAction === 'open') {
+      await openFileInNewTab(container)
+      return
     }
 
-    onContentChange()
+    if (effectiveAction === 'download') {
+      const filePath = container.getAttribute('data-file-path')
+      if (!filePath) return
+      try {
+        await triggerDownload(filePath)
+        flashActionState(actionButton, 'Done')
+      } catch (err) {
+        console.error('[fileBlock] download failed:', err)
+      }
+      return
+    }
+
+    if (effectiveAction === 'copy-path') {
+      const filePath = container.getAttribute('data-file-path')
+      if (!filePath) return
+
+      try {
+        if (navigator.clipboard?.writeText) {
+          await navigator.clipboard.writeText(filePath)
+          flashActionState(actionButton, 'Copied')
+        }
+      } catch (err) {
+        console.warn('[fileBlock] copy path failed:', err)
+      }
+      return
+    }
+
+    if (effectiveAction === 'annotate-pdf') {
+      const filePath = container.getAttribute('data-file-path')
+      const fileName = container.getAttribute('data-file-name')
+      if (!filePath || !fileName) return
+
+      const detail: FileBlockAnnotatePdfEventDetail = {
+        filePath,
+        fileName,
+        fileType: container.getAttribute('data-file-type') || undefined,
+        attachedAt: container.getAttribute('data-file-attached-at') || undefined,
+        occurrenceIndex: getOccurrenceIndex(container, filePath, fileName),
+      }
+
+      window.dispatchEvent(new CustomEvent<FileBlockAnnotatePdfEventDetail>(FILE_BLOCK_ANNOTATE_PDF_EVENT, { detail }))
+      flashActionState(actionButton, 'Queued')
+      return
+    }
+
+    if (effectiveAction === 'remove') {
+      const nextElement = container.nextElementSibling
+      container.remove()
+
+      if (!nextElement) {
+        const paragraph = document.createElement('p')
+        paragraph.appendChild(document.createElement('br'))
+        editorElement.appendChild(paragraph)
+      }
+
+      onContentChange()
+    }
   }
 
-  editorElement.addEventListener('click', handleDownload, true)
-  editorElement.addEventListener('click', handlePreview, true)
-  editorElement.addEventListener('click', handleContainerOpen, true)
-  editorElement.addEventListener('click', handleDelete, true)
+  editorElement.addEventListener('click', handleFileBlockClick, true)
 
   return () => {
-    editorElement.removeEventListener('click', handleDownload, true)
-    editorElement.removeEventListener('click', handlePreview, true)
-    editorElement.removeEventListener('click', handleContainerOpen, true)
-    editorElement.removeEventListener('click', handleDelete, true)
+    editorElement.removeEventListener('click', handleFileBlockClick, true)
   }
 }

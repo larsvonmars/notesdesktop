@@ -81,7 +81,14 @@ import { useIsMobile } from '@/lib/useIsMobile'
 import { noteLinkBlock } from '../lib/editor/noteLinkBlock'
 import { imageBlock } from '../lib/editor/imageBlock'
 import { dataSheetTableBlock, type DataSheetTablePayload } from '../lib/editor/dataSheetTableBlock'
-import { fileBlock, type FileBlockPayload, initializeFileBlockInteractions } from '../lib/editor/fileBlock'
+import { pdfAnnotationEmbedBlock, type PdfAnnotationEmbedPayload } from '../lib/editor/pdfAnnotationEmbedBlock'
+import {
+  fileBlock,
+  type FileBlockPayload,
+  initializeFileBlockInteractions,
+  FILE_BLOCK_ANNOTATE_PDF_EVENT,
+  type FileBlockAnnotatePdfEventDetail,
+} from '../lib/editor/fileBlock'
 import FileExplorerModal from './FileExplorerModal'
 import SettingsModal from './SettingsModal'
 import AIAssistant from './AIAssistant'
@@ -1821,6 +1828,181 @@ export default function NoteEditor({
     return () => window.removeEventListener('note-link-click', handleNoteLinkClick)
   }, [notes, onSelectNote, toast])
 
+  // Handle "Annotate PDF" action from file attachment blocks inside the rich text editor.
+  useEffect(() => {
+    const openPdfAnnotationNote = async (noteId: string): Promise<boolean> => {
+      const existing = (allNotes ?? notes).find((item) => item.id === noteId)
+      if (existing) {
+        onSelectNote(existing)
+        return true
+      }
+
+      try {
+        const fetched = await getNote(noteId)
+        if (fetched) {
+          onSelectNote(fetched)
+          return true
+        }
+      } catch (error) {
+        console.error('Failed to open embedded PDF annotation note:', error)
+      }
+
+      return false
+    }
+
+    const findExistingPdfAnnotationEmbed = (
+      sourcePath: string,
+      occurrenceIndex: number
+    ): { noteId: string; element: HTMLElement } | null => {
+      const editorElement = editorRef.current?.getRootElement()
+      if (!editorElement) return null
+
+      const embedNodes = Array.from(
+        editorElement.querySelectorAll('[data-block-type="pdf-annotation-embed"]')
+      ) as HTMLElement[]
+
+      const exact = embedNodes.find((node) => {
+        const nodePath = node.getAttribute('data-pdf-source-path') || ''
+        const nodeOccurrence = Number(node.getAttribute('data-pdf-source-occurrence') || '0')
+        return nodePath === sourcePath && nodeOccurrence === occurrenceIndex
+      })
+
+      if (exact) {
+        const noteId = exact.getAttribute('data-pdf-note-id') || ''
+        if (noteId) {
+          return { noteId, element: exact }
+        }
+      }
+
+      const byPath = embedNodes.find((node) => {
+        const nodePath = node.getAttribute('data-pdf-source-path') || ''
+        return nodePath === sourcePath
+      })
+
+      if (byPath) {
+        const noteId = byPath.getAttribute('data-pdf-note-id') || ''
+        if (noteId) {
+          return { noteId, element: byPath }
+        }
+      }
+
+      return null
+    }
+
+    const handleAnnotatePdfFromFileBlock = async (event: Event) => {
+      const customEvent = event as CustomEvent<FileBlockAnnotatePdfEventDetail>
+      const detail = customEvent.detail
+      if (!detail?.filePath) return
+
+      const mime = (detail.fileType || '').toLowerCase()
+      const isPdf = mime === 'application/pdf' || detail.filePath.toLowerCase().endsWith('.pdf')
+      if (!isPdf) {
+        toast.push({ title: 'Unsupported file', description: 'Only PDF files can be opened in PDF annotation notes.' })
+        return
+      }
+
+      const baseName = (detail.fileName || 'PDF').replace(/\.[pP][dD][fF]$/, '').trim() || 'PDF'
+      const annotationTitle = `${baseName} Annotation`
+      const nowIso = new Date().toISOString()
+      const occurrenceIndex = typeof detail.occurrenceIndex === 'number' ? detail.occurrenceIndex : 0
+
+      if (noteType === 'rich-text') {
+        const existingEmbed = findExistingPdfAnnotationEmbed(detail.filePath, occurrenceIndex)
+        if (existingEmbed) {
+          const opened = await openPdfAnnotationNote(existingEmbed.noteId)
+          if (opened) {
+            existingEmbed.element.classList.add('ring-2', 'ring-indigo-300')
+            window.setTimeout(() => {
+              existingEmbed.element.classList.remove('ring-2', 'ring-indigo-300')
+            }, 1200)
+
+            toast.push({
+              title: 'Existing annotation reused',
+              description: 'Opened the embedded PDF annotation note for this attachment.',
+            })
+            return
+          }
+        }
+      }
+
+      const initialPdfData: PdfAnnotationData = {
+        pdfStoragePath: detail.filePath,
+        pages: [],
+        currentPage: 0,
+        totalPages: 0,
+        zoom: 1,
+      }
+
+      try {
+        const created = await createNote({
+          title: annotationTitle,
+          content: JSON.stringify(initialPdfData),
+          folder_id: note?.folder_id ?? selectedFolderId ?? null,
+          project_id: note?.project_id ?? null,
+          note_type: 'pdf-annotation',
+        })
+
+        if (noteType === 'rich-text' && editorRef.current?.insertCustomBlock) {
+          const embedPayload: PdfAnnotationEmbedPayload = {
+            noteId: created.id,
+            noteTitle: created.title || annotationTitle,
+            sourcePath: detail.filePath,
+            sourceName: detail.fileName || 'PDF',
+            occurrenceIndex,
+            createdAt: nowIso,
+          }
+
+          editorRef.current.insertCustomBlock('pdf-annotation-embed', embedPayload)
+          const html = editorRef.current.getHTML()
+          handleContentChange(html)
+          setHasChanges(true)
+        }
+
+        toast.push({
+          title: 'PDF annotation note created',
+          description: 'Embedded annotation block added. Use Open to jump into the annotation note.',
+        })
+      } catch (error) {
+        console.error('Failed to create PDF annotation note from file block:', error)
+        toast.push({ title: 'Creation failed', description: 'Could not create PDF annotation note.' })
+      }
+    }
+
+    const handleOpenEmbeddedPdfNote = async (event: Event) => {
+      const target = event.target as HTMLElement | null
+      if (!target) return
+      const button = target.closest('[data-open-pdf-note-id]') as HTMLElement | null
+      if (!button) return
+
+      const editorElement = editorRef.current?.getRootElement()
+      if (!editorElement || !editorElement.contains(button)) return
+
+      event.preventDefault()
+      const noteId = button.getAttribute('data-open-pdf-note-id')
+      if (!noteId) return
+
+      void openPdfAnnotationNote(noteId)
+    }
+
+    window.addEventListener(FILE_BLOCK_ANNOTATE_PDF_EVENT, handleAnnotatePdfFromFileBlock as EventListener)
+    window.addEventListener('click', handleOpenEmbeddedPdfNote)
+
+    return () => {
+      window.removeEventListener(FILE_BLOCK_ANNOTATE_PDF_EVENT, handleAnnotatePdfFromFileBlock as EventListener)
+      window.removeEventListener('click', handleOpenEmbeddedPdfNote)
+    }
+  }, [
+    allNotes,
+    handleContentChange,
+    note?.folder_id,
+    note?.project_id,
+    noteType,
+    notes,
+    onSelectNote,
+    selectedFolderId,
+    toast,
+  ])
+
   const handleSave = useCallback(async (opts?: { isAuto?: boolean }) => {
     const isAuto = !!opts?.isAuto
 
@@ -3098,6 +3280,7 @@ export default function NoteEditor({
                       imageBlock,
                       dataSheetTableBlock,
                       fileBlock,
+                      pdfAnnotationEmbedBlock,
                       {
                         type: 'table',
                         render: (payload?: any) => {

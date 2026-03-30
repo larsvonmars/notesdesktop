@@ -64,22 +64,32 @@ function postProcessNoteHtml(html: string): string {
 
   // 1. Remove interactive action buttons from file blocks
   for (const el of Array.from(
-    doc.querySelectorAll('.file-block-preview, .file-block-download, .file-block-delete')
+    doc.querySelectorAll('[data-file-action], .file-block-preview, .file-block-download, .file-block-delete')
   )) {
     el.remove()
   }
 
-  // 2. Clean up "• Click to open" text in the file info row
+  // 2. File blocks are display-only in public notes
   for (const fileBlock of Array.from(doc.querySelectorAll('[data-block-type="file"]'))) {
-    const infoRow = fileBlock.querySelector('.text-xs')
-    if (infoRow) {
-      for (const span of Array.from(infoRow.querySelectorAll('span'))) {
-        const text = (span as HTMLElement).textContent?.trim()
-        if (text === '•' || text === 'Click to open') span.remove()
+    const surface = fileBlock.querySelector('.file-block-surface') as HTMLElement | null
+    if (surface) {
+      surface.style.pointerEvents = 'none'
+      surface.style.cursor = 'default'
+      if (surface instanceof HTMLButtonElement) {
+        surface.setAttribute('disabled', '')
       }
     }
+
     // Prevent @tailwindcss/typography from restyling the file block internals
     ;(fileBlock as HTMLElement).classList.add('not-prose')
+  }
+
+  // 2b. Embedded PDF annotation cards are display-only in public notes
+  for (const embed of Array.from(doc.querySelectorAll('[data-block-type="pdf-annotation-embed"]'))) {
+    for (const action of Array.from(embed.querySelectorAll('[data-open-pdf-note-id]'))) {
+      action.remove()
+    }
+    ;(embed as HTMLElement).classList.add('not-prose')
   }
 
   // 3. Disable all checkboxes (read-only in share view)

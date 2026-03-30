@@ -821,7 +821,7 @@ const RichTextEditor = forwardRef<RichTextEditorHandle, RichTextEditorProps>(
                 }
 
                 if (blockElement && blockElement.getAttribute('data-block-type') === type) {
-                  const blockLevelTypes = ['image', 'table', 'file']
+                  const blockLevelTypes = ['image', 'table', 'file', 'pdf-annotation-embed']
                   const isBlockLevel = blockLevelTypes.includes(type)
                   const hasNextSibling = blockElement.nextElementSibling
 
