@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState, useCallback, useRef } from 'react'
+import { forwardRef, memo, useCallback, useEffect, useRef, useState } from 'react'
 import {
   Bold,
   Italic,
@@ -12,395 +12,471 @@ import {
   AlignCenter,
   AlignRight,
   Quote,
+  List,
+  ListOrdered,
+  CheckSquare,
+  ChevronDown,
   MoreHorizontal,
-  Type as TypeIcon,
+  Undo,
+  Redo,
 } from 'lucide-react'
+import type { RichTextCommand } from './RichTextEditor'
 import { useIsMobile } from '@/lib/useIsMobile'
 
+/* Types */
+
 interface SelectionToolbarProps {
-  onCommand: (command: string) => void
-  queryCommandState: (command: string) => boolean
+  top: number
+  left: number
+  visible: boolean
+  activeFormats: Set<string>
+  onCommand: (command: RichTextCommand) => void
   isDisabled?: boolean
 }
 
-interface Position {
-  top: number
-  left: number
+/* Static button descriptors (allocated once) */
+
+interface HeadingOption {
+  level: number
+  command: RichTextCommand
+  label: string
+  shortcut: string
 }
 
-export default function SelectionToolbar({ 
-  onCommand, 
-  queryCommandState,
-  isDisabled 
-}: SelectionToolbarProps) {
-  const [isVisible, setIsVisible] = useState(false)
-  const [position, setPosition] = useState<Position>({ top: 0, left: 0 })
-  const [showMore, setShowMore] = useState(false)
-  const toolbarRef = useRef<HTMLDivElement>(null)
-  const moreRef = useRef<HTMLDivElement>(null)
-  const [activeCommands, setActiveCommands] = useState<Set<string>>(new Set())
-  const isMobile = useIsMobile()
+const HEADING_OPTIONS: HeadingOption[] = [
+  { level: 1, command: 'heading1', label: 'Heading 1', shortcut: '\u2318/Ctrl+Alt+1' },
+  { level: 2, command: 'heading2', label: 'Heading 2', shortcut: '\u2318/Ctrl+Alt+2' },
+  { level: 3, command: 'heading3', label: 'Heading 3', shortcut: '\u2318/Ctrl+Alt+3' },
+  { level: 4, command: 'heading4', label: 'Heading 4', shortcut: '\u2318/Ctrl+Alt+4' },
+  { level: 5, command: 'heading5', label: 'Heading 5', shortcut: '\u2318/Ctrl+Alt+5' },
+  { level: 6, command: 'heading6', label: 'Heading 6', shortcut: '\u2318/Ctrl+Alt+6' },
+]
 
-  const updatePosition = useCallback(() => {
-    const selection = window.getSelection()
-    if (!selection || selection.rangeCount === 0) {
-      setIsVisible(false)
-      return
-    }
+const INLINE_BUTTONS = [
+  { command: 'bold' as RichTextCommand, Icon: Bold, label: 'Bold', shortcut: '\u2318/Ctrl+B' },
+  { command: 'italic' as RichTextCommand, Icon: Italic, label: 'Italic', shortcut: '\u2318/Ctrl+I' },
+  { command: 'underline' as RichTextCommand, Icon: Underline, label: 'Underline', shortcut: '\u2318/Ctrl+U' },
+  { command: 'strike' as RichTextCommand, Icon: Strikethrough, label: 'Strikethrough', shortcut: '\u2318/Ctrl+\u21e7+X' },
+  { command: 'code' as RichTextCommand, Icon: Code, label: 'Inline Code', shortcut: '\u2318/Ctrl+`' },
+] as const
 
-    const range = selection.getRangeAt(0)
-    const text = range.toString()
+const ALIGNMENT_BUTTONS = [
+  { command: 'align-left' as RichTextCommand, Icon: AlignLeft, label: 'Align Left', shortcut: '' },
+  { command: 'align-center' as RichTextCommand, Icon: AlignCenter, label: 'Center', shortcut: '\u2318/Ctrl+\u21e7+E' },
+  { command: 'align-right' as RichTextCommand, Icon: AlignRight, label: 'Align Right', shortcut: '\u2318/Ctrl+\u21e7+R' },
+] as const
 
-    // Only show if there's selected text (not just a cursor)
-    if (!text || text.trim().length === 0) {
-      setIsVisible(false)
-      return
-    }
+const LIST_BUTTONS = [
+  { command: 'unordered-list' as RichTextCommand, Icon: List, label: 'Bullet List', shortcut: '\u2318/Ctrl+\u21e7+L' },
+  { command: 'ordered-list' as RichTextCommand, Icon: ListOrdered, label: 'Numbered List', shortcut: '\u2318/Ctrl+\u21e7+O' },
+  { command: 'checklist' as RichTextCommand, Icon: CheckSquare, label: 'Checklist', shortcut: '\u2318/Ctrl+\u21e7+C' },
+] as const
 
-    const rect = range.getBoundingClientRect()
-    
-    if (rect.width === 0 && rect.height === 0) {
-      setIsVisible(false)
-      return
-    }
+interface ColorSwatch {
+  key: string
+  bg: string
+  border?: string
+  label: string
+}
 
-    const toolbarHeight = isMobile ? 48 : 40
-    const toolbarWidth = isMobile ? 320 : 420
-    const margin = 8
+const HIGHLIGHT_COLORS: ColorSwatch[] = [
+  { key: 'yellow', bg: 'bg-yellow-300', label: 'Yellow highlight' },
+  { key: 'green', bg: 'bg-green-300', label: 'Green highlight' },
+  { key: 'pink', bg: 'bg-pink-300', label: 'Pink highlight' },
+  { key: 'blue', bg: 'bg-blue-300', label: 'Blue highlight' },
+]
 
-    // Position above selection if possible, otherwise below
-    let top = rect.top + window.scrollY - toolbarHeight - margin
-    if (top < margin) {
-      top = rect.bottom + window.scrollY + margin
-    }
+const TEXT_COLORS: ColorSwatch[] = [
+  { key: 'default', bg: 'bg-transparent', border: 'border border-gray-300 dark:border-gray-500', label: 'Default color' },
+  { key: 'red', bg: 'bg-red-500', label: 'Red text' },
+  { key: 'green', bg: 'bg-green-500', label: 'Green text' },
+  { key: 'blue', bg: 'bg-blue-500', label: 'Blue text' },
+  { key: 'purple', bg: 'bg-purple-500', label: 'Purple text' },
+]
 
-    // Center horizontally on selection
-    let left = rect.left + window.scrollX + (rect.width / 2) - (toolbarWidth / 2)
-    
-    // Clamp to viewport
-    const maxLeft = window.innerWidth - toolbarWidth - margin
-    if (left > maxLeft) left = maxLeft
-    if (left < margin) left = margin
+const FONT_SIZES = [
+  { key: '12', label: '12' },
+  { key: '16', label: '16' },
+  { key: '20', label: '20' },
+  { key: '24', label: '24' },
+] as const
 
-    setPosition({ top, left })
-    setIsVisible(true)
+/* Sub-components */
 
-    // Update active command states
-    const active = new Set<string>()
-    if (queryCommandState('bold')) active.add('bold')
-    if (queryCommandState('italic')) active.add('italic')
-    if (queryCommandState('underline')) active.add('underline')
-    if (queryCommandState('strikeThrough')) active.add('strike')
-    if (queryCommandState('code')) active.add('code')
-    // Headings
-    if (queryCommandState('heading1')) active.add('heading1')
-    if (queryCommandState('heading2')) active.add('heading2')
-    if (queryCommandState('heading3')) active.add('heading3')
-    // Block
-    if (queryCommandState('blockquote')) active.add('blockquote')
-    // Alignment
-    if (queryCommandState('align-left')) active.add('align-left')
-    if (queryCommandState('align-center')) active.add('align-center')
-    if (queryCommandState('align-right')) active.add('align-right')
-    // Detect active highlight color
-    for (const c of ['yellow', 'green', 'pink', 'blue']) {
-      if (queryCommandState(`highlight:${c}`)) active.add(`highlight:${c}`)
-    }
-    // Detect active text color
-    for (const c of ['red', 'green', 'blue', 'purple']) {
-      if (queryCommandState(`color:${c}`)) active.add(`color:${c}`)
-    }
-    setActiveCommands(active)
-  }, [queryCommandState, isMobile])
+const Divider = memo(() => (
+  <span
+    className="mx-0.5 h-5 w-px shrink-0 bg-gray-200 dark:bg-gray-600"
+    aria-hidden="true"
+  />
+))
+Divider.displayName = 'Divider'
 
-  useEffect(() => {
-    const handleSelectionChange = () => {
-      // Small delay to ensure selection is stable
-      setTimeout(updatePosition, 10)
-    }
+interface TBtnProps {
+  active?: boolean
+  disabled?: boolean
+  title: string
+  onClick: () => void
+  mobile?: boolean
+  className?: string
+  children: React.ReactNode
+}
 
-    const handleHide = () => {
-      setIsVisible(false)
-      setShowMore(false)
-    }
-
-    document.addEventListener('selectionchange', handleSelectionChange)
-    document.addEventListener('mouseup', handleSelectionChange)
-    window.addEventListener('resize', handleHide)
-    window.addEventListener('scroll', handleHide, true)
-
-    return () => {
-      document.removeEventListener('selectionchange', handleSelectionChange)
-      document.removeEventListener('mouseup', handleSelectionChange)
-      window.removeEventListener('resize', handleHide)
-      window.removeEventListener('scroll', handleHide, true)
-    }
-  }, [updatePosition])
-
-  // Close "more" dropdown when clicking outside
-  useEffect(() => {
-    if (!showMore) return
-    const handleClickOutside = (e: MouseEvent) => {
-      if (
-        moreRef.current &&
-        !moreRef.current.contains(e.target as Node) &&
-        toolbarRef.current &&
-        !toolbarRef.current.contains(e.target as Node)
-      ) {
-        setShowMore(false)
-      }
-    }
-    document.addEventListener('mousedown', handleClickOutside)
-    return () => document.removeEventListener('mousedown', handleClickOutside)
-  }, [showMore])
-
-  const handleCommand = (command: string) => {
-    if (isDisabled) return
-    onCommand(command)
-    // Update position after command (selection might have changed)
-    setTimeout(updatePosition, 50)
-  }
-
-  if (!isVisible) return null
-
-  // Determine current heading label for the heading cycle button
-  const currentHeading = activeCommands.has('heading1')
-    ? 'H1'
-    : activeCommands.has('heading2')
-    ? 'H2'
-    : activeCommands.has('heading3')
-    ? 'H3'
-    : 'P'
-
-  // Primary inline formatting buttons
-  const inlineButtons = [
-    { command: 'bold', icon: Bold, label: 'Bold (Ctrl+B)' },
-    { command: 'italic', icon: Italic, label: 'Italic (Ctrl+I)' },
-    { command: 'underline', icon: Underline, label: 'Underline (Ctrl+U)' },
-    { command: 'strike', icon: Strikethrough, label: 'Strikethrough (Ctrl+Shift+X)' },
-    { command: 'code', icon: Code, label: 'Inline Code (Ctrl+`)' },
-    { command: 'link', icon: LinkIcon, label: 'Link (Ctrl+K)' },
-  ]
-
-  // Alignment buttons
-  const alignmentButtons = [
-    { command: 'align-left', icon: AlignLeft, label: 'Align Left' },
-    { command: 'align-center', icon: AlignCenter, label: 'Center (Ctrl+Shift+E)' },
-    { command: 'align-right', icon: AlignRight, label: 'Right (Ctrl+Shift+R)' },
-  ]
-
-  const highlightColors = [
-    { key: 'yellow', title: 'Highlight: Yellow', colorClass: 'bg-yellow-200' },
-    { key: 'green', title: 'Highlight: Green', colorClass: 'bg-green-200' },
-    { key: 'pink', title: 'Highlight: Pink', colorClass: 'bg-pink-200' },
-    { key: 'blue', title: 'Highlight: Blue', colorClass: 'bg-blue-200' },
-  ]
-
-  const textColors = [
-    { key: 'default', title: 'Color: Default', colorClass: 'bg-transparent', indicatorClass: 'border border-gray-300' },
-    { key: 'red', title: 'Color: Red', colorClass: 'bg-red-500' },
-    { key: 'green', title: 'Color: Green', colorClass: 'bg-green-500' },
-    { key: 'blue', title: 'Color: Blue', colorClass: 'bg-blue-500' },
-    { key: 'purple', title: 'Color: Purple', colorClass: 'bg-purple-500' },
-  ]
-
-  const fontSizes = [
-    { key: '12', label: '12' },
-    { key: '16', label: '16' },
-    { key: '20', label: '20' },
-    { key: '24', label: '24' },
-  ]
-
-  const btnBase = `rounded hover:bg-gray-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed touch-target`
-  const btnSize = isMobile ? 'p-2.5 min-w-[40px] min-h-[40px]' : 'p-1.5 min-w-[30px] min-h-[30px]'
-  const iconSize = isMobile ? 18 : 15
-
-  const Divider = () => (
-    <div className="w-px h-5 bg-gray-600 mx-0.5 shrink-0" />
-  )
-
-  return (
-    <div
-      ref={toolbarRef}
-      className={`fixed z-50 flex flex-col rounded-lg bg-gray-900 text-white shadow-lg ${isMobile ? 'px-1.5 py-1' : 'px-1.5 py-1'} animate-in fade-in duration-150`}
-      style={{ top: position.top, left: position.left }}
-      onMouseDown={(e) => {
-        // Prevent toolbar from taking focus away from editor
-        e.preventDefault()
-      }}
+const TBtn = memo<TBtnProps>(
+  ({ active, disabled, title, onClick, mobile, className, children }) => (
+    <button
+      type="button"
+      disabled={disabled}
+      title={title}
+      aria-pressed={active || undefined}
+      aria-label={title}
+      onMouseDown={(e) => e.preventDefault()}
+      onClick={onClick}
+      className={[
+        'inline-flex items-center justify-center rounded-full border transition-colors',
+        'focus:outline-none focus-visible:ring-2 focus-visible:ring-alpine-500',
+        'disabled:pointer-events-none disabled:opacity-40',
+        mobile ? 'h-10 w-10' : 'h-8 w-8',
+        active
+          ? 'border-alpine-300 bg-alpine-50 text-alpine-700 dark:border-alpine-600 dark:bg-alpine-900/50 dark:text-alpine-300'
+          : 'border-transparent text-gray-600 hover:border-gray-300 hover:bg-gray-100 hover:text-gray-900 dark:text-gray-300 dark:hover:border-gray-600 dark:hover:bg-gray-700 dark:hover:text-gray-100',
+        className,
+      ]
+        .filter(Boolean)
+        .join(' ')}
     >
-      {/* Row 1: Heading cycle + inline formatting + alignment + blockquote + more */}
-      <div className="flex items-center gap-0.5 flex-wrap">
-        {/* Heading cycle button */}
-        <button
-          onClick={() => {
-            // Cycle: P -> H1 -> H2 -> H3 -> P
-            if (currentHeading === 'P') handleCommand('heading1')
-            else if (currentHeading === 'H1') handleCommand('heading2')
-            else if (currentHeading === 'H2') handleCommand('heading3')
-            else handleCommand('heading1') // H3 → toggle off → becomes P, then next click → H1
-          }}
-          onMouseDown={(e) => e.preventDefault()}
-          title={`Block: ${currentHeading} (click to cycle)`}
-          disabled={isDisabled}
-          className={`${btnBase} flex items-center gap-0.5 ${isMobile ? 'px-2.5 py-2' : 'px-2 py-1'} font-semibold text-xs ${
-            currentHeading !== 'P' ? 'bg-gray-700' : ''
-          }`}
-          aria-label={`Block: ${currentHeading}`}
-        >
-          <TypeIcon size={iconSize} />
-          <span>{currentHeading}</span>
-        </button>
+      {children}
+    </button>
+  ),
+)
+TBtn.displayName = 'TBtn'
 
-        <Divider />
+/* Main component */
 
-        {/* Inline buttons */}
-        {inlineButtons.map(({ command, icon: Icon, label }) => (
-          <button
-            key={command}
-            onClick={() => handleCommand(command)}
-            onMouseDown={(e) => e.preventDefault()}
-            title={label}
-            disabled={isDisabled}
-            className={`${btnSize} ${btnBase} ${
-              activeCommands.has(command) ? 'bg-gray-700' : ''
-            }`}
-            aria-label={label}
-          >
-            <Icon size={iconSize} />
-          </button>
-        ))}
+const SelectionToolbar = forwardRef<HTMLDivElement, SelectionToolbarProps>(
+  ({ top, left, visible, activeFormats, onCommand, isDisabled }, ref) => {
+    const [showMore, setShowMore] = useState(false)
+    const [headingOpen, setHeadingOpen] = useState(false)
+    const headingRef = useRef<HTMLDivElement>(null)
+    const isMobile = useIsMobile()
+    const iconSize = isMobile ? 17 : 15
 
-        <Divider />
+    // Reset dropdowns when toolbar hides
+    useEffect(() => {
+      if (!visible) {
+        setShowMore(false)
+        setHeadingOpen(false)
+      }
+    }, [visible])
 
-        {/* Alignment buttons */}
-        {alignmentButtons.map(({ command, icon: Icon, label }) => (
-          <button
-            key={command}
-            onClick={() => handleCommand(command)}
-            onMouseDown={(e) => e.preventDefault()}
-            title={label}
-            disabled={isDisabled}
-            className={`${btnSize} ${btnBase} ${
-              activeCommands.has(command) ? 'bg-gray-700' : ''
-            }`}
-            aria-label={label}
-          >
-            <Icon size={iconSize} />
-          </button>
-        ))}
+    // Close heading dropdown on outside click
+    useEffect(() => {
+      if (!headingOpen) return
+      const handler = (e: MouseEvent) => {
+        if (
+          headingRef.current &&
+          !headingRef.current.contains(e.target as Node)
+        ) {
+          setHeadingOpen(false)
+        }
+      }
+      document.addEventListener('mousedown', handler)
+      return () => document.removeEventListener('mousedown', handler)
+    }, [headingOpen])
 
-        <Divider />
+    const fire = useCallback(
+      (cmd: RichTextCommand) => {
+        if (!isDisabled) onCommand(cmd)
+      },
+      [isDisabled, onCommand],
+    )
 
-        {/* Blockquote toggle */}
-        <button
-          onClick={() => handleCommand('blockquote')}
-          onMouseDown={(e) => e.preventDefault()}
-          title="Blockquote (Ctrl+Shift+B)"
-          disabled={isDisabled}
-          className={`${btnSize} ${btnBase} ${
-            activeCommands.has('blockquote') ? 'bg-gray-700' : ''
-          }`}
-          aria-label="Blockquote"
-        >
-          <Quote size={iconSize} />
-        </button>
+    if (!visible) return null
 
-        {/* More button for secondary options (colors, font sizes) */}
-        <Divider />
-        <button
-          onClick={() => setShowMore(!showMore)}
-          onMouseDown={(e) => e.preventDefault()}
-          title="More formatting"
-          disabled={isDisabled}
-          className={`${btnSize} ${btnBase} ${showMore ? 'bg-gray-700' : ''}`}
-          aria-label="More formatting"
-        >
-          <MoreHorizontal size={iconSize} />
-        </button>
-      </div>
+    const activeHeading = HEADING_OPTIONS.find((h) =>
+      activeFormats.has(h.command),
+    )
+    const headingBtnLabel = activeHeading ? `H${activeHeading.level}` : 'P'
 
-      {/* Row 2: Expandable panel with highlights, colors, font sizes */}
-      {showMore && (
-        <div
-          ref={moreRef}
-          className="flex items-center gap-0.5 flex-wrap pt-1 mt-1 border-t border-gray-700"
-          onMouseDown={(e) => e.preventDefault()}
-        >
-          {/* Highlight color buttons */}
-          {highlightColors.map(({ key, title, colorClass }) => (
+    const tip = (label: string, shortcut?: string) =>
+      shortcut ? `${label} (${shortcut})` : label
+
+    return (
+      <div
+        ref={ref}
+        role="toolbar"
+        aria-label="Text formatting"
+        className="fixed z-50 flex flex-col rounded-2xl border border-gray-200 bg-white/95 shadow-lg backdrop-blur-sm dark:border-gray-700 dark:bg-gray-800/95 dark:shadow-black/30"
+        style={{ top, left, maxWidth: 'calc(100vw - 32px)' }}
+        onMouseDown={(e) => e.preventDefault()}
+      >
+        {/* Primary row */}
+        <div className="flex flex-wrap items-center gap-0.5 px-2 py-1.5">
+          {/* Heading selector */}
+          <div ref={headingRef} className="relative">
             <button
-              key={key}
-              onClick={() => handleCommand(`highlight:${key}`)}
-              onMouseDown={(e) => e.preventDefault()}
-              title={title}
+              type="button"
               disabled={isDisabled}
-              className={`p-1 rounded hover:opacity-90 touch-target ${
-                activeCommands.has(`highlight:${key}`) ? 'ring-2 ring-white/70' : ''
-              }`}
-              aria-label={title}
+              title="Text type"
+              aria-haspopup="listbox"
+              aria-expanded={headingOpen}
+              onMouseDown={(e) => e.preventDefault()}
+              onClick={() => setHeadingOpen((v) => !v)}
+              className={[
+                'inline-flex items-center gap-0.5 rounded-full border px-2 text-xs font-semibold transition-colors',
+                'focus:outline-none focus-visible:ring-2 focus-visible:ring-alpine-500',
+                'disabled:pointer-events-none disabled:opacity-40',
+                isMobile ? 'h-10' : 'h-8',
+                activeHeading
+                  ? 'border-alpine-300 bg-alpine-50 text-alpine-700 dark:border-alpine-600 dark:bg-alpine-900/50 dark:text-alpine-300'
+                  : 'border-transparent text-gray-600 hover:border-gray-300 hover:bg-gray-100 dark:text-gray-300 dark:hover:border-gray-600 dark:hover:bg-gray-700',
+              ].join(' ')}
             >
-              <span className={`${colorClass} inline-block h-4 w-4 rounded`} />
+              {headingBtnLabel}
+              <ChevronDown
+                size={12}
+                className={`transition-transform ${headingOpen ? 'rotate-180' : ''}`}
+              />
             </button>
-          ))}
-          <button
-            onClick={() => handleCommand('highlight:clear')}
-            onMouseDown={(e) => e.preventDefault()}
-            title="Remove highlight"
-            disabled={isDisabled}
-            className={`px-1.5 py-0.5 text-[10px] rounded hover:bg-gray-700 touch-target`}
-            aria-label="Remove highlight"
-          >
-            ✕
-          </button>
+
+            {headingOpen && (
+              <div
+                role="listbox"
+                className="absolute left-0 top-full z-10 mt-1.5 min-w-[160px] overflow-hidden rounded-xl border border-gray-200 bg-white py-1 shadow-xl dark:border-gray-700 dark:bg-gray-800"
+                onMouseDown={(e) => e.preventDefault()}
+              >
+                <button
+                  type="button"
+                  role="option"
+                  aria-selected={!activeHeading}
+                  onClick={() => {
+                    if (activeHeading) fire(activeHeading.command)
+                    setHeadingOpen(false)
+                  }}
+                  className={`flex w-full items-center px-3 py-1.5 text-sm transition-colors ${
+                    !activeHeading
+                      ? 'bg-alpine-50 font-medium text-alpine-700 dark:bg-alpine-900/40 dark:text-alpine-300'
+                      : 'text-gray-700 hover:bg-gray-100 dark:text-gray-200 dark:hover:bg-gray-700'
+                  }`}
+                >
+                  Paragraph
+                </button>
+
+                {HEADING_OPTIONS.map(({ level, command, label, shortcut }) => (
+                  <button
+                    key={command}
+                    type="button"
+                    role="option"
+                    aria-selected={activeFormats.has(command)}
+                    onClick={() => {
+                      fire(command)
+                      setHeadingOpen(false)
+                    }}
+                    className={`flex w-full items-center justify-between px-3 py-1.5 text-sm transition-colors ${
+                      activeFormats.has(command)
+                        ? 'bg-alpine-50 font-medium text-alpine-700 dark:bg-alpine-900/40 dark:text-alpine-300'
+                        : 'text-gray-700 hover:bg-gray-100 dark:text-gray-200 dark:hover:bg-gray-700'
+                    }`}
+                  >
+                    <span>{label}</span>
+                    <kbd className="text-[10px] text-gray-400 dark:text-gray-500">
+                      {shortcut}
+                    </kbd>
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
 
           <Divider />
 
-          {/* Text color buttons */}
-          {textColors.map(({ key, title, colorClass, indicatorClass }) => (
-            <button
-              key={key}
-              onClick={() => handleCommand(`color:${key}`)}
-              onMouseDown={(e) => e.preventDefault()}
-              title={title}
+          {/* Inline formatting */}
+          {INLINE_BUTTONS.map(({ command, Icon, label, shortcut }) => (
+            <TBtn
+              key={command}
+              active={activeFormats.has(command)}
               disabled={isDisabled}
-              className={`p-1 rounded hover:opacity-90 touch-target ${
-                activeCommands.has(`color:${key}`) ? 'ring-2 ring-white/70' : ''
-              }`}
-              aria-label={title}
+              title={tip(label, shortcut)}
+              onClick={() => fire(command)}
+              mobile={isMobile}
             >
-              <span className={`${colorClass} inline-block h-4 w-4 rounded ${indicatorClass ?? ''}`} />
-            </button>
+              <Icon size={iconSize} />
+            </TBtn>
           ))}
 
           <Divider />
 
-          {/* Font size buttons */}
-          {fontSizes.map(({ key, label }) => (
-            <button
-              key={key}
-              onClick={() => handleCommand(`font-size:${key}`)}
-              onMouseDown={(e) => e.preventDefault()}
-              title={`Font size ${label}px`}
-              disabled={isDisabled}
-              className={`px-1.5 py-0.5 text-[10px] rounded hover:bg-gray-700 touch-target`}
-              aria-label={`Font size ${label}px`}
-            >
-              {label}
-            </button>
-          ))}
-          <button
-            onClick={() => handleCommand('font-size:clear')}
-            onMouseDown={(e) => e.preventDefault()}
-            title="Reset font size"
+          {/* Link */}
+          <TBtn
             disabled={isDisabled}
-            className={`px-1.5 py-0.5 text-[10px] rounded hover:bg-gray-700 touch-target`}
-            aria-label="Reset font size"
+            title={tip('Link', '\u2318/Ctrl+K')}
+            onClick={() => fire('link')}
+            mobile={isMobile}
           >
-            A↺
-          </button>
+            <LinkIcon size={iconSize} />
+          </TBtn>
+
+          <Divider />
+
+          {/* Alignment */}
+          {ALIGNMENT_BUTTONS.map(({ command, Icon, label, shortcut }) => (
+            <TBtn
+              key={command}
+              active={activeFormats.has(command)}
+              disabled={isDisabled}
+              title={tip(label, shortcut)}
+              onClick={() => fire(command)}
+              mobile={isMobile}
+            >
+              <Icon size={iconSize} />
+            </TBtn>
+          ))}
+
+          <Divider />
+
+          {/* Blockquote */}
+          <TBtn
+            active={activeFormats.has('blockquote')}
+            disabled={isDisabled}
+            title={tip('Blockquote', '\u2318/Ctrl+\u21e7+B')}
+            onClick={() => fire('blockquote')}
+            mobile={isMobile}
+          >
+            <Quote size={iconSize} />
+          </TBtn>
+
+          <Divider />
+
+          {/* More toggle */}
+          <TBtn
+            active={showMore}
+            disabled={isDisabled}
+            title="More formatting options"
+            onClick={() => setShowMore((v) => !v)}
+            mobile={isMobile}
+          >
+            <MoreHorizontal size={iconSize} />
+          </TBtn>
         </div>
-      )}
-    </div>
-  )
-}
+
+        {/* Expanded panel */}
+        {showMore && (
+          <div
+            className="flex flex-wrap items-center gap-0.5 border-t border-gray-200 px-2 py-1.5 dark:border-gray-700"
+            onMouseDown={(e) => e.preventDefault()}
+          >
+            {/* Lists */}
+            {LIST_BUTTONS.map(({ command, Icon, label, shortcut }) => (
+              <TBtn
+                key={command}
+                active={activeFormats.has(command)}
+                disabled={isDisabled}
+                title={tip(label, shortcut)}
+                onClick={() => fire(command)}
+                mobile={isMobile}
+              >
+                <Icon size={iconSize} />
+              </TBtn>
+            ))}
+
+            <Divider />
+
+            {/* Highlight colors */}
+            {HIGHLIGHT_COLORS.map(({ key, bg, label }) => {
+              const cmd = `highlight:${key}` as RichTextCommand
+              return (
+                <TBtn
+                  key={key}
+                  active={activeFormats.has(cmd)}
+                  disabled={isDisabled}
+                  title={label}
+                  onClick={() => fire(cmd)}
+                  mobile={isMobile}
+                >
+                  <span className={`inline-block h-3.5 w-3.5 rounded-sm ${bg}`} />
+                </TBtn>
+              )
+            })}
+            <TBtn
+              disabled={isDisabled}
+              title="Clear highlight"
+              onClick={() => fire('highlight:clear' as RichTextCommand)}
+              mobile={isMobile}
+            >
+              <span className="text-[10px] font-medium leading-none">{'\u2715'}</span>
+            </TBtn>
+
+            <Divider />
+
+            {/* Text colors */}
+            {TEXT_COLORS.map(({ key, bg, border, label }) => {
+              const cmd = `color:${key}` as RichTextCommand
+              return (
+                <TBtn
+                  key={key}
+                  active={activeFormats.has(cmd)}
+                  disabled={isDisabled}
+                  title={label}
+                  onClick={() => fire(cmd)}
+                  mobile={isMobile}
+                >
+                  <span
+                    className={`inline-block h-3.5 w-3.5 rounded-sm ${bg} ${border ?? ''}`}
+                  />
+                </TBtn>
+              )
+            })}
+
+            <Divider />
+
+            {/* Font sizes */}
+            {FONT_SIZES.map(({ key, label }) => (
+              <TBtn
+                key={key}
+                disabled={isDisabled}
+                title={`Font size ${label}px`}
+                onClick={() => fire(`font-size:${key}` as RichTextCommand)}
+                mobile={isMobile}
+              >
+                <span className="text-[10px] font-medium leading-none">
+                  {label}
+                </span>
+              </TBtn>
+            ))}
+            <TBtn
+              disabled={isDisabled}
+              title="Reset font size"
+              onClick={() => fire('font-size:clear' as RichTextCommand)}
+              mobile={isMobile}
+            >
+              <span className="text-[10px] font-medium leading-none">{`A\u21ba`}</span>
+            </TBtn>
+
+            <Divider />
+
+            {/* Undo / Redo */}
+            <TBtn
+              disabled={isDisabled}
+              title={tip('Undo', '\u2318/Ctrl+Z')}
+              onClick={() => fire('undo')}
+              mobile={isMobile}
+            >
+              <Undo size={iconSize} />
+            </TBtn>
+            <TBtn
+              disabled={isDisabled}
+              title={tip('Redo', '\u2318/Ctrl+\u21e7+Z')}
+              onClick={() => fire('redo')}
+              mobile={isMobile}
+            >
+              <Redo size={iconSize} />
+            </TBtn>
+          </div>
+        )}
+      </div>
+    )
+  },
+)
+
+SelectionToolbar.displayName = 'SelectionToolbar'
+
+export default SelectionToolbar

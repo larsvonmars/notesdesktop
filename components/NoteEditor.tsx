@@ -3,17 +3,10 @@
 import { useState, useEffect, useCallback, useMemo, useRef, useDeferredValue, useLayoutEffect } from 'react'
 import DOMPurify from 'dompurify'
 import {
-  Bold,
-  Italic,
-  Underline,
-  Strikethrough,
-  Code,
   List,
   ListOrdered,
   Quote,
   CheckSquare,
-  Undo,
-  Redo,
   Save,
   Trash2,
   X,
@@ -39,9 +32,6 @@ import {
   ListOrdered as OrderedListIcon,
   Image as ImageIcon,
   Paperclip,
-  AlignLeft,
-  AlignCenter,
-  AlignRight,
 } from 'lucide-react'
 import RichTextEditor, {
   type RichTextCommand,
@@ -78,6 +68,7 @@ import DataSheetPickerDialog from './DataSheetPickerDialog'
 import { ErrorBoundary } from './ErrorBoundary'
 import KnowledgeGraphModal from './KnowledgeGraphModal'
 import { useIsMobile } from '@/lib/useIsMobile'
+import SelectionToolbar from './SelectionToolbar'
 import { noteLinkBlock } from '../lib/editor/noteLinkBlock'
 import { imageBlock } from '../lib/editor/imageBlock'
 import { dataSheetTableBlock, type DataSheetTablePayload } from '../lib/editor/dataSheetTableBlock'
@@ -477,31 +468,6 @@ const safeParsePdfAnnotationData = (value: string): PdfAnnotationData | null => 
   } catch {
     return null
   }
-}
-
-const commandShortcuts: Record<RichTextCommand, string> = {
-  bold: '⌘/Ctrl+B',
-  italic: '⌘/Ctrl+I',
-  underline: '⌘/Ctrl+U',
-  strike: '⌘/Ctrl+⇧+X',
-  code: '⌘/Ctrl+`',
-  'unordered-list': '⌘/Ctrl+⇧+L',
-  'ordered-list': '⌘/Ctrl+⇧+O',
-  blockquote: '⌘/Ctrl+⇧+B',
-  checklist: '⌘/Ctrl+⇧+C',
-  heading1: '⌘/Ctrl+Alt+1',
-  heading2: '⌘/Ctrl+Alt+2',
-  heading3: '⌘/Ctrl+Alt+3',
-  heading4: '⌘/Ctrl+Alt+4',
-  heading5: '⌘/Ctrl+Alt+5',
-  heading6: '⌘/Ctrl+Alt+6',
-  link: '⌘/Ctrl+K',
-  'horizontal-rule': '',
-  'align-left': '',
-  'align-center': '⌘/Ctrl+⇧+E',
-  'align-right': '⌘/Ctrl+⇧+R',
-  undo: '⌘/Ctrl+Z',
-  redo: '⌘/Ctrl+⇧+Z'
 }
 
 interface NoteEditorWithPanelProps extends NoteEditorProps {
@@ -2970,67 +2936,7 @@ export default function NoteEditor({
     }
   }, [notesForConnections, onSelectNote, toast])
 
-  const toolbar: Array<{
-    label: string
-    command: RichTextCommand
-    icon: React.ReactNode
-  }> = [
-    { label: 'H1', command: 'heading1', icon: <Heading1 size={16} /> },
-    { label: 'H2', command: 'heading2', icon: <Heading2 size={16} /> },
-    { label: 'H3', command: 'heading3', icon: <Heading3 size={16} /> },
-    { label: 'H4', command: 'heading4', icon: <Heading4 size={16} /> },
-    { label: 'H5', command: 'heading5', icon: <Heading5 size={16} /> },
-    { label: 'H6', command: 'heading6', icon: <Heading6 size={16} /> },
-    { label: 'Bold', command: 'bold', icon: <Bold size={16} /> },
-    { label: 'Italic', command: 'italic', icon: <Italic size={16} /> },
-    { label: 'Underline', command: 'underline', icon: <Underline size={16} /> },
-    { label: 'Strike', command: 'strike', icon: <Strikethrough size={16} /> },
-    { label: 'Code', command: 'code', icon: <Code size={16} /> },
-    { label: 'Link', command: 'link', icon: <LinkIcon size={16} /> },
-    { label: 'Bullets', command: 'unordered-list', icon: <List size={16} /> },
-    { label: 'Numbered', command: 'ordered-list', icon: <ListOrdered size={16} /> },
-    { label: 'Quote', command: 'blockquote', icon: <Quote size={16} /> },
-    { label: 'Checklist', command: 'checklist', icon: <CheckSquare size={16} /> },
-    { label: 'Left', command: 'align-left', icon: <AlignLeft size={16} /> },
-    { label: 'Center', command: 'align-center', icon: <AlignCenter size={16} /> },
-    { label: 'Right', command: 'align-right', icon: <AlignRight size={16} /> },
-  ]
 
-  const secondaryToolbar: Array<{
-    label: string
-    command?: RichTextCommand
-    icon: React.ReactNode
-    onClick?: () => void
-  }> = [
-    { 
-      label: 'Table', 
-      icon: <TableIcon size={16} />, 
-      onClick: () => editorRef.current?.showTableDialog() 
-    },
-    { 
-      label: 'Note Link', 
-      icon: <FileText size={16} />, 
-      onClick: () => editorRef.current?.requestNoteLink() 
-    },
-    // Highlight colors
-    { label: 'Highlight Yellow', command: 'highlight:yellow' as RichTextCommand, icon: <span className="inline-block h-4 w-4 rounded bg-yellow-300" />, onClick: () => handleCommand('highlight:yellow') },
-    { label: 'Highlight Green', command: 'highlight:green' as RichTextCommand, icon: <span className="inline-block h-4 w-4 rounded bg-green-300" />, onClick: () => handleCommand('highlight:green') },
-    { label: 'Highlight Pink', command: 'highlight:pink' as RichTextCommand, icon: <span className="inline-block h-4 w-4 rounded bg-pink-300" />, onClick: () => handleCommand('highlight:pink') },
-    { label: 'Highlight Blue', command: 'highlight:blue' as RichTextCommand, icon: <span className="inline-block h-4 w-4 rounded bg-blue-300" />, onClick: () => handleCommand('highlight:blue') },
-    // Text colors
-    { label: 'Color Default', command: 'color:default' as RichTextCommand, icon: <span className="inline-block h-4 w-4 rounded border border-gray-300" />, onClick: () => handleCommand('color:default') },
-    { label: 'Color Red', command: 'color:red' as RichTextCommand, icon: <span className="inline-block h-4 w-4 rounded bg-red-500" />, onClick: () => handleCommand('color:red') },
-    { label: 'Color Green', command: 'color:green' as RichTextCommand, icon: <span className="inline-block h-4 w-4 rounded bg-green-500" />, onClick: () => handleCommand('color:green') },
-    { label: 'Color Blue', command: 'color:blue' as RichTextCommand, icon: <span className="inline-block h-4 w-4 rounded bg-blue-500" />, onClick: () => handleCommand('color:blue') },
-    { label: 'Color Purple', command: 'color:purple' as RichTextCommand, icon: <span className="inline-block h-4 w-4 rounded bg-purple-500" />, onClick: () => handleCommand('color:purple') },
-    // Font sizes
-    { label: 'Font 12', icon: <span className="text-xs">12</span>, onClick: () => handleCommand('font-size:12') },
-    { label: 'Font 16', icon: <span className="text-sm">16</span>, onClick: () => handleCommand('font-size:16') },
-    { label: 'Font 20', icon: <span className="text-base">20</span>, onClick: () => handleCommand('font-size:20') },
-    { label: 'Font 24', icon: <span className="text-lg">24</span>, onClick: () => handleCommand('font-size:24') },
-    { label: 'Undo', command: 'undo', icon: <Undo size={16} /> },
-    { label: 'Redo', command: 'redo', icon: <Redo size={16} /> }
-  ]
 
   // AI Assistant handlers
   // Build a readable plain-text representation of the current note for the AI,
@@ -3498,72 +3404,15 @@ export default function NoteEditor({
       </div>
 
       {/* Floating Toolbar - Only show for rich text notes */}
-      {noteType === 'rich-text' && floatingToolbar.visible && (
-        <div
-          ref={floatingToolbarRef}
-          className="fixed z-50 flex flex-wrap items-center justify-center gap-1.5 rounded-2xl border border-gray-200 bg-white/95 px-3 py-2 shadow-lg backdrop-blur dark:border-gray-700 dark:bg-gray-800/95 dark:shadow-black/30"
-          style={{
-            top: floatingToolbar.top,
-            left: floatingToolbar.left,
-            maxWidth: 'calc(100vw - 32px)'
-          }}
-          onMouseDown={(event) => event.preventDefault()}
-        >
-          {toolbar.map(({ label, command, icon }) => {
-            const isActive = activeFormats.has(command)
-            return (
-              <button
-                key={command}
-                type="button"
-                onMouseDown={(event) => event.preventDefault()}
-                onClick={() => handleCommand(command)}
-                className={`inline-flex items-center justify-center rounded-full border text-gray-600 transition-colors focus:outline-none focus:ring-2 focus:ring-alpine-500 dark:text-gray-300 ${
-                  isMobile ? 'h-11 w-11' : 'h-9 w-9'
-                } ${
-                  isActive
-                    ? 'border-alpine-300 bg-alpine-100 text-alpine-700 dark:border-alpine-600 dark:bg-alpine-900/50 dark:text-alpine-300'
-                    : 'border-transparent hover:border-gray-300 hover:text-gray-900 dark:hover:border-gray-600 dark:hover:text-gray-100'
-                }`}
-                title={`${label} (${commandShortcuts[command]})`}
-              >
-                {icon}
-              </button>
-            )
-          })}
-
-          {secondaryToolbar.length > 0 && (
-            <span className="mx-1 h-6 w-px bg-gray-200 dark:bg-gray-600" aria-hidden="true" />
-          )}
-
-          {secondaryToolbar.map(({ label, command, icon, onClick }) => {
-            const isActive = command ? activeFormats.has(command) : false
-            return (
-            <button
-              key={label}
-              type="button"
-              onMouseDown={(event) => event.preventDefault()}
-              onClick={() => {
-                if (onClick) {
-                  onClick()
-                } else if (command) {
-                  handleCommand(command)
-                }
-              }}
-              className={`inline-flex items-center justify-center rounded-full border text-gray-500 transition-colors hover:border-gray-300 hover:text-gray-800 focus:outline-none focus:ring-2 focus:ring-alpine-500 dark:text-gray-400 dark:hover:border-gray-600 dark:hover:text-gray-200 ${
-                isMobile ? 'h-11 w-11' : 'h-9 w-9'
-              } ${
-                isActive
-                  ? 'border-alpine-300 bg-alpine-100 text-alpine-700 dark:border-alpine-600 dark:bg-alpine-900/50 dark:text-alpine-300'
-                  : 'border-transparent'
-              }`}
-              title={command ? `${label} (${commandShortcuts[command]})` : label}
-            >
-              {icon}
-            </button>
-            )
-          })}
-        </div>
-      )}
+      <SelectionToolbar
+        ref={floatingToolbarRef}
+        top={floatingToolbar.top}
+        left={floatingToolbar.left}
+        visible={noteType === 'rich-text' && floatingToolbar.visible}
+        activeFormats={activeFormats}
+        onCommand={handleCommand}
+        isDisabled={isSaving || isDeleting}
+      />
 
       {/* Word Goal Input Modal */}
       {showWordGoalInput && (
