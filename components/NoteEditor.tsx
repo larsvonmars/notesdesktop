@@ -1035,40 +1035,10 @@ export default function NoteEditor({
 
   const updateActiveFormats = useCallback(() => {
     if (!editorRef.current) return
-    
-    const formats = new Set<string>()
-    
-    // Check inline formatting commands
-    if (editorRef.current.queryCommandState('bold')) formats.add('bold')
-    if (editorRef.current.queryCommandState('italic')) formats.add('italic')
-    if (editorRef.current.queryCommandState('underline')) formats.add('underline')
-    if (editorRef.current.queryCommandState('strikeThrough')) formats.add('strike')
-    if (editorRef.current.queryCommandState('code')) formats.add('code')
-    if (editorRef.current.queryCommandState('insertUnorderedList')) formats.add('unordered-list')
-    if (editorRef.current.queryCommandState('insertOrderedList')) formats.add('ordered-list')
-    if (editorRef.current.queryCommandState('checklist')) formats.add('checklist')
-    
-    // Check block-level formatting commands
-    if (editorRef.current.queryCommandState('heading1')) formats.add('heading1')
-    if (editorRef.current.queryCommandState('heading2')) formats.add('heading2')
-    if (editorRef.current.queryCommandState('heading3')) formats.add('heading3')
-    if (editorRef.current.queryCommandState('blockquote')) formats.add('blockquote')
-
-    // Check alignment
-    if (editorRef.current.queryCommandState('align-left')) formats.add('align-left')
-    if (editorRef.current.queryCommandState('align-center')) formats.add('align-center')
-    if (editorRef.current.queryCommandState('align-right')) formats.add('align-right')
-
-    // Check highlight colors
-    for (const c of ['yellow', 'green', 'pink', 'blue']) {
-      if (editorRef.current.queryCommandState(`highlight:${c}`)) formats.add(`highlight:${c}`)
-    }
-    // Check text colors
-    for (const c of ['red', 'green', 'blue', 'purple']) {
-      if (editorRef.current.queryCommandState(`color:${c}`)) formats.add(`color:${c}`)
-    }
-    
-    setActiveFormats(formats)
+    // Single-pass: getActiveFormats resolves the selection element once and
+    // checks every format in one DOM walk — more reliable and efficient than
+    // calling queryCommandState N times.
+    setActiveFormats(editorRef.current.getActiveFormats())
   }, [])
 
   const scheduleActiveFormatsUpdate = useCallback(() => {
@@ -1199,8 +1169,23 @@ export default function NoteEditor({
         scheduleActiveFormatsUpdate()
         updateFloatingToolbar()
       })
+      // Block-format commands (headings, blockquote) restore the cursor
+      // asynchronously (80-150 ms). Schedule a second format update after
+      // the cursor has settled so the toolbar reflects the true state.
+      if (
+        command.startsWith('heading') ||
+        command === 'blockquote' ||
+        command === 'unordered-list' ||
+        command === 'ordered-list' ||
+        command === 'checklist'
+      ) {
+        setTimeout(() => {
+          updateActiveFormats()
+          updateFloatingToolbar()
+        }, 200)
+      }
     },
-    [scheduleActiveFormatsUpdate, updateFloatingToolbar]
+    [scheduleActiveFormatsUpdate, updateActiveFormats, updateFloatingToolbar]
   )
 
   // Save current selection before opening note link dialog

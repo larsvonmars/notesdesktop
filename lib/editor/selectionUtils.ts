@@ -18,6 +18,45 @@ const nodeToElement = (node: Node | null): HTMLElement | null => {
 }
 
 /**
+ * Resolve the deepest meaningful element at the cursor position.
+ * When the browser places the selection at an Element boundary (e.g. the
+ * editor root between two block children), this drills into the child at
+ * `startOffset` so that ancestor-based queries like `.closest('h1')` work
+ * correctly.
+ */
+function resolveElement(range: Range, root?: HTMLElement | null): HTMLElement | null {
+  let node: Node = range.startContainer
+
+  // When startContainer is an Element (not a text node) and has children,
+  // the cursor is between child nodes at startOffset. Drill down to get a
+  // more precise context element.
+  if (node.nodeType === Node.ELEMENT_NODE && node.childNodes.length > 0) {
+    const offset = range.startOffset
+    // Prefer the child at `offset` (the node the cursor is "before"),
+    // fall back to `offset - 1` (the node the cursor is "after", i.e. at its end).
+    const child =
+      (offset < node.childNodes.length ? node.childNodes[offset] : null) ||
+      (offset > 0 ? node.childNodes[offset - 1] : null)
+
+    if (child && (!root || root.contains(child))) {
+      // If the child is itself an Element with children, keep drilling
+      // into its first child so we land inside the block (e.g. inside an
+      // <h1> rather than on it).
+      let deeper: Node = child
+      while (
+        deeper.nodeType === Node.ELEMENT_NODE &&
+        (deeper as HTMLElement).firstChild
+      ) {
+        deeper = (deeper as HTMLElement).firstChild!
+      }
+      return nodeToElement(deeper)
+    }
+  }
+
+  return nodeToElement(node)
+}
+
+/**
  * Returns normalized selection context for the current browser selection.
  * If `root` is provided, selection must be inside `root`.
  */
@@ -35,7 +74,7 @@ export function getSelectionContext(root?: HTMLElement | null): SelectionContext
   const anchorNode = range.startContainer
   if (!anchorNode.isConnected) return null
 
-  const element = nodeToElement(anchorNode)
+  const element = resolveElement(range, root)
   if (!element) return null
 
   if (root && !root.contains(element)) {

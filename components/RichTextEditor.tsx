@@ -119,6 +119,8 @@ export interface RichTextEditorHandle {
   getMarkdown: () => string
   getHeadings: () => Array<{ id: string; level: number; text: string }>
   queryCommandState: (command: string) => boolean
+  /** Return all active format names in a single DOM pass. */
+  getActiveFormats: () => Set<string>
   showLinkDialog: () => void
   showSearchDialog: () => void
   showTableDialog: () => void
@@ -2090,6 +2092,64 @@ const RichTextEditor = forwardRef<RichTextEditorHandle, RichTextEditorProps>(
           } catch {
             return false
           }
+        },
+        getActiveFormats: () => {
+          const formats = new Set<string>()
+          try {
+            const editor = editorRef.current
+            if (!editor) return formats
+            const context = getSelectionContext(editor)
+            const el = context?.element
+            if (!el) return formats
+
+            // Inline formats
+            if (el.closest('strong, b')) formats.add('bold')
+            if (el.closest('em, i')) formats.add('italic')
+            if (el.closest('u')) formats.add('underline')
+            if (el.closest('s, strike')) formats.add('strike')
+            if (el.closest('code')) formats.add('code')
+
+            // Lists
+            if (el.closest('ul[data-checklist="true"], ol[data-checklist="true"]')) {
+              formats.add('checklist')
+            } else if (el.closest('ul')) {
+              formats.add('unordered-list')
+            } else if (el.closest('ol')) {
+              formats.add('ordered-list')
+            }
+
+            // Headings — mutually exclusive, check all 6
+            if (el.closest('h1')) formats.add('heading1')
+            else if (el.closest('h2')) formats.add('heading2')
+            else if (el.closest('h3')) formats.add('heading3')
+            else if (el.closest('h4')) formats.add('heading4')
+            else if (el.closest('h5')) formats.add('heading5')
+            else if (el.closest('h6')) formats.add('heading6')
+
+            // Block-level
+            if (el.closest('blockquote')) formats.add('blockquote')
+
+            // Alignment
+            const align = getTextAlignment(editor)
+            if (align) formats.add(`align-${align}`)
+
+            // Highlight color
+            const hlEl = el.closest('[data-highlight]') as HTMLElement | null
+            if (hlEl) {
+              const hlColor = hlEl.getAttribute('data-highlight')
+              if (hlColor) formats.add(`highlight:${hlColor}`)
+            }
+
+            // Text color
+            const colorEl = el.closest('[data-color]') as HTMLElement | null
+            if (colorEl) {
+              const colorVal = colorEl.getAttribute('data-color')
+              if (colorVal) formats.add(`color:${colorVal}`)
+            }
+          } catch {
+            // Return whatever we have so far
+          }
+          return formats
         },
         showLinkDialog: () => {
           insertLink()
