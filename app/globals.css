@@ -1383,9 +1383,22 @@
 }
 
 .file-block-container .file-block-action-icon {
-  width: 1.5rem;
-  height: 1.5rem;
+  width: 1.25rem;
+  height: 1.25rem;
   padding: 0;
+}
+
+.file-block-container .file-block-head {
+  min-height: 2rem;
+}
+
+.file-block-container .file-block-head .file-block-surface-button {
+  min-height: 1.5rem;
+}
+
+.file-block-container .file-block-head .file-block-icon-wrap svg {
+  width: 0.75rem;
+  height: 0.75rem;
 }
 
 .file-block-container .file-block-action {

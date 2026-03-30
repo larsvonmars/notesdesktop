@@ -280,19 +280,17 @@ export const fileBlock: CustomBlockDescriptor = {
       <div class="file-block-card group relative overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm transition-all hover:border-slate-300 hover:shadow-md" data-file-path="${path}" data-file-name="${name}" data-file-size="${size}" data-file-type="${escapedType}" data-file-attached-at="${attachedAtIso}">
         <div class="absolute inset-x-0 top-0 h-[2px] bg-gradient-to-r ${accentClass}"></div>
 
-        <div class="file-block-head flex items-center gap-2 px-2.5 py-1.5">
+        <div class="file-block-head flex items-center gap-1.5 px-2 py-1">
           <button type="button" class="file-block-surface file-block-surface-button flex min-w-0 flex-1 items-center gap-2 text-left" aria-label="Open file" title="Open ${name}" contenteditable="false">
-            <div class="file-block-icon-wrap flex h-7 w-7 flex-shrink-0 items-center justify-center rounded-lg border border-slate-200 bg-white text-slate-600 shadow-sm ${bgClass}">
+            <div class="file-block-icon-wrap flex h-6 w-6 flex-shrink-0 items-center justify-center rounded-md border border-slate-200 bg-white text-slate-600 shadow-sm ${bgClass}">
               ${iconSvg}
             </div>
 
             <div class="min-w-0 flex-1">
-              <div class="truncate text-[12px] font-semibold leading-4 text-slate-900" title="${name}">${name}</div>
-              <div class="mt-0.5 flex items-center gap-1 text-[10px] leading-3 text-slate-500">
-                <span class="inline-flex items-center rounded border border-slate-200 bg-slate-50 px-1 py-0 font-semibold tracking-wide text-slate-600">${escapeHtml(ext)}</span>
-                <span data-file-size-label="true">${sizeStr}</span>
-                <span>•</span>
-                <span>${kindLabel}</span>
+              <div class="flex min-w-0 items-center gap-1">
+                <span class="truncate text-[11px] font-semibold leading-4 text-slate-900" title="${name}">${name}</span>
+                <span class="inline-flex flex-shrink-0 items-center rounded border border-slate-200 bg-slate-50 px-1 py-0 text-[9px] font-semibold tracking-wide text-slate-600">${escapeHtml(ext)}</span>
+                <span class="flex-shrink-0 text-[9px] leading-4 text-slate-500" data-file-size-label="true">${sizeStr}</span>
               </div>
             </div>
           </button>
