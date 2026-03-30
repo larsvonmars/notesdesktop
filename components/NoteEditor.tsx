@@ -2683,7 +2683,8 @@ export default function NoteEditor({
 <head>
   <meta charset="utf-8">
   <style>
-    body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; font-size: 11pt; line-height: 1.5; color: #111827; }
+    body, p, h1, h2, h3, h4, h5, h6, ul, ol, li, table, th, td, blockquote, div { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; }
+    body { font-size: 11pt; line-height: 1.5; color: #111827; }
     h1 { font-size: 24pt; font-weight: bold; margin-top: 18pt; margin-bottom: 12pt; }
     h2 { font-size: 18pt; font-weight: bold; margin-top: 16pt; margin-bottom: 10pt; }
     h3 { font-size: 14pt; font-weight: bold; margin-top: 14pt; margin-bottom: 8pt; }
