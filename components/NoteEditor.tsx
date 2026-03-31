@@ -3675,7 +3675,7 @@ export default function NoteEditor({
         <div className="fixed inset-0 z-50">
           <button
             onClick={() => setShowAIAssistant(false)}
-            className="absolute inset-0 bg-black/30 backdrop-blur-[1px]"
+            className="absolute inset-0 bg-black/30 -[1px]"
             aria-label="Close AI Assistant"
           />
 

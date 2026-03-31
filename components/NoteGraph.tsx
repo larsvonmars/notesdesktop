@@ -412,7 +412,7 @@ export default function NoteGraph({ notes, folders, onSelectNote, className }: N
       </svg>
 
       {/* Legend */}
-      <div className="absolute bottom-2 right-2 flex flex-wrap gap-2 text-[10px] bg-surface/80 backdrop-blur rounded-lg px-2 py-1.5">
+      <div className="absolute bottom-2 right-2 flex flex-wrap gap-2 text-[10px] bg-surface  rounded-lg px-2 py-1.5">
         {Array.from(new Set(notes.map(n => n.note_type))).map(type => {
           const pres = getNoteTypePresentation(type)
           return (

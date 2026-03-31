@@ -599,7 +599,7 @@ export default function FileExplorerModal({
                 <span className="text-alpine-500 dark:text-alpine-300">/</span>
                 {uploadPathSegments.map((segment, index) => (
                   <span key={`${segment}-${index}`} className="flex items-center gap-2 whitespace-nowrap">
-                    <span className="rounded-md bg-white/80 dark:bg-slate-700 px-2 py-0.5 text-alpine-900 dark:text-alpine-100 border border-alpine-200/70 dark:border-slate-600">
+                    <span className="rounded-md bg-white dark:bg-slate-700 px-2 py-0.5 text-alpine-900 dark:text-alpine-100 border border-alpine-200/70 dark:border-slate-600">
                       {segment}
                     </span>
                     {index < uploadPathSegments.length - 1 && (
@@ -818,7 +818,7 @@ export default function FileExplorerModal({
 
             {/* Drag overlay */}
             {isDragOver && (
-              <div className="absolute inset-0 z-10 flex items-center justify-center bg-alpine-50/80 backdrop-blur-sm pointer-events-none">
+              <div className="absolute inset-0 z-10 flex items-center justify-center bg-alpine-50  pointer-events-none">
                 <div className="flex flex-col items-center gap-2 text-alpine-700">
                   <Upload size={40} />
                   <p className="font-medium">Drop files to upload</p>

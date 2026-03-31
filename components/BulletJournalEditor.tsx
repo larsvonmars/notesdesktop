@@ -568,7 +568,7 @@ const BulletJournalEditor = forwardRef<BulletJournalEditorHandle, BulletJournalE
 
         {/* ─── Add Entry FAB ────────────────────────────────── */}
         {view !== 'index' && (
-          <div className="sticky bottom-0 px-4 py-3 border-t border-gray-100 bg-white/90 backdrop-blur-sm">
+          <div className="sticky bottom-0 px-4 py-3 border-t border-gray-100 bg-white ">
             <button
               onClick={addNewEntry}
               disabled={disabled}

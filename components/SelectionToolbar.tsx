@@ -205,7 +205,7 @@ const SelectionToolbar = forwardRef<HTMLDivElement, SelectionToolbarProps>(
         ref={ref}
         role="toolbar"
         aria-label="Text formatting"
-        className="fixed z-50 flex flex-col rounded-2xl border border-gray-200 bg-white/95 shadow-lg backdrop-blur-sm dark:border-gray-700 dark:bg-gray-800/95 dark:shadow-black/30"
+        className="fixed z-50 flex flex-col rounded-2xl border border-gray-200 bg-white shadow-lg  dark:border-gray-700 dark:bg-gray-800/95 dark:shadow-black/30"
         style={{ top, left, maxWidth: 'calc(100vw - 32px)' }}
         onMouseDown={(e) => e.preventDefault()}
       >

@@ -99,7 +99,7 @@ export default function BaseModal({
   return (
     <div
       className={`fixed inset-0 flex items-center justify-center p-3 sm:p-6 bg-black/60 ${
-        backdropBlur ? 'backdrop-blur-sm' : ''
+        ''
       } ${animationCls} ${backdropClassName}`}
       style={{ zIndex }}
       onClick={handleBackdropClick}

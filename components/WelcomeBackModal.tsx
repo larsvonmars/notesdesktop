@@ -105,12 +105,12 @@ export default function WelcomeBackModal({
       maxHeight="calc(100vh - 4rem)"
       zIndex={100}
       asView={asView}
-      className={asView ? '' : 'border-border bg-surface/95 backdrop-blur-sm'}
+      className={asView ? '' : 'border-border bg-surface '}
     >
 
         {/* ── Hero header ──────────────────────────────────────────────── */}
         <header className="relative overflow-hidden shrink-0 border-b border-border bg-gradient-to-br from-alpine-600 via-alpine-500 to-peak-500 dark:from-slate-900 dark:via-slate-800 dark:to-slate-900 px-6 py-6 sm:px-8 sm:py-8">
-          <div className="pointer-events-none absolute -top-8 -right-8 h-40 w-40 rounded-full bg-white/10 blur-2xl" />
+          <div className="pointer-events-none absolute -top-8 -right-8 h-40 w-40 rounded-full bg-white blur-2xl" />
           <div className="pointer-events-none absolute bottom-0 left-1/3 h-24 w-48 rounded-full bg-peak-400/20 blur-3xl" />
           <div className="relative flex items-start justify-between gap-4">
             <div>
@@ -124,7 +124,7 @@ export default function WelcomeBackModal({
               <ModalCloseButton
                 onClick={onClose}
                 ariaLabel="Close welcome modal"
-                className="shrink-0 bg-white/10 hover:bg-white/20 text-white border-white/20"
+                className="shrink-0 bg-white hover:bg-white text-white border-white/20"
               />
             )}
           </div>

@@ -37,7 +37,7 @@ export default function Login() {
   return (
     <div className="flex items-center justify-center min-h-screen px-4 safe-bottom">
       <ThemeToggle />
-      <div className="w-full max-w-md p-6 sm:p-8 bg-white/80 backdrop-blur-sm rounded-2xl shadow-lg border border-alpine-100">
+      <div className="w-full max-w-md p-6 sm:p-8 bg-white rounded-2xl shadow-lg border border-alpine-100">
         <div className="flex items-center justify-center gap-3 mb-1">
           <img src="/icon-192.png" alt="MindViz Notes" className="w-8 h-8" />
           <h1 className="text-2xl font-bold text-gray-900">MindViz Notes</h1>

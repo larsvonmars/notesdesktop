@@ -1951,7 +1951,7 @@ export default function AIAssistant({
     if (!showMindmapPromptModal) return null
 
     return (
-      <div className="absolute inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm p-4">
+      <div className="absolute inset-0 z-50 flex items-center justify-center bg-black/40  p-4">
         <div className="w-full max-w-lg rounded-2xl border border-border-strong bg-surface shadow-2xl">
           <div className="flex items-center justify-between border-b border-border/50 px-5 py-3.5">
             <div>
@@ -2019,7 +2019,7 @@ export default function AIAssistant({
     if (!showNoteContextConsentModal) return null
 
     return (
-      <div className="absolute inset-0 z-[60] flex items-center justify-center bg-black/40 backdrop-blur-sm p-4">
+      <div className="absolute inset-0 z-[60] flex items-center justify-center bg-black/40  p-4">
         <div className="w-full max-w-md rounded-2xl border border-border-strong bg-surface shadow-2xl">
           <div className="px-5 py-3.5 border-b border-border/50">
             <h3 className="text-sm font-semibold text-foreground">Share note context with AI?</h3>

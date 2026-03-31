@@ -466,7 +466,7 @@ export default function ProjectsWorkspaceModal({
 
         {/* Loading overlay */}
         {isLoading && (
-          <div className="absolute inset-0 z-20 flex items-center justify-center bg-white/80 dark:bg-slate-900/80">
+          <div className="absolute inset-0 z-20 flex items-center justify-center bg-white dark:bg-slate-900">
             <Loader2 className="h-6 w-6 animate-spin text-alpine-500" />
           </div>
         )}

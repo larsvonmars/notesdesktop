@@ -163,7 +163,7 @@ function FloatingTOC({ headings }: { headings: TocHeading[] }) {
 
   return (
     <aside className="hidden xl:block fixed right-6 top-1/2 z-20 w-52 -translate-y-1/2">
-      <div className="flex max-h-[70vh] flex-col overflow-hidden rounded-2xl border border-slate-200/80 bg-white/90 shadow-[0_8px_30px_-8px_rgba(15,23,42,0.18)] backdrop-blur-md">
+      <div className="flex max-h-[70vh] flex-col overflow-hidden rounded-2xl border border-slate-200/80 bg-white shadow-[0_8px_30px_-8px_rgba(15,23,42,0.18)] ">
         <button
           type="button"
           onClick={() => setCollapsed((c) => !c)}
@@ -255,7 +255,7 @@ function DrawingShareView({ data }: { data: DrawingData }) {
   const page = data.pages[pageIndex] ?? data.pages[0]
 
   if (!page) {
-    return <div className="rounded-2xl border border-dashed border-slate-300 bg-white/80 p-6 text-sm text-slate-500">This drawing is empty.</div>
+    return <div className="rounded-2xl border border-dashed border-slate-300 bg-white p-6 text-sm text-slate-500">This drawing is empty.</div>
   }
 
   return (
@@ -402,7 +402,7 @@ function MindmapShareView({ data }: { data: MindmapData }) {
 
   if (!data.nodes[data.rootId]) {
     return (
-      <div className="rounded-2xl border border-dashed border-slate-300 bg-white/80 p-6 text-sm text-slate-500">
+      <div className="rounded-2xl border border-dashed border-slate-300 bg-white p-6 text-sm text-slate-500">
         This mind map could not be rendered.
       </div>
     )
@@ -418,23 +418,23 @@ function MindmapShareView({ data }: { data: MindmapData }) {
             <div className="mt-2 text-xs text-slate-500">Pan to move · Scroll or pinch to zoom · Click nodes or connections to inspect details</div>
           </div>
           <div className="grid grid-cols-2 gap-2 text-center text-xs sm:min-w-[330px] sm:grid-cols-5">
-            <div className="rounded-xl border border-slate-200 bg-white/90 px-3 py-2">
+            <div className="rounded-xl border border-slate-200 bg-white px-3 py-2">
               <div className="font-semibold text-slate-900">{stats.nodeCount}</div>
               <div className="text-slate-500">Nodes</div>
             </div>
-            <div className="rounded-xl border border-slate-200 bg-white/90 px-3 py-2">
+            <div className="rounded-xl border border-slate-200 bg-white px-3 py-2">
               <div className="font-semibold text-slate-900">{stats.leafCount}</div>
               <div className="text-slate-500">Leaves</div>
             </div>
-            <div className="rounded-xl border border-slate-200 bg-white/90 px-3 py-2">
+            <div className="rounded-xl border border-slate-200 bg-white px-3 py-2">
               <div className="font-semibold text-slate-900">{stats.maxDepth}</div>
               <div className="text-slate-500">Depth</div>
             </div>
-            <div className="rounded-xl border border-slate-200 bg-white/90 px-3 py-2">
+            <div className="rounded-xl border border-slate-200 bg-white px-3 py-2">
               <div className="font-semibold text-slate-900">{stats.parentConnectionCount}</div>
               <div className="text-slate-500">Tree links</div>
             </div>
-            <div className="rounded-xl border border-slate-200 bg-white/90 px-3 py-2">
+            <div className="rounded-xl border border-slate-200 bg-white px-3 py-2">
               <div className="font-semibold text-slate-900">{stats.customConnectionCount}</div>
               <div className="text-slate-500">Custom links</div>
             </div>
@@ -483,8 +483,8 @@ function MindmapShareView({ data }: { data: MindmapData }) {
 
       <div className="relative overflow-hidden rounded-[28px] border border-slate-200 bg-white shadow-[0_25px_80px_-50px_rgba(15,23,42,0.45)]" style={{ height: '70vh', minHeight: '400px' }}>
         {isFramingView && (
-          <div className="pointer-events-none absolute inset-0 z-10 flex items-center justify-center bg-white/55 backdrop-blur-[2px]">
-            <div className="rounded-full border border-white/70 bg-white/90 px-4 py-2 text-xs font-medium text-slate-600 shadow">
+          <div className="pointer-events-none absolute inset-0 z-10 flex items-center justify-center bg-white -[2px]">
+            <div className="rounded-full border border-white/70 bg-white px-4 py-2 text-xs font-medium text-slate-600 shadow">
               Framing map view...
             </div>
           </div>
@@ -515,13 +515,13 @@ function BulletJournalShareView({ data }: { data: BulletJournalData }) {
   const orderedDates = Object.keys(groupedEntries).sort((left, right) => left.localeCompare(right))
 
   if (orderedDates.length === 0) {
-    return <div className="rounded-2xl border border-dashed border-slate-300 bg-white/80 p-6 text-sm text-slate-500">This journal is empty.</div>
+    return <div className="rounded-2xl border border-dashed border-slate-300 bg-white p-6 text-sm text-slate-500">This journal is empty.</div>
   }
 
   return (
     <section className="space-y-6">
       {orderedDates.map((dateKey) => (
-        <div key={dateKey} className="rounded-[24px] border border-slate-200 bg-white/90 p-5 shadow-sm">
+        <div key={dateKey} className="rounded-[24px] border border-slate-200 bg-white p-5 shadow-sm">
           <div className="mb-4 flex items-center gap-2 text-sm font-semibold text-slate-900">
             <Calendar className="h-4 w-4 text-slate-500" />
             <span>{dateKey === 'Undated' ? dateKey : new Intl.DateTimeFormat(undefined, { dateStyle: 'full' }).format(new Date(dateKey))}</span>
@@ -567,7 +567,7 @@ function DataSheetShareView({ data }: { data: DataSheetData }) {
   const rows = data.rows || []
 
   if (columns.length === 0 && rows.length === 0) {
-    return <div className="rounded-2xl border border-dashed border-slate-300 bg-white/80 p-6 text-sm text-slate-500">This sheet is empty.</div>
+    return <div className="rounded-2xl border border-dashed border-slate-300 bg-white p-6 text-sm text-slate-500">This sheet is empty.</div>
   }
 
   return (
@@ -633,7 +633,7 @@ function PdfAnnotationShareView({ data, pdfUrl }: { data: PdfAnnotationData; pdf
           <iframe src={pdfUrl} title="Shared PDF note" className="h-[70vh] w-full bg-slate-50" />
         </div>
       ) : (
-        <div className="rounded-[24px] border border-dashed border-slate-300 bg-white/80 p-6 text-sm text-slate-500">
+        <div className="rounded-[24px] border border-dashed border-slate-300 bg-white p-6 text-sm text-slate-500">
           The PDF file itself is not available in this published view, but the annotation summary is preserved.
         </div>
       )}
@@ -670,23 +670,23 @@ function renderNoteBody(share: PublishedNoteShare) {
     }
     case 'drawing': {
       const drawingData = safeParseJson<DrawingData>(share.content)
-      return drawingData ? <DrawingShareView data={drawingData} /> : <div className="rounded-2xl border border-dashed border-slate-300 bg-white/80 p-6 text-sm text-slate-500">This drawing could not be loaded.</div>
+      return drawingData ? <DrawingShareView data={drawingData} /> : <div className="rounded-2xl border border-dashed border-slate-300 bg-white p-6 text-sm text-slate-500">This drawing could not be loaded.</div>
     }
     case 'mindmap': {
       const mindmapData = safeParseJson<MindmapData>(share.content)
-      return mindmapData ? <MindmapShareView data={mindmapData} /> : <div className="rounded-2xl border border-dashed border-slate-300 bg-white/80 p-6 text-sm text-slate-500">This mind map could not be loaded.</div>
+      return mindmapData ? <MindmapShareView data={mindmapData} /> : <div className="rounded-2xl border border-dashed border-slate-300 bg-white p-6 text-sm text-slate-500">This mind map could not be loaded.</div>
     }
     case 'bullet-journal': {
       const bulletJournalData = safeParseJson<BulletJournalData>(share.content)
-      return bulletJournalData ? <BulletJournalShareView data={bulletJournalData} /> : <div className="rounded-2xl border border-dashed border-slate-300 bg-white/80 p-6 text-sm text-slate-500">This journal could not be loaded.</div>
+      return bulletJournalData ? <BulletJournalShareView data={bulletJournalData} /> : <div className="rounded-2xl border border-dashed border-slate-300 bg-white p-6 text-sm text-slate-500">This journal could not be loaded.</div>
     }
     case 'data-sheet': {
       const dataSheetData = safeParseJson<DataSheetData>(share.content)
-      return dataSheetData ? <DataSheetShareView data={dataSheetData} /> : <div className="rounded-2xl border border-dashed border-slate-300 bg-white/80 p-6 text-sm text-slate-500">This data sheet could not be loaded.</div>
+      return dataSheetData ? <DataSheetShareView data={dataSheetData} /> : <div className="rounded-2xl border border-dashed border-slate-300 bg-white p-6 text-sm text-slate-500">This data sheet could not be loaded.</div>
     }
     case 'pdf-annotation': {
       const pdfAnnotationData = safeParseJson<PdfAnnotationData>(share.content)
-      return pdfAnnotationData ? <PdfAnnotationShareView data={pdfAnnotationData} pdfUrl={share.metadata?.pdfUrl} /> : <div className="rounded-2xl border border-dashed border-slate-300 bg-white/80 p-6 text-sm text-slate-500">This PDF note could not be loaded.</div>
+      return pdfAnnotationData ? <PdfAnnotationShareView data={pdfAnnotationData} pdfUrl={share.metadata?.pdfUrl} /> : <div className="rounded-2xl border border-dashed border-slate-300 bg-white p-6 text-sm text-slate-500">This PDF note could not be loaded.</div>
     }
     default:
       return (
@@ -733,7 +733,7 @@ export default function SharedNoteView({ share }: SharedNoteViewProps) {
   return (
     <main className="min-h-screen bg-[radial-gradient(circle_at_top,#ccfbf1_0%,#f8fafc_40%,#e2e8f0_100%)] px-4 py-8 text-slate-950 sm:px-6 lg:px-8">
       <div className="mx-auto max-w-5xl">
-        <header className="mb-8 overflow-hidden rounded-[32px] border border-white/70 bg-white/75 shadow-[0_30px_120px_-60px_rgba(15,23,42,0.5)] backdrop-blur">
+        <header className="mb-8 overflow-hidden rounded-[32px] border border-white/70 bg-white shadow-[0_30px_120px_-60px_rgba(15,23,42,0.5)] ">
           <div className="grid gap-6 px-6 py-8 sm:px-8 lg:grid-cols-[1.4fr_0.8fr] lg:items-end">
             <div className="space-y-4">
               <div className="inline-flex items-center gap-2 rounded-full border border-teal-200 bg-teal-50 px-3 py-1 text-xs font-semibold uppercase tracking-[0.18em] text-teal-800">
@@ -750,7 +750,7 @@ export default function SharedNoteView({ share }: SharedNoteViewProps) {
 
             <div className="grid gap-3 rounded-[28px] border border-slate-200 bg-slate-950/95 p-5 text-slate-50 shadow-inner">
               <div className="flex items-center gap-3">
-                <div className={`flex h-11 w-11 items-center justify-center rounded-2xl ${typePresentation.iconClassName.replace('text-', 'bg-').replace('500', '100')} bg-white/10 text-white`}>
+                <div className={`flex h-11 w-11 items-center justify-center rounded-2xl ${typePresentation.iconClassName.replace('text-', 'bg-').replace('500', '100')} bg-white text-white`}>
                   <TypeIcon className="h-5 w-5" />
                 </div>
                 <div>
@@ -759,7 +759,7 @@ export default function SharedNoteView({ share }: SharedNoteViewProps) {
                 </div>
               </div>
               <div className="flex items-center gap-3">
-                <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-white/10 text-white">
+                <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-white text-white">
                   <Calendar className="h-5 w-5" />
                 </div>
                 <div>
@@ -773,7 +773,7 @@ export default function SharedNoteView({ share }: SharedNoteViewProps) {
 
         {share.note_type === 'rich-text' && <FloatingTOC headings={tocHeadings} />}
 
-        <section className="overflow-hidden rounded-[32px] border border-white/70 bg-white/85 px-6 py-8 shadow-[0_30px_100px_-60px_rgba(15,23,42,0.45)] backdrop-blur sm:px-8">
+        <section className="overflow-hidden rounded-[32px] border border-white/70 bg-white px-6 py-8 shadow-[0_30px_100px_-60px_rgba(15,23,42,0.45)]  sm:px-8">
           {share.note_type === 'rich-text' ? (
             <article
               className="share-note-content prose prose-slate max-w-none

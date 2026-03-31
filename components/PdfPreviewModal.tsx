@@ -41,7 +41,7 @@ export default function PdfPreviewModal({
   if (!isOpen || !filePath) return null
 
   return (
-    <BaseModal isOpen={isOpen} onClose={onClose} size="5xl" maxHeight="90vh" backdropBlur animation="zoom">
+    <BaseModal isOpen={isOpen} onClose={onClose} size="5xl" maxHeight="90vh" animation="zoom">
         <ModalHeader onClose={onClose} closeAriaLabel="Close preview" gradient={false} className="bg-gray-50 dark:bg-slate-800/50">
             <div className="flex h-8 w-8 flex-shrink-0 items-center justify-center rounded bg-red-100 dark:bg-red-900/30 text-red-600 dark:text-red-400">
               <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">

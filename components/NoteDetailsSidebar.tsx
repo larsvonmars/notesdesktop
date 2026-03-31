@@ -191,7 +191,7 @@ export default function NoteDetailsSidebar({
   // ---- COLLAPSED VIEW ----
   if (collapsed) {
     return (
-      <aside className="fixed inset-y-0 right-0 z-30 hidden w-12 border-l border-border/40 bg-surface/95 backdrop-blur-xl transition-all duration-300 lg:flex lg:flex-col" title={displayName}>
+      <aside className="fixed inset-y-0 right-0 z-30 hidden w-12 border-l border-border/40 bg-surface  transition-all duration-300 lg:flex lg:flex-col" title={displayName}>
         <div className="flex items-center justify-center px-2 py-4">
           <button
             onClick={onToggleCollapsed}
@@ -287,7 +287,7 @@ export default function NoteDetailsSidebar({
   // ---- EXPANDED VIEW ----
   return (
     <>
-    <aside className="fixed inset-y-0 right-0 z-30 hidden w-[280px] border-l border-border/40 bg-surface/95 backdrop-blur-xl transition-all duration-300 lg:flex lg:flex-col">
+    <aside className="fixed inset-y-0 right-0 z-30 hidden w-[280px] border-l border-border/40 bg-surface  transition-all duration-300 lg:flex lg:flex-col">
       {/* Header */}
       <div className="flex items-center justify-between px-4 py-3.5">
         <div className="min-w-0">
@@ -637,9 +637,9 @@ export default function NoteDetailsSidebar({
 
     {/* ---- FILE MODAL (Export / Import / Share) ---- */}
     {showFileModal && (
-      <div className="fixed inset-0 z-[70] flex items-center justify-center p-4 bg-black/40 backdrop-blur-sm" onClick={() => setShowFileModal(false)}>
+      <div className="fixed inset-0 z-[70] flex items-center justify-center p-4 bg-black/40 " onClick={() => setShowFileModal(false)}>
         <div
-          className="bg-surface/95 backdrop-blur-xl rounded-2xl shadow-2xl border border-border/40 w-full max-w-md overflow-hidden"
+          className="bg-surface  rounded-2xl shadow-2xl border border-border/40 w-full max-w-md overflow-hidden"
           onClick={(e) => e.stopPropagation()}
         >
           {/* Modal Header */}

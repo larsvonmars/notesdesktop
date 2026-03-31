@@ -92,7 +92,7 @@ aside[class*="backdrop-blur"] {
 
   /* Subtle frosted-glass card surfaces */
   .alpine-surface {
-    @apply bg-white/80 backdrop-blur-sm;
+    @apply bg-white;
   }
 }
 

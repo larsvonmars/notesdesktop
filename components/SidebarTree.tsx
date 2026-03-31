@@ -815,7 +815,7 @@ export default function SidebarTree({
   // ---- COLLAPSED VIEW ----
   if (collapsed) {
     return (
-      <aside className="fixed inset-y-0 left-0 z-40 hidden w-14 border-r border-border/40 bg-surface/95 backdrop-blur-xl transition-all duration-300 lg:flex lg:flex-col">
+      <aside className="fixed inset-y-0 left-0 z-40 hidden w-14 border-r border-border/40 bg-surface  transition-all duration-300 lg:flex lg:flex-col">
         <div className="flex items-center justify-center px-3 py-4">
           <div className="flex h-8 w-8 items-center justify-center rounded-xl bg-gradient-to-br from-alpine-500 to-alpine-600 text-sm font-bold text-white shadow-sm">
             N
@@ -869,7 +869,7 @@ export default function SidebarTree({
   // ---- EXPANDED VIEW ----
   return (
     <>
-      <aside className="fixed inset-y-0 left-0 z-40 hidden w-[280px] border-r border-border/40 bg-surface/95 backdrop-blur-xl transition-all duration-300 lg:flex lg:flex-col">
+      <aside className="fixed inset-y-0 left-0 z-40 hidden w-[280px] border-r border-border/40 bg-surface  transition-all duration-300 lg:flex lg:flex-col">
         {/* Header */}
         <div className="flex items-center justify-between px-4 py-3.5">
           <div className="flex items-center gap-2.5 overflow-hidden">
@@ -1142,7 +1142,7 @@ export default function SidebarTree({
             onClick={() => setContextMenu(null)}
           />
           <div
-            className="fixed z-[60] bg-surface/95 backdrop-blur-xl rounded-2xl shadow-2xl border border-border/40 py-1.5 min-w-[200px] max-h-[400px] overflow-y-auto"
+            className="fixed z-[60] bg-surface  rounded-2xl shadow-2xl border border-border/40 py-1.5 min-w-[200px] max-h-[400px] overflow-y-auto"
             style={{ left: contextMenu.x, top: contextMenu.y }}
             onClick={(e) => e.stopPropagation()}
           >
@@ -1395,8 +1395,8 @@ export default function SidebarTree({
 
       {/* Delete Confirmation Modal */}
       {showDeleteModal && (
-        <div className="fixed inset-0 z-[70] flex items-center justify-center p-4 bg-black/40 backdrop-blur-sm">
-          <div className="bg-surface/95 backdrop-blur-xl rounded-2xl shadow-2xl border border-border/40 max-w-md w-full p-6">
+        <div className="fixed inset-0 z-[70] flex items-center justify-center p-4 bg-black/40 ">
+          <div className="bg-surface  rounded-2xl shadow-2xl border border-border/40 max-w-md w-full p-6">
             <div className="flex items-start gap-4 mb-4">
               <div className="flex-shrink-0 w-12 h-12 rounded-full bg-danger-light flex items-center justify-center">
                 <Trash2 size={24} className="text-danger" />
@@ -1439,8 +1439,8 @@ export default function SidebarTree({
 
       {/* Rename Modal (Folder or Project) */}
       {showRenameModal && (
-        <div className="fixed inset-0 z-[70] flex items-center justify-center p-4 bg-black/40 backdrop-blur-sm">
-          <div className="bg-surface/95 backdrop-blur-xl rounded-2xl shadow-2xl border border-border/40 max-w-md w-full p-6">
+        <div className="fixed inset-0 z-[70] flex items-center justify-center p-4 bg-black/40 ">
+          <div className="bg-surface  rounded-2xl shadow-2xl border border-border/40 max-w-md w-full p-6">
             <h3 className="text-lg font-semibold text-foreground mb-1">
               Rename {showRenameModal.type === 'project' ? 'Project' : 'Folder'}
             </h3>
@@ -1480,8 +1480,8 @@ export default function SidebarTree({
 
       {/* Color Picker Modal (Projects) */}
       {showColorPicker && onUpdateProjectColor && (
-        <div className="fixed inset-0 z-[70] flex items-center justify-center p-4 bg-black/40 backdrop-blur-sm">
-          <div className="bg-surface/95 backdrop-blur-xl rounded-2xl shadow-2xl border border-border/40 max-w-sm w-full p-6">
+        <div className="fixed inset-0 z-[70] flex items-center justify-center p-4 bg-black/40 ">
+          <div className="bg-surface  rounded-2xl shadow-2xl border border-border/40 max-w-sm w-full p-6">
             <h3 className="text-lg font-semibold text-foreground mb-1">Project Color</h3>
             <p className="text-sm text-muted mb-4">Choose a color for this project</p>
             <div className="grid grid-cols-6 gap-2 mb-4">

@@ -41,7 +41,7 @@ export default function ThemeToggle() {
     <div ref={menuRef} className="fixed top-4 right-4 z-50">
       <button
         onClick={() => setIsOpen((previous) => !previous)}
-        className="p-2.5 rounded-full bg-white/85 dark:bg-slate-800/90 backdrop-blur-sm border border-gray-200 dark:border-slate-700 shadow-sm text-gray-600 dark:text-slate-300 hover:text-gray-900 dark:hover:text-slate-100 hover:bg-gray-100 dark:hover:bg-slate-700 transition-all"
+        className="p-2.5 rounded-full bg-white dark:bg-slate-800/90  border border-gray-200 dark:border-slate-700 shadow-sm text-gray-600 dark:text-slate-300 hover:text-gray-900 dark:hover:text-slate-100 hover:bg-gray-100 dark:hover:bg-slate-700 transition-all"
         title="Theme settings"
         aria-label="Theme settings"
       >

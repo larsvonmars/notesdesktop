@@ -1978,7 +1978,7 @@ const PdfAnnotationEditor = forwardRef<PdfAnnotationEditorHandle, PdfAnnotationE
                   <textarea
                     ref={textAreaRef}
                     autoFocus
-                    className="absolute rounded border border-blue-400 bg-white/80 p-1 text-black outline-none dark:bg-black/80 dark:text-white"
+                    className="absolute rounded border border-blue-400 bg-white p-1 text-black outline-none dark:bg-black/80 dark:text-white"
                     style={{
                       left: vx,
                       top: vy,

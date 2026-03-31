@@ -3115,7 +3115,7 @@ const MindmapEditor = forwardRef<MindmapEditorHandle, MindmapEditorProps>(
 
         {breadcrumbPath.length > 0 && (
           <div className="absolute top-3 left-1/2 z-10 -translate-x-1/2 max-w-[55%] overflow-hidden">
-            <nav className="flex items-center gap-1 rounded-full border border-slate-200 dark:border-slate-700 bg-white/90 dark:bg-slate-800/90 px-3 py-1.5 text-xs font-medium text-slate-500 dark:text-slate-400 shadow-sm backdrop-blur overflow-x-auto">
+            <nav className="flex items-center gap-1 rounded-full border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800/90 px-3 py-1.5 text-xs font-medium text-slate-500 dark:text-slate-400 shadow-sm  overflow-x-auto">
               {breadcrumbPath.map((node, index) => {
                 const isActive = index === breadcrumbPath.length - 1
                 return (
@@ -3347,7 +3347,7 @@ const MindmapEditor = forwardRef<MindmapEditorHandle, MindmapEditorProps>(
 
         {/* Node detail view */}
         {selectedEdge && !detailNodeId && (
-          <div className="absolute right-3 top-3 z-20 w-[320px] max-w-[calc(100%-1.5rem)] rounded-2xl border border-slate-200 dark:border-slate-700 bg-white/95 dark:bg-slate-900/95 shadow-xl backdrop-blur">
+          <div className="absolute right-3 top-3 z-20 w-[320px] max-w-[calc(100%-1.5rem)] rounded-2xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900/95 shadow-xl ">
             <div className="flex items-center justify-between border-b border-slate-200 dark:border-slate-700 px-4 py-3">
               <div>
                 <p className="text-xs uppercase tracking-wide text-slate-400 dark:text-slate-500">
@@ -3536,7 +3536,7 @@ const MindmapEditor = forwardRef<MindmapEditorHandle, MindmapEditorProps>(
                 ? useSharedDetailBottomSheet
                   ? 'flex items-end justify-center bg-slate-900/30'
                   : 'pointer-events-none flex items-stretch justify-end'
-                : 'flex items-end sm:items-center justify-center bg-slate-900/50 backdrop-blur-sm'
+                : 'flex items-end sm:items-center justify-center bg-slate-900/50 '
             }`}
             onClick={() => {
               if (useSharedDetailBottomSheet && !isSheetDragging) {
@@ -3906,7 +3906,7 @@ const MindmapEditor = forwardRef<MindmapEditorHandle, MindmapEditorProps>(
 
         {showMinimap && (
           <div className="absolute bottom-4 left-4 z-10">
-            <div className="relative rounded-2xl border border-slate-200 dark:border-slate-700 bg-white/80 dark:bg-slate-900/80 p-3 shadow-lg backdrop-blur">
+            <div className="relative rounded-2xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900/80 p-3 shadow-lg ">
               <button
                 type="button"
                 onClick={() => setShowMinimap(false)}
@@ -4084,7 +4084,7 @@ const MindmapEditor = forwardRef<MindmapEditorHandle, MindmapEditorProps>(
 
         {/* Info overlay */}
         {showInfo && (
-        <div className="absolute bottom-4 right-4 bg-white/90 dark:bg-slate-900/90 backdrop-blur-sm rounded-lg shadow-lg p-3 border border-gray-200 dark:border-slate-700 text-sm">
+        <div className="absolute bottom-4 right-4 bg-white dark:bg-slate-900/90  rounded-lg shadow-lg p-3 border border-gray-200 dark:border-slate-700 text-sm">
           <div className="text-gray-600 dark:text-slate-400">
             <div className="flex items-center justify-between gap-3">
               <div className="font-medium text-slate-700 dark:text-slate-200">Zoom: {Math.round(scale * 100)}%</div>
