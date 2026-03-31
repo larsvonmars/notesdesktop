@@ -3697,6 +3697,7 @@ export default function NoteEditor({
                   mindmapData={mindmapData}
                   selectedMindmapNodeId={selectedMindmapNodeId}
                   onInsertText={handleAIInsertText}
+                  onReplaceText={handleAIReplaceText}
                   onReplaceSelection={handleAIReplaceSelection}
                   onInsertAtCursor={handleAIInsertAtCursor}
                   onAddMindmapNode={noteType === 'mindmap' ? handleAIAddMindmapNode : undefined}

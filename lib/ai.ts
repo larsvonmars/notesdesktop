@@ -646,6 +646,44 @@ export const AI_TOOLS: AITool[] = [
       },
     },
   },
+  {
+    type: 'function',
+    function: {
+      name: 'replace_note_content',
+      description: 'Replace the entire content of the currently open note with new content. Use this when the user asks you to rewrite, restructure, or completely replace the note. The content should be provided as plain text or markdown — it will be converted to the note format automatically.',
+      parameters: {
+        type: 'object',
+        properties: {
+          content: {
+            type: 'string',
+            description: 'The new content to replace the entire note with (plain text or markdown)',
+          },
+        },
+        required: ['content'],
+      },
+    },
+  },
+  {
+    type: 'function',
+    function: {
+      name: 'edit_note_content',
+      description: 'Edit the currently open note by finding and replacing specific text. Use this for targeted edits like fixing a paragraph, updating a section, or correcting specific text. The search is case-sensitive and matches the first occurrence.',
+      parameters: {
+        type: 'object',
+        properties: {
+          findText: {
+            type: 'string',
+            description: 'The exact text to find in the note (plain text, matched against the note\'s text content)',
+          },
+          replaceWith: {
+            type: 'string',
+            description: 'The text to replace the found text with (plain text or markdown)',
+          },
+        },
+        required: ['findText', 'replaceWith'],
+      },
+    },
+  },
 ]
 
 // ============================================================================

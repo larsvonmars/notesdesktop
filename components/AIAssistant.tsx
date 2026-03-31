@@ -349,6 +349,7 @@ export default function AIAssistant({
   tasks,
   events,
   onInsertText,
+  onReplaceText,
   onReplaceSelection,
   onInsertAtCursor,
   onCreateTask,
@@ -730,6 +731,43 @@ export default function AIAssistant({
         })
         return `Found ${scored.length} note(s) matching "${query}". Showing top ${Math.min(maxResults, scored.length)}:\n${excerpts.join('\n\n')}`
       }
+      case 'replace_note_content': {
+        if (!onReplaceText) return 'Note content replacement is not available in this view.'
+        if (!note) return 'No note is currently open.'
+        const content = (args.content as string | undefined)?.trim()
+        if (!content) return 'No content provided for replacement.'
+        onReplaceText(textToHtml(content))
+        return `Successfully replaced the entire content of "${note.title || 'Untitled'}".`
+      }
+      case 'edit_note_content': {
+        if (!onReplaceText) return 'Note editing is not available in this view.'
+        if (!note) return 'No note is currently open.'
+        const findText = (args.findText as string | undefined)?.trim()
+        const replaceWith = (args.replaceWith as string | undefined) ?? ''
+        if (!findText) return 'No findText provided.'
+        const currentPlain = stripHtmlForAI(noteContent || note.content || '')
+        if (!currentPlain.includes(findText)) {
+          return `Could not find the text "${truncateAtBoundary(findText, 80)}" in the note. Make sure you are using the exact text from the note content.`
+        }
+        const currentHtml = noteContent || note.content || ''
+        const escapedFind = findText.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+        const plainSegmentRegex = new RegExp(
+          escapedFind.split('').map(ch => {
+            const esc = ch.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+            return esc + '(?:<[^>]*>)*'
+          }).join(''),
+        )
+        const replacementHtml = textToHtml(replaceWith)
+        let newHtml: string
+        if (plainSegmentRegex.test(currentHtml)) {
+          newHtml = currentHtml.replace(plainSegmentRegex, replacementHtml)
+        } else {
+          const plainUpdated = currentPlain.replace(findText, replaceWith)
+          newHtml = textToHtml(plainUpdated)
+        }
+        onReplaceText(newHtml)
+        return `Successfully edited the note "${note.title || 'Untitled'}". Replaced "${truncateAtBoundary(findText, 60)}" with new content.`
+      }
       case 'create_mindmap_note': {
         if (!onCreateMindmapNote) return 'Mindmap note creation is not available in this view.'
 
@@ -790,7 +828,7 @@ export default function AIAssistant({
       default:
         return `Unknown tool: ${name}`
     }
-  }, [allNotes, note, onCreateMindmapNote])
+  }, [allNotes, note, noteContent, onCreateMindmapNote, onReplaceText])
 
   const handleSend = useCallback(async (
     overrideInput?: string,
