@@ -27,6 +27,8 @@ import {
   LayoutDashboard,
   ChevronsUpDown,
   FolderInput,
+  FolderOpen,
+  Hash,
   type LucideIcon,
 } from 'lucide-react'
 import type { Note } from './NoteEditor'
@@ -571,6 +573,33 @@ export default function SidebarTree({
     [allNotes, isFilterActive, searchQuery, filterNoteTypes, filterProjectIds]
   )
 
+  // Search folders: match on folder name, optionally filtered by project
+  const filteredFolders = useMemo(() => {
+    if (!searchQuery.trim()) return []
+    const q = searchQuery.toLowerCase()
+    return flatAllFolders.filter(({ folder, projectName }) => {
+      if (!folder.name.toLowerCase().includes(q)) return false
+      if (filterProjectIds.size > 0) {
+        const key = folder.project_id ?? '__UNFILED__'
+        if (!filterProjectIds.has(key)) return false
+      }
+      return true
+    })
+  }, [searchQuery, flatAllFolders, filterProjectIds])
+
+  // Search projects: match on project name or description
+  const filteredProjects = useMemo(() => {
+    if (!searchQuery.trim()) return []
+    const q = searchQuery.toLowerCase()
+    return projects.filter(p => {
+      if (p.name.toLowerCase().includes(q)) return true
+      if (p.description && p.description.toLowerCase().includes(q)) return true
+      return false
+    })
+  }, [searchQuery, projects])
+
+  const totalResultCount = filteredNotes.length + filteredFolders.length + filteredProjects.length
+
   const getNoteLocationMeta = useCallback((note: Note): { projectName: string; projectColor: string; folderPath: string } => {
     const proj = projects.find(p => p.id === note.project_id)
     const projectName = proj?.name ?? 'Unfiled'
@@ -1076,7 +1105,7 @@ export default function SidebarTree({
                 type="text"
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
-                placeholder="Search notes..."
+                placeholder="Search notes, folders, projects..."
                 className="w-full pl-8 pr-7 py-2 text-xs border-0 rounded-xl bg-surface-hover/50 focus:outline-none focus:ring-2 focus:ring-alpine-500/25 focus:bg-surface-hover/80 text-foreground placeholder:text-muted/60 transition-all duration-200"
               />
               {searchQuery && (
@@ -1211,69 +1240,240 @@ export default function SidebarTree({
             <>
               <div className="flex items-center justify-between mb-2 px-1">
                 <span className="text-[10px] font-semibold uppercase tracking-wide text-muted">
-                  {filteredNotes.length} result{filteredNotes.length !== 1 ? 's' : ''}
+                  {totalResultCount} result{totalResultCount !== 1 ? 's' : ''}
                 </span>
                 <button onClick={clearAllFilters} className="text-[10px] text-muted hover:text-foreground flex items-center gap-0.5 transition-colors">
                   <X size={9} /> Clear
                 </button>
               </div>
-              {filteredNotes.length === 0 ? (
-                <div className="text-xs text-muted italic text-center py-8">No notes match your filters.</div>
+              {totalResultCount === 0 ? (
+                <div className="text-xs text-muted italic text-center py-8">No results match your search.</div>
               ) : (
-                <div className="space-y-0.5">
-                  {filteredNotes.map(note => {
-                    const { projectName, projectColor, folderPath } = getNoteLocationMeta(note)
-                    const isActive = selectedNoteId === note.id
-                    const presentation = getNoteTypePresentation(note.note_type)
-                    const Icon = NOTE_TYPE_ICON_MAP[presentation.iconKey]
-                    return (
-                      <div
-                        role="button"
-                        tabIndex={0}
-                        key={note.id}
-                        draggable
-                        onDragStart={(e) => handleDragStart(e, { type: 'note', id: note.id })}
-                        onDragEnd={handleDragEnd}
-                        onClick={() => onSelectNote(note)}
-                        onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onSelectNote(note) } }}
-                        onContextMenu={(e) => handleNoteContextMenu(e, note)}
-                        className={`group w-full text-left px-2.5 py-2.5 rounded-xl transition-all duration-200 flex items-start gap-2.5 ${
-                          isActive
-                            ? 'bg-alpine-50 dark:bg-alpine-900/30 shadow-sm'
-                            : 'hover:bg-surface-hover/60'
-                        }`}
-                        style={isActive ? { borderLeft: `3px solid ${projectColor}`, paddingLeft: '7px' } : {}}
-                      >
-                        <div className={`mt-0.5 flex-shrink-0 w-7 h-7 rounded-xl flex items-center justify-center ${presentation.iconBgClassName}`}>
-                          <Icon size={12} />
-                        </div>
-                        <div className="flex-1 min-w-0">
-                          <div className={`text-xs truncate font-medium ${
-                            isActive ? 'text-alpine-800 dark:text-alpine-200' : 'text-foreground'
-                          }`}>
-                            {note.title || 'Untitled'}
-                          </div>
-                          <div className="flex items-center gap-1 mt-0.5 min-w-0">
-                            <span className="text-[10px] font-semibold truncate flex-shrink-0" style={{ color: projectColor }}>
-                              {projectName}
-                            </span>
-                            {folderPath && (
-                              <>
-                                <ChevronRight size={8} className="text-muted/50 flex-shrink-0" />
-                                <span className="text-[10px] text-muted truncate">{folderPath}</span>
-                              </>
-                            )}
-                          </div>
-                        </div>
-                        <button
-                          onClick={(e) => { e.stopPropagation(); handleNoteContextMenu(e, note) }}
-                          className="hidden group-hover:flex p-0.5 hover:bg-surface-hover rounded transition-colors flex-shrink-0 mt-0.5"
-                        >
-                          <MoreVertical size={11} />
-                        </button>
+                <div className="space-y-1">
+                  {/* ---- PROJECT RESULTS ---- */}
+                  {filteredProjects.length > 0 && (
+                    <div>
+                      <div className="px-1 mb-1 flex items-center gap-1.5">
+                        <Hash size={10} className="text-muted/60" />
+                        <span className="text-[9px] font-bold uppercase tracking-widest text-muted/70">Projects</span>
+                        <span className="text-[9px] text-muted/50">{filteredProjects.length}</span>
                       </div>
-                    )
-                  })}
+                      <div className="space-y-0.5">
+                        {filteredProjects.map(project => {
+                          const isActive = selectedProjectId === project.id
+                          const noteCount = allNotes.filter(n => n.project_id === project.id).length
+                          const folderCount = folderTree.filter(f => f.project_id === project.id).length
+                          return (
+                            <div
+                              role="button"
+                              tabIndex={0}
+                              key={project.id}
+                              onClick={() => {
+                                setExpandedProjects(prev => {
+                                  const next = new Set(prev)
+                                  next.add(project.id)
+                                  return next
+                                })
+                                onSelectFolder(null)
+                                if (onOpenProjectDashboard) onOpenProjectDashboard(project.id)
+                              }}
+                              onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); if (onOpenProjectDashboard) onOpenProjectDashboard(project.id) } }}
+                              onContextMenu={(e) => handleProjectContextMenu(e, project)}
+                              className={`group w-full text-left px-2.5 py-2.5 rounded-xl transition-all duration-200 flex items-start gap-2.5 ${
+                                isActive
+                                  ? 'bg-alpine-50 dark:bg-alpine-900/30 shadow-sm'
+                                  : 'hover:bg-surface-hover/60'
+                              }`}
+                              style={isActive ? { borderLeft: `3px solid ${project.color ?? '#6B7280'}`, paddingLeft: '7px' } : {}}
+                            >
+                              <div className="mt-0.5 flex-shrink-0 w-7 h-7 rounded-xl flex items-center justify-center shadow-sm" style={{ backgroundColor: project.color ?? '#6B7280' }}>
+                                <span className="text-[9px] font-bold text-white uppercase">{project.name.slice(0, 2)}</span>
+                              </div>
+                              <div className="flex-1 min-w-0">
+                                <div className={`text-xs truncate font-semibold ${
+                                  isActive ? 'text-alpine-800 dark:text-alpine-200' : 'text-foreground'
+                                }`}>
+                                  {project.name}
+                                </div>
+                                <div className="flex items-center gap-2 mt-0.5">
+                                  {project.description && (
+                                    <span className="text-[10px] text-muted truncate">{project.description}</span>
+                                  )}
+                                  {!project.description && (
+                                    <span className="text-[10px] text-muted/60">
+                                      {folderCount} folder{folderCount !== 1 ? 's' : ''} · {noteCount} note{noteCount !== 1 ? 's' : ''}
+                                    </span>
+                                  )}
+                                </div>
+                              </div>
+                              <button
+                                onClick={(e) => { e.stopPropagation(); handleProjectContextMenu(e, project) }}
+                                className="hidden group-hover:flex p-0.5 hover:bg-surface-hover rounded transition-colors flex-shrink-0 mt-0.5"
+                              >
+                                <MoreVertical size={11} />
+                              </button>
+                            </div>
+                          )
+                        })}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* ---- FOLDER RESULTS ---- */}
+                  {filteredFolders.length > 0 && (
+                    <div>
+                      <div className="px-1 mb-1 flex items-center gap-1.5">
+                        <FolderOpen size={10} className="text-muted/60" />
+                        <span className="text-[9px] font-bold uppercase tracking-widest text-muted/70">Folders</span>
+                        <span className="text-[9px] text-muted/50">{filteredFolders.length}</span>
+                      </div>
+                      <div className="space-y-0.5">
+                        {filteredFolders.map(({ folder, depth, projectName, projectColor }) => {
+                          const isActive = selectedFolderId === folder.id
+                          const noteCount = allNotes.filter(n => n.folder_id === folder.id).length
+                          return (
+                            <div
+                              role="button"
+                              tabIndex={0}
+                              key={folder.id}
+                              onClick={() => {
+                                // Expand the parent project
+                                const projKey = folder.project_id ?? '__UNFILED__'
+                                setExpandedProjects(prev => {
+                                  const next = new Set(prev)
+                                  next.add(projKey)
+                                  return next
+                                })
+                                // Expand all ancestor folders
+                                const findPath = (ns: FolderNode[], t: string): string[] | null => {
+                                  for (const n of ns) {
+                                    if (n.id === t) return [n.id]
+                                    const child = findPath(n.children, t)
+                                    if (child) return [n.id, ...child]
+                                  }
+                                  return null
+                                }
+                                const path = findPath(folderTree, folder.id)
+                                if (path) {
+                                  setExpandedFolders(prev => {
+                                    const next = new Set(prev)
+                                    path.forEach(id => next.add(id))
+                                    return next
+                                  })
+                                }
+                                onSelectFolder(folder.id)
+                              }}
+                              onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onSelectFolder(folder.id) } }}
+                              onContextMenu={(e) => handleFolderContextMenu(e, folder.id, folder.name, folder.project_id)}
+                              className={`group w-full text-left px-2.5 py-2.5 rounded-xl transition-all duration-200 flex items-start gap-2.5 ${
+                                isActive
+                                  ? 'bg-alpine-50 dark:bg-alpine-900/30 shadow-sm'
+                                  : 'hover:bg-surface-hover/60'
+                              }`}
+                              style={isActive ? { borderLeft: `3px solid ${projectColor}`, paddingLeft: '7px' } : {}}
+                            >
+                              <div className="mt-0.5 flex-shrink-0 w-7 h-7 rounded-xl flex items-center justify-center bg-surface-hover/80">
+                                <FolderTreeIcon size={12} className="text-alpine-500" />
+                              </div>
+                              <div className="flex-1 min-w-0">
+                                <div className={`text-xs truncate font-medium ${
+                                  isActive ? 'text-alpine-800 dark:text-alpine-200' : 'text-foreground'
+                                }`}>
+                                  {folder.name}
+                                </div>
+                                <div className="flex items-center gap-1 mt-0.5 min-w-0">
+                                  <span className="text-[10px] font-semibold truncate flex-shrink-0" style={{ color: projectColor }}>
+                                    {projectName}
+                                  </span>
+                                  {depth > 0 && (
+                                    <>
+                                      <ChevronRight size={8} className="text-muted/50 flex-shrink-0" />
+                                      <span className="text-[10px] text-muted/50">nested</span>
+                                    </>
+                                  )}
+                                  <span className="text-[10px] text-muted/50 ml-auto flex-shrink-0">{noteCount} note{noteCount !== 1 ? 's' : ''}</span>
+                                </div>
+                              </div>
+                              <button
+                                onClick={(e) => { e.stopPropagation(); handleFolderContextMenu(e, folder.id, folder.name, folder.project_id) }}
+                                className="hidden group-hover:flex p-0.5 hover:bg-surface-hover rounded transition-colors flex-shrink-0 mt-0.5"
+                              >
+                                <MoreVertical size={11} />
+                              </button>
+                            </div>
+                          )
+                        })}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* ---- NOTE RESULTS ---- */}
+                  {filteredNotes.length > 0 && (
+                    <div>
+                      {(filteredFolders.length > 0 || filteredProjects.length > 0) && (
+                        <div className="px-1 mb-1 flex items-center gap-1.5">
+                          <FileText size={10} className="text-muted/60" />
+                          <span className="text-[9px] font-bold uppercase tracking-widest text-muted/70">Notes</span>
+                          <span className="text-[9px] text-muted/50">{filteredNotes.length}</span>
+                        </div>
+                      )}
+                      <div className="space-y-0.5">
+                        {filteredNotes.map(note => {
+                          const { projectName, projectColor, folderPath } = getNoteLocationMeta(note)
+                          const isActive = selectedNoteId === note.id
+                          const presentation = getNoteTypePresentation(note.note_type)
+                          const Icon = NOTE_TYPE_ICON_MAP[presentation.iconKey]
+                          return (
+                            <div
+                              role="button"
+                              tabIndex={0}
+                              key={note.id}
+                              draggable
+                              onDragStart={(e) => handleDragStart(e, { type: 'note', id: note.id })}
+                              onDragEnd={handleDragEnd}
+                              onClick={() => onSelectNote(note)}
+                              onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onSelectNote(note) } }}
+                              onContextMenu={(e) => handleNoteContextMenu(e, note)}
+                              className={`group w-full text-left px-2.5 py-2.5 rounded-xl transition-all duration-200 flex items-start gap-2.5 ${
+                                isActive
+                                  ? 'bg-alpine-50 dark:bg-alpine-900/30 shadow-sm'
+                                  : 'hover:bg-surface-hover/60'
+                              }`}
+                              style={isActive ? { borderLeft: `3px solid ${projectColor}`, paddingLeft: '7px' } : {}}
+                            >
+                              <div className={`mt-0.5 flex-shrink-0 w-7 h-7 rounded-xl flex items-center justify-center ${presentation.iconBgClassName}`}>
+                                <Icon size={12} />
+                              </div>
+                              <div className="flex-1 min-w-0">
+                                <div className={`text-xs truncate font-medium ${
+                                  isActive ? 'text-alpine-800 dark:text-alpine-200' : 'text-foreground'
+                                }`}>
+                                  {note.title || 'Untitled'}
+                                </div>
+                                <div className="flex items-center gap-1 mt-0.5 min-w-0">
+                                  <span className="text-[10px] font-semibold truncate flex-shrink-0" style={{ color: projectColor }}>
+                                    {projectName}
+                                  </span>
+                                  {folderPath && (
+                                    <>
+                                      <ChevronRight size={8} className="text-muted/50 flex-shrink-0" />
+                                      <span className="text-[10px] text-muted truncate">{folderPath}</span>
+                                    </>
+                                  )}
+                                </div>
+                              </div>
+                              <button
+                                onClick={(e) => { e.stopPropagation(); handleNoteContextMenu(e, note) }}
+                                className="hidden group-hover:flex p-0.5 hover:bg-surface-hover rounded transition-colors flex-shrink-0 mt-0.5"
+                              >
+                                <MoreVertical size={11} />
+                              </button>
+                            </div>
+                          )
+                        })}
+                      </div>
+                    </div>
+                  )}
                 </div>
               )}
             </>
