@@ -39,6 +39,7 @@ import {
 } from '@/lib/projects'
 import { getTasks, type Task } from '@/lib/tasks'
 import { getNoteTypePresentation, type NoteTypeIconKey } from '@/lib/note-types'
+import { sendAIRequestStream, type AIMessage } from '@/lib/ai'
 import NoteGraph from '@/components/NoteGraph'
 
 // ────────────────────────────────────────────────────────────────────────────
@@ -186,6 +187,10 @@ export default function ProjectDashboard({
   const [newLinkUrl, setNewLinkUrl] = useState('')
   const [editingDescription, setEditingDescription] = useState(false)
   const [descriptionDraft, setDescriptionDraft] = useState(project.description ?? '')
+  const [aiSummary, setAiSummary] = useState('')
+  const [isGeneratingSummary, setIsGeneratingSummary] = useState(false)
+  const [summaryError, setSummaryError] = useState<string | null>(null)
+  const summaryAbortRef = useRef<AbortController | null>(null)
   const descriptionRef = useRef<HTMLTextAreaElement>(null)
   const linkLabelRef = useRef<HTMLInputElement>(null)
 
@@ -336,6 +341,58 @@ export default function ProjectDashboard({
     }
   }, [quickLinks, project.id, onUpdateProject])
 
+  // ── AI Summary handler ─────────────────────────────────────────────────
+  const handleGenerateSummary = useCallback(async () => {
+    if (isGeneratingSummary) {
+      summaryAbortRef.current?.abort()
+      return
+    }
+
+    setIsGeneratingSummary(true)
+    setSummaryError(null)
+    setAiSummary('')
+
+    const controller = new AbortController()
+    summaryAbortRef.current = controller
+
+    // Build context about the project for the AI
+    const noteSummaries = projectNotes.slice(0, 20).map(n => {
+      const pres = getNoteTypePresentation(n.note_type)
+      return `- "${n.title || 'Untitled'}" (${pres.label}, updated ${relativeTime(n.updated_at)})`
+    }).join('\n')
+
+    const taskSummaries = tasks.slice(0, 20).map(t => {
+      const status = STATUS_LABELS[t.status] ?? t.status
+      const due = t.due_date ? `, due ${new Date(t.due_date).toLocaleDateString()}` : ''
+      return `- [${status}] "${t.title}" (${t.priority} priority${due})`
+    }).join('\n')
+
+    const messages: AIMessage[] = [
+      {
+        role: 'system',
+        content: 'You are a concise project analyst. Generate a brief, high-level project summary in 3-5 short paragraphs. Cover: overall status, key areas of focus, task progress, and any notable patterns. Use plain text, no markdown headers or bullet lists. Be direct and insightful.',
+      },
+      {
+        role: 'user',
+        content: `Summarize this project:\n\nProject: ${project.name}\nDescription: ${project.description || 'No description'}\nCreated: ${new Date(project.created_at).toLocaleDateString()}\nNotes: ${projectNotes.length} total, ${projectFolders.length} folders, ~${stats.totalWords.toLocaleString()} words\nTasks: ${tasks.length} total (${completedTaskCount} completed, ${openTasks.length} open)\n\nNotes:\n${noteSummaries || 'None yet'}\n\nTasks:\n${taskSummaries || 'None yet'}`,
+      },
+    ]
+
+    try {
+      await sendAIRequestStream(messages, {
+        onToken: (token) => setAiSummary(prev => prev + token),
+        onError: (error) => setSummaryError(error.message),
+      }, { signal: controller.signal, maxTokens: 1024, temperature: 0.7 })
+    } catch (err: unknown) {
+      if (err instanceof Error && err.name !== 'AbortError') {
+        setSummaryError(err.message)
+      }
+    } finally {
+      setIsGeneratingSummary(false)
+      summaryAbortRef.current = null
+    }
+  }, [isGeneratingSummary, projectNotes, projectFolders, tasks, openTasks, completedTaskCount, stats.totalWords, project])
+
   // ── Render helpers ──────────────────────────────────────────────────────
   const NoteTypeIcon = ({ noteType, size = 14 }: { noteType: NoteType; size?: number }) => {
     const pres = getNoteTypePresentation(noteType)
@@ -430,6 +487,47 @@ export default function ProjectDashboard({
           <StatCard icon={CheckCircle2} label="Open Tasks" value={stats.openTasks} accent="#10b981" />
           <StatCard icon={Type} label="Words" value={stats.totalWords.toLocaleString()} accent="#8b5cf6" />
         </div>
+
+        {/* ────── AI Summary ────── */}
+        <DashboardCard
+          title="AI Summary"
+          icon={Sparkles}
+          className="mb-6"
+          action={
+            <button
+              onClick={handleGenerateSummary}
+              disabled={projectNotes.length === 0 && tasks.length === 0}
+              className="inline-flex items-center gap-1.5 rounded-lg px-2.5 py-1 text-[11px] font-medium text-muted hover:bg-surface-hover hover:text-foreground transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+              title={isGeneratingSummary ? 'Stop generating' : 'Generate AI summary'}
+            >
+              {isGeneratingSummary ? (
+                <>
+                  <div className="h-3 w-3 border-[1.5px] border-accent border-t-transparent rounded-full animate-spin" />
+                  Stop
+                </>
+              ) : (
+                <>
+                  <Sparkles size={12} />
+                  {aiSummary ? 'Regenerate' : 'Generate'}
+                </>
+              )}
+            </button>
+          }
+        >
+          {summaryError ? (
+            <div className="flex items-center gap-2 rounded-lg bg-red-50 dark:bg-red-900/20 px-3 py-2 text-xs text-red-600 dark:text-red-400">
+              <AlertCircle size={14} />
+              <span>{summaryError}</span>
+            </div>
+          ) : aiSummary ? (
+            <div className="text-sm text-foreground/90 leading-relaxed whitespace-pre-wrap">
+              {aiSummary}
+              {isGeneratingSummary && <span className="inline-block w-1.5 h-4 bg-accent/70 animate-pulse ml-0.5 align-text-bottom rounded-sm" />}
+            </div>
+          ) : (
+            <EmptyState text={projectNotes.length === 0 && tasks.length === 0 ? 'Add notes or tasks first' : 'Click Generate to create an AI-powered project summary'} icon={Sparkles} />
+          )}
+        </DashboardCard>
 
         {/* ────── 7-Day Activity Heatmap ────── */}
         <DashboardCard title="Weekly Activity" icon={TrendingUp} className="mb-6">
