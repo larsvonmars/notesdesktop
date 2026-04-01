@@ -750,10 +750,12 @@ function WorkspaceContent() {
       return
     }
 
-    // Check for duplicate folder names at the same level
-    const siblings = createFolderParentId
-      ? folders.filter((f) => f.parent_id === createFolderParentId)
-      : folders.filter((f) => f.parent_id === null)
+    // Check for duplicate folder names at the same level within the same project
+    const siblings = folders.filter((f) => {
+      if (f.parent_id !== (createFolderParentId ?? null)) return false
+      if ((f.project_id ?? null) !== (createFolderProjectId ?? null)) return false
+      return true
+    })
 
     if (siblings.some((f) => f.name.toLowerCase() === name.toLowerCase())) {
       alert('A folder with this name already exists at this level')
@@ -793,11 +795,11 @@ function WorkspaceContent() {
       return
     }
 
-    // Find the folder being renamed to check siblings
+    // Find the folder being renamed to check siblings within the same project
     const folderToRename = folders.find((f) => f.id === folderId)
     if (folderToRename) {
       const siblings = folders.filter(
-        (f) => f.parent_id === folderToRename.parent_id && f.id !== folderId
+        (f) => f.parent_id === folderToRename.parent_id && f.id !== folderId && (f.project_id ?? null) === (folderToRename.project_id ?? null)
       )
 
       if (siblings.some((f) => f.name.toLowerCase() === trimmedName.toLowerCase())) {
