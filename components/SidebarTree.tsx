@@ -25,6 +25,8 @@ import {
   Palette,
   ArrowRightLeft,
   LayoutDashboard,
+  ChevronsUpDown,
+  FolderInput,
   type LucideIcon,
 } from 'lucide-react'
 import type { Note } from './NoteEditor'
@@ -41,6 +43,10 @@ const NOTE_TYPE_ICON_MAP: Record<NoteTypeIconKey, LucideIcon> = {
   'table-2': Table2,
   'file-pen-line': FilePenLine,
 }
+
+// Drag data types
+const DRAG_TYPE_NOTE = 'application/x-note-id'
+const DRAG_TYPE_FOLDER = 'application/x-folder-id'
 
 // A combined tree node representing projects as top-level groupings
 export interface ProjectTreeNode {
@@ -63,6 +69,7 @@ export interface SidebarTreeProps {
   onRenameFolder: (folderId: string, newName: string) => void
   onDeleteFolder: (folderId: string) => void
   onMoveFolder?: (folderId: string, newParentId: string | null) => void
+  onMoveFolderToProject?: (folderId: string, projectId: string | null) => void
   onDuplicateNote?: (note: Note) => void
   onDeleteNote?: (noteId: string) => void
   onMoveNote?: (noteId: string, newFolderId: string | null) => Promise<void>
@@ -75,6 +82,13 @@ export interface SidebarTreeProps {
   collapsed: boolean
   onToggleCollapsed: () => void
 }
+
+type DragPayload = { type: 'note'; id: string } | { type: 'folder'; id: string }
+
+type DropTarget =
+  | { kind: 'folder'; id: string }
+  | { kind: 'project-root'; projectId: string | null }
+  | null
 
 export default function SidebarTree({
   projects,
@@ -90,6 +104,7 @@ export default function SidebarTree({
   onRenameFolder,
   onDeleteFolder,
   onMoveFolder,
+  onMoveFolderToProject,
   onDuplicateNote,
   onDeleteNote,
   onMoveNote,
@@ -109,21 +124,23 @@ export default function SidebarTree({
   const [filterNoteTypes, setFilterNoteTypes] = useState<Set<NoteType>>(() => new Set())
   const [filterProjectIds, setFilterProjectIds] = useState<Set<string>>(() => new Set())
   const [showFilterPanel, setShowFilterPanel] = useState(false)
-  const [hoverFolderId, setHoverFolderId] = useState<string | null>(null)
-  const [hoverProjectId, setHoverProjectId] = useState<string | null>(null)
   const searchInputRef = useRef<HTMLInputElement>(null)
+
+  // Drag-and-drop state
+  const [dropTarget, setDropTarget] = useState<DropTarget>(null)
+  const [dragPayload, setDragPayload] = useState<DragPayload | null>(null)
+  const dragCounterRef = useRef<Map<string, number>>(new Map())
 
   // Context menu state
   const [contextMenu, setContextMenu] = useState<{
     x: number; y: number; type: 'folder' | 'note' | 'project'; id: string; name: string; projectId?: string | null
   } | null>(null)
 
-  // Rename modal state (for folders and projects)
-  const [showRenameModal, setShowRenameModal] = useState<{
-    type: 'folder' | 'project'; id: string; currentName: string
+  // Inline rename state
+  const [inlineRename, setInlineRename] = useState<{
+    type: 'folder' | 'project'; id: string; value: string
   } | null>(null)
-  const [renameInput, setRenameInput] = useState('')
-  const renameInputRef = useRef<HTMLInputElement | null>(null)
+  const inlineRenameRef = useRef<HTMLInputElement>(null)
 
   // Delete confirmation modal state
   const [showDeleteModal, setShowDeleteModal] = useState<{
@@ -135,10 +152,18 @@ export default function SidebarTree({
     projectId: string; currentColor: string
   } | null>(null)
 
+  // Move-to picker modal (searchable, full list)
+  const [showMovePicker, setShowMovePicker] = useState<{
+    type: 'note-to-folder' | 'note-to-project' | 'folder-to-project'
+    id: string
+    name: string
+  } | null>(null)
+  const [movePickerSearch, setMovePickerSearch] = useState('')
+  const movePickerSearchRef = useRef<HTMLInputElement>(null)
+
   // Auto-expand to the selected folder's path
   useEffect(() => {
     if (!selectedFolderId) return
-    // Walk the tree to find path from root to selected folder
     const findPath = (nodes: FolderNode[], target: string): string[] | null => {
       for (const n of nodes) {
         if (n.id === target) return [n.id]
@@ -174,7 +199,6 @@ export default function SidebarTree({
     const note = allNotes.find(n => n.id === selectedNoteId)
     if (!note) return
 
-    // Expand the project
     const projectKey = note.project_id ?? '__UNFILED__'
     setExpandedProjects(prev => {
       if (prev.has(projectKey)) return prev
@@ -183,7 +207,6 @@ export default function SidebarTree({
       return next
     })
 
-    // Expand the folder path
     if (note.folder_id) {
       const findPath = (nodes: FolderNode[], target: string): string[] | null => {
         for (const n of nodes) {
@@ -205,15 +228,31 @@ export default function SidebarTree({
     }
   }, [selectedNoteId, allNotes, folderTree])
 
-  // ---- DERIVED: active note context ----
+  // Focus inline rename input when it appears
+  useEffect(() => {
+    if (inlineRename) {
+      setTimeout(() => {
+        inlineRenameRef.current?.focus()
+        inlineRenameRef.current?.select()
+      }, 30)
+    }
+  }, [inlineRename])
 
-  // The active note object
+  // Focus move picker search when it appears
+  useEffect(() => {
+    if (showMovePicker) {
+      setMovePickerSearch('')
+      setTimeout(() => movePickerSearchRef.current?.focus(), 50)
+    }
+  }, [showMovePicker])
+
+  // ---- DERIVED STATE ----
+
   const activeNote = useMemo(
     () => (selectedNoteId ? allNotes.find(n => n.id === selectedNoteId) : undefined),
     [selectedNoteId, allNotes]
   )
 
-  // Recursively collect all ancestor folder ids of a given folderId
   const getAncestorFolderIds = useCallback((targetId: string, nodes: FolderNode[]): Set<string> => {
     const findPath = (ns: FolderNode[], t: string): string[] | null => {
       for (const n of ns) {
@@ -227,19 +266,16 @@ export default function SidebarTree({
     return path ? new Set(path) : new Set()
   }, [])
 
-  // Set of folder ids that are ancestors-of-or-equal-to the active note's folder
   const activeFolderAncestors = useMemo((): Set<string> => {
     if (!activeNote?.folder_id) return new Set()
     return getAncestorFolderIds(activeNote.folder_id, folderTree)
   }, [activeNote, folderTree, getAncestorFolderIds])
 
-  // The active project node (for breadcrumb / color)
   const activeProject = useMemo(
     () => projects.find(p => p.id === activeNote?.project_id),
     [projects, activeNote]
   )
 
-  // Breadcrumb: project > folder path > note
   const breadcrumb = useMemo((): string[] => {
     if (!activeNote) return []
     const parts: string[] = []
@@ -259,18 +295,15 @@ export default function SidebarTree({
     return parts
   }, [activeNote, activeProject, folderTree])
 
-  // Recursive total note count for a folder subtree
   const countNotesRecursive = useCallback((folder: FolderNode): number => {
     const direct = allNotes.filter(n => n.folder_id === folder.id).length
     const childCount = folder.children.reduce((acc, c) => acc + countNotesRecursive(c), 0)
     return direct + childCount
   }, [allNotes])
 
-  // Build the project tree structure
   const projectTree = useMemo((): ProjectTreeNode[] => {
     const result: ProjectTreeNode[] = []
 
-    // Each project gets its top-level folders (folders where parent_id is null and project_id matches)
     for (const project of projects) {
       const projectFolders = folderTree.filter(f => f.project_id === project.id)
       const projectRootNotes = allNotes.filter(
@@ -279,7 +312,6 @@ export default function SidebarTree({
       result.push({ project, folders: projectFolders, notes: projectRootNotes })
     }
 
-    // "Unfiled" — folders/notes with no project
     const unfiledFolders = folderTree.filter(f => f.project_id === null)
     const unfiledNotes = allNotes.filter(n => n.project_id === null && n.folder_id === null)
     result.push({ project: null, folders: unfiledFolders, notes: unfiledNotes })
@@ -287,46 +319,97 @@ export default function SidebarTree({
     return result
   }, [projects, folderTree, allNotes])
 
-  // Get notes for a specific folder — derived directly from allNotes
   const getNotesForFolder = useCallback((folderId: string): Note[] => {
     return allNotes.filter(n => n.folder_id === folderId)
   }, [allNotes])
 
-  // Toggle folder expand/collapse  
+  // Flatten all folders for move picker
+  const flatAllFolders = useMemo(() => {
+    const result: { folder: FolderNode; depth: number; projectName: string; projectColor: string }[] = []
+    const walk = (nodes: FolderNode[], depth: number, projectName: string, projectColor: string) => {
+      for (const n of nodes) {
+        result.push({ folder: n, depth, projectName, projectColor })
+        walk(n.children, depth + 1, projectName, projectColor)
+      }
+    }
+    for (const pt of projectTree) {
+      const pName = pt.project?.name ?? 'Unfiled'
+      const pColor = pt.project?.color ?? '#6B7280'
+      walk(pt.folders, 0, pName, pColor)
+    }
+    return result
+  }, [projectTree])
+
+  // Client-side check: is folderId a descendant of potentialAncestorId?
+  const isFolderDescendant = useCallback((folderId: string, potentialAncestorId: string): boolean => {
+    const check = (nodes: FolderNode[]): boolean => {
+      for (const n of nodes) {
+        if (n.id === potentialAncestorId) {
+          const findInSubtree = (subtree: FolderNode[]): boolean => {
+            for (const c of subtree) {
+              if (c.id === folderId) return true
+              if (findInSubtree(c.children)) return true
+            }
+            return false
+          }
+          return findInSubtree(n.children)
+        }
+        if (check(n.children)) return true
+      }
+      return false
+    }
+    return check(folderTree)
+  }, [folderTree])
+
+  // ---- TOGGLE HELPERS ----
+
   const toggleFolder = useCallback((folderId: string) => {
     setExpandedFolders(prev => {
       const next = new Set(prev)
-      if (next.has(folderId)) {
-        next.delete(folderId)
-      } else {
-        next.add(folderId)
-      }
+      if (next.has(folderId)) next.delete(folderId)
+      else next.add(folderId)
       return next
     })
   }, [])
 
-  // Toggle project expand/collapse
   const toggleProject = useCallback((projectId: string) => {
     setExpandedProjects(prev => {
       const next = new Set(prev)
-      if (next.has(projectId)) {
-        next.delete(projectId)
-      } else {
-        next.add(projectId)
-      }
+      if (next.has(projectId)) next.delete(projectId)
+      else next.add(projectId)
       return next
     })
   }, [])
 
-  // Context menu handlers
+  const expandAll = useCallback(() => {
+    const allFolderIds = new Set<string>()
+    const allProjectIds = new Set<string>()
+    const walk = (nodes: FolderNode[]) => {
+      for (const n of nodes) {
+        allFolderIds.add(n.id)
+        walk(n.children)
+      }
+    }
+    walk(folderTree)
+    for (const p of projects) allProjectIds.add(p.id)
+    allProjectIds.add('__UNFILED__')
+    setExpandedFolders(allFolderIds)
+    setExpandedProjects(allProjectIds)
+  }, [folderTree, projects])
+
+  const collapseAll = useCallback(() => {
+    setExpandedFolders(new Set())
+    setExpandedProjects(new Set())
+  }, [])
+
+  // ---- CONTEXT MENU HELPERS ----
+
   const handleFolderContextMenu = useCallback((e: React.MouseEvent, folderId: string, folderName: string, projectId?: string | null) => {
     e.preventDefault()
     e.stopPropagation()
-    const menuWidth = 200
-    const menuHeight = 250
     setContextMenu({
-      x: Math.min(e.clientX, window.innerWidth - menuWidth - 10),
-      y: Math.min(e.clientY, window.innerHeight - menuHeight - 10),
+      x: Math.min(e.clientX, window.innerWidth - 220),
+      y: Math.min(e.clientY, window.innerHeight - 300),
       type: 'folder',
       id: folderId,
       name: folderName,
@@ -337,11 +420,9 @@ export default function SidebarTree({
   const handleNoteContextMenu = useCallback((e: React.MouseEvent, note: Note) => {
     e.preventDefault()
     e.stopPropagation()
-    const menuWidth = 200
-    const menuHeight = 280
     setContextMenu({
-      x: Math.min(e.clientX, window.innerWidth - menuWidth - 10),
-      y: Math.min(e.clientY, window.innerHeight - menuHeight - 10),
+      x: Math.min(e.clientX, window.innerWidth - 220),
+      y: Math.min(e.clientY, window.innerHeight - 300),
       type: 'note',
       id: note.id,
       name: note.title || 'Untitled',
@@ -352,74 +433,125 @@ export default function SidebarTree({
   const handleProjectContextMenu = useCallback((e: React.MouseEvent, project: Project) => {
     e.preventDefault()
     e.stopPropagation()
-    const menuWidth = 200
-    const menuHeight = 300
     setContextMenu({
-      x: Math.min(e.clientX, window.innerWidth - menuWidth - 10),
-      y: Math.min(e.clientY, window.innerHeight - menuHeight - 10),
+      x: Math.min(e.clientX, window.innerWidth - 220),
+      y: Math.min(e.clientY, window.innerHeight - 300),
       type: 'project',
       id: project.id,
       name: project.name,
     })
   }, [])
 
-  // Drag and drop
-  const handleNoteDragStart = useCallback((e: React.DragEvent, noteId: string) => {
-    e.dataTransfer.setData('text/plain', noteId)
+  // ---- DRAG-AND-DROP ----
+
+  const handleDragStart = useCallback((e: React.DragEvent, payload: DragPayload) => {
+    if (payload.type === 'note') {
+      e.dataTransfer.setData(DRAG_TYPE_NOTE, payload.id)
+    } else {
+      e.dataTransfer.setData(DRAG_TYPE_FOLDER, payload.id)
+    }
     e.dataTransfer.effectAllowed = 'move'
     if (e.currentTarget instanceof HTMLElement) {
       e.currentTarget.style.opacity = '0.5'
     }
+    setDragPayload(payload)
   }, [])
 
-  const handleNoteDragEnd = useCallback((e: React.DragEvent) => {
+  const handleDragEnd = useCallback((e: React.DragEvent) => {
     if (e.currentTarget instanceof HTMLElement) {
       e.currentTarget.style.opacity = '1'
     }
-    setHoverFolderId(null)
+    setDropTarget(null)
+    setDragPayload(null)
+    dragCounterRef.current.clear()
   }, [])
 
-  const handleFolderDragOver = useCallback((e: React.DragEvent) => {
+  const makeDragKey = (target: DropTarget): string => {
+    if (!target) return '__none__'
+    if (target.kind === 'folder') return `folder:${target.id}`
+    return `project:${target.projectId ?? '__UNFILED__'}`
+  }
+
+  const handleDragEnter = useCallback((e: React.DragEvent, target: DropTarget) => {
+    e.preventDefault()
+    e.stopPropagation()
+    const key = makeDragKey(target)
+    const count = (dragCounterRef.current.get(key) ?? 0) + 1
+    dragCounterRef.current.set(key, count)
+    setDropTarget(target)
+  }, [])
+
+  const handleDragLeave = useCallback((e: React.DragEvent, target: DropTarget) => {
+    e.preventDefault()
+    e.stopPropagation()
+    const key = makeDragKey(target)
+    const count = (dragCounterRef.current.get(key) ?? 0) - 1
+    dragCounterRef.current.set(key, count)
+    if (count <= 0) {
+      dragCounterRef.current.delete(key)
+      setDropTarget(prev => {
+        if (prev && makeDragKey(prev) === key) return null
+        return prev
+      })
+    }
+  }, [])
+
+  const handleDragOver = useCallback((e: React.DragEvent) => {
     e.preventDefault()
     e.dataTransfer.dropEffect = 'move'
   }, [])
 
-  const handleFolderDragEnter = useCallback((e: React.DragEvent, targetFolderId: string | null) => {
+  const handleDrop = useCallback(async (e: React.DragEvent, target: DropTarget) => {
     e.preventDefault()
-    if (e.currentTarget === e.target) {
-      setHoverFolderId(targetFolderId)
-    }
-  }, [])
+    e.stopPropagation()
+    setDropTarget(null)
+    setDragPayload(null)
+    dragCounterRef.current.clear()
 
-  const handleFolderDragLeave = useCallback((e: React.DragEvent) => {
-    e.preventDefault()
-    if (e.currentTarget === e.target || !e.currentTarget.contains(e.relatedTarget as Node)) {
-      setHoverFolderId(null)
-    }
-  }, [])
+    if (!target) return
 
-  const handleFolderDrop = useCallback(async (e: React.DragEvent, targetFolderId: string | null) => {
-    e.preventDefault()
-    setHoverFolderId(null)
-    const noteId = e.dataTransfer.getData('text/plain')
-    if (!noteId || !onMoveNote) return
-    try {
-      await onMoveNote(noteId, targetFolderId)
-    } catch (err) {
-      console.error('Failed to move note:', err)
+    const noteId = e.dataTransfer.getData(DRAG_TYPE_NOTE)
+    const folderId = e.dataTransfer.getData(DRAG_TYPE_FOLDER)
+
+    if (noteId) {
+      if (target.kind === 'folder') {
+        if (onMoveNote) {
+          try { await onMoveNote(noteId, target.id) } catch (err) { console.error('Failed to move note:', err) }
+        }
+      } else if (target.kind === 'project-root') {
+        if (onMoveNoteToProject) {
+          try { await onMoveNoteToProject(noteId, target.projectId) } catch (err) { console.error('Failed to move note to project:', err) }
+        }
+      }
+    } else if (folderId) {
+      if (target.kind === 'folder') {
+        if (folderId === target.id) return
+        if (isFolderDescendant(target.id, folderId)) return
+        if (onMoveFolder) {
+          try { await onMoveFolder(folderId, target.id) } catch (err) { console.error('Failed to move folder:', err) }
+        }
+      } else if (target.kind === 'project-root') {
+        if (onMoveFolderToProject) {
+          try { await onMoveFolderToProject(folderId, target.projectId) } catch (err) { console.error('Failed to move folder to project:', err) }
+        } else if (onMoveFolder) {
+          try { await onMoveFolder(folderId, null) } catch (err) { console.error('Failed to move folder:', err) }
+        }
+      }
     }
-    setContextMenu(null)
-  }, [onMoveNote])
+  }, [onMoveNote, onMoveNoteToProject, onMoveFolder, onMoveFolderToProject, isFolderDescendant])
+
+  const isDropHighlighted = useCallback((target: DropTarget): boolean => {
+    if (!dropTarget || !target) return false
+    return makeDragKey(dropTarget) === makeDragKey(target)
+  }, [dropTarget])
 
   // ---- SEARCH & FILTER ----
 
-  // Basic text match used for tree folder/project label filtering
   const matchesSearch = useCallback((text: string) => {
     if (!searchQuery.trim()) return true
     return text.toLowerCase().includes(searchQuery.toLowerCase())
   }, [searchQuery])
 
-  // Full note filter: text + type + project
   const noteMatchesFilters = useCallback((note: Note): boolean => {
     if (searchQuery.trim() && !((note.title ?? 'Untitled').toLowerCase().includes(searchQuery.toLowerCase()))) return false
     if (filterNoteTypes.size > 0 && !filterNoteTypes.has((note.note_type ?? 'rich-text') as NoteType)) return false
@@ -439,7 +571,6 @@ export default function SidebarTree({
     [allNotes, isFilterActive, searchQuery, filterNoteTypes, filterProjectIds]
   )
 
-  // Get display path for a note (project › folder › ...)
   const getNoteLocationMeta = useCallback((note: Note): { projectName: string; projectColor: string; folderPath: string } => {
     const proj = projects.find(p => p.id === note.project_id)
     const projectName = proj?.name ?? 'Unfiled'
@@ -463,7 +594,8 @@ export default function SidebarTree({
   const toggleNoteTypeFilter = useCallback((type: NoteType) => {
     setFilterNoteTypes(prev => {
       const next = new Set(prev)
-      if (next.has(type)) { next.delete(type) } else { next.add(type) }
+      if (next.has(type)) next.delete(type)
+      else next.add(type)
       return next
     })
   }, [])
@@ -471,7 +603,8 @@ export default function SidebarTree({
   const toggleProjectFilter = useCallback((id: string) => {
     setFilterProjectIds(prev => {
       const next = new Set(prev)
-      if (next.has(id)) { next.delete(id) } else { next.add(id) }
+      if (next.has(id)) next.delete(id)
+      else next.add(id)
       return next
     })
   }, [])
@@ -482,74 +615,69 @@ export default function SidebarTree({
     setFilterProjectIds(new Set())
   }, [])
 
-  // All note types for the filter chips
   const allNoteTypePresentations = useMemo(() => getOrderedNoteTypePresentations(), [])
 
-  // Delete / rename handlers
+  // ---- DELETE / INLINE RENAME HANDLERS ----
+
   const handleConfirmDelete = useCallback(() => {
     if (!showDeleteModal) return
-    if (showDeleteModal.type === 'folder') {
-      onDeleteFolder(showDeleteModal.id)
-    } else if (showDeleteModal.type === 'note' && onDeleteNote) {
-      onDeleteNote(showDeleteModal.id)
-    } else if (showDeleteModal.type === 'project' && onDeleteProject) {
-      onDeleteProject(showDeleteModal.id)
-    }
+    if (showDeleteModal.type === 'folder') onDeleteFolder(showDeleteModal.id)
+    else if (showDeleteModal.type === 'note' && onDeleteNote) onDeleteNote(showDeleteModal.id)
+    else if (showDeleteModal.type === 'project' && onDeleteProject) onDeleteProject(showDeleteModal.id)
     setShowDeleteModal(null)
   }, [showDeleteModal, onDeleteFolder, onDeleteNote, onDeleteProject])
 
-  const handleConfirmRename = useCallback(() => {
-    if (!showRenameModal || !renameInput.trim()) return
-    if (showRenameModal.type === 'folder') {
-      onRenameFolder(showRenameModal.id, renameInput.trim())
-    } else if (showRenameModal.type === 'project' && onRenameProject) {
-      onRenameProject(showRenameModal.id, renameInput.trim())
+  const commitInlineRename = useCallback(() => {
+    if (!inlineRename || !inlineRename.value.trim()) {
+      setInlineRename(null)
+      return
     }
-    setShowRenameModal(null)
-    setRenameInput('')
-  }, [showRenameModal, renameInput, onRenameFolder, onRenameProject])
-
-  // Focus rename input when modal opens
-  useEffect(() => {
-    if (showRenameModal) {
-      setTimeout(() => renameInputRef.current?.focus(), 50)
+    if (inlineRename.type === 'folder') {
+      onRenameFolder(inlineRename.id, inlineRename.value.trim())
+    } else if (inlineRename.type === 'project' && onRenameProject) {
+      onRenameProject(inlineRename.id, inlineRename.value.trim())
     }
-  }, [showRenameModal])
+    setInlineRename(null)
+  }, [inlineRename, onRenameFolder, onRenameProject])
 
-  // Note type icon helper
+  // ---- NOTE TYPE ICON ----
+
   const NoteIcon = ({ noteType, size = 12 }: { noteType?: NoteType; size?: number }) => {
     const presentation = getNoteTypePresentation(noteType)
     const Icon = NOTE_TYPE_ICON_MAP[presentation.iconKey]
     return <Icon size={size} className={`${presentation.iconClassName} flex-shrink-0`} />
   }
 
-  // Render a single note item
-  const renderNoteItem = (n: Note) => {
+  // ---- RENDER NOTE ITEM ----
+  const renderNoteItem = (n: Note, indent: number = 0) => {
     if (!matchesSearch(n.title || 'Untitled')) return null
     const isActive = selectedNoteId === n.id
     const accentColor = activeProject?.color ?? '#6B7280'
+    const isDragging = dragPayload?.type === 'note' && dragPayload.id === n.id
     return (
       <div
         role="button"
         tabIndex={0}
         key={n.id}
         draggable
-        onDragStart={(e) => handleNoteDragStart(e, n.id)}
-        onDragEnd={handleNoteDragEnd}
+        onDragStart={(e) => handleDragStart(e, { type: 'note', id: n.id })}
+        onDragEnd={handleDragEnd}
         onClick={() => onSelectNote(n)}
         onKeyDown={(e) => {
-          if (e.key === 'Enter' || e.key === ' ') {
-            e.preventDefault()
-            onSelectNote(n)
-          }
+          if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onSelectNote(n) }
         }}
         onContextMenu={(e) => handleNoteContextMenu(e, n)}
         className={`group w-full text-left px-2.5 py-2 rounded-xl transition-all duration-200 flex items-start justify-between ${
+          isDragging ? 'opacity-50' : ''
+        } ${
           isActive
             ? 'bg-alpine-50 dark:bg-alpine-900/30 text-alpine-800 dark:text-alpine-200 font-medium shadow-sm'
             : 'hover:bg-surface-hover/60 text-foreground/70 hover:text-foreground'
         }`}
-        style={isActive ? { borderLeft: `3px solid ${accentColor}`, paddingLeft: '5px' } : {}}
+        style={{
+          paddingLeft: `${indent}px`,
+          ...(isActive ? { borderLeft: `3px solid ${accentColor}`, paddingLeft: `${Math.max(indent - 3, 5)}px` } : {}),
+        }}
         title={n.title || 'Untitled'}
       >
         <div className="flex-1 min-w-0">
@@ -559,10 +687,7 @@ export default function SidebarTree({
           </div>
         </div>
         <button
-          onClick={(e) => {
-            e.stopPropagation()
-            handleNoteContextMenu(e, n)
-          }}
+          onClick={(e) => { e.stopPropagation(); handleNoteContextMenu(e, n) }}
           className="hidden group-hover:flex p-0.5 hover:bg-surface-hover rounded transition-colors flex-shrink-0"
           title="Note options"
         >
@@ -572,12 +697,8 @@ export default function SidebarTree({
     )
   }
 
-  // Render folder recursively
+  // ---- RENDER FOLDER ----
   const renderFolder = (folder: FolderNode, level: number = 0): React.ReactNode => {
-    if (!matchesSearch(folder.name) && !searchQuery) {
-      // If search is active but folder name doesn't match, still render if any child matches
-    }
-
     const isExpanded = expandedFolders.has(folder.id)
     const isSelected = selectedFolderId === folder.id
     const hasChildren = folder.children.length > 0
@@ -585,33 +706,38 @@ export default function SidebarTree({
     const totalCount = countNotesRecursive(folder)
     const isOnActivePath = activeFolderAncestors.has(folder.id)
     const accentColor = activeProject?.color ?? '#6B7280'
+    const isRenaming = inlineRename?.type === 'folder' && inlineRename.id === folder.id
+    const isDragging = dragPayload?.type === 'folder' && dragPayload.id === folder.id
+    const isDropTarget = isDropHighlighted({ kind: 'folder', id: folder.id })
+    const indent = level * 16 + 8
 
     return (
-      <div key={folder.id}>
+      <div key={folder.id} className={isDragging ? 'opacity-40' : ''}>
         {/* Folder Header */}
         <div
           role="button"
           tabIndex={0}
-          onClick={() => toggleFolder(folder.id)}
-          onContextMenu={(e) => handleFolderContextMenu(e, folder.id, folder.name, folder.project_id)}
-          onDragOver={handleFolderDragOver}
-          onDragEnter={(e) => handleFolderDragEnter(e, folder.id)}
-          onDragLeave={handleFolderDragLeave}
-          onDrop={(e) => handleFolderDrop(e, folder.id)}
-          onMouseEnter={() => setHoverFolderId(folder.id)}
-          onMouseLeave={() => setHoverFolderId(null)}
-          onKeyDown={(e) => {
-            if (e.key === 'Enter' || e.key === ' ') {
-              e.preventDefault()
-              toggleFolder(folder.id)
-            }
+          draggable={!isRenaming}
+          onDragStart={(e) => handleDragStart(e, { type: 'folder', id: folder.id })}
+          onDragEnd={handleDragEnd}
+          onClick={() => { if (!isRenaming) toggleFolder(folder.id) }}
+          onDoubleClick={() => {
+            setInlineRename({ type: 'folder', id: folder.id, value: folder.name })
           }}
-          className={`group flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl transition-all duration-200 ${
+          onContextMenu={(e) => handleFolderContextMenu(e, folder.id, folder.name, folder.project_id)}
+          onDragOver={handleDragOver}
+          onDragEnter={(e) => handleDragEnter(e, { kind: 'folder', id: folder.id })}
+          onDragLeave={(e) => handleDragLeave(e, { kind: 'folder', id: folder.id })}
+          onDrop={(e) => handleDrop(e, { kind: 'folder', id: folder.id })}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); toggleFolder(folder.id) }
+          }}
+          className={`group flex items-center gap-1.5 px-2 py-1.5 rounded-xl transition-all duration-200 ${
             isSelected ? 'bg-accent/10 text-accent font-medium shadow-sm' : 'hover:bg-surface-hover/60 text-foreground/70 hover:text-foreground'
-          } ${hoverFolderId === folder.id ? 'ring-2 ring-alpine-400/30 bg-alpine-50/50 dark:bg-alpine-900/20' : ''}`}
+          } ${isDropTarget ? 'ring-2 ring-alpine-400/50 bg-alpine-50/60 dark:bg-alpine-900/30' : ''}`}
           style={{
-            paddingLeft: `${level * 12 + 8}px`,
-            ...(isOnActivePath ? { borderLeft: `2px solid ${accentColor}`, paddingLeft: `${level * 12 + 6}px` } : {}),
+            paddingLeft: `${indent}px`,
+            ...(isOnActivePath ? { borderLeft: `2px solid ${accentColor}`, paddingLeft: `${indent - 2}px` } : {}),
           }}
         >
           <ChevronRight
@@ -619,64 +745,86 @@ export default function SidebarTree({
             className={`flex-shrink-0 transition-transform duration-200 ${isExpanded ? 'rotate-90' : ''} ${hasChildren || folderNotes.length > 0 ? 'text-muted' : 'text-transparent'}`}
           />
           <FolderTreeIcon size={12} className={`flex-shrink-0 ${isOnActivePath ? 'text-alpine-500' : isExpanded ? 'text-alpine-500' : 'text-muted'}`} />
-          <span className={`text-xs truncate flex-1 ${isOnActivePath ? 'font-medium' : ''}`}>{folder.name}</span>
-          {totalCount > 0 && (
+
+          {isRenaming ? (
+            <input
+              ref={inlineRenameRef}
+              type="text"
+              value={inlineRename.value}
+              onChange={(e) => setInlineRename({ ...inlineRename, value: e.target.value })}
+              onBlur={commitInlineRename}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') commitInlineRename()
+                if (e.key === 'Escape') setInlineRename(null)
+                e.stopPropagation()
+              }}
+              onClick={(e) => e.stopPropagation()}
+              className="flex-1 text-xs bg-surface-hover/80 border border-alpine-400/50 rounded px-1 py-0.5 focus:outline-none focus:ring-1 focus:ring-alpine-500 min-w-0"
+            />
+          ) : (
+            <span className={`text-xs truncate flex-1 ${isOnActivePath ? 'font-medium' : ''}`}>{folder.name}</span>
+          )}
+
+          {totalCount > 0 && !isRenaming && (
             <span className="text-[10px] bg-surface-hover text-muted px-1 py-0.5 rounded-full font-semibold flex-shrink-0">
               {totalCount}
             </span>
           )}
           {/* Hover actions */}
-          <div className="hidden group-hover:flex items-center gap-0.5 flex-shrink-0">
-            <button
-              onClick={(e) => {
-                e.stopPropagation()
-                onNewNote(undefined, folder.id, folder.project_id)
-              }}
-              className="p-0.5 hover:bg-surface-hover rounded transition-colors"
-              title="New note in this folder"
-            >
-              <Plus size={12} />
-            </button>
-            <button
-              onClick={(e) => {
-                e.stopPropagation()
-                handleFolderContextMenu(e, folder.id, folder.name, folder.project_id)
-              }}
-              className="p-0.5 hover:bg-surface-hover rounded transition-colors"
-              title="Folder options"
-            >
-              <MoreVertical size={11} />
-            </button>
-          </div>
+          {!isRenaming && (
+            <div className="hidden group-hover:flex items-center gap-0.5 flex-shrink-0">
+              <button
+                onClick={(e) => { e.stopPropagation(); onNewNote(undefined, folder.id, folder.project_id) }}
+                className="p-0.5 hover:bg-surface-hover rounded transition-colors"
+                title="New note"
+              >
+                <Plus size={12} />
+              </button>
+              <button
+                onClick={(e) => { e.stopPropagation(); onCreateFolder(folder.id, folder.project_id) }}
+                className="p-0.5 hover:bg-surface-hover rounded transition-colors"
+                title="New subfolder"
+              >
+                <FolderPlus size={11} />
+              </button>
+              <button
+                onClick={(e) => { e.stopPropagation(); handleFolderContextMenu(e, folder.id, folder.name, folder.project_id) }}
+                className="p-0.5 hover:bg-surface-hover rounded transition-colors"
+                title="More options"
+              >
+                <MoreVertical size={11} />
+              </button>
+            </div>
+          )}
         </div>
 
         {/* Expanded content */}
         {isExpanded && (
           <div className="space-y-0.5 mt-0.5">
-            {/* Notes in this folder */}
-            {folderNotes.length > 0 ? (
-              <div className="space-y-0.5" style={{ paddingLeft: `${(level + 1) * 12}px` }}>
-                {folderNotes.map(n => renderNoteItem(n))}
-              </div>
-            ) : (
-              <div className="text-[10px] text-muted italic py-0.5" style={{ paddingLeft: `${(level + 1) * 12 + 8}px` }}>
-                Empty
-              </div>
-            )}
-
-            {/* Child folders */}
+            {/* Child folders first */}
             {hasChildren && (
               <div className="space-y-0.5">
                 {folder.children.map(child => renderFolder(child, level + 1))}
               </div>
             )}
+
+            {/* Notes in this folder */}
+            {folderNotes.length > 0 ? (
+              <div className="space-y-0.5">
+                {folderNotes.map(n => renderNoteItem(n, (level + 1) * 16 + 4))}
+              </div>
+            ) : !hasChildren ? (
+              <div className="text-[10px] text-muted italic py-0.5" style={{ paddingLeft: `${(level + 1) * 16 + 12}px` }}>
+                Empty
+              </div>
+            ) : null}
           </div>
         )}
       </div>
     )
   }
 
-  // Render project section
+  // ---- RENDER PROJECT ----
   const renderProject = (node: ProjectTreeNode) => {
     const projectKey = node.project?.id ?? '__UNFILED__'
     const projectName = node.project?.name ?? 'Unfiled'
@@ -685,8 +833,10 @@ export default function SidebarTree({
     const totalItems = node.folders.length + node.notes.length
     const isActiveProject = node.project?.id === activeNote?.project_id
     const totalNoteCount = node.notes.length + node.folders.reduce((acc, f) => acc + countNotesRecursive(f), 0)
+    const isRenaming = inlineRename?.type === 'project' && node.project && inlineRename.id === node.project.id
+    const dropTargetHere: DropTarget = { kind: 'project-root', projectId: node.project?.id ?? null }
+    const isDropHere = isDropHighlighted(dropTargetHere)
 
-    // Skip empty projects when searching
     if (searchQuery && totalItems === 0) return null
 
     return (
@@ -699,23 +849,23 @@ export default function SidebarTree({
         <div
           role="button"
           tabIndex={0}
-          onClick={() => toggleProject(projectKey)}
-          onContextMenu={node.project ? (e) => handleProjectContextMenu(e, node.project!) : undefined}
-          onMouseEnter={() => setHoverProjectId(projectKey)}
-          onMouseLeave={() => setHoverProjectId(null)}
-          onDragOver={handleFolderDragOver}
-          onDragEnter={(e) => handleFolderDragEnter(e, null)}
-          onDragLeave={handleFolderDragLeave}
-          onDrop={(e) => handleFolderDrop(e, null)}
-          onKeyDown={(e) => {
-            if (e.key === 'Enter' || e.key === ' ') {
-              e.preventDefault()
-              toggleProject(projectKey)
+          onClick={() => { if (!isRenaming) toggleProject(projectKey) }}
+          onDoubleClick={() => {
+            if (node.project) {
+              setInlineRename({ type: 'project', id: node.project.id, value: node.project.name })
             }
+          }}
+          onContextMenu={node.project ? (e) => handleProjectContextMenu(e, node.project!) : undefined}
+          onDragOver={handleDragOver}
+          onDragEnter={(e) => handleDragEnter(e, dropTargetHere)}
+          onDragLeave={(e) => handleDragLeave(e, dropTargetHere)}
+          onDrop={(e) => handleDrop(e, dropTargetHere)}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); toggleProject(projectKey) }
           }}
           className={`group flex items-center gap-2 px-3 py-2 rounded-xl transition-all duration-200 hover:bg-surface-hover/60 ${
             isActiveProject ? 'bg-accent/8 shadow-sm' : selectedProjectId === node.project?.id ? 'bg-accent/10' : ''
-          }`}
+          } ${isDropHere ? 'ring-2 ring-alpine-400/50 bg-alpine-50/60 dark:bg-alpine-900/30' : ''}`}
         >
           <ChevronRight
             size={12}
@@ -729,61 +879,86 @@ export default function SidebarTree({
           ) : (
             <Home size={12} className="text-muted flex-shrink-0" />
           )}
-          <span className={`truncate flex-1 text-foreground ${isActiveProject ? 'text-sm font-bold' : 'text-xs font-semibold'}`}>{projectName}</span>
-          {totalNoteCount > 0 && (
+
+          {isRenaming ? (
+            <input
+              ref={inlineRenameRef}
+              type="text"
+              value={inlineRename!.value}
+              onChange={(e) => setInlineRename({ ...inlineRename!, value: e.target.value })}
+              onBlur={commitInlineRename}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') commitInlineRename()
+                if (e.key === 'Escape') setInlineRename(null)
+                e.stopPropagation()
+              }}
+              onClick={(e) => e.stopPropagation()}
+              className="flex-1 text-xs font-semibold bg-surface-hover/80 border border-alpine-400/50 rounded px-1 py-0.5 focus:outline-none focus:ring-1 focus:ring-alpine-500 min-w-0"
+            />
+          ) : (
+            <span className={`truncate flex-1 text-foreground ${isActiveProject ? 'text-sm font-bold' : 'text-xs font-semibold'}`}>{projectName}</span>
+          )}
+
+          {totalNoteCount > 0 && !isRenaming && (
             <span className="text-[10px] text-muted flex-shrink-0">{totalNoteCount}</span>
           )}
           {/* Hover actions */}
-          <div className="hidden group-hover:flex items-center gap-0.5 flex-shrink-0">
-            {node.project && (
-              <>
-                {onOpenProjectDashboard && (
+          {!isRenaming && (
+            <div className="hidden group-hover:flex items-center gap-0.5 flex-shrink-0">
+              {node.project && (
+                <>
+                  {onOpenProjectDashboard && (
+                    <button
+                      onClick={(e) => { e.stopPropagation(); onOpenProjectDashboard(node.project!.id) }}
+                      className="p-0.5 hover:bg-surface-hover rounded transition-colors"
+                      title={`Open ${projectName} dashboard`}
+                    >
+                      <LayoutDashboard size={12} />
+                    </button>
+                  )}
                   <button
-                    onClick={(e) => {
-                      e.stopPropagation()
-                      onOpenProjectDashboard(node.project!.id)
-                    }}
+                    onClick={(e) => { e.stopPropagation(); onCreateFolder(null, node.project?.id) }}
                     className="p-0.5 hover:bg-surface-hover rounded transition-colors"
-                    title={`Open ${projectName} dashboard`}
+                    title="New folder"
                   >
-                    <LayoutDashboard size={12} />
+                    <FolderPlus size={12} />
                   </button>
-                )}
-                <button
-                  onClick={(e) => {
-                    e.stopPropagation()
-                    onNewNote(undefined, null, node.project?.id)
-                  }}
-                  className="p-0.5 hover:bg-surface-hover rounded transition-colors"
-                  title={`New note in ${projectName}`}
-                >
-                  <Plus size={12} />
-                </button>
-                <button
-                  onClick={(e) => {
-                    e.stopPropagation()
-                    handleProjectContextMenu(e, node.project!)
-                  }}
-                  className="p-0.5 hover:bg-surface-hover rounded transition-colors"
-                  title="Project options"
-                >
-                  <MoreVertical size={11} />
-                </button>
-              </>
-            )}
-            {!node.project && (
-              <button
-                onClick={(e) => {
-                  e.stopPropagation()
-                  onCreateFolder(null)
-                }}
-                className="p-0.5 hover:bg-surface-hover rounded transition-colors"
-                title="New folder"
-              >
-                <FolderPlus size={12} />
-              </button>
-            )}
-          </div>
+                  <button
+                    onClick={(e) => { e.stopPropagation(); onNewNote(undefined, null, node.project?.id) }}
+                    className="p-0.5 hover:bg-surface-hover rounded transition-colors"
+                    title={`New note in ${projectName}`}
+                  >
+                    <Plus size={12} />
+                  </button>
+                  <button
+                    onClick={(e) => { e.stopPropagation(); handleProjectContextMenu(e, node.project!) }}
+                    className="p-0.5 hover:bg-surface-hover rounded transition-colors"
+                    title="Project options"
+                  >
+                    <MoreVertical size={11} />
+                  </button>
+                </>
+              )}
+              {!node.project && (
+                <>
+                  <button
+                    onClick={(e) => { e.stopPropagation(); onCreateFolder(null) }}
+                    className="p-0.5 hover:bg-surface-hover rounded transition-colors"
+                    title="New folder"
+                  >
+                    <FolderPlus size={12} />
+                  </button>
+                  <button
+                    onClick={(e) => { e.stopPropagation(); onNewNote(undefined, null, null) }}
+                    className="p-0.5 hover:bg-surface-hover rounded transition-colors"
+                    title="New note"
+                  >
+                    <Plus size={12} />
+                  </button>
+                </>
+              )}
+            </div>
+          )}
         </div>
 
         {/* Project Content (expanded) */}
@@ -792,10 +967,10 @@ export default function SidebarTree({
             {/* Folders */}
             {node.folders.map(folder => renderFolder(folder, 1))}
 
-            {/* Root-level notes in this project (no folder) */}
+            {/* Root-level notes in this project */}
             {node.notes.length > 0 && (
               <div className="space-y-0.5 pl-2">
-                {node.notes.map(n => renderNoteItem(n))}
+                {node.notes.map(n => renderNoteItem(n, 20))}
               </div>
             )}
 
@@ -806,7 +981,6 @@ export default function SidebarTree({
             )}
           </div>
         )}
-        {/* Section separator between projects */}
         <div className="mx-2 mt-1.5 mb-0.5" />
       </div>
     )
@@ -815,13 +989,12 @@ export default function SidebarTree({
   // ---- COLLAPSED VIEW ----
   if (collapsed) {
     return (
-      <aside className="fixed inset-y-0 left-0 z-40 hidden w-14 border-r border-border/40 bg-surface  transition-all duration-300 lg:flex lg:flex-col">
+      <aside className="fixed inset-y-0 left-0 z-40 hidden w-14 border-r border-border/40 bg-surface transition-all duration-300 lg:flex lg:flex-col">
         <div className="flex items-center justify-center px-3 py-4">
           <div className="flex h-8 w-8 items-center justify-center rounded-xl bg-gradient-to-br from-alpine-500 to-alpine-600 text-sm font-bold text-white shadow-sm">
             N
           </div>
         </div>
-        {/* Project dots */}
         <nav className="flex-1 flex flex-col items-center gap-2.5 px-2 py-4 overflow-y-auto scrollbar-hide">
           {projects.map(p => (
             <button
@@ -838,12 +1011,9 @@ export default function SidebarTree({
                 ...(p.id === activeNote?.project_id ? { ringColor: p.color ?? '#6B7280' } : {}),
               }}
             >
-              <span className="text-[9px] font-bold text-white uppercase">
-                {p.name.slice(0, 2)}
-              </span>
+              <span className="text-[9px] font-bold text-white uppercase">{p.name.slice(0, 2)}</span>
             </button>
           ))}
-          {/* Unfiled dot */}
           <button
             onClick={onToggleCollapsed}
             title="Unfiled"
@@ -869,26 +1039,35 @@ export default function SidebarTree({
   // ---- EXPANDED VIEW ----
   return (
     <>
-      <aside className="fixed inset-y-0 left-0 z-40 hidden w-[280px] border-r border-border/40 bg-surface  transition-all duration-300 lg:flex lg:flex-col">
+      <aside className="fixed inset-y-0 left-0 z-40 hidden w-[280px] border-r border-border/40 bg-surface transition-all duration-300 lg:flex lg:flex-col">
         {/* Header */}
         <div className="flex items-center justify-between px-4 py-3.5">
           <div className="flex items-center gap-2.5 overflow-hidden">
             <img src="/icon-192.png" alt="MindViz Notes" className="h-7 w-7 rounded-xl flex-shrink-0 shadow-sm" />
             <span className="truncate text-[13px] font-bold text-foreground tracking-tight">MindViz Notes</span>
           </div>
-          <button
-            onClick={onToggleCollapsed}
-            className="rounded-xl p-1.5 text-muted/70 transition-all duration-200 hover:bg-surface-hover/70 hover:text-foreground"
-            aria-label="Collapse sidebar"
-            title="Collapse sidebar"
-          >
-            <ChevronLeft size={15} />
-          </button>
+          <div className="flex items-center gap-0.5">
+            <button
+              onClick={expandAll}
+              className="rounded-lg p-1 text-muted/50 transition-all duration-200 hover:bg-surface-hover/70 hover:text-foreground"
+              aria-label="Expand all"
+              title="Expand all"
+            >
+              <ChevronsUpDown size={13} />
+            </button>
+            <button
+              onClick={onToggleCollapsed}
+              className="rounded-xl p-1.5 text-muted/70 transition-all duration-200 hover:bg-surface-hover/70 hover:text-foreground"
+              aria-label="Collapse sidebar"
+              title="Collapse sidebar"
+            >
+              <ChevronLeft size={15} />
+            </button>
+          </div>
         </div>
 
         {/* Search */}
         <div className="px-3 pt-1 pb-2 space-y-2">
-          {/* Row: text input + filter toggle */}
           <div className="flex items-center gap-1.5">
             <div className="relative flex-1">
               <Search size={13} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-muted/60" />
@@ -930,7 +1109,6 @@ export default function SidebarTree({
           {/* Filter panel */}
           {showFilterPanel && (
             <div className="space-y-2">
-              {/* Note type chips */}
               <div>
                 <div className="text-[9px] font-semibold uppercase text-muted mb-1 tracking-wide">Type</div>
                 <div className="flex flex-wrap gap-1">
@@ -956,12 +1134,10 @@ export default function SidebarTree({
                 </div>
               </div>
 
-              {/* Project chips */}
               {projects.length > 0 && (
                 <div>
                   <div className="text-[9px] font-semibold uppercase text-muted mb-1 tracking-wide">Project</div>
                   <div className="flex flex-wrap gap-1">
-                    {/* Unfiled chip */}
                     <button
                       onClick={() => toggleProjectFilter('__UNFILED__')}
                       className={`flex items-center gap-1 px-2 py-1 rounded-lg text-[10px] font-medium border transition-all duration-200 ${
@@ -995,7 +1171,6 @@ export default function SidebarTree({
                 </div>
               )}
 
-              {/* Clear all */}
               {activeFilterCount > 0 && (
                 <button
                   onClick={clearAllFilters}
@@ -1034,7 +1209,6 @@ export default function SidebarTree({
         <div className="flex-1 overflow-y-auto px-2 py-2">
           {isFilterActive ? (
             <>
-              {/* Flat results header */}
               <div className="flex items-center justify-between mb-2 px-1">
                 <span className="text-[10px] font-semibold uppercase tracking-wide text-muted">
                   {filteredNotes.length} result{filteredNotes.length !== 1 ? 's' : ''}
@@ -1057,6 +1231,9 @@ export default function SidebarTree({
                         role="button"
                         tabIndex={0}
                         key={note.id}
+                        draggable
+                        onDragStart={(e) => handleDragStart(e, { type: 'note', id: note.id })}
+                        onDragEnd={handleDragEnd}
                         onClick={() => onSelectNote(note)}
                         onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onSelectNote(note) } }}
                         onContextMenu={(e) => handleNoteContextMenu(e, note)}
@@ -1067,23 +1244,17 @@ export default function SidebarTree({
                         }`}
                         style={isActive ? { borderLeft: `3px solid ${projectColor}`, paddingLeft: '7px' } : {}}
                       >
-                        {/* Type icon */}
                         <div className={`mt-0.5 flex-shrink-0 w-7 h-7 rounded-xl flex items-center justify-center ${presentation.iconBgClassName}`}>
                           <Icon size={12} />
                         </div>
                         <div className="flex-1 min-w-0">
-                          {/* Title */}
                           <div className={`text-xs truncate font-medium ${
                             isActive ? 'text-alpine-800 dark:text-alpine-200' : 'text-foreground'
                           }`}>
                             {note.title || 'Untitled'}
                           </div>
-                          {/* Location: project › folder */}
                           <div className="flex items-center gap-1 mt-0.5 min-w-0">
-                            <span
-                              className="text-[10px] font-semibold truncate flex-shrink-0"
-                              style={{ color: projectColor }}
-                            >
+                            <span className="text-[10px] font-semibold truncate flex-shrink-0" style={{ color: projectColor }}>
                               {projectName}
                             </span>
                             {folderPath && (
@@ -1134,15 +1305,12 @@ export default function SidebarTree({
         </div>
       </aside>
 
-      {/* Context Menu */}
+      {/* ========== CONTEXT MENU ========== */}
       {contextMenu && (
         <>
+          <div className="fixed inset-0 z-50" onClick={() => setContextMenu(null)} />
           <div
-            className="fixed inset-0 z-50"
-            onClick={() => setContextMenu(null)}
-          />
-          <div
-            className="fixed z-[60] bg-surface  rounded-2xl shadow-2xl border border-border/40 py-1.5 min-w-[200px] max-h-[400px] overflow-y-auto"
+            className="fixed z-[60] bg-surface rounded-2xl shadow-2xl border border-border/40 py-1.5 min-w-[200px] max-h-[400px] overflow-y-auto"
             style={{ left: contextMenu.x, top: contextMenu.y }}
             onClick={(e) => e.stopPropagation()}
           >
@@ -1151,12 +1319,7 @@ export default function SidebarTree({
               <>
                 <button
                   onClick={() => {
-                    setShowRenameModal({
-                      type: 'project',
-                      id: contextMenu.id,
-                      currentName: contextMenu.name,
-                    })
-                    setRenameInput(contextMenu.name)
+                    setInlineRename({ type: 'project', id: contextMenu.id, value: contextMenu.name })
                     setContextMenu(null)
                   }}
                   className="w-full px-3 py-2 text-xs text-left hover:bg-surface-hover flex items-center gap-2 text-foreground/80 transition-colors"
@@ -1168,10 +1331,7 @@ export default function SidebarTree({
                   <button
                     onClick={() => {
                       const project = projects.find(p => p.id === contextMenu.id)
-                      setShowColorPicker({
-                        projectId: contextMenu.id,
-                        currentColor: project?.color ?? '#6B7280',
-                      })
+                      setShowColorPicker({ projectId: contextMenu.id, currentColor: project?.color ?? '#6B7280' })
                       setContextMenu(null)
                     }}
                     className="w-full px-3 py-2 text-xs text-left hover:bg-surface-hover flex items-center gap-2 text-foreground/80 transition-colors"
@@ -1180,22 +1340,28 @@ export default function SidebarTree({
                     <span className="font-medium">Change Color</span>
                   </button>
                 )}
+                {onOpenProjectDashboard && (
+                  <button
+                    onClick={() => {
+                      onOpenProjectDashboard(contextMenu.id)
+                      setContextMenu(null)
+                    }}
+                    className="w-full px-3 py-2 text-xs text-left hover:bg-surface-hover flex items-center gap-2 text-foreground/80 transition-colors"
+                  >
+                    <LayoutDashboard size={14} />
+                    <span className="font-medium">Open Dashboard</span>
+                  </button>
+                )}
                 <div className="border-t border-border my-1" />
                 <button
-                  onClick={() => {
-                    onCreateFolder(null, contextMenu.id)
-                    setContextMenu(null)
-                  }}
+                  onClick={() => { onCreateFolder(null, contextMenu.id); setContextMenu(null) }}
                   className="w-full px-3 py-2 text-xs text-left hover:bg-surface-hover flex items-center gap-2 text-foreground/80 transition-colors"
                 >
                   <FolderPlus size={14} />
                   <span className="font-medium">New Folder</span>
                 </button>
                 <button
-                  onClick={() => {
-                    onNewNote(undefined, null, contextMenu.id)
-                    setContextMenu(null)
-                  }}
+                  onClick={() => { onNewNote(undefined, null, contextMenu.id); setContextMenu(null) }}
                   className="w-full px-3 py-2 text-xs text-left hover:bg-surface-hover flex items-center gap-2 text-foreground/80 transition-colors"
                 >
                   <FileText size={14} />
@@ -1205,14 +1371,7 @@ export default function SidebarTree({
                   <>
                     <div className="border-t border-border my-1" />
                     <button
-                      onClick={() => {
-                        setShowDeleteModal({
-                          type: 'project',
-                          id: contextMenu.id,
-                          name: contextMenu.name,
-                        })
-                        setContextMenu(null)
-                      }}
+                      onClick={() => { setShowDeleteModal({ type: 'project', id: contextMenu.id, name: contextMenu.name }); setContextMenu(null) }}
                       className="w-full px-3 py-2 text-xs text-left hover:bg-danger-light text-danger flex items-center gap-2 transition-colors"
                     >
                       <Trash2 size={14} />
@@ -1228,49 +1387,47 @@ export default function SidebarTree({
               <>
                 <button
                   onClick={() => {
-                    setShowRenameModal({
-                      type: 'folder',
-                      id: contextMenu.id,
-                      currentName: contextMenu.name,
-                    })
-                    setRenameInput(contextMenu.name)
+                    setInlineRename({ type: 'folder', id: contextMenu.id, value: contextMenu.name })
                     setContextMenu(null)
                   }}
                   className="w-full px-3 py-2 text-xs text-left hover:bg-surface-hover flex items-center gap-2 text-foreground/80 transition-colors"
                 >
                   <Edit2 size={14} />
-                  <span className="font-medium">Rename Folder</span>
+                  <span className="font-medium">Rename</span>
                 </button>
                 <button
-                  onClick={() => {
-                    onCreateFolder(contextMenu.id, contextMenu.projectId)
-                    setContextMenu(null)
-                  }}
+                  onClick={() => { onCreateFolder(contextMenu.id, contextMenu.projectId); setContextMenu(null) }}
                   className="w-full px-3 py-2 text-xs text-left hover:bg-surface-hover flex items-center gap-2 text-foreground/80 transition-colors"
                 >
                   <FolderPlus size={14} />
                   <span className="font-medium">New Subfolder</span>
                 </button>
                 <button
-                  onClick={() => {
-                    onNewNote(undefined, contextMenu.id, contextMenu.projectId)
-                    setContextMenu(null)
-                  }}
+                  onClick={() => { onNewNote(undefined, contextMenu.id, contextMenu.projectId); setContextMenu(null) }}
                   className="w-full px-3 py-2 text-xs text-left hover:bg-surface-hover flex items-center gap-2 text-foreground/80 transition-colors"
                 >
                   <FileText size={14} />
                   <span className="font-medium">New Note Here</span>
                 </button>
+                {/* Move folder to project */}
+                {(onMoveFolderToProject || onMoveFolder) && projects.length > 0 && (
+                  <>
+                    <div className="border-t border-border my-1" />
+                    <button
+                      onClick={() => {
+                        setShowMovePicker({ type: 'folder-to-project', id: contextMenu.id, name: contextMenu.name })
+                        setContextMenu(null)
+                      }}
+                      className="w-full px-3 py-2 text-xs text-left hover:bg-surface-hover flex items-center gap-2 text-foreground/80 transition-colors"
+                    >
+                      <FolderInput size={14} />
+                      <span className="font-medium">Move to Project...</span>
+                    </button>
+                  </>
+                )}
                 <div className="border-t border-border my-1" />
                 <button
-                  onClick={() => {
-                    setShowDeleteModal({
-                      type: 'folder',
-                      id: contextMenu.id,
-                      name: contextMenu.name,
-                    })
-                    setContextMenu(null)
-                  }}
+                  onClick={() => { setShowDeleteModal({ type: 'folder', id: contextMenu.id, name: contextMenu.name }); setContextMenu(null) }}
                   className="w-full px-3 py-2 text-xs text-left hover:bg-danger-light text-danger flex items-center gap-2 transition-colors"
                 >
                   <Trash2 size={14} />
@@ -1295,91 +1452,37 @@ export default function SidebarTree({
                     <span className="font-medium">Duplicate Note</span>
                   </button>
                 )}
-                {/* Move to folder */}
-                {onMoveNote && folderTree.length > 0 && (
-                  <div className="border-t border-border my-1">
-                    <div className="px-3 py-1 text-[10px] font-semibold text-muted uppercase">
-                      Move to folder
-                    </div>
-                    <button
-                      onClick={async () => {
-                        if (onMoveNote) {
-                          try { await onMoveNote(contextMenu.id, null) } catch {}
-                        }
-                        setContextMenu(null)
-                      }}
-                      className="w-full px-3 py-1.5 text-xs text-left hover:bg-surface-hover flex items-center gap-2 text-foreground/80 transition-colors"
-                    >
-                      <FileText size={12} />
-                      <span>Root (unfiled)</span>
-                    </button>
-                    {folderTree.slice(0, 8).map(folder => (
-                      <button
-                        key={folder.id}
-                        onClick={async () => {
-                          if (onMoveNote) {
-                            try { await onMoveNote(contextMenu.id, folder.id) } catch {}
-                          }
-                          setContextMenu(null)
-                        }}
-                        className="w-full px-3 py-1.5 text-xs text-left hover:bg-surface-hover flex items-center gap-2 text-foreground/80 transition-colors"
-                      >
-                        <FolderTreeIcon size={12} />
-                        <span className="truncate">{folder.name}</span>
-                      </button>
-                    ))}
-                  </div>
+                {/* Move to folder — opens full searchable picker */}
+                {onMoveNote && (
+                  <button
+                    onClick={() => {
+                      setShowMovePicker({ type: 'note-to-folder', id: contextMenu.id, name: contextMenu.name })
+                      setContextMenu(null)
+                    }}
+                    className="w-full px-3 py-2 text-xs text-left hover:bg-surface-hover flex items-center gap-2 text-foreground/80 transition-colors"
+                  >
+                    <FolderInput size={14} />
+                    <span className="font-medium">Move to Folder...</span>
+                  </button>
                 )}
-                {/* Move to project */}
+                {/* Move to project — opens full searchable picker */}
                 {onMoveNoteToProject && projects.length > 0 && (
-                  <div className="border-t border-border my-1">
-                    <div className="px-3 py-1 text-[10px] font-semibold text-muted uppercase">
-                      Move to project
-                    </div>
-                    <button
-                      onClick={async () => {
-                        try { await onMoveNoteToProject(contextMenu.id, null) } catch {}
-                        setContextMenu(null)
-                      }}
-                      className="w-full px-3 py-1.5 text-xs text-left hover:bg-surface-hover flex items-center gap-2 text-foreground/80 transition-colors"
-                    >
-                      <Home size={12} />
-                      <span>Unfiled</span>
-                    </button>
-                    {projects
-                      .filter(p => p.id !== contextMenu.projectId)
-                      .slice(0, 8)
-                      .map(project => (
-                        <button
-                          key={project.id}
-                          onClick={async () => {
-                            try { await onMoveNoteToProject(contextMenu.id, project.id) } catch {}
-                            setContextMenu(null)
-                          }}
-                          className="w-full px-3 py-1.5 text-xs text-left hover:bg-surface-hover flex items-center gap-2 text-foreground/80 transition-colors"
-                        >
-                          <div
-                            className="w-2 h-2 rounded-full flex-shrink-0"
-                            style={{ backgroundColor: project.color ?? '#6B7280' }}
-                          />
-                          <span className="truncate">{project.name}</span>
-                        </button>
-                      ))
-                    }
-                  </div>
+                  <button
+                    onClick={() => {
+                      setShowMovePicker({ type: 'note-to-project', id: contextMenu.id, name: contextMenu.name })
+                      setContextMenu(null)
+                    }}
+                    className="w-full px-3 py-2 text-xs text-left hover:bg-surface-hover flex items-center gap-2 text-foreground/80 transition-colors"
+                  >
+                    <ArrowRightLeft size={14} />
+                    <span className="font-medium">Move to Project...</span>
+                  </button>
                 )}
                 {onDeleteNote && (
                   <>
                     <div className="border-t border-border my-1" />
                     <button
-                      onClick={() => {
-                        setShowDeleteModal({
-                          type: 'note',
-                          id: contextMenu.id,
-                          name: contextMenu.name,
-                        })
-                        setContextMenu(null)
-                      }}
+                      onClick={() => { setShowDeleteModal({ type: 'note', id: contextMenu.id, name: contextMenu.name }); setContextMenu(null) }}
                       className="w-full px-3 py-2 text-xs text-left hover:bg-danger-light text-danger flex items-center gap-2 transition-colors"
                     >
                       <Trash2 size={14} />
@@ -1393,10 +1496,146 @@ export default function SidebarTree({
         </>
       )}
 
-      {/* Delete Confirmation Modal */}
+      {/* ========== MOVE PICKER MODAL ========== */}
+      {showMovePicker && (
+        <div className="fixed inset-0 z-[70] flex items-center justify-center p-4 bg-black/40" onClick={() => setShowMovePicker(null)}>
+          <div className="bg-surface rounded-2xl shadow-2xl border border-border/40 max-w-md w-full max-h-[60vh] flex flex-col" onClick={(e) => e.stopPropagation()}>
+            <div className="px-4 pt-4 pb-2">
+              <h3 className="text-sm font-semibold text-foreground mb-0.5">
+                {showMovePicker.type === 'note-to-folder' && 'Move note to folder'}
+                {showMovePicker.type === 'note-to-project' && 'Move note to project'}
+                {showMovePicker.type === 'folder-to-project' && 'Move folder to project'}
+              </h3>
+              <p className="text-[11px] text-muted mb-2 truncate">
+                Moving &ldquo;{showMovePicker.name}&rdquo;
+              </p>
+              <div className="relative">
+                <Search size={13} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-muted/60" />
+                <input
+                  ref={movePickerSearchRef}
+                  type="text"
+                  value={movePickerSearch}
+                  onChange={(e) => setMovePickerSearch(e.target.value)}
+                  placeholder="Search..."
+                  className="w-full pl-8 pr-3 py-2 text-xs border border-border rounded-lg focus:outline-none focus:ring-2 focus:ring-alpine-500/30 bg-surface text-foreground"
+                />
+              </div>
+            </div>
+            <div className="flex-1 overflow-y-auto px-2 pb-2 space-y-0.5">
+              {/* Note-to-Folder picker */}
+              {showMovePicker.type === 'note-to-folder' && (
+                <>
+                  <button
+                    onClick={async () => {
+                      if (onMoveNote) { try { await onMoveNote(showMovePicker.id, null) } catch {} }
+                      setShowMovePicker(null)
+                    }}
+                    className="w-full px-3 py-2 text-xs text-left hover:bg-surface-hover rounded-lg flex items-center gap-2 text-foreground/80 transition-colors"
+                  >
+                    <Home size={12} className="text-muted" />
+                    <span>Root (no folder)</span>
+                  </button>
+                  {flatAllFolders
+                    .filter(f => movePickerSearch ? f.folder.name.toLowerCase().includes(movePickerSearch.toLowerCase()) : true)
+                    .map(({ folder, depth, projectName, projectColor }) => (
+                      <button
+                        key={folder.id}
+                        onClick={async () => {
+                          if (onMoveNote) { try { await onMoveNote(showMovePicker.id, folder.id) } catch {} }
+                          setShowMovePicker(null)
+                        }}
+                        className="w-full px-3 py-2 text-xs text-left hover:bg-surface-hover rounded-lg flex items-center gap-2 text-foreground/80 transition-colors"
+                        style={{ paddingLeft: `${depth * 12 + 12}px` }}
+                      >
+                        <FolderTreeIcon size={12} className="text-muted flex-shrink-0" />
+                        <span className="truncate flex-1">{folder.name}</span>
+                        <span className="text-[10px] flex-shrink-0 font-medium" style={{ color: projectColor }}>{projectName}</span>
+                      </button>
+                    ))
+                  }
+                </>
+              )}
+
+              {/* Note-to-Project picker */}
+              {showMovePicker.type === 'note-to-project' && (
+                <>
+                  <button
+                    onClick={async () => {
+                      if (onMoveNoteToProject) { try { await onMoveNoteToProject(showMovePicker.id, null) } catch {} }
+                      setShowMovePicker(null)
+                    }}
+                    className="w-full px-3 py-2 text-xs text-left hover:bg-surface-hover rounded-lg flex items-center gap-2 text-foreground/80 transition-colors"
+                  >
+                    <Home size={12} className="text-muted" />
+                    <span>Unfiled</span>
+                  </button>
+                  {projects
+                    .filter(p => movePickerSearch ? p.name.toLowerCase().includes(movePickerSearch.toLowerCase()) : true)
+                    .map(p => (
+                      <button
+                        key={p.id}
+                        onClick={async () => {
+                          if (onMoveNoteToProject) { try { await onMoveNoteToProject(showMovePicker.id, p.id) } catch {} }
+                          setShowMovePicker(null)
+                        }}
+                        className="w-full px-3 py-2 text-xs text-left hover:bg-surface-hover rounded-lg flex items-center gap-2 text-foreground/80 transition-colors"
+                      >
+                        <div className="w-2.5 h-2.5 rounded-full flex-shrink-0" style={{ backgroundColor: p.color ?? '#6B7280' }} />
+                        <span className="truncate">{p.name}</span>
+                      </button>
+                    ))
+                  }
+                </>
+              )}
+
+              {/* Folder-to-Project picker */}
+              {showMovePicker.type === 'folder-to-project' && (
+                <>
+                  <button
+                    onClick={async () => {
+                      if (onMoveFolderToProject) { try { await onMoveFolderToProject(showMovePicker.id, null) } catch {} }
+                      setShowMovePicker(null)
+                    }}
+                    className="w-full px-3 py-2 text-xs text-left hover:bg-surface-hover rounded-lg flex items-center gap-2 text-foreground/80 transition-colors"
+                  >
+                    <Home size={12} className="text-muted" />
+                    <span>Unfiled</span>
+                  </button>
+                  {projects
+                    .filter(p => movePickerSearch ? p.name.toLowerCase().includes(movePickerSearch.toLowerCase()) : true)
+                    .map(p => (
+                      <button
+                        key={p.id}
+                        onClick={async () => {
+                          if (onMoveFolderToProject) { try { await onMoveFolderToProject(showMovePicker.id, p.id) } catch {} }
+                          setShowMovePicker(null)
+                        }}
+                        className="w-full px-3 py-2 text-xs text-left hover:bg-surface-hover rounded-lg flex items-center gap-2 text-foreground/80 transition-colors"
+                      >
+                        <div className="w-2.5 h-2.5 rounded-full flex-shrink-0" style={{ backgroundColor: p.color ?? '#6B7280' }} />
+                        <span className="truncate">{p.name}</span>
+                      </button>
+                    ))
+                  }
+                </>
+              )}
+            </div>
+            <div className="px-4 py-2 border-t border-border">
+              <button
+                onClick={() => setShowMovePicker(null)}
+                className="w-full px-3 py-1.5 text-xs font-medium text-muted hover:text-foreground transition-colors text-center"
+              >
+                Cancel
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ========== DELETE CONFIRMATION MODAL ========== */}
       {showDeleteModal && (
-        <div className="fixed inset-0 z-[70] flex items-center justify-center p-4 bg-black/40 ">
-          <div className="bg-surface  rounded-2xl shadow-2xl border border-border/40 max-w-md w-full p-6">
+        <div className="fixed inset-0 z-[70] flex items-center justify-center p-4 bg-black/40">
+          <div className="bg-surface rounded-2xl shadow-2xl border border-border/40 max-w-md w-full p-6">
             <div className="flex items-start gap-4 mb-4">
               <div className="flex-shrink-0 w-12 h-12 rounded-full bg-danger-light flex items-center justify-center">
                 <Trash2 size={24} className="text-danger" />
@@ -1437,51 +1676,10 @@ export default function SidebarTree({
         </div>
       )}
 
-      {/* Rename Modal (Folder or Project) */}
-      {showRenameModal && (
-        <div className="fixed inset-0 z-[70] flex items-center justify-center p-4 bg-black/40 ">
-          <div className="bg-surface  rounded-2xl shadow-2xl border border-border/40 max-w-md w-full p-6">
-            <h3 className="text-lg font-semibold text-foreground mb-1">
-              Rename {showRenameModal.type === 'project' ? 'Project' : 'Folder'}
-            </h3>
-            <p className="text-sm text-muted mb-4">
-              Enter a new name for &quot;{showRenameModal.currentName}&quot;
-            </p>
-            <input
-              ref={renameInputRef}
-              type="text"
-              value={renameInput}
-              onChange={(e) => setRenameInput(e.target.value)}
-              placeholder={showRenameModal.type === 'project' ? 'Project name' : 'Folder name'}
-              className="w-full px-3 py-2 text-sm border border-border rounded-lg mb-4 focus:outline-none focus:ring-2 focus:ring-alpine-500 bg-surface text-foreground"
-              onKeyDown={(e) => {
-                if (e.key === 'Enter') handleConfirmRename()
-                if (e.key === 'Escape') { setShowRenameModal(null); setRenameInput('') }
-              }}
-            />
-            <div className="flex items-center justify-end gap-2">
-              <button
-                onClick={() => { setShowRenameModal(null); setRenameInput('') }}
-                className="px-4 py-2 text-sm font-medium text-foreground/80 bg-surface border border-border rounded-lg hover:bg-surface-hover transition-colors"
-              >
-                Cancel
-              </button>
-              <button
-                onClick={handleConfirmRename}
-                disabled={!renameInput.trim()}
-                className="px-4 py-2 text-sm font-medium text-white bg-alpine-600 rounded-lg hover:bg-alpine-700 disabled:opacity-50 transition-colors"
-              >
-                Rename
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Color Picker Modal (Projects) */}
+      {/* ========== COLOR PICKER MODAL ========== */}
       {showColorPicker && onUpdateProjectColor && (
-        <div className="fixed inset-0 z-[70] flex items-center justify-center p-4 bg-black/40 ">
-          <div className="bg-surface  rounded-2xl shadow-2xl border border-border/40 max-w-sm w-full p-6">
+        <div className="fixed inset-0 z-[70] flex items-center justify-center p-4 bg-black/40">
+          <div className="bg-surface rounded-2xl shadow-2xl border border-border/40 max-w-sm w-full p-6">
             <h3 className="text-lg font-semibold text-foreground mb-1">Project Color</h3>
             <p className="text-sm text-muted mb-4">Choose a color for this project</p>
             <div className="grid grid-cols-6 gap-2 mb-4">

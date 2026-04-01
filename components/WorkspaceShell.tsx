@@ -50,6 +50,7 @@ import {
   updateProject,
   deleteProject as deleteProjectApi,
   moveNoteToProject,
+  moveFolderToProject,
   type Project,
 } from '@/lib/projects'
 
@@ -918,6 +919,26 @@ function WorkspaceContent() {
     }
   }
 
+  const handleMoveFolderToProject = async (folderId: string, projectId: string | null) => {
+    try {
+      await moveFolderToProject(folderId, projectId)
+      loadFolders()
+      loadAllNotes()
+      toast.push({
+        title: 'Folder moved',
+        description: 'Folder has been moved to the project.',
+        duration: 3000,
+      })
+    } catch (error) {
+      console.error('Error moving folder to project:', error)
+      toast.push({
+        title: 'Move failed',
+        description: error instanceof Error ? error.message : 'Failed to move folder',
+        duration: 5000,
+      })
+    }
+  }
+
   // ---- Project CRUD handlers ----
   const handleCreateProject = async () => {
     try {
@@ -1159,6 +1180,7 @@ function WorkspaceContent() {
           onRenameFolder={handleRenameFolder}
           onDeleteFolder={handleDeleteFolder}
           onMoveFolder={handleMoveFolder}
+          onMoveFolderToProject={handleMoveFolderToProject}
           onDuplicateNote={handleDuplicateNote}
           onDeleteNote={handleSidebarDeleteNote}
           onMoveNote={handleMoveNote}
@@ -1284,6 +1306,7 @@ function WorkspaceContent() {
                 onRenameFolder={handleRenameFolder}
                 onDeleteFolder={handleDeleteFolder}
                 onMoveFolder={handleMoveFolder}
+                onMoveFolderToProject={handleMoveFolderToProject}
                 onDuplicateNote={handleDuplicateNote}
                 onDeleteNote={handleSidebarDeleteNote}
                 onMoveNote={handleMoveNote}
