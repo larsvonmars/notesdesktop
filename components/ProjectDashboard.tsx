@@ -355,26 +355,46 @@ export default function ProjectDashboard({
     const controller = new AbortController()
     summaryAbortRef.current = controller
 
-    // Build context about the project for the AI
-    const noteSummaries = projectNotes.slice(0, 20).map(n => {
-      const pres = getNoteTypePresentation(n.note_type)
-      return `- "${n.title || 'Untitled'}" (${pres.label}, updated ${relativeTime(n.updated_at)})`
-    }).join('\n')
+    // Extract readable text from note JSON content
+    const extractText = (content: string, maxLen: number = 500): string => {
+      try {
+        const parsed = JSON.parse(content)
+        const text = JSON.stringify(parsed)
+          .replace(/"type":"[^"]+"/g, '')
+          .replace(/[{}[\]":,]/g, ' ')
+          .replace(/\s+/g, ' ')
+          .trim()
+        return text.length > maxLen ? text.slice(0, maxLen) + '…' : text
+      } catch {
+        const text = content.replace(/\s+/g, ' ').trim()
+        return text.length > maxLen ? text.slice(0, maxLen) + '…' : text
+      }
+    }
 
-    const taskSummaries = tasks.slice(0, 20).map(t => {
+    // Build context about the project for the AI
+    const recentWithContent = [...projectNotes]
+      .sort((a, b) => new Date(b.updated_at).getTime() - new Date(a.updated_at).getTime())
+      .slice(0, 10)
+      .map(n => {
+        const pres = getNoteTypePresentation(n.note_type)
+        const content = n.content ? extractText(n.content) : '(empty)'
+        return `- "${n.title || 'Untitled'}" (${pres.label}, updated ${relativeTime(n.updated_at)})\n  Content: ${content}`
+      }).join('\n')
+
+    const taskSummaries = tasks.slice(0, 30).map(t => {
       const status = STATUS_LABELS[t.status] ?? t.status
-      const due = t.due_date ? `, due ${new Date(t.due_date).toLocaleDateString()}` : ''
+      const due = t.due_date ? `, due ${new Date(t.due_date).toLocaleDateString()}` : ', no due date'
       return `- [${status}] "${t.title}" (${t.priority} priority${due})`
     }).join('\n')
 
     const messages: AIMessage[] = [
       {
         role: 'system',
-        content: 'You are a concise project analyst. Generate a brief, high-level project summary in 3-5 short paragraphs. Cover: overall status, key areas of focus, task progress, and any notable patterns. Use plain text, no markdown headers or bullet lists. Be direct and insightful.',
+        content: 'You are a concise project analyst. Generate a brief, high-level project summary in 3-5 short paragraphs. Cover: overall status, key areas of focus based on note content, task progress with specific deadlines worth noting, and any notable patterns. Use plain text, no markdown headers or bullet lists. Be direct and insightful.',
       },
       {
         role: 'user',
-        content: `Summarize this project:\n\nProject: ${project.name}\nDescription: ${project.description || 'No description'}\nCreated: ${new Date(project.created_at).toLocaleDateString()}\nNotes: ${projectNotes.length} total, ${projectFolders.length} folders, ~${stats.totalWords.toLocaleString()} words\nTasks: ${tasks.length} total (${completedTaskCount} completed, ${openTasks.length} open)\n\nNotes:\n${noteSummaries || 'None yet'}\n\nTasks:\n${taskSummaries || 'None yet'}`,
+        content: `Summarize this project:\n\nProject: ${project.name}\nDescription: ${project.description || 'No description'}\nCreated: ${new Date(project.created_at).toLocaleDateString()}\nNotes: ${projectNotes.length} total, ${projectFolders.length} folders, ~${stats.totalWords.toLocaleString()} words\nTasks: ${tasks.length} total (${completedTaskCount} completed, ${openTasks.length} open)\n\nRecent Notes (with content excerpts):\n${recentWithContent || 'None yet'}\n\nTasks:\n${taskSummaries || 'None yet'}`,
       },
     ]
 
