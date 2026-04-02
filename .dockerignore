@@ -1,0 +1,12 @@
+node_modules
+.next
+out
+src-tauri
+snap
+.git
+.github
+.env.local
+*.md
+tests
+md-docs
+cloudflare
