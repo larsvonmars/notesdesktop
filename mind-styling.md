@@ -251,3 +251,184 @@ Keep these behaviors to preserve quality:
 4. Do not mix unrelated radius systems (e.g., sharp cards + pill controls).
 5. Do not break semantic token mapping by hardcoding many one-off colors.
 
+---
+
+## 13. General App Structure
+
+This section documents the structural skeleton of the app — how the shell, sidebars, menus, and modals are assembled — so the layout can be replicated faithfully.
+
+### 13.1 Shell Layout
+
+The root shell is a full-screen flex column (`min-h-screen flex flex-col`). Inside it:
+
+```
+Root shell  (min-h-screen flex flex-col)
+ ├── SidebarTree              [desktop only, fixed left, z-40]
+ ├── Mobile header bar        [mobile only, fixed top, z-40]
+ ├── Mobile slide-out drawer  [mobile only, conditional mount, z-50]
+ └── main  (flex-1 w-full h-screen overflow-hidden)
+      └── active view (Welcome / Notes / Files / Projects)
+```
+
+The main content area receives horizontal padding via a CSS variable `--workspace-sidebar-offset` (64px collapsed, 280px expanded), applied as an inline `paddingLeft` style so it reacts to sidebar state without a hard-coded breakpoint.
+
+On mobile, the sidebar is replaced by a fixed top header and a slide-out drawer panel (`w-[280px]`, `z-50`) overlaid over a semi-transparent backdrop (`bg-black/40`, `z-40`). The drawer opens/closes by mounting/unmounting (no CSS slide animation). A left-edge swipe gesture (`clientX ≤ 28, dx > 72`) also opens it.
+
+### 13.2 Left Sidebar (SidebarTree)
+
+The sidebar has two width states — **collapsed** (icon rail, `w-14`) and **expanded** (`w-[280px]`):
+
+```
+aside  (fixed inset-y-0 left-0 z-40, transition-all duration-300)
+ ├── Header row           (logo + title + expand-all + collapse toggle)
+ ├── Search bar           (rounded-xl, bg-surface-hover/50, icon prefix)
+ ├── Filter panel         (conditional, note-type + project chips)
+ ├── Scrollable tree body (flex-1 overflow-y-auto)
+ │    └── Projects → Folders → Notes  (recursive indent)
+ └── Footer               (settings + sign-out)
+```
+
+**Collapsed icon-rail** shows only a gradient logo avatar and project color dots; an active project item gets `scale-105 ring-2 ring-offset-2 shadow-md`.
+
+Key classes:
+
+| Element | Classes |
+|---|---|
+| `<aside>` | `fixed inset-y-0 left-0 z-40 hidden lg:flex lg:flex-col border-r border-border/40 bg-surface transition-all duration-300` |
+| Search input | `pl-8 pr-7 py-2 text-xs rounded-xl bg-surface-hover/50 focus:ring-2 focus:ring-alpine-500/25` |
+| Selected note | `bg-alpine-50 dark:bg-alpine-900/30 text-alpine-700` |
+| Drag drop-zone | `ring-2 ring-alpine-400/50 bg-alpine-50/20` |
+| Filter badge | `absolute -top-1 -right-1 min-w-[14px] h-[14px] bg-alpine-600 text-white text-[9px] rounded-full` |
+
+### 13.3 Right Details Sidebar (NoteDetailsSidebar)
+
+A second sidebar lives on the right edge and is also collapsible:
+
+```
+aside  (fixed inset-y-0 right-0 z-30, transition-all duration-300)
+ ├── Header  ("Details" label + note title + collapse chevron)
+ └── Scrollable body  (flex-1 overflow-y-auto)
+      ├── Title input
+      ├── Save / Delete actions
+      ├── Metadata  (type, folder, project)
+      ├── Statistics grid  (2-col: words / chars)
+      ├── Word-goal progress bar
+      ├── Table of Contents  (collapsible, level-indent via paddingLeft)
+      ├── Connections  (backlinks + outgoing links)
+      ├── AI Assistant shortcut
+      └── Export / Share actions
+```
+
+Width states: collapsed `w-12`, expanded `w-[280px]`. It sits at `z-30` — below modal layers and the left sidebar.
+
+Key details:
+
+| Element | Classes |
+|---|---|
+| `<aside>` | `fixed inset-y-0 right-0 z-30 hidden lg:flex lg:flex-col border-l border-border/40 bg-surface transition-all duration-300` |
+| Section label | `text-[10px] font-semibold text-muted/60 uppercase tracking-widest` |
+| Title input | `px-3 py-2 text-sm rounded-xl bg-surface-hover/40 border-0 focus:ring-2 focus:ring-alpine-500/25` |
+| Save button | `bg-gradient-to-r from-alpine-600 to-alpine-500 text-white rounded-xl hover:shadow-md` |
+| Delete button | `text-danger bg-danger-light/60 hover:bg-danger hover:text-white` |
+| Stats cell | `bg-surface-hover/30 rounded-xl px-2.5 py-2.5 text-center` |
+| Word-goal bar track | `h-2.5 bg-surface-hover/50 rounded-full overflow-hidden` |
+| Word-goal bar fill | `bg-gradient-to-r from-alpine-400 to-alpine-500` (done: `from-green-400 to-green-500`) |
+| Unsaved dot | `w-1.5 h-1.5 bg-amber-500 rounded-full animate-pulse` |
+| ToC chevron | `transition-transform duration-200 rotate-90` (expanded) |
+
+### 13.4 Modals (BaseModal)
+
+All modals share a single `BaseModal` primitive with two render modes:
+
+**Overlay mode** (standard dialog):
+```
+div.fixed.inset-0  (backdrop, bg-black/60, flex items-center justify-center, p-3 sm:p-6)
+ └── div  (card: w-full {max-w-*} rounded-2xl shadow-2xl border flex flex-col overflow-hidden)
+      ├── ModalHeader   (shrink-0, border-b, gradient fill)
+      │    ├── Icon + title slot
+      │    └── ModalCloseButton  (×)
+      ├── ModalBody     (flex-1 overflow-y-auto, px-4 sm:px-6 py-4 sm:py-5)
+      └── ModalFooter   (shrink-0, border-t)
+```
+
+**`asView` mode**: renders as a full-height panel (`h-full w-full flex flex-col overflow-hidden bg-background`) without a backdrop, used when embedding a modal-style UI directly into the main content area.
+
+Size variants (`size` prop):
+
+| Value | Max-width class |
+|---|---|
+| `'sm'` | `max-w-sm` |
+| `'md'` | `max-w-md` |
+| `'lg'` | `max-w-lg` |
+| `'xl'` | `max-w-xl` |
+| `'2xl'` | `max-w-2xl` |
+| `'3xl'` | `max-w-3xl` |
+| `'full'` | `max-w-full h-full` |
+
+Entry animations (controlled via `animation` prop):
+
+| Value | Classes applied to card |
+|---|---|
+| `'fade'` (default) | `animate-in fade-in duration-200` |
+| `'zoom'` | `animate-in fade-in zoom-in-95 duration-200` |
+| `'none'` | — |
+
+Default close behaviors: `Escape` key and backdrop click (both opt-out via props). Z-index is prop-controlled (default `50`).
+
+Key classes:
+
+| Slot | Classes |
+|---|---|
+| Backdrop | `fixed inset-0 flex items-center justify-center p-3 sm:p-6 bg-black/60` |
+| Card | `bg-white dark:bg-slate-900 rounded-2xl shadow-2xl border border-gray-200 dark:border-slate-700` |
+| Header | `px-4 sm:px-6 py-3.5 sm:py-4 border-b border-gray-200 dark:border-slate-700 shrink-0` |
+| Header gradient | `bg-gradient-to-r from-white to-gray-50 dark:from-slate-900 dark:to-slate-800` |
+| Title | `text-lg font-semibold text-gray-900 dark:text-slate-100` |
+| Body | `flex-1 overflow-y-auto px-4 sm:px-6 py-4 sm:py-5` |
+| Footer | `border-t border-gray-200 dark:border-slate-700 px-4 sm:px-6 py-3 sm:py-4 shrink-0` |
+
+### 13.5 Context Menus
+
+Context menus are positioned absolutely at the mouse cursor using `fixed` positioning with `x`/`y` coordinates stored in state. They always render as a two-layer stack:
+
+```
+div.fixed.inset-0.z-50          (invisible backdrop, click-to-dismiss)
+div.fixed.z-[60]  (style: top/left from cursor coords)
+  min-w-[200px] max-h-[400px] overflow-y-auto rounded-2xl shadow-2xl border bg-surface
+   └── list of action rows  (hover:bg-surface-hover, text-sm)
+```
+
+Role-based visual cues:
+- Destructive actions (delete) use `text-danger`.
+- Separator groups use a `border-t border-border/40` divider.
+
+### 13.6 Z-Index Layering Reference
+
+The full stacking order from back to front:
+
+| Layer | Z-index | Element |
+|---|---|---|
+| Right details sidebar | `z-30` | `NoteDetailsSidebar` |
+| Left sidebar + mobile header | `z-40` | `SidebarTree`, mobile `<header>` |
+| Mobile backdrop | `z-40` | dim overlay behind drawer |
+| Mobile drawer | `z-50` | slide-out `<aside>` |
+| Modals (default) | `z-50` | `BaseModal` backdrop |
+| Context menu backdrop | `z-50` | click-dismiss layer |
+| Context menu card | `z-[60]` | positioned menu card |
+| Note type picker overlay | `z-[60]` | full-screen type picker |
+| Move / delete confirmations | `z-[70]` | sub-modal overlays |
+| File preview modal | `z-[120]` | deep nested preview |
+
+### 13.7 Active View Switching
+
+The main content area renders one active view at a time, controlled by an `activeView` state string:
+
+| Value | Renders |
+|---|---|
+| `'welcome'` | Welcome/onboarding screen |
+| `'notes'` | Note editor + details sidebar |
+| `'files'` | File explorer panel |
+| `'projects'` | Project dashboard |
+
+Transitions between views are instant (mount/unmount, no CSS transition). Use `animate-in fade-in duration-200` on the entering view if you want a soft reveal.
+
