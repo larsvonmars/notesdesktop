@@ -64,7 +64,7 @@
 }
 
 /* New thin themed scrollbar */
-::-webkit-scrollbar       { width: 5px; height: 5px; }
+::-webkit-scrollbar       { width: 6px; height: 6px; }
 ::-webkit-scrollbar-track { background: transparent; }
 ::-webkit-scrollbar-thumb { background: var(--border-strong); border-radius: 999px; }
 ::-webkit-scrollbar-thumb:hover { background: var(--muted); }
@@ -92,7 +92,11 @@ aside[class*="backdrop-blur"] {
 
   /* Subtle frosted-glass card surfaces */
   .alpine-surface {
-    @apply bg-white;
+    background: rgb(255 255 255 / 0.8);
+    backdrop-filter: blur(4px);
+  }
+  .dark .alpine-surface {
+    background: rgb(28 25 23 / 0.85);
   }
 }
 
