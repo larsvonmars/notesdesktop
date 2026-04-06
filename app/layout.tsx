@@ -5,6 +5,7 @@ import { AuthProvider } from '@/lib/auth-context'
 import { ThemeProvider } from '@/lib/theme-context'
 import { WebViewPolyfillsInitializer } from '@/components/WebViewPolyfillsInitializer'
 import ToastProvider from '@/components/ToastProvider'
+import CookieConsentBanner from '@/components/CookieConsentBanner'
 
 const geistSans = Geist({
   subsets: ['latin'],
@@ -60,6 +61,7 @@ export default function RootLayout({
           <AuthProvider>
             <ToastProvider>{children}</ToastProvider>
           </AuthProvider>
+          <CookieConsentBanner />
         </ThemeProvider>
       </body>
     </html>
