@@ -279,7 +279,8 @@ export async function uploadFile(
   }
 
   const userId = await getUserId()
-  const relativePath = folderPath ? `${folderPath}/${file.name}` : file.name
+  const sanitizedFileName = sanitizeFileName(file.name)
+  const relativePath = folderPath ? `${folderPath}/${sanitizedFileName}` : sanitizedFileName
   const fullPath = buildFullPath(userId, relativePath)
 
   const { data, error } = await supabase.storage
@@ -294,10 +295,10 @@ export async function uploadFile(
   return {
     path: relativePath,
     file: {
-      name: file.name,
+      name: sanitizedFileName,
       id: data.id ?? null,
       size: file.size,
-      type: file.type || guessMimeType(file.name),
+      type: file.type || guessMimeType(sanitizedFileName),
       created_at: new Date().toISOString(),
       updated_at: new Date().toISOString(),
       path: relativePath,
