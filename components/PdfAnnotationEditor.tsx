@@ -41,7 +41,7 @@ import {
 } from 'lucide-react'
 import { uploadFile, getFileSignedUrl, downloadFile } from '@/lib/file-storage'
 
-const PDF_ANNOTATION_MAX_FILE_SIZE_BYTES = 25 * 1024 * 1024
+const PDF_ANNOTATION_MAX_FILE_SIZE_BYTES = 50 * 1024 * 1024
 
 // ============================================================================
 // TYPES
@@ -1242,7 +1242,7 @@ const PdfAnnotationEditor = forwardRef<PdfAnnotationEditorHandle, PdfAnnotationE
           return
         }
         if (file.size > PDF_ANNOTATION_MAX_FILE_SIZE_BYTES) {
-          setPdfError('PDF must be under 25 MB')
+          setPdfError('PDF must be under 50 MB')
           return
         }
 
@@ -1430,7 +1430,7 @@ const PdfAnnotationEditor = forwardRef<PdfAnnotationEditorHandle, PdfAnnotationE
           <div className="rounded-xl border-2 border-dashed border-border p-12 text-center">
             <Upload className="mx-auto mb-4 h-12 w-12 text-muted-foreground" />
             <h3 className="mb-2 text-lg font-semibold text-foreground">Upload a PDF to annotate</h3>
-            <p className="mb-4 text-sm text-muted-foreground">Max file size: 25 MB</p>
+            <p className="mb-4 text-sm text-muted-foreground">Max file size: 50 MB</p>
             {pdfError && (
               <p className="mb-4 text-sm text-red-500">{pdfError}</p>
             )}
