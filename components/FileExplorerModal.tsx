@@ -253,9 +253,31 @@ export default function FileExplorerModal({
       setUploadProgress({ done: 0, total: fileArray.length })
       try {
         const targetPath = uploadPath ?? currentPath
-        await uploadFiles(fileArray, targetPath, (done, total) => {
+        const uploadResults = await uploadFiles(fileArray, targetPath, (done, total) => {
           setUploadProgress({ done, total })
         })
+
+        const renamedFiles = uploadResults
+          .map((result, idx) => ({
+            original: fileArray[idx]?.name,
+            stored: result.file.name,
+          }))
+          .filter((entry) => entry.original && entry.original !== entry.stored) as Array<{ original: string; stored: string }>
+
+        if (renamedFiles.length > 0) {
+          const preview = renamedFiles
+            .slice(0, 2)
+            .map((entry) => `${entry.original} -> ${entry.stored}`)
+            .join('; ')
+          const remainder = renamedFiles.length > 2 ? ` (+${renamedFiles.length - 2} more)` : ''
+
+          toast.push({
+            title: 'Some filenames were adjusted',
+            description: `${preview}${remainder}`,
+            duration: 5000,
+          })
+        }
+
         toast.push({
           title: 'Upload complete',
           description: `${fileArray.length} file${fileArray.length > 1 ? 's' : ''} uploaded`,

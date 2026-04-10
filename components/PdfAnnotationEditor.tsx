@@ -1,6 +1,6 @@
 'use client'
 
-import {
+import React, {
   forwardRef,
   useCallback,
   useEffect,
@@ -40,6 +40,7 @@ import {
   RotateCcw,
 } from 'lucide-react'
 import { uploadFile, getFileSignedUrl, downloadFile } from '@/lib/file-storage'
+import { useToast } from '@/components/ToastProvider'
 
 const PDF_ANNOTATION_MAX_FILE_SIZE_BYTES = 50 * 1024 * 1024
 
@@ -75,6 +76,7 @@ export interface TextAnnotation {
   color: string
   bold?: boolean
   italic?: boolean
+  fontFamily?: string
 }
 
 export interface ShapeAnnotation {
@@ -86,6 +88,9 @@ export interface ShapeAnnotation {
   y2: number
   color: string
   strokeWidth: number
+  filled?: boolean
+  fillOpacity?: number
+  doubleEnded?: boolean
 }
 
 export interface StickyNoteAnnotation {
@@ -219,6 +224,8 @@ async function loadPdfJs() {
 
 const PdfAnnotationEditor = forwardRef<PdfAnnotationEditorHandle, PdfAnnotationEditorProps>(
   function PdfAnnotationEditor({ value, onChange, disabled, noteId }, ref) {
+    const toast = useToast()
+
     // PDF doc state
     const [pdfDoc, setPdfDoc] = useState<PDFDocumentProxy | null>(null)
     const [pdfLoading, setPdfLoading] = useState(false)
@@ -239,6 +246,9 @@ const PdfAnnotationEditor = forwardRef<PdfAnnotationEditorHandle, PdfAnnotationE
     const [editingText, setEditingText] = useState<TextAnnotation | null>(null)
     const [selectedId, setSelectedId] = useState<string | null>(null)
     const [dragOffset, setDragOffset] = useState<{ x: number; y: number } | null>(null)
+    const [resizeHandle, setResizeHandle] = useState<string | null>(null)
+    const [shapeFilled, setShapeFilled] = useState(false)
+    const [doubleEndedArrow, setDoubleEndedArrow] = useState(false)
 
     // Undo/redo
     const [history, setHistory] = useState<PdfAnnotationPage[][]>([])
@@ -268,6 +278,12 @@ const PdfAnnotationEditor = forwardRef<PdfAnnotationEditorHandle, PdfAnnotationE
     const [showThumbnails, setShowThumbnails] = useState(false)
     const [deleteConfirmIdx, setDeleteConfirmIdx] = useState<number | null>(null)
     const [thumbnailUrls, setThumbnailUrls] = useState<string[]>([])
+
+    // Refs for stable access inside non-reactive listeners (e.g. wheel handler)
+    const pagesRef = useRef(pages)
+    const currentPageRef = useRef(currentPage)
+    useEffect(() => { pagesRef.current = pages }, [pages])
+    useEffect(() => { currentPageRef.current = currentPage }, [currentPage])
 
     // ────────────────────────────────────────────────────────
     // Imperative handle
@@ -514,6 +530,89 @@ const PdfAnnotationEditor = forwardRef<PdfAnnotationEditorHandle, PdfAnnotationE
       pushHistory(pages)
     }, [pushHistory, pages])
 
+    // ────────────────────────────────────────────────────────
+    // Eraser helper — erases all annotation types at a point
+    // ────────────────────────────────────────────────────────
+    const eraseAtPoint = useCallback(
+      (pos: PdfPoint) => {
+        const pageAnnot = getPageAnnotations(currentPage)
+        const hitRadius = 12 / zoom
+
+        const newStrokes = pageAnnot.strokes.filter(s =>
+          !s.points.some(p =>
+            Math.abs(p.x - pos.x) < hitRadius && Math.abs(p.y - pos.y) < hitRadius
+          )
+        )
+        const newShapes = pageAnnot.shapes.filter(s => {
+          const minX = Math.min(s.x1, s.x2) - hitRadius
+          const maxX = Math.max(s.x1, s.x2) + hitRadius
+          const minY = Math.min(s.y1, s.y2) - hitRadius
+          const maxY = Math.max(s.y1, s.y2) + hitRadius
+          return !(pos.x >= minX && pos.x <= maxX && pos.y >= minY && pos.y <= maxY)
+        })
+        const newTexts = pageAnnot.textAnnotations.filter(t =>
+          !(pos.x >= t.x && pos.x <= t.x + t.width &&
+            pos.y >= t.y && pos.y <= t.y + (t.height || t.fontSize * 1.5))
+        )
+        const newStickies = (pageAnnot.stickyNotes ?? []).filter(sn =>
+          !(pos.x >= sn.x && pos.x <= sn.x + sn.width &&
+            pos.y >= sn.y && pos.y <= sn.y + sn.height)
+        )
+
+        const changed =
+          newStrokes.length !== pageAnnot.strokes.length ||
+          newShapes.length !== pageAnnot.shapes.length ||
+          newTexts.length !== pageAnnot.textAnnotations.length ||
+          newStickies.length !== (pageAnnot.stickyNotes ?? []).length
+
+        if (changed) {
+          const newPages = updatePageAnnotations(currentPage, p => ({
+            ...p,
+            strokes: newStrokes,
+            shapes: newShapes,
+            textAnnotations: newTexts,
+            stickyNotes: newStickies,
+          }))
+          setPages(newPages)
+          emitChange(newPages)
+        }
+      },
+      [currentPage, zoom, getPageAnnotations, updatePageAnnotations, emitChange]
+    )
+
+    // ────────────────────────────────────────────────────────
+    // Text color helper
+    // ────────────────────────────────────────────────────────
+    const changeTextColor = useCallback(
+      (id: string, newColor: string) => {
+        const newPages = updatePageAnnotations(currentPage, page => ({
+          ...page,
+          textAnnotations: page.textAnnotations.map(t =>
+            t.id === id ? { ...t, color: newColor } : t
+          ),
+        }))
+        setPages(newPages)
+        pushHistory(newPages)
+        emitChange(newPages)
+      },
+      [currentPage, updatePageAnnotations, pushHistory, emitChange]
+    )
+
+    const changeTextFontFamily = useCallback(
+      (id: string, family: string) => {
+        const newPages = updatePageAnnotations(currentPage, page => ({
+          ...page,
+          textAnnotations: page.textAnnotations.map(t =>
+            t.id === id ? { ...t, fontFamily: family } : t
+          ),
+        }))
+        setPages(newPages)
+        pushHistory(newPages)
+        emitChange(newPages)
+      },
+      [currentPage, updatePageAnnotations, pushHistory, emitChange]
+    )
+
     const deleteStickyNote = useCallback(
       (id: string) => {
         const newPages = updatePageAnnotations(currentPage, page => ({
@@ -532,35 +631,70 @@ const PdfAnnotationEditor = forwardRef<PdfAnnotationEditorHandle, PdfAnnotationE
     // ────────────────────────────────────────────────────────
     const renderThumbnails = useCallback(async () => {
       const urls: string[] = []
+      const thumbScale = 0.18
       for (let i = 0; i < pages.length; i++) {
         const page = pages[i]
         const thumbCanvas = document.createElement('canvas')
+        let thumbCtx: CanvasRenderingContext2D | null = null
+        let renderedW = 0
+        let renderedH = 0
         if (page.isBlank) {
-          const w = naturalWidth > 0 ? Math.round(naturalWidth * 0.18) : 112
-          const h = naturalHeight > 0 ? Math.round(naturalHeight * 0.18) : 155
+          const w = naturalWidth > 0 ? Math.round(naturalWidth * thumbScale) : 112
+          const h = naturalHeight > 0 ? Math.round(naturalHeight * thumbScale) : 155
           thumbCanvas.width = w
           thumbCanvas.height = h
-          const ctx = thumbCanvas.getContext('2d')!
-          ctx.fillStyle = '#ffffff'
-          ctx.fillRect(0, 0, w, h)
-          ctx.strokeStyle = '#e5e7eb'
-          ctx.strokeRect(0.5, 0.5, w - 1, h - 1)
+          thumbCtx = thumbCanvas.getContext('2d')!
+          thumbCtx.fillStyle = '#ffffff'
+          thumbCtx.fillRect(0, 0, w, h)
+          thumbCtx.strokeStyle = '#e5e7eb'
+          thumbCtx.strokeRect(0.5, 0.5, w - 1, h - 1)
+          renderedW = w
+          renderedH = h
           urls.push(thumbCanvas.toDataURL())
         } else if (pdfDoc && page.pdfPageNumber) {
           try {
             const pdfPage = await pdfDoc.getPage(page.pdfPageNumber)
-            const vp = pdfPage.getViewport({ scale: 0.18 })
+            const vp = pdfPage.getViewport({ scale: thumbScale })
             thumbCanvas.width = vp.width
             thumbCanvas.height = vp.height
-            const ctx = thumbCanvas.getContext('2d')!
-            await pdfPage.render({ canvasContext: ctx, viewport: vp }).promise
-            urls.push(thumbCanvas.toDataURL())
+            thumbCtx = thumbCanvas.getContext('2d')!
+            await pdfPage.render({ canvasContext: thumbCtx, viewport: vp }).promise
+            renderedW = vp.width
+            renderedH = vp.height
           } catch {
             urls.push('')
+            thumbCanvas.remove()
+            continue
           }
         } else {
           urls.push('')
+          thumbCanvas.remove()
+          continue
         }
+
+        // Composite annotations onto the thumbnail
+        if (thumbCtx && renderedW > 0) {
+          const pageAnnot = pages.find(p => p.pageNumber === i) ?? {
+            pageNumber: i, strokes: [], textAnnotations: [], shapes: [], stickyNotes: [],
+          }
+          for (const stroke of pageAnnot.strokes) {
+            renderStrokeToCtx(thumbCtx, stroke, thumbScale)
+          }
+          for (const shape of pageAnnot.shapes) {
+            drawShape(thumbCtx, shape, thumbScale, false)
+          }
+          for (const ta of pageAnnot.textAnnotations) {
+            thumbCtx.save()
+            thumbCtx.font = `${ta.italic ? 'italic ' : ''}${ta.bold ? 'bold ' : ''}${ta.fontSize * thumbScale}px sans-serif`
+            thumbCtx.fillStyle = ta.color
+            ta.text.split('\n').forEach((line, li) => {
+              thumbCtx!.fillText(line, ta.x * thumbScale, (ta.y + ta.fontSize + li * ta.fontSize * 1.2) * thumbScale)
+            })
+            thumbCtx.restore()
+          }
+          urls.push(thumbCanvas.toDataURL())
+        }
+
         thumbCanvas.remove()
       }
       setThumbnailUrls(urls)
@@ -736,6 +870,20 @@ const PdfAnnotationEditor = forwardRef<PdfAnnotationEditorHandle, PdfAnnotationE
       // Draw strokes
       for (const stroke of pageAnnot.strokes) {
         renderStrokeToCtx(ctx, stroke, scale)
+        if (stroke.id === selectedId) {
+          const xs = stroke.points.map(p => p.x * scale)
+          const ys = stroke.points.map(p => p.y * scale)
+          const minX = Math.min(...xs) - stroke.size * scale / 2
+          const minY = Math.min(...ys) - stroke.size * scale / 2
+          const maxX = Math.max(...xs) + stroke.size * scale / 2
+          const maxY = Math.max(...ys) + stroke.size * scale / 2
+          ctx.save()
+          ctx.strokeStyle = '#3b82f6'
+          ctx.lineWidth = 1.5
+          ctx.setLineDash([4, 4])
+          ctx.strokeRect(minX - 4, minY - 4, maxX - minX + 8, maxY - minY + 8)
+          ctx.restore()
+        }
       }
 
       // Draw in-progress stroke
@@ -753,6 +901,27 @@ const PdfAnnotationEditor = forwardRef<PdfAnnotationEditorHandle, PdfAnnotationE
       // Draw shapes
       for (const shape of pageAnnot.shapes) {
         drawShape(ctx, shape, scale, shape.id === selectedId)
+        if (shape.id === selectedId && shape.type !== 'arrow') {
+          // Draw resize handles at the 4 corners
+          const handles = [
+            { x: shape.x1 * scale, y: shape.y1 * scale },
+            { x: shape.x2 * scale, y: shape.y1 * scale },
+            { x: shape.x1 * scale, y: shape.y2 * scale },
+            { x: shape.x2 * scale, y: shape.y2 * scale },
+          ]
+          ctx.save()
+          ctx.fillStyle = '#3b82f6'
+          ctx.strokeStyle = '#ffffff'
+          ctx.lineWidth = 1.5
+          ctx.setLineDash([])
+          for (const h of handles) {
+            ctx.beginPath()
+            ctx.rect(h.x - 5, h.y - 5, 10, 10)
+            ctx.fill()
+            ctx.stroke()
+          }
+          ctx.restore()
+        }
       }
 
       // Draw shape preview
@@ -763,7 +932,7 @@ const PdfAnnotationEditor = forwardRef<PdfAnnotationEditorHandle, PdfAnnotationE
       // Draw text annotations
       for (const ta of pageAnnot.textAnnotations) {
         ctx.save()
-        const fontStyle = `${ta.italic ? 'italic ' : ''}${ta.bold ? 'bold ' : ''}${ta.fontSize * scale}px sans-serif`
+        const fontStyle = `${ta.italic ? 'italic ' : ''}${ta.bold ? 'bold ' : ''}${ta.fontSize * scale}px ${ta.fontFamily ?? 'sans-serif'}`
         ctx.font = fontStyle
         ctx.fillStyle = ta.color
         const lines = ta.text.split('\n')
@@ -792,6 +961,15 @@ const PdfAnnotationEditor = forwardRef<PdfAnnotationEditorHandle, PdfAnnotationE
     // ────────────────────────────────────────────────────────
     // Shape drawing helper
     // ────────────────────────────────────────────────────────
+    function distToSegment(p: PdfPoint, a: PdfPoint, b: PdfPoint): number {
+      const dx = b.x - a.x
+      const dy = b.y - a.y
+      const lenSq = dx * dx + dy * dy
+      if (lenSq === 0) return Math.hypot(p.x - a.x, p.y - a.y)
+      const t = Math.max(0, Math.min(1, ((p.x - a.x) * dx + (p.y - a.y) * dy) / lenSq))
+      return Math.hypot(p.x - (a.x + t * dx), p.y - (a.y + t * dy))
+    }
+
     function drawShape(
       ctx: CanvasRenderingContext2D,
       shape: ShapeAnnotation,
@@ -811,6 +989,13 @@ const PdfAnnotationEditor = forwardRef<PdfAnnotationEditorHandle, PdfAnnotationE
       const y2 = shape.y2 * scale
 
       if (shape.type === 'rectangle') {
+        if (shape.filled) {
+          ctx.save()
+          ctx.globalAlpha = shape.fillOpacity ?? 0.2
+          ctx.fillStyle = shape.color
+          ctx.fillRect(x1, y1, x2 - x1, y2 - y1)
+          ctx.restore()
+        }
         ctx.strokeRect(x1, y1, x2 - x1, y2 - y1)
       } else if (shape.type === 'circle') {
         const rx = Math.abs(x2 - x1) / 2
@@ -819,6 +1004,13 @@ const PdfAnnotationEditor = forwardRef<PdfAnnotationEditorHandle, PdfAnnotationE
         const cy = (y1 + y2) / 2
         ctx.beginPath()
         ctx.ellipse(cx, cy, rx, ry, 0, 0, Math.PI * 2)
+        if (shape.filled) {
+          ctx.save()
+          ctx.globalAlpha = shape.fillOpacity ?? 0.2
+          ctx.fillStyle = shape.color
+          ctx.fill()
+          ctx.restore()
+        }
         ctx.stroke()
       } else if (shape.type === 'arrow') {
         // Line
@@ -826,7 +1018,7 @@ const PdfAnnotationEditor = forwardRef<PdfAnnotationEditorHandle, PdfAnnotationE
         ctx.moveTo(x1, y1)
         ctx.lineTo(x2, y2)
         ctx.stroke()
-        // Arrowhead
+        // Arrowhead at end
         const angle = Math.atan2(y2 - y1, x2 - x1)
         const headLen = 12 * scale
         ctx.beginPath()
@@ -835,6 +1027,16 @@ const PdfAnnotationEditor = forwardRef<PdfAnnotationEditorHandle, PdfAnnotationE
         ctx.moveTo(x2, y2)
         ctx.lineTo(x2 - headLen * Math.cos(angle + Math.PI / 6), y2 - headLen * Math.sin(angle + Math.PI / 6))
         ctx.stroke()
+        // Arrowhead at start (double-ended)
+        if (shape.doubleEnded) {
+          const startAngle = Math.atan2(y1 - y2, x1 - x2)
+          ctx.beginPath()
+          ctx.moveTo(x1, y1)
+          ctx.lineTo(x1 - headLen * Math.cos(startAngle - Math.PI / 6), y1 - headLen * Math.sin(startAngle - Math.PI / 6))
+          ctx.moveTo(x1, y1)
+          ctx.lineTo(x1 - headLen * Math.cos(startAngle + Math.PI / 6), y1 - headLen * Math.sin(startAngle + Math.PI / 6))
+          ctx.stroke()
+        }
       }
       ctx.restore()
     }
@@ -881,20 +1083,8 @@ const PdfAnnotationEditor = forwardRef<PdfAnnotationEditorHandle, PdfAnnotationE
           setIsDrawing(true)
           setCurrentStrokePoints([pos])
         } else if (tool === 'eraser') {
-          // Remove stroke under pointer
-          const pageAnnot = getPageAnnotations(currentPage)
-          const hitRadius = 10 / zoom
-          const remaining = pageAnnot.strokes.filter(s => {
-            return !s.points.some(p =>
-              Math.abs(p.x - pos.x) < hitRadius && Math.abs(p.y - pos.y) < hitRadius
-            )
-          })
-          if (remaining.length !== pageAnnot.strokes.length) {
-            const newPages = updatePageAnnotations(currentPage, p => ({ ...p, strokes: remaining }))
-            setPages(newPages)
-            pushHistory(newPages)
-            emitChange(newPages)
-          }
+          setIsDrawing(true)
+          eraseAtPoint(pos)
         } else if (tool === 'text') {
           // Place a new text annotation
           const newText: TextAnnotation = {
@@ -934,17 +1124,40 @@ const PdfAnnotationEditor = forwardRef<PdfAnnotationEditorHandle, PdfAnnotationE
           // Hit-test shapes and text
           const pageAnnot = getPageAnnotations(currentPage)
           let hit = false
+          const HANDLE_RADIUS = 8 / zoom
+
+          // Check resize handles on the currently selected shape first
+          if (selectedId && !hit) {
+            const selShape = pageAnnot.shapes.find(s => s.id === selectedId)
+            if (selShape && selShape.type !== 'arrow') {
+              const handles: [string, number, number][] = [
+                ['x1y1', selShape.x1, selShape.y1],
+                ['x2y1', selShape.x2, selShape.y1],
+                ['x1y2', selShape.x1, selShape.y2],
+                ['x2y2', selShape.x2, selShape.y2],
+              ]
+              for (const [hKey, hx, hy] of handles) {
+                if (Math.hypot(pos.x - hx, pos.y - hy) < HANDLE_RADIUS) {
+                  setResizeHandle(hKey)
+                  hit = true
+                  break
+                }
+              }
+            }
+          }
 
           // Check text annotations
-          for (const ta of pageAnnot.textAnnotations) {
-            if (
-              pos.x >= ta.x && pos.x <= ta.x + ta.width &&
-              pos.y >= ta.y && pos.y <= ta.y + (ta.height || ta.fontSize * 1.5)
-            ) {
-              setSelectedId(ta.id)
-              setDragOffset({ x: pos.x - ta.x, y: pos.y - ta.y })
-              hit = true
-              break
+          if (!hit) {
+            for (const ta of pageAnnot.textAnnotations) {
+              if (
+                pos.x >= ta.x && pos.x <= ta.x + ta.width &&
+                pos.y >= ta.y && pos.y <= ta.y + (ta.height || ta.fontSize * 1.5)
+              ) {
+                setSelectedId(ta.id)
+                setDragOffset({ x: pos.x - ta.x, y: pos.y - ta.y })
+                hit = true
+                break
+              }
             }
           }
 
@@ -964,15 +1177,36 @@ const PdfAnnotationEditor = forwardRef<PdfAnnotationEditorHandle, PdfAnnotationE
             }
           }
 
+          // Check strokes (distance-to-path)
+          if (!hit) {
+            const hitR = Math.max(6, strokeSize) / zoom
+            for (let si = pageAnnot.strokes.length - 1; si >= 0; si--) {
+              const stroke = pageAnnot.strokes[si]
+              const pts = stroke.points
+              let minDist = Infinity
+              for (let i = 1; i < pts.length; i++) {
+                const d = distToSegment(pos, pts[i - 1], pts[i])
+                if (d < minDist) minDist = d
+              }
+              if (minDist < hitR + stroke.size / 2) {
+                setSelectedId(stroke.id)
+                setDragOffset({ x: pos.x, y: pos.y })
+                hit = true
+                break
+              }
+            }
+          }
+
           if (!hit) {
             setSelectedId(null)
             setDragOffset(null)
+            setResizeHandle(null)
           }
           setIsDrawing(hit)
         }
       },
       // eslint-disable-next-line react-hooks/exhaustive-deps
-      [disabled, tool, color, currentPage, zoom, pages]
+      [disabled, tool, color, currentPage, zoom, pages, selectedId, strokeSize]
     )
 
     const handlePointerMove = useCallback(
@@ -983,6 +1217,8 @@ const PdfAnnotationEditor = forwardRef<PdfAnnotationEditorHandle, PdfAnnotationE
 
         if (tool === 'pen' || tool === 'highlighter') {
           setCurrentStrokePoints(prev => [...prev, pos])
+        } else if (tool === 'eraser') {
+          eraseAtPoint(pos)
         } else if ((tool === 'rectangle' || tool === 'circle' || tool === 'arrow') && shapeStart) {
           setShapePreview({
             id: 'preview',
@@ -994,33 +1230,65 @@ const PdfAnnotationEditor = forwardRef<PdfAnnotationEditorHandle, PdfAnnotationE
             color,
             strokeWidth: strokeSize,
           })
-        } else if (tool === 'select' && selectedId && dragOffset) {
-          // Move selected annotation
-          const dx = pos.x - dragOffset.x
-          const dy = pos.y - dragOffset.y
+        } else if (tool === 'select' && selectedId && resizeHandle) {
+          // Resize selected shape via drag handle
           const newPages = updatePageAnnotations(currentPage, page => {
-            const textIdx = page.textAnnotations.findIndex(t => t.id === selectedId)
-            if (textIdx >= 0) {
-              const updated = [...page.textAnnotations]
-              updated[textIdx] = { ...updated[textIdx], x: dx, y: dy }
-              return { ...page, textAnnotations: updated }
-            }
             const shapeIdx = page.shapes.findIndex(s => s.id === selectedId)
-            if (shapeIdx >= 0) {
-              const s = page.shapes[shapeIdx]
-              const w = s.x2 - s.x1
-              const h = s.y2 - s.y1
-              const updated = [...page.shapes]
-              updated[shapeIdx] = { ...updated[shapeIdx], x1: dx, y1: dy, x2: dx + w, y2: dy + h }
-              return { ...page, shapes: updated }
-            }
-            return page
+            if (shapeIdx < 0) return page
+            const s = { ...page.shapes[shapeIdx] }
+            if (resizeHandle.includes('x1')) s.x1 = pos.x
+            if (resizeHandle.includes('x2')) s.x2 = pos.x
+            if (resizeHandle.includes('y1')) s.y1 = pos.y
+            if (resizeHandle.includes('y2')) s.y2 = pos.y
+            const updated = [...page.shapes]
+            updated[shapeIdx] = s
+            return { ...page, shapes: updated }
           })
           setPages(newPages)
+        } else if (tool === 'select' && selectedId && dragOffset) {
+          // Move selected annotation
+          const pageAnnot = getPageAnnotations(currentPage)
+          const isStroke = pageAnnot.strokes.some(s => s.id === selectedId)
+          if (isStroke) {
+            const dx = pos.x - dragOffset.x
+            const dy = pos.y - dragOffset.y
+            const newPages = updatePageAnnotations(currentPage, page => ({
+              ...page,
+              strokes: page.strokes.map(s =>
+                s.id === selectedId
+                  ? { ...s, points: s.points.map(p => ({ ...p, x: p.x + dx, y: p.y + dy })) }
+                  : s
+              ),
+            }))
+            setPages(newPages)
+            setDragOffset({ x: pos.x, y: pos.y })
+          } else {
+            const dx = pos.x - dragOffset.x
+            const dy = pos.y - dragOffset.y
+            const newPages = updatePageAnnotations(currentPage, page => {
+              const textIdx = page.textAnnotations.findIndex(t => t.id === selectedId)
+              if (textIdx >= 0) {
+                const updated = [...page.textAnnotations]
+                updated[textIdx] = { ...updated[textIdx], x: dx, y: dy }
+                return { ...page, textAnnotations: updated }
+              }
+              const shapeIdx = page.shapes.findIndex(s => s.id === selectedId)
+              if (shapeIdx >= 0) {
+                const s = page.shapes[shapeIdx]
+                const w = s.x2 - s.x1
+                const h = s.y2 - s.y1
+                const updated = [...page.shapes]
+                updated[shapeIdx] = { ...updated[shapeIdx], x1: dx, y1: dy, x2: dx + w, y2: dy + h }
+                return { ...page, shapes: updated }
+              }
+              return page
+            })
+            setPages(newPages)
+          }
         }
       },
       // eslint-disable-next-line react-hooks/exhaustive-deps
-      [isDrawing, tool, shapeStart, color, strokeSize, selectedId, dragOffset, currentPage, pages]
+      [isDrawing, tool, shapeStart, color, strokeSize, selectedId, dragOffset, currentPage, pages, eraseAtPoint, resizeHandle, getPageAnnotations, updatePageAnnotations]
     )
 
     const handlePointerUp = useCallback(
@@ -1059,6 +1327,8 @@ const PdfAnnotationEditor = forwardRef<PdfAnnotationEditorHandle, PdfAnnotationE
               y2: pos.y,
               color,
               strokeWidth: strokeSize,
+              ...(tool !== 'arrow' && shapeFilled ? { filled: true, fillOpacity: 0.2 } : {}),
+              ...(tool === 'arrow' && doubleEndedArrow ? { doubleEnded: true } : {}),
             }
             const newPages = updatePageAnnotations(currentPage, p => ({
               ...p,
@@ -1073,12 +1343,51 @@ const PdfAnnotationEditor = forwardRef<PdfAnnotationEditorHandle, PdfAnnotationE
         } else if (tool === 'select' && selectedId) {
           pushHistory(pages)
           emitChange(pages)
+        } else if (tool === 'eraser') {
+          // Commit the erased state to history
+          pushHistory(pages)
         }
 
         setIsDrawing(false)
+        setResizeHandle(null)
       },
       // eslint-disable-next-line react-hooks/exhaustive-deps
-      [isDrawing, tool, currentStrokePoints, color, strokeSize, currentPage, shapeStart, selectedId, pages, zoom]
+      [isDrawing, tool, currentStrokePoints, color, strokeSize, currentPage, shapeStart, selectedId, pages, zoom, shapeFilled, doubleEndedArrow]
+    )
+
+    // ────────────────────────────────────────────────────────
+    // Double-click: re-enter edit mode on a committed text annotation
+    // ────────────────────────────────────────────────────────
+    const handleDoubleClick = useCallback(
+      (e: React.MouseEvent<HTMLCanvasElement>) => {
+        const rect = annotCanvasRef.current!.getBoundingClientRect()
+        const vx = e.clientX - rect.left
+        const vy = e.clientY - rect.top
+        let cx: number, cy: number
+        switch (viewRotation) {
+          case 90:  cx = vy / zoom; cy = (canvasWidth - vx) / zoom; break
+          case 180: cx = (canvasWidth - vx) / zoom; cy = (canvasHeight - vy) / zoom; break
+          case 270: cx = (canvasHeight - vy) / zoom; cy = vx / zoom; break
+          default:  cx = vx / zoom; cy = vy / zoom
+        }
+        const pos = { x: cx, y: cy }
+        const pageAnnot = getPageAnnotations(currentPage)
+        const ta = pageAnnot.textAnnotations.find(t =>
+          pos.x >= t.x && pos.x <= t.x + t.width &&
+          pos.y >= t.y && pos.y <= t.y + (t.height || t.fontSize * 1.5)
+        )
+        if (ta) {
+          // Pull the annotation back out of committed state and into editing
+          const newPages = updatePageAnnotations(currentPage, p => ({
+            ...p,
+            textAnnotations: p.textAnnotations.filter(t => t.id !== ta.id),
+          }))
+          setPages(newPages)
+          setEditingText(ta)
+          setTool('text')
+        }
+      },
+      [currentPage, zoom, viewRotation, canvasWidth, canvasHeight, getPageAnnotations, updatePageAnnotations]
     )
 
     // ────────────────────────────────────────────────────────
@@ -1100,35 +1409,6 @@ const PdfAnnotationEditor = forwardRef<PdfAnnotationEditorHandle, PdfAnnotationE
     }, [editingText, currentPage, updatePageAnnotations, pushHistory, emitChange])
 
     // ────────────────────────────────────────────────────────
-    // Delete selected annotation
-    // ────────────────────────────────────────────────────────
-    useEffect(() => {
-      function handleKeyDown(e: KeyboardEvent) {
-        if (e.key === 'Delete' || e.key === 'Backspace') {
-          if (selectedId && tool === 'select' && !editingText) {
-            const newPages = updatePageAnnotations(currentPage, page => ({
-              ...page,
-              textAnnotations: page.textAnnotations.filter(t => t.id !== selectedId),
-              shapes: page.shapes.filter(s => s.id !== selectedId),
-            }))
-            setPages(newPages)
-            pushHistory(newPages)
-            emitChange(newPages)
-            setSelectedId(null)
-          }
-        }
-        // Undo/redo keyboard shortcuts
-        if ((e.metaKey || e.ctrlKey) && e.key === 'z') {
-          e.preventDefault()
-          if (e.shiftKey) redo()
-          else undo()
-        }
-      }
-      window.addEventListener('keydown', handleKeyDown)
-      return () => window.removeEventListener('keydown', handleKeyDown)
-    }, [selectedId, tool, editingText, currentPage, updatePageAnnotations, pushHistory, emitChange, undo, redo])
-
-    // ────────────────────────────────────────────────────────
     // Page navigation
     // ────────────────────────────────────────────────────────
     const goToPage = useCallback((pg: number) => {
@@ -1145,6 +1425,65 @@ const PdfAnnotationEditor = forwardRef<PdfAnnotationEditorHandle, PdfAnnotationE
         })
       }
     }, [value?.pdfStoragePath, pages, totalPages, zoom, onChange])
+
+    // ────────────────────────────────────────────────────────
+    // Keyboard shortcuts: delete, undo/redo, tool switching, page nav
+    // ────────────────────────────────────────────────────────
+    useEffect(() => {
+      function handleKeyDown(e: KeyboardEvent) {
+        if (e.key === 'Delete' || e.key === 'Backspace') {
+          if (selectedId && tool === 'select' && !editingText) {
+            const newPages = updatePageAnnotations(currentPage, page => ({
+              ...page,
+              textAnnotations: page.textAnnotations.filter(t => t.id !== selectedId),
+              shapes: page.shapes.filter(s => s.id !== selectedId),
+              strokes: page.strokes.filter(s => s.id !== selectedId),
+            }))
+            setPages(newPages)
+            pushHistory(newPages)
+            emitChange(newPages)
+            setSelectedId(null)
+          }
+        }
+        // Undo/redo keyboard shortcuts
+        if ((e.metaKey || e.ctrlKey) && e.key === 'z') {
+          e.preventDefault()
+          if (e.shiftKey) redo()
+          else undo()
+        }
+        // Tool switching shortcuts (only when not editing text/textarea)
+        if (!editingText && !e.metaKey && !e.ctrlKey && !e.altKey) {
+          const keyToTool: Record<string, PdfTool> = {
+            's': 'select', 'p': 'pen', 'h': 'highlighter', 'e': 'eraser',
+            't': 'text', 'r': 'rectangle', 'c': 'circle', 'a': 'arrow', 'n': 'sticky',
+          }
+          if (keyToTool[e.key.toLowerCase()]) {
+            const target = e.target as HTMLElement
+            const isInput = target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.tagName === 'SELECT'
+            if (!isInput) setTool(keyToTool[e.key.toLowerCase()])
+          }
+          // Page navigation
+          if (e.key === 'ArrowRight' || e.key === 'ArrowDown') {
+            const target = e.target as HTMLElement
+            const isInput = target.tagName === 'INPUT' || target.tagName === 'TEXTAREA'
+            if (!isInput && currentPage < totalPages - 1) {
+              e.preventDefault()
+              goToPage(currentPage + 1)
+            }
+          }
+          if (e.key === 'ArrowLeft' || e.key === 'ArrowUp') {
+            const target = e.target as HTMLElement
+            const isInput = target.tagName === 'INPUT' || target.tagName === 'TEXTAREA'
+            if (!isInput && currentPage > 0) {
+              e.preventDefault()
+              goToPage(currentPage - 1)
+            }
+          }
+        }
+      }
+      window.addEventListener('keydown', handleKeyDown)
+      return () => window.removeEventListener('keydown', handleKeyDown)
+    }, [selectedId, tool, editingText, currentPage, totalPages, updatePageAnnotations, pushHistory, emitChange, undo, redo, goToPage])
 
     // ────────────────────────────────────────────────────────
     // Zoom
@@ -1211,7 +1550,7 @@ const PdfAnnotationEditor = forwardRef<PdfAnnotationEditorHandle, PdfAnnotationE
       emitChange(pages, currentPage, newZoom)
     }, [naturalWidth, naturalHeight, pages, currentPage, emitChange, clampZoom])
 
-    // Ctrl/Cmd + scroll wheel zoom
+    // Ctrl/Cmd + scroll wheel zoom — uses refs to avoid stale closures on pages/currentPage
     useEffect(() => {
       const el = scrollAreaRef.current
       if (!el) return
@@ -1221,14 +1560,13 @@ const PdfAnnotationEditor = forwardRef<PdfAnnotationEditorHandle, PdfAnnotationE
         const delta = e.deltaY > 0 ? -ZOOM_STEP : ZOOM_STEP
         setZoom(prev => {
           const newZoom = clampZoom(prev + delta)
-          // We push emitChange via a microtask so state is in sync
-          queueMicrotask(() => emitChange(pages, currentPage, newZoom))
+          queueMicrotask(() => emitChange(pagesRef.current, currentPageRef.current, newZoom))
           return newZoom
         })
       }
       el.addEventListener('wheel', onWheel, { passive: false })
       return () => el.removeEventListener('wheel', onWheel)
-    }, [clampZoom, emitChange, pages, currentPage])
+    }, [clampZoom, emitChange])
 
     // ────────────────────────────────────────────────────────
     // File upload
@@ -1253,6 +1591,12 @@ const PdfAnnotationEditor = forwardRef<PdfAnnotationEditorHandle, PdfAnnotationE
           const result = await uploadFile(file, folderPath, {
             maxFileSizeBytes: PDF_ANNOTATION_MAX_FILE_SIZE_BYTES,
           })
+          if (result.file.name !== file.name) {
+            toast.push({
+              title: 'Filename adjusted',
+              description: `Stored as "${result.file.name}" for compatibility.`,
+            })
+          }
           const storagePath = result.path
 
           // Initialize annotation data
@@ -1290,7 +1634,7 @@ const PdfAnnotationEditor = forwardRef<PdfAnnotationEditorHandle, PdfAnnotationE
           setPdfLoading(false)
         }
       },
-      [onChange, pushHistory]
+      [onChange, pushHistory, toast]
     )
 
     // ────────────────────────────────────────────────────────
@@ -1313,10 +1657,12 @@ const PdfAnnotationEditor = forwardRef<PdfAnnotationEditorHandle, PdfAnnotationE
           defaultH = fvp.height
         }
 
+        const firstPageW = (viewRotation === 90 || viewRotation === 270) ? defaultH : defaultW
+        const firstPageH = (viewRotation === 90 || viewRotation === 270) ? defaultW : defaultH
         const pdf = new jsPDF({
-          orientation: defaultW > defaultH ? 'landscape' : 'portrait',
+          orientation: firstPageW > firstPageH ? 'landscape' : 'portrait',
           unit: 'px',
-          format: [defaultW, defaultH],
+          format: [firstPageW, firstPageH],
         })
 
         for (let i = 0; i < pages.length; i++) {
@@ -1349,7 +1695,9 @@ const PdfAnnotationEditor = forwardRef<PdfAnnotationEditorHandle, PdfAnnotationE
           }
 
           if (i > 0) {
-            pdf.addPage([canvasW, canvasH], canvasW > canvasH ? 'landscape' : 'portrait')
+            const pageW = (viewRotation === 90 || viewRotation === 270) ? canvasH : canvasW
+            const pageH = (viewRotation === 90 || viewRotation === 270) ? canvasW : canvasH
+            pdf.addPage([pageW, pageH], pageW > pageH ? 'landscape' : 'portrait')
           }
 
           // Render strokes
@@ -1363,7 +1711,7 @@ const PdfAnnotationEditor = forwardRef<PdfAnnotationEditorHandle, PdfAnnotationE
           // Render text annotations
           for (const ta of pageAnnot.textAnnotations) {
             tempCtx.save()
-            tempCtx.font = `${ta.italic ? 'italic ' : ''}${ta.bold ? 'bold ' : ''}${ta.fontSize * exportScale}px sans-serif`
+            tempCtx.font = `${ta.italic ? 'italic ' : ''}${ta.bold ? 'bold ' : ''}${ta.fontSize * exportScale}px ${ta.fontFamily ?? 'sans-serif'}`
             tempCtx.fillStyle = ta.color
             ta.text.split('\n').forEach((line, li) => {
               tempCtx.fillText(line, ta.x * exportScale, (ta.y + ta.fontSize + li * ta.fontSize * 1.2) * exportScale)
@@ -1395,16 +1743,53 @@ const PdfAnnotationEditor = forwardRef<PdfAnnotationEditorHandle, PdfAnnotationE
             tempCtx.restore()
           }
 
-          const imgData = tempCanvas.toDataURL('image/png')
-          pdf.addImage(imgData, 'PNG', 0, 0, canvasW, canvasH)
+          // Apply viewRotation if needed: composite tempCanvas into a rotated finalCanvas
+          let exportCanvas = tempCanvas
+          let exportW = canvasW
+          let exportH = canvasH
+          if (viewRotation !== 0) {
+            const rotated = document.createElement('canvas')
+            if (viewRotation === 90 || viewRotation === 270) {
+              rotated.width = canvasH
+              rotated.height = canvasW
+              exportW = canvasH
+              exportH = canvasW
+            } else {
+              rotated.width = canvasW
+              rotated.height = canvasH
+            }
+            const rCtx = rotated.getContext('2d')!
+            rCtx.save()
+            switch (viewRotation) {
+              case 90:
+                rCtx.translate(canvasH, 0)
+                rCtx.rotate(Math.PI / 2)
+                break
+              case 180:
+                rCtx.translate(canvasW, canvasH)
+                rCtx.rotate(Math.PI)
+                break
+              case 270:
+                rCtx.translate(0, canvasW)
+                rCtx.rotate(-Math.PI / 2)
+                break
+            }
+            rCtx.drawImage(tempCanvas, 0, 0)
+            rCtx.restore()
+            exportCanvas = rotated
+          }
+
+          const imgData = exportCanvas.toDataURL('image/png')
+          pdf.addImage(imgData, 'PNG', 0, 0, exportW, exportH)
           tempCanvas.remove()
+          if (exportCanvas !== tempCanvas) exportCanvas.remove()
         }
 
         pdf.save('annotated.pdf')
       } catch (err) {
         console.error('PDF export failed:', err)
       }
-    }, [pdfDoc, pages, getPageAnnotations, naturalWidth, naturalHeight])
+    }, [pdfDoc, pages, getPageAnnotations, naturalWidth, naturalHeight, viewRotation])
 
     // ────────────────────────────────────────────────────────
     // Tool buttons
@@ -1542,6 +1927,42 @@ const PdfAnnotationEditor = forwardRef<PdfAnnotationEditorHandle, PdfAnnotationE
             />
             <span className="w-4 text-center">{strokeSize}</span>
           </label>
+
+          {/* Shape fill toggle — visible when drawing rectangle or circle */}
+          {(tool === 'rectangle' || tool === 'circle') && (
+            <>
+              <div className="mx-1 h-5 w-px bg-border" />
+              <button
+                title={shapeFilled ? 'Filled shape (click to unfill)' : 'No fill (click to fill)'}
+                onClick={() => setShapeFilled(v => !v)}
+                className={`rounded px-2 py-1 text-xs font-medium transition-colors ${
+                  shapeFilled
+                    ? 'bg-rose-100 text-rose-600 dark:bg-rose-900/40 dark:text-rose-400'
+                    : 'text-muted-foreground hover:bg-surface-hover'
+                }`}
+              >
+                Fill
+              </button>
+            </>
+          )}
+
+          {/* Double-ended arrow toggle — visible when drawing arrows */}
+          {tool === 'arrow' && (
+            <>
+              <div className="mx-1 h-5 w-px bg-border" />
+              <button
+                title={doubleEndedArrow ? 'Double-headed arrow (click for single)' : 'Single arrow (click for double-headed)'}
+                onClick={() => setDoubleEndedArrow(v => !v)}
+                className={`rounded px-2 py-1 text-base transition-colors ${
+                  doubleEndedArrow
+                    ? 'bg-rose-100 text-rose-600 dark:bg-rose-900/40 dark:text-rose-400'
+                    : 'text-muted-foreground hover:bg-surface-hover'
+                }`}
+              >
+                ↔
+              </button>
+            </>
+          )}
 
           <div className="mx-1 h-5 w-px bg-border" />
 
@@ -1830,6 +2251,7 @@ const PdfAnnotationEditor = forwardRef<PdfAnnotationEditorHandle, PdfAnnotationE
                 onPointerDown={handlePointerDown}
                 onPointerMove={handlePointerMove}
                 onPointerUp={handlePointerUp}
+                onDoubleClick={handleDoubleClick}
               />
               </div>{/* end rotation wrapper */}
 
@@ -1878,12 +2300,99 @@ const PdfAnnotationEditor = forwardRef<PdfAnnotationEditorHandle, PdfAnnotationE
                       title="Increase font size"
                       className="rounded px-1.5 text-sm text-muted-foreground hover:bg-surface-hover"
                     >+</button>
+                    <div className="mx-0.5 h-4 w-px bg-border" />
+                    {COLORS.map(c => (
+                      <button
+                        key={c}
+                        title={`Text color: ${c}`}
+                        onMouseDown={e => { e.preventDefault(); changeTextColor(ta.id, c) }}
+                        className={`h-4 w-4 rounded-full border transition-transform ${
+                          ta.color === c ? 'scale-125 border-foreground' : 'border-border'
+                        }`}
+                        style={{ backgroundColor: c }}
+                      />
+                    ))}
+                    <div className="mx-0.5 h-4 w-px bg-border" />
+                    <select
+                      value={ta.fontFamily ?? 'sans-serif'}
+                      onMouseDown={e => e.stopPropagation()}
+                      onChange={e => changeTextFontFamily(ta.id, e.target.value)}
+                      className="rounded border border-border bg-surface py-0.5 text-[11px] text-muted-foreground focus:outline-none"
+                      title="Font family"
+                    >
+                      <option value="sans-serif">Sans</option>
+                      <option value="serif">Serif</option>
+                      <option value="monospace">Mono</option>
+                    </select>
                   </div>
                 )
               })()}
 
-              {/* Sticky notes overlay — rendered at 0° outside the rotation wrapper */}
-              {getPageAnnotations(currentPage).stickyNotes?.map(sn => {
+
+              {/* Shape formatting toolbar — fill + double-ended arrow for selected shape */}
+              {tool === 'select' && selectedId && (() => {
+                const pageAnnot = getPageAnnotations(currentPage)
+                const shape = pageAnnot.shapes.find(s => s.id === selectedId)
+                if (!shape) return null
+                const { vx, vy } = logicalToVisual(Math.min(shape.x1, shape.x2), Math.min(shape.y1, shape.y2))
+                return (
+                  <div
+                    className="absolute z-40 flex items-center gap-0.5 rounded-lg border border-border bg-surface px-1.5 py-1 shadow-md"
+                    style={{ left: vx, top: Math.max(0, vy - 40) }}
+                  >
+                    {(shape.type === 'rectangle' || shape.type === 'circle') && (
+                      <button
+                        onMouseDown={e => {
+                          e.preventDefault()
+                          const newPages = updatePageAnnotations(currentPage, page => ({
+                            ...page,
+                            shapes: page.shapes.map(s =>
+                              s.id === shape.id ? { ...s, filled: !s.filled } : s
+                            ),
+                          }))
+                          setPages(newPages)
+                          pushHistory(newPages)
+                          emitChange(newPages)
+                        }}
+                        title={shape.filled ? 'Remove fill' : 'Add fill'}
+                        className={`rounded px-1.5 py-0.5 text-[11px] font-medium transition-colors ${
+                          shape.filled
+                            ? 'bg-rose-100 text-rose-600 dark:bg-rose-900/40 dark:text-rose-400'
+                            : 'text-muted-foreground hover:bg-surface-hover'
+                        }`}
+                      >
+                        Fill
+                      </button>
+                    )}
+                    {shape.type === 'arrow' && (
+                      <button
+                        onMouseDown={e => {
+                          e.preventDefault()
+                          const newPages = updatePageAnnotations(currentPage, page => ({
+                            ...page,
+                            shapes: page.shapes.map(s =>
+                              s.id === shape.id ? { ...s, doubleEnded: !s.doubleEnded } : s
+                            ),
+                          }))
+                          setPages(newPages)
+                          pushHistory(newPages)
+                          emitChange(newPages)
+                        }}
+                        title={shape.doubleEnded ? 'Single arrow' : 'Double-headed arrow'}
+                        className={`rounded px-1.5 py-0.5 text-base transition-colors ${
+                          shape.doubleEnded
+                            ? 'bg-rose-100 text-rose-600 dark:bg-rose-900/40 dark:text-rose-400'
+                            : 'text-muted-foreground hover:bg-surface-hover'
+                        }`}
+                      >
+                        ↔
+                      </button>
+                    )}
+                  </div>
+                )
+              })()}
+
+              {/* Sticky notes overlay — rendered at 0° outside the rotation wrapper */}              {getPageAnnotations(currentPage).stickyNotes?.map(sn => {
                 const { vx, vy } = logicalToVisual(sn.x, sn.y)
                 return (
                 <div
@@ -1969,6 +2478,33 @@ const PdfAnnotationEditor = forwardRef<PdfAnnotationEditorHandle, PdfAnnotationE
                       onClick={() => setSelectedId(sn.id)}
                       onChange={e => updateStickyNote(sn.id, { text: e.target.value })}
                       onBlur={commitStickyMove}
+                    />
+                  )}
+                  {/* Resize handle */}
+                  {!sn.collapsed && (
+                    <div
+                      className="absolute bottom-0 right-0 h-3 w-3 cursor-se-resize"
+                      style={{ background: 'rgba(0,0,0,0.15)', borderRadius: '0 0 4px 0' }}
+                      onMouseDown={e => {
+                        e.stopPropagation()
+                        const startX = e.clientX
+                        const startY = e.clientY
+                        const origW = sn.width
+                        const origH = sn.height
+                        const onMove = (me: MouseEvent) => {
+                          updateStickyNote(sn.id, {
+                            width: Math.max(100, origW + (me.clientX - startX) / zoom),
+                            height: Math.max(80, origH + (me.clientY - startY) / zoom),
+                          })
+                        }
+                        const onUp = () => {
+                          window.removeEventListener('mousemove', onMove)
+                          window.removeEventListener('mouseup', onUp)
+                          commitStickyMove()
+                        }
+                        window.addEventListener('mousemove', onMove)
+                        window.addEventListener('mouseup', onUp)
+                      }}
                     />
                   )}
                 </div>
