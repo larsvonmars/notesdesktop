@@ -45,7 +45,9 @@ import {
   TextCursor,
   ChevronUp,
   ChevronDown,
+  FolderOpen,
 } from 'lucide-react'
+import FileExplorerModal from '@/components/FileExplorerModal'
 import { uploadFile, getFileSignedUrl, downloadFile } from '@/lib/file-storage'
 import { useToast } from '@/components/ToastProvider'
 
@@ -291,6 +293,9 @@ const PdfAnnotationEditor = forwardRef<PdfAnnotationEditorHandle, PdfAnnotationE
     const currentPageRef = useRef(currentPage)
     useEffect(() => { pagesRef.current = pages }, [pages])
     useEffect(() => { currentPageRef.current = currentPage }, [currentPage])
+
+    // File picker (select existing uploaded file)
+    const [showFilePicker, setShowFilePicker] = useState(false)
 
     // Text layer state & refs
     const [showTextLayer, setShowTextLayer] = useState(false)
@@ -1714,6 +1719,63 @@ const PdfAnnotationEditor = forwardRef<PdfAnnotationEditorHandle, PdfAnnotationE
     )
 
     // ────────────────────────────────────────────────────────
+    // Select an already-uploaded PDF from storage
+    // ────────────────────────────────────────────────────────
+    const handleSelectExistingFile = useCallback(
+      async (files: Array<{ name: string; path: string; size: number; type: string }>) => {
+        const file = files[0]
+        if (!file) return
+
+        const isPdf = file.type === 'application/pdf' || file.name.toLowerCase().endsWith('.pdf')
+        if (!isPdf) {
+          setPdfError('Please select a PDF file')
+          return
+        }
+
+        setShowFilePicker(false)
+        setPdfLoading(true)
+        setPdfError(null)
+
+        try {
+          const lib = await loadPdfJs()
+          const blob = await downloadFile(file.path)
+          const arrayBuf = await blob.arrayBuffer()
+          const doc = await lib.getDocument({ data: arrayBuf }).promise
+          setPdfDoc(doc)
+          setTotalPages(doc.numPages)
+
+          const initialPages: PdfAnnotationPage[] = []
+          for (let i = 0; i < doc.numPages; i++) {
+            initialPages.push({
+              pageNumber: i,
+              pdfPageNumber: i + 1,
+              strokes: [],
+              textAnnotations: [],
+              shapes: [],
+              stickyNotes: [],
+            })
+          }
+          setPages(initialPages)
+          setCurrentPage(0)
+          pushHistory(initialPages)
+
+          onChange({
+            pdfStoragePath: file.path,
+            pages: initialPages,
+            currentPage: 0,
+            totalPages: doc.numPages,
+            zoom: 1,
+          })
+        } catch (err) {
+          setPdfError(err instanceof Error ? err.message : 'Failed to load PDF')
+        } finally {
+          setPdfLoading(false)
+        }
+      },
+      [onChange, pushHistory]
+    )
+
+    // ────────────────────────────────────────────────────────
     // File upload
     // ────────────────────────────────────────────────────────
     const handleFileSelect = useCallback(
@@ -1961,25 +2023,40 @@ const PdfAnnotationEditor = forwardRef<PdfAnnotationEditorHandle, PdfAnnotationE
         <div className="flex h-full flex-col items-center justify-center gap-4 p-8">
           <div className="rounded-xl border-2 border-dashed border-border p-12 text-center">
             <Upload className="mx-auto mb-4 h-12 w-12 text-muted-foreground" />
-            <h3 className="mb-2 text-lg font-semibold text-foreground">Upload a PDF to annotate</h3>
-            <p className="mb-4 text-sm text-muted-foreground">Max file size: 50 MB</p>
+            <h3 className="mb-2 text-lg font-semibold text-foreground">Add a PDF to annotate</h3>
+            <p className="mb-6 text-sm text-muted-foreground">Upload a new file or pick one you've already uploaded</p>
             {pdfError && (
               <p className="mb-4 text-sm text-red-500">{pdfError}</p>
             )}
-            <button
-              onClick={() => fileInputRef.current?.click()}
-              disabled={pdfLoading || disabled}
-              className="rounded-lg bg-rose-500 px-6 py-2.5 text-sm font-medium text-white transition-colors hover:bg-rose-600 disabled:opacity-50"
-            >
-              {pdfLoading ? (
-                <span className="flex items-center gap-2">
-                  <Loader2 className="h-4 w-4 animate-spin" />
-                  Uploading...
-                </span>
-              ) : (
-                'Choose PDF File'
-              )}
-            </button>
+            <div className="flex flex-col items-center gap-3 sm:flex-row sm:justify-center">
+              <button
+                onClick={() => fileInputRef.current?.click()}
+                disabled={pdfLoading || disabled}
+                className="flex items-center gap-2 rounded-lg bg-rose-500 px-6 py-2.5 text-sm font-medium text-white transition-colors hover:bg-rose-600 disabled:opacity-50"
+              >
+                {pdfLoading ? (
+                  <>
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                    Loading...
+                  </>
+                ) : (
+                  <>
+                    <Upload size={15} />
+                    Upload new PDF
+                  </>
+                )}
+              </button>
+              <span className="text-xs text-muted-foreground">or</span>
+              <button
+                onClick={() => setShowFilePicker(true)}
+                disabled={pdfLoading || disabled}
+                className="flex items-center gap-2 rounded-lg border border-border bg-surface px-6 py-2.5 text-sm font-medium text-foreground transition-colors hover:bg-surface-hover disabled:opacity-50"
+              >
+                <FolderOpen size={15} />
+                Browse uploaded files
+              </button>
+            </div>
+            <p className="mt-4 text-xs text-muted-foreground">Max upload size: 50 MB</p>
             <input
               ref={fileInputRef}
               type="file"
@@ -1988,6 +2065,14 @@ const PdfAnnotationEditor = forwardRef<PdfAnnotationEditorHandle, PdfAnnotationE
               onChange={handleFileSelect}
             />
           </div>
+
+          {/* File picker modal */}
+          <FileExplorerModal
+            isOpen={showFilePicker}
+            onClose={() => setShowFilePicker(false)}
+            title="Select a PDF"
+            onSelectFiles={handleSelectExistingFile}
+          />
         </div>
       )
     }
