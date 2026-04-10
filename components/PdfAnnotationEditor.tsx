@@ -38,6 +38,13 @@ import {
   PanelLeft,
   RotateCw,
   RotateCcw,
+  Minus,
+  Search,
+  X,
+  Layers,
+  TextCursor,
+  ChevronUp,
+  ChevronDown,
 } from 'lucide-react'
 import { uploadFile, getFileSignedUrl, downloadFile } from '@/lib/file-storage'
 import { useToast } from '@/components/ToastProvider'
@@ -48,7 +55,7 @@ const PDF_ANNOTATION_MAX_FILE_SIZE_BYTES = 50 * 1024 * 1024
 // TYPES
 // ============================================================================
 
-type PdfTool = 'select' | 'pen' | 'highlighter' | 'eraser' | 'text' | 'rectangle' | 'circle' | 'arrow' | 'sticky'
+type PdfTool = 'select' | 'pen' | 'highlighter' | 'eraser' | 'text' | 'rectangle' | 'circle' | 'arrow' | 'line' | 'sticky' | 'textselect'
 type StickyColor = 'yellow' | 'blue' | 'green' | 'pink'
 
 export interface PdfPoint {
@@ -81,7 +88,7 @@ export interface TextAnnotation {
 
 export interface ShapeAnnotation {
   id: string
-  type: 'rectangle' | 'circle' | 'arrow'
+  type: 'rectangle' | 'circle' | 'arrow' | 'line'
   x1: number
   y1: number
   x2: number
@@ -284,6 +291,16 @@ const PdfAnnotationEditor = forwardRef<PdfAnnotationEditorHandle, PdfAnnotationE
     const currentPageRef = useRef(currentPage)
     useEffect(() => { pagesRef.current = pages }, [pages])
     useEffect(() => { currentPageRef.current = currentPage }, [currentPage])
+
+    // Text layer state & refs
+    const [showTextLayer, setShowTextLayer] = useState(false)
+    const [searchQuery, setSearchQuery] = useState('')
+    const [searchVisible, setSearchVisible] = useState(false)
+    const [searchMatchCount, setSearchMatchCount] = useState(0)
+    const [searchCurrentIdx, setSearchCurrentIdx] = useState(0)
+    const [textLayerVersion, setTextLayerVersion] = useState(0)
+    const textLayerRef = useRef<HTMLDivElement>(null)
+    const textLayerInstanceRef = useRef<{ cancel: () => void } | null>(null)
 
     // ────────────────────────────────────────────────────────
     // Imperative handle
@@ -1012,6 +1029,11 @@ const PdfAnnotationEditor = forwardRef<PdfAnnotationEditorHandle, PdfAnnotationE
           ctx.restore()
         }
         ctx.stroke()
+      } else if (shape.type === 'line') {
+        ctx.beginPath()
+        ctx.moveTo(x1, y1)
+        ctx.lineTo(x2, y2)
+        ctx.stroke()
       } else if (shape.type === 'arrow') {
         // Line
         ctx.beginPath()
@@ -1098,7 +1120,7 @@ const PdfAnnotationEditor = forwardRef<PdfAnnotationEditorHandle, PdfAnnotationE
             color,
           }
           setEditingText(newText)
-        } else if (tool === 'rectangle' || tool === 'circle' || tool === 'arrow') {
+        } else if (tool === 'rectangle' || tool === 'circle' || tool === 'arrow' || tool === 'line') {
           setIsDrawing(true)
           setShapeStart({ x: pos.x, y: pos.y })
         } else if (tool === 'sticky') {
@@ -1219,10 +1241,10 @@ const PdfAnnotationEditor = forwardRef<PdfAnnotationEditorHandle, PdfAnnotationE
           setCurrentStrokePoints(prev => [...prev, pos])
         } else if (tool === 'eraser') {
           eraseAtPoint(pos)
-        } else if ((tool === 'rectangle' || tool === 'circle' || tool === 'arrow') && shapeStart) {
+        } else if ((tool === 'rectangle' || tool === 'circle' || tool === 'arrow' || tool === 'line') && shapeStart) {
           setShapePreview({
             id: 'preview',
-            type: tool,
+            type: tool as ShapeAnnotation['type'],
             x1: shapeStart.x,
             y1: shapeStart.y,
             x2: pos.x,
@@ -1314,20 +1336,20 @@ const PdfAnnotationEditor = forwardRef<PdfAnnotationEditorHandle, PdfAnnotationE
             emitChange(newPages)
           }
           setCurrentStrokePoints([])
-        } else if ((tool === 'rectangle' || tool === 'circle' || tool === 'arrow') && shapeStart) {
+        } else if ((tool === 'rectangle' || tool === 'circle' || tool === 'arrow' || tool === 'line') && shapeStart) {
           const pos = getPointerPos(e)
           const minDist = 5 / zoom
           if (Math.abs(pos.x - shapeStart.x) > minDist || Math.abs(pos.y - shapeStart.y) > minDist) {
             const newShape: ShapeAnnotation = {
               id: uid(),
-              type: tool,
+              type: tool as ShapeAnnotation['type'],
               x1: shapeStart.x,
               y1: shapeStart.y,
               x2: pos.x,
               y2: pos.y,
               color,
               strokeWidth: strokeSize,
-              ...(tool !== 'arrow' && shapeFilled ? { filled: true, fillOpacity: 0.2 } : {}),
+              ...(tool !== 'arrow' && tool !== 'line' && shapeFilled ? { filled: true, fillOpacity: 0.2 } : {}),
               ...(tool === 'arrow' && doubleEndedArrow ? { doubleEnded: true } : {}),
             }
             const newPages = updatePageAnnotations(currentPage, p => ({
@@ -1451,11 +1473,28 @@ const PdfAnnotationEditor = forwardRef<PdfAnnotationEditorHandle, PdfAnnotationE
           if (e.shiftKey) redo()
           else undo()
         }
+        // Find/search shortcut (Ctrl/Cmd+F)
+        if ((e.metaKey || e.ctrlKey) && e.key === 'f') {
+          e.preventDefault()
+          setShowTextLayer(true)
+          setSearchVisible(v => {
+            if (!v) setSearchQuery('')
+            return true
+          })
+        }
+        // Close search on Escape
+        if (e.key === 'Escape') {
+          if (searchVisible) {
+            setSearchVisible(false)
+            setSearchQuery('')
+          }
+        }
         // Tool switching shortcuts (only when not editing text/textarea)
         if (!editingText && !e.metaKey && !e.ctrlKey && !e.altKey) {
           const keyToTool: Record<string, PdfTool> = {
             's': 'select', 'p': 'pen', 'h': 'highlighter', 'e': 'eraser',
-            't': 'text', 'r': 'rectangle', 'c': 'circle', 'a': 'arrow', 'n': 'sticky',
+            't': 'text', 'r': 'rectangle', 'c': 'circle', 'a': 'arrow',
+            'l': 'line', 'n': 'sticky', 'i': 'textselect',
           }
           if (keyToTool[e.key.toLowerCase()]) {
             const target = e.target as HTMLElement
@@ -1483,7 +1522,7 @@ const PdfAnnotationEditor = forwardRef<PdfAnnotationEditorHandle, PdfAnnotationE
       }
       window.addEventListener('keydown', handleKeyDown)
       return () => window.removeEventListener('keydown', handleKeyDown)
-    }, [selectedId, tool, editingText, currentPage, totalPages, updatePageAnnotations, pushHistory, emitChange, undo, redo, goToPage])
+    }, [selectedId, tool, editingText, currentPage, totalPages, updatePageAnnotations, pushHistory, emitChange, undo, redo, goToPage, searchVisible])
 
     // ────────────────────────────────────────────────────────
     // Zoom
@@ -1567,6 +1606,112 @@ const PdfAnnotationEditor = forwardRef<PdfAnnotationEditorHandle, PdfAnnotationE
       el.addEventListener('wheel', onWheel, { passive: false })
       return () => el.removeEventListener('wheel', onWheel)
     }, [clampZoom, emitChange])
+
+    // ────────────────────────────────────────────────────────
+    // Text layer rendering (pdfjs TextLayer class, pdfjs-dist 4.x)
+    // ────────────────────────────────────────────────────────
+    useEffect(() => {
+      const el = textLayerRef.current
+      // Cancel any in-flight render
+      if (textLayerInstanceRef.current) {
+        textLayerInstanceRef.current.cancel()
+        textLayerInstanceRef.current = null
+      }
+      if (el) el.innerHTML = ''
+
+      if (!showTextLayer || !pdfDoc || !el) return
+
+      let cancelled = false
+
+      async function renderTextLayerForPage() {
+        const lib = pdfjsLib
+        if (!lib) return
+        const pageData = pages.find(p => p.pageNumber === currentPage)
+        if (!pageData?.pdfPageNumber) return
+
+        const page = await pdfDoc!.getPage(pageData.pdfPageNumber)
+        if (cancelled) return
+
+        const viewport = page.getViewport({ scale: zoom })
+
+        // pdfjs-dist 4.x exposes TextLayer class
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const tl: { render: () => Promise<void>; cancel: () => void } = new (lib as any).TextLayer({
+          textContentSource: page.streamTextContent(),
+          container: el!,
+          viewport,
+        })
+        textLayerInstanceRef.current = tl
+
+        try {
+          await tl.render()
+          if (!cancelled) setTextLayerVersion(v => v + 1)
+        } catch {
+          // cancelled or error — ignore
+        }
+      }
+
+      renderTextLayerForPage()
+
+      return () => {
+        cancelled = true
+        textLayerInstanceRef.current?.cancel()
+        textLayerInstanceRef.current = null
+        if (el) el.innerHTML = ''
+      }
+    }, [pdfDoc, currentPage, zoom, showTextLayer, pages])
+
+    // ────────────────────────────────────────────────────────
+    // Search: highlight matching spans in text layer
+    // ────────────────────────────────────────────────────────
+    useEffect(() => {
+      const el = textLayerRef.current
+      if (!el) return
+
+      const spans = Array.from(el.querySelectorAll('span')) as HTMLElement[]
+      for (const span of spans) {
+        span.classList.remove('pdfannot-match', 'pdfannot-match-active')
+      }
+
+      if (!searchQuery.trim()) {
+        setSearchMatchCount(0)
+        setSearchCurrentIdx(0)
+        return
+      }
+
+      const q = searchQuery.toLowerCase()
+      const hits: HTMLElement[] = []
+      for (const span of spans) {
+        if ((span.textContent ?? '').toLowerCase().includes(q)) {
+          span.classList.add('pdfannot-match')
+          hits.push(span)
+        }
+      }
+
+      setSearchMatchCount(hits.length)
+      const newIdx = hits.length > 0 ? 0 : -1
+      setSearchCurrentIdx(newIdx)
+      if (hits.length > 0) {
+        hits[0].classList.add('pdfannot-match-active')
+        hits[0].scrollIntoView({ block: 'nearest', behavior: 'smooth' })
+      }
+    }, [searchQuery, textLayerVersion, showTextLayer, currentPage])
+
+    const navigateSearch = useCallback(
+      (dir: 1 | -1) => {
+        const el = textLayerRef.current
+        if (!el) return
+        const hits = Array.from(el.querySelectorAll('.pdfannot-match')) as HTMLElement[]
+        if (hits.length === 0) return
+        const prev = searchCurrentIdx < 0 ? 0 : searchCurrentIdx
+        hits[prev]?.classList.remove('pdfannot-match-active')
+        const next = (prev + dir + hits.length) % hits.length
+        hits[next].classList.add('pdfannot-match-active')
+        hits[next].scrollIntoView({ block: 'nearest', behavior: 'smooth' })
+        setSearchCurrentIdx(next)
+      },
+      [searchCurrentIdx]
+    )
 
     // ────────────────────────────────────────────────────────
     // File upload
@@ -1795,15 +1940,17 @@ const PdfAnnotationEditor = forwardRef<PdfAnnotationEditorHandle, PdfAnnotationE
     // Tool buttons
     // ────────────────────────────────────────────────────────
     const tools: { id: PdfTool; icon: typeof Pen; label: string }[] = [
-      { id: 'select', icon: MousePointer2, label: 'Select' },
-      { id: 'pen', icon: Pen, label: 'Pen' },
-      { id: 'highlighter', icon: Highlighter, label: 'Highlighter' },
-      { id: 'eraser', icon: Eraser, label: 'Eraser' },
-      { id: 'text', icon: Type, label: 'Text' },
-      { id: 'rectangle', icon: Square, label: 'Rectangle' },
-      { id: 'circle', icon: Circle, label: 'Circle' },
-      { id: 'arrow', icon: ArrowUpRight, label: 'Arrow' },
-      { id: 'sticky', icon: StickyNoteIcon, label: 'Sticky Note' },
+      { id: 'select', icon: MousePointer2, label: 'Select (S)' },
+      { id: 'pen', icon: Pen, label: 'Pen (P)' },
+      { id: 'highlighter', icon: Highlighter, label: 'Highlighter (H)' },
+      { id: 'eraser', icon: Eraser, label: 'Eraser (E)' },
+      { id: 'text', icon: Type, label: 'Text (T)' },
+      { id: 'rectangle', icon: Square, label: 'Rectangle (R)' },
+      { id: 'circle', icon: Circle, label: 'Circle (C)' },
+      { id: 'arrow', icon: ArrowUpRight, label: 'Arrow (A)' },
+      { id: 'line', icon: Minus, label: 'Line (L)' },
+      { id: 'sticky', icon: StickyNoteIcon, label: 'Sticky Note (N)' },
+      { id: 'textselect', icon: TextCursor, label: 'Select PDF Text (I)' },
     ]
 
     // ────────────────────────────────────────────────────────
@@ -2128,6 +2275,37 @@ const PdfAnnotationEditor = forwardRef<PdfAnnotationEditorHandle, PdfAnnotationE
 
           <div className="flex-1" />
 
+          {/* Text layer toggle */}
+          <button
+            title={showTextLayer ? 'Hide PDF text layer' : 'Show PDF text layer (enables text selection & search)'}
+            onClick={() => {
+              setShowTextLayer(v => {
+                if (v) { setSearchVisible(false); setSearchQuery('') }
+                return !v
+              })
+            }}
+            className={`flex items-center gap-1 rounded px-2 py-1 text-xs transition-colors ${
+              showTextLayer
+                ? 'bg-rose-100 text-rose-600 dark:bg-rose-900/40 dark:text-rose-400'
+                : 'text-muted-foreground hover:bg-surface-hover'
+            }`}
+          >
+            <Layers size={14} />
+            Text
+          </button>
+
+          {/* Search (Ctrl+F) */}
+          <button
+            title="Find in PDF (Ctrl+F)"
+            onClick={() => {
+              setShowTextLayer(true)
+              setSearchVisible(v => { if (!v) setSearchQuery(''); return true })
+            }}
+            className="rounded p-1.5 text-muted-foreground transition-colors hover:bg-surface-hover"
+          >
+            <Search size={14} />
+          </button>
+
           {/* Export */}
           <button
             title="Export annotated PDF"
@@ -2138,6 +2316,55 @@ const PdfAnnotationEditor = forwardRef<PdfAnnotationEditorHandle, PdfAnnotationE
             Export PDF
           </button>
         </div>
+
+        {/* Find/search bar */}
+        {searchVisible && showTextLayer && (
+          <div className="flex items-center gap-1.5 border-b border-border bg-surface px-3 py-1.5">
+            <Search size={13} className="shrink-0 text-muted-foreground" />
+            <input
+              autoFocus
+              type="text"
+              placeholder="Find in PDF…"
+              value={searchQuery}
+              onChange={e => setSearchQuery(e.target.value)}
+              onKeyDown={e => {
+                if (e.key === 'Enter') navigateSearch(e.shiftKey ? -1 : 1)
+                if (e.key === 'Escape') { setSearchVisible(false); setSearchQuery('') }
+              }}
+              className="min-w-0 flex-1 bg-transparent text-xs text-foreground outline-none placeholder:text-muted-foreground"
+            />
+            {searchQuery.trim() && (
+              <span className="shrink-0 text-[11px] text-muted-foreground">
+                {searchMatchCount === 0
+                  ? 'No results'
+                  : `${searchCurrentIdx + 1} / ${searchMatchCount}`}
+              </span>
+            )}
+            <button
+              onClick={() => navigateSearch(-1)}
+              disabled={searchMatchCount === 0}
+              title="Previous match (Shift+Enter)"
+              className="rounded p-0.5 text-muted-foreground hover:bg-surface-hover disabled:opacity-30"
+            >
+              <ChevronUp size={14} />
+            </button>
+            <button
+              onClick={() => navigateSearch(1)}
+              disabled={searchMatchCount === 0}
+              title="Next match (Enter)"
+              className="rounded p-0.5 text-muted-foreground hover:bg-surface-hover disabled:opacity-30"
+            >
+              <ChevronDown size={14} />
+            </button>
+            <button
+              onClick={() => { setSearchVisible(false); setSearchQuery('') }}
+              title="Close search (Escape)"
+              className="rounded p-0.5 text-muted-foreground hover:bg-surface-hover"
+            >
+              <X size={14} />
+            </button>
+          </div>
+        )}
 
         {/* Canvas area + optional thumbnail strip */}
         <div className="flex flex-1 overflow-hidden">
@@ -2228,6 +2455,17 @@ const PdfAnnotationEditor = forwardRef<PdfAnnotationEditorHandle, PdfAnnotationE
                 className="absolute left-0 top-0"
                 style={{ width: canvasWidth, height: canvasHeight }}
               />
+              {/* Text layer (pdfjs TextLayer) — between PDF and annotation canvas */}
+              <div
+                ref={textLayerRef}
+                className="pdf-text-layer absolute left-0 top-0"
+                style={{
+                  width: canvasWidth,
+                  height: canvasHeight,
+                  display: showTextLayer ? 'block' : 'none',
+                  pointerEvents: showTextLayer && tool === 'textselect' ? 'auto' : 'none',
+                }}
+              />
               {/* Annotation overlay layer */}
               <canvas
                 ref={annotCanvasRef}
@@ -2235,6 +2473,7 @@ const PdfAnnotationEditor = forwardRef<PdfAnnotationEditorHandle, PdfAnnotationE
                 style={{
                   width: canvasWidth,
                   height: canvasHeight,
+                  pointerEvents: tool === 'textselect' ? 'none' : 'auto',
                   cursor:
                     tool === 'pen' || tool === 'highlighter'
                       ? 'crosshair'
@@ -2246,6 +2485,8 @@ const PdfAnnotationEditor = forwardRef<PdfAnnotationEditorHandle, PdfAnnotationE
                       ? 'cell'
                       : tool === 'select'
                       ? 'default'
+                      : tool === 'textselect'
+                      ? 'text'
                       : 'crosshair',
                 }}
                 onPointerDown={handlePointerDown}
