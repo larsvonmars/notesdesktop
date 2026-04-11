@@ -82,6 +82,11 @@ import {
   useTableDialogState,
   type SearchMatch,
 } from '@/lib/editor/useEditorDialogState'
+import {
+  FILE_BLOCK_PREVIEW_PDF_EVENT,
+  type FileBlockPreviewPdfEventDetail,
+} from '@/lib/editor/fileBlock'
+import PdfPreviewModal from './PdfPreviewModal'
 
 
 // Re-export RichTextCommand type for external use
@@ -440,6 +445,22 @@ const RichTextEditor = forwardRef<RichTextEditorHandle, RichTextEditorProps>(
     const savedSelectionRef = useRef<Range | null>(null)
     const [autoformatEnabled] = useState(true)
     const [activeFormats, setActiveFormats] = useState<Set<string>>(new Set())
+    const [pdfPreview, setPdfPreview] = useState<{ isOpen: boolean; filePath: string | null; fileName: string | null }>({
+      isOpen: false,
+      filePath: null,
+      fileName: null,
+    })
+
+    useEffect(() => {
+      const handlePreviewPdf = (event: Event) => {
+        const customEvent = event as CustomEvent<FileBlockPreviewPdfEventDetail>
+        const detail = customEvent.detail
+        if (!detail?.filePath) return
+        setPdfPreview({ isOpen: true, filePath: detail.filePath, fileName: detail.fileName })
+      }
+      window.addEventListener(FILE_BLOCK_PREVIEW_PDF_EVENT, handlePreviewPdf as EventListener)
+      return () => window.removeEventListener(FILE_BLOCK_PREVIEW_PDF_EVENT, handlePreviewPdf as EventListener)
+    }, [])
 
     const isSelectionInsideEditor = useCallback(() => {
       return isSelectionInsideRoot(editorRef.current)
@@ -3109,6 +3130,13 @@ const RichTextEditor = forwardRef<RichTextEditorHandle, RichTextEditorProps>(
           onToggleHeaderRow={toggleHeaderRow}
           outlinesVisible={outlinesVisibleForToolbar}
           onToggleOutlines={toggleTableOutlines}
+        />
+
+        <PdfPreviewModal
+          isOpen={pdfPreview.isOpen}
+          onClose={() => setPdfPreview({ isOpen: false, filePath: null, fileName: null })}
+          filePath={pdfPreview.filePath}
+          fileName={pdfPreview.fileName}
         />
       </div>
     )
