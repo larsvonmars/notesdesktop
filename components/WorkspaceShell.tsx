@@ -1202,6 +1202,7 @@ function WorkspaceContent() {
             setSelectedProjectId(projectId)
             setActiveView('projects')
           }}
+          onOpenFileExplorer={() => setShowFilesPanel(prev => !prev)}
           collapsed={sidebarCollapsed}
           onToggleCollapsed={() => setSidebarCollapsed(prev => !prev)}
         />
@@ -1327,6 +1328,10 @@ function WorkspaceContent() {
                 onOpenProjectDashboard={(projectId) => {
                   setSelectedProjectId(projectId)
                   setActiveView('projects')
+                  setWorkspaceNavOpen(false)
+                }}
+                onOpenFileExplorer={() => {
+                  setActiveView('files')
                   setWorkspaceNavOpen(false)
                 }}
                 collapsed={false}

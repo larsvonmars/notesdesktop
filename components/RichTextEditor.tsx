@@ -70,6 +70,7 @@ import {
 } from '@/lib/editor/selectionUtils'
 import { useLinkPopover } from '@/lib/editor/useLinkPopover'
 import { useTableToolbar } from '@/lib/editor/useTableToolbar'
+import { useTableColumnResize } from '@/lib/editor/useTableColumnResize'
 import {
   applyAutoformat,
   shouldApplyAutoformat,
@@ -147,7 +148,7 @@ const SANITIZE_CONFIG: Config = {
     'a', 'b', 'strong', 'i', 'em', 'u', 's', 'code', 'pre', 'p', 'br',
     'div', 'span', 'blockquote', 'ul', 'ol', 'li', 'hr', 'input',
     'h1', 'h2', 'h3', 'h4', 'h5', 'h6', 'mark', 'img', 'button', 'svg', 'path', 'table',
-    'thead', 'tbody', 'tr', 'td', 'th',
+    'thead', 'tbody', 'tr', 'td', 'th', 'colgroup', 'col',
     // SVG shape elements used by file-block / annotation-embed icons
     'line', 'polyline', 'polygon', 'circle', 'rect', 'ellipse', 'g'
   ],
@@ -926,6 +927,8 @@ const RichTextEditor = forwardRef<RichTextEditorHandle, RichTextEditorProps>(
       toggleHeaderRow,
       getTableDimensionsLabel,
     } = useTableToolbar({ editorRef, onEmitChange: emitChange })
+
+    useTableColumnResize({ editorRef, onEmitChange: emitChange, disabled })
 
     const toggleTableOutlines = useCallback(() => {
       try {

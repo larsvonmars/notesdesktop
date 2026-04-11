@@ -81,6 +81,7 @@ export interface SidebarTreeProps {
   onCreateProject?: () => void
   onMoveNoteToProject?: (noteId: string, projectId: string | null) => Promise<void>
   onOpenProjectDashboard?: (projectId: string) => void
+  onOpenFileExplorer?: () => void
   collapsed: boolean
   onToggleCollapsed: () => void
 }
@@ -116,6 +117,7 @@ export default function SidebarTree({
   onCreateProject,
   onMoveNoteToProject,
   onOpenProjectDashboard,
+  onOpenFileExplorer,
   collapsed,
   onToggleCollapsed,
 }: SidebarTreeProps) {
@@ -1500,6 +1502,15 @@ export default function SidebarTree({
             >
               <Plus className="h-3.5 w-3.5 shrink-0" />
               <span>New Project</span>
+            </button>
+          )}
+          {onOpenFileExplorer && (
+            <button
+              onClick={onOpenFileExplorer}
+              className="group flex w-full items-center gap-2.5 rounded-xl px-2.5 py-2 text-xs font-medium text-muted/70 transition-all duration-200 hover:bg-surface-hover/60 hover:text-foreground"
+            >
+              <FolderOpen className="h-3.5 w-3.5 shrink-0" />
+              <span>File Explorer</span>
             </button>
           )}
         </div>
