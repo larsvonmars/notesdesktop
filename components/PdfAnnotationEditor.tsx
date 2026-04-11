@@ -319,6 +319,11 @@ const PdfAnnotationEditor = forwardRef<PdfAnnotationEditorHandle, PdfAnnotationE
     const [textLayerVersion, setTextLayerVersion] = useState(0)
     const textLayerRef = useRef<HTMLDivElement>(null)
     const textLayerInstanceRef = useRef<{ cancel: () => void } | null>(null)
+    // Cross-page search index (built once per PDF; rebuilt when page count changes)
+    const [searchIndex, setSearchIndex] = useState<{ pageNumber: number; texts: string[] }[]>([])
+    const [searchIndexBuilding, setSearchIndexBuilding] = useState(false)
+    const searchGlobalResultsRef = useRef<{ pageNumber: number; spanIdx: number }[]>([])
+    const pendingHighlightRef = useRef<{ spanIdx: number } | null>(null)
 
     // ────────────────────────────────────────────────────────
     // Imperative handle
@@ -1755,55 +1760,161 @@ const PdfAnnotationEditor = forwardRef<PdfAnnotationEditorHandle, PdfAnnotationE
     }, [pdfDoc, currentPage, zoom, pages])
 
     // ────────────────────────────────────────────────────────
-    // Search: highlight matching spans in text layer
+    // Build cross-page search index (text items per page)
+    // Runs once when the PDF doc loads or page count changes
     // ────────────────────────────────────────────────────────
     useEffect(() => {
+      if (!pdfDoc) { setSearchIndex([]); return }
+      let cancelled = false
+      // Show loading indicator only after 400ms (hides flicker for fast PDFs)
+      const loadingTimer = setTimeout(() => { if (!cancelled) setSearchIndexBuilding(true) }, 400)
+
+      ;(async () => {
+        const idx: { pageNumber: number; texts: string[] }[] = []
+        for (const pg of pagesRef.current) {
+          if (cancelled) break
+          if (pg.isBlank || !pg.pdfPageNumber) {
+            idx.push({ pageNumber: pg.pageNumber, texts: [] })
+            continue
+          }
+          try {
+            const page = await pdfDoc.getPage(pg.pdfPageNumber)
+            const tc = await page.getTextContent()
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            const texts = tc.items.map((item: any) => ('str' in item ? (item.str as string) : ''))
+            idx.push({ pageNumber: pg.pageNumber, texts })
+          } catch {
+            idx.push({ pageNumber: pg.pageNumber, texts: [] })
+          }
+        }
+        if (!cancelled) {
+          clearTimeout(loadingTimer)
+          setSearchIndex(idx)
+          setSearchIndexBuilding(false)
+        }
+      })()
+
+      return () => {
+        cancelled = true
+        clearTimeout(loadingTimer)
+        setSearchIndexBuilding(false)
+      }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [pdfDoc, totalPages])
+
+    // ────────────────────────────────────────────────────────
+    // Search: build cross-page results when query or index changes
+    // ────────────────────────────────────────────────────────
+
+    /** Apply per-page DOM highlights for the current page. `activeGlobalIdx`
+     *  is the index into searchGlobalResultsRef.current to mark as active. */
+    const applyPageHighlights = useCallback((activeGlobalIdx: number) => {
       const el = textLayerRef.current
       if (!el) return
-
       const spans = Array.from(el.querySelectorAll('span')) as HTMLElement[]
-      for (const span of spans) {
-        span.classList.remove('pdfannot-match', 'pdfannot-match-active')
+      // Clear old
+      for (const s of spans) s.classList.remove('pdfannot-match', 'pdfannot-match-active')
+
+      const results = searchGlobalResultsRef.current
+      const pg = currentPageRef.current
+      // Mark all matches on this page
+      for (const r of results) {
+        if (r.pageNumber === pg && r.spanIdx < spans.length) {
+          spans[r.spanIdx].classList.add('pdfannot-match')
+        }
+      }
+      // Mark the active one if it's on this page
+      const active = results[activeGlobalIdx]
+      if (active && active.pageNumber === pg && active.spanIdx < spans.length) {
+        spans[active.spanIdx].classList.remove('pdfannot-match')
+        spans[active.spanIdx].classList.add('pdfannot-match-active')
+        spans[active.spanIdx].scrollIntoView({ block: 'nearest', behavior: 'smooth' })
+      }
+    }, [])
+
+    useEffect(() => {
+      // Clear DOM highlights whenever the query changes
+      const el = textLayerRef.current
+      if (el) {
+        el.querySelectorAll('.pdfannot-match, .pdfannot-match-active')
+          .forEach(s => s.classList.remove('pdfannot-match', 'pdfannot-match-active'))
       }
 
-      if (!searchQuery.trim()) {
+      if (!searchQuery.trim() || searchIndex.length === 0) {
+        searchGlobalResultsRef.current = []
         setSearchMatchCount(0)
-        setSearchCurrentIdx(0)
+        setSearchCurrentIdx(-1)
         return
       }
 
       const q = searchQuery.toLowerCase()
-      const hits: HTMLElement[] = []
-      for (const span of spans) {
-        if ((span.textContent ?? '').toLowerCase().includes(q)) {
-          span.classList.add('pdfannot-match')
-          hits.push(span)
+      const allMatches: { pageNumber: number; spanIdx: number }[] = []
+      for (const entry of searchIndex) {
+        for (let i = 0; i < entry.texts.length; i++) {
+          if (entry.texts[i].toLowerCase().includes(q)) {
+            allMatches.push({ pageNumber: entry.pageNumber, spanIdx: i })
+          }
         }
       }
 
-      setSearchMatchCount(hits.length)
-      const newIdx = hits.length > 0 ? 0 : -1
-      setSearchCurrentIdx(newIdx)
-      if (hits.length > 0) {
-        hits[0].classList.add('pdfannot-match-active')
-        hits[0].scrollIntoView({ block: 'nearest', behavior: 'smooth' })
+      searchGlobalResultsRef.current = allMatches
+      setSearchMatchCount(allMatches.length)
+
+      if (allMatches.length === 0) {
+        setSearchCurrentIdx(-1)
+        return
       }
-    }, [searchQuery, textLayerVersion, showTextLayer, currentPage])
+
+      // Start from the first match on or after the current page
+      let startIdx = allMatches.findIndex(m => m.pageNumber >= currentPageRef.current)
+      if (startIdx === -1) startIdx = 0
+      setSearchCurrentIdx(startIdx)
+
+      const target = allMatches[startIdx]
+      if (target.pageNumber !== currentPageRef.current) {
+        pendingHighlightRef.current = { spanIdx: target.spanIdx }
+        goToPage(target.pageNumber)
+      } else {
+        // Apply highlights after state flushes (textLayerVersion will bump if needed)
+        queueMicrotask(() => applyPageHighlights(startIdx))
+      }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [searchQuery, searchIndex])
+
+    // After the text layer re-renders (new page), restore pending highlight
+    useEffect(() => {
+      if (pendingHighlightRef.current === null) return
+      applyPageHighlights(searchGlobalResultsRef.current.findIndex(
+        (r, i) => {
+          void i
+          return r.pageNumber === currentPageRef.current && r.spanIdx === pendingHighlightRef.current!.spanIdx
+        }
+      ) !== -1
+        ? searchGlobalResultsRef.current.findIndex(
+            r => r.pageNumber === currentPageRef.current && r.spanIdx === pendingHighlightRef.current!.spanIdx
+          )
+        : searchGlobalResultsRef.current.findIndex(r => r.pageNumber === currentPageRef.current)
+      )
+      pendingHighlightRef.current = null
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [textLayerVersion])
 
     const navigateSearch = useCallback(
       (dir: 1 | -1) => {
-        const el = textLayerRef.current
-        if (!el) return
-        const hits = Array.from(el.querySelectorAll('.pdfannot-match')) as HTMLElement[]
-        if (hits.length === 0) return
+        const results = searchGlobalResultsRef.current
+        if (results.length === 0) return
         const prev = searchCurrentIdx < 0 ? 0 : searchCurrentIdx
-        hits[prev]?.classList.remove('pdfannot-match-active')
-        const next = (prev + dir + hits.length) % hits.length
-        hits[next].classList.add('pdfannot-match-active')
-        hits[next].scrollIntoView({ block: 'nearest', behavior: 'smooth' })
+        const next = (prev + dir + results.length) % results.length
         setSearchCurrentIdx(next)
+        const target = results[next]
+        if (target.pageNumber !== currentPageRef.current) {
+          pendingHighlightRef.current = { spanIdx: target.spanIdx }
+          goToPage(target.pageNumber)
+        } else {
+          applyPageHighlights(next)
+        }
       },
-      [searchCurrentIdx]
+      [searchCurrentIdx, goToPage, applyPageHighlights]
     )
 
     // ────────────────────────────────────────────────────────
@@ -2507,7 +2618,10 @@ const PdfAnnotationEditor = forwardRef<PdfAnnotationEditorHandle, PdfAnnotationE
         {/* Find/search bar */}
         {searchVisible && showTextLayer && (
           <div className="flex items-center gap-1.5 border-b border-border bg-surface px-3 py-1.5">
-            <Search size={13} className="shrink-0 text-muted-foreground" />
+            {searchIndexBuilding
+              ? <Loader2 size={13} className="shrink-0 animate-spin text-muted-foreground" />
+              : <Search size={13} className="shrink-0 text-muted-foreground" />
+            }
             <input
               autoFocus
               type="text"
@@ -2522,7 +2636,9 @@ const PdfAnnotationEditor = forwardRef<PdfAnnotationEditorHandle, PdfAnnotationE
             />
             {searchQuery.trim() && (
               <span className="shrink-0 text-[11px] text-muted-foreground">
-                {searchMatchCount === 0
+                {searchIndexBuilding
+                  ? 'Indexing…'
+                  : searchMatchCount === 0
                   ? 'No results'
                   : `${searchCurrentIdx + 1} / ${searchMatchCount}`}
               </span>
