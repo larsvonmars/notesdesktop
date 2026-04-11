@@ -218,105 +218,264 @@ aside[class*="backdrop-blur"] {
     @apply mr-2 cursor-pointer;
   }
 
-  /* ─── List base styling ─── */
+  /* ══════════════════════════════════════════════════════════
+     FUTURISTIC LIST DESIGN
+     Neon-rail hierarchy, glowing markers, terminal-style
+     checklists — matching the table's sci-fi aesthetic.
+     ══════════════════════════════════════════════════════════ */
+
+  /* ─── Base list containers ─── */
   [contenteditable='true'] ul,
   [contenteditable='true'] ol {
-    margin: 0.75em 0 !important;
-    padding-left: 2em !important;
+    margin: 0.85em 0 !important;
+    padding-left: 1.75em !important;
     display: block !important;
-    position: relative;
+    position: relative !important;
+    /* Level 1 neon-green left rail */
+    border-left: 2px solid rgba(22, 163, 74, 0.3) !important;
+    margin-left: 0.15em !important;
+    padding-top: 0.1em !important;
+    padding-bottom: 0.1em !important;
+    box-shadow: -3px 0 12px -4px rgba(22, 163, 74, 0.2) !important;
+    transition: border-left-color 0.25s ease, box-shadow 0.25s ease !important;
   }
 
+  /* Hover on list container: rail brightens */
+  [contenteditable='true'] ul:hover,
+  [contenteditable='true'] ol:hover {
+    border-left-color: rgba(22, 163, 74, 0.6) !important;
+    box-shadow: -3px 0 18px -4px rgba(22, 163, 74, 0.35) !important;
+  }
+
+  /* ─── UL bullet markers — glowing right-arrow ─── */
   [contenteditable='true'] ul {
-    list-style-type: disc !important;
+    list-style-type: none !important;
   }
 
+  [contenteditable='true'] ul > li::marker {
+    content: '' !important;
+  }
+
+  /* Custom bullet via ::before — green ▸ triangle */
+  [contenteditable='true'] ul > li:not(.checklist-item)::before {
+    content: '▸';
+    position: absolute !important;
+    left: -1.45em !important;
+    top: 0.1em !important;
+    color: #16a34a !important;
+    font-size: 0.8em !important;
+    line-height: 1.6 !important;
+    transition: color 0.2s ease, text-shadow 0.2s ease !important;
+    text-shadow: 0 0 8px rgba(22, 163, 74, 0.5) !important;
+    pointer-events: none !important;
+    user-select: none !important;
+  }
+
+  [contenteditable='true'] ul > li:not(.checklist-item):hover::before {
+    color: #22c55e !important;
+    text-shadow: 0 0 14px rgba(34, 197, 94, 0.8) !important;
+  }
+
+  /* ─── OL — monospace glowing counter ─── */
   [contenteditable='true'] ol {
-    list-style-type: decimal !important;
+    list-style-type: none !important;
+    counter-reset: futuristic-ol !important;
   }
 
-  /* ─── Nested list bullet styles ─── */
-  /* Level 2 */
-  [contenteditable='true'] ul ul,
-  [contenteditable='true'] li[data-list-depth="2"] > ul {
-    list-style-type: circle !important;
+  [contenteditable='true'] ol > li {
+    counter-increment: futuristic-ol !important;
   }
 
-  /* Level 3 */
-  [contenteditable='true'] ul ul ul,
-  [contenteditable='true'] li[data-list-depth="3"] > ul {
-    list-style-type: square !important;
+  [contenteditable='true'] ol > li::before {
+    content: counter(futuristic-ol, decimal) '.' !important;
+    position: absolute !important;
+    left: -2em !important;
+    top: 0 !important;
+    min-width: 1.8em !important;
+    text-align: right !important;
+    font-family: 'JetBrains Mono', 'Fira Code', ui-monospace, SFMono-Regular, Menlo, monospace !important;
+    font-size: 0.78em !important;
+    font-weight: 700 !important;
+    line-height: 1.75 !important;
+    color: #16a34a !important;
+    text-shadow: 0 0 8px rgba(22, 163, 74, 0.45) !important;
+    transition: color 0.2s ease, text-shadow 0.2s ease !important;
+    pointer-events: none !important;
+    user-select: none !important;
   }
 
-  /* Level 4 */
-  [contenteditable='true'] ul ul ul ul,
-  [contenteditable='true'] li[data-list-depth="4"] > ul {
-    list-style-type: disc !important;
+  [contenteditable='true'] ol > li:hover::before {
+    color: #22c55e !important;
+    text-shadow: 0 0 14px rgba(34, 197, 94, 0.7) !important;
   }
 
-  /* Level 5 */
-  [contenteditable='true'] ul ul ul ul ul,
-  [contenteditable='true'] li[data-list-depth="5"] > ul {
-    list-style-type: circle !important;
-  }
-
-  /* Level 6 */
-  [contenteditable='true'] ul ul ul ul ul ul,
-  [contenteditable='true'] li[data-list-depth="6"] > ul {
-    list-style-type: square !important;
-  }
-
-  /* Nested ordered list numbering styles */
-  [contenteditable='true'] ol ol {
-    list-style-type: lower-alpha !important;
-  }
-
-  [contenteditable='true'] ol ol ol {
-    list-style-type: lower-roman !important;
-  }
-
-  [contenteditable='true'] ol ol ol ol {
-    list-style-type: decimal !important;
-  }
-
-  /* Nested list indentation guide */
+  /* ─── Nested list neon-rail colour palette ─── */
+  /* Level 2 → sky blue */
   [contenteditable='true'] ul ul,
   [contenteditable='true'] ol ol,
   [contenteditable='true'] ul ol,
   [contenteditable='true'] ol ul {
-    margin-top: 0.25em !important;
-    margin-bottom: 0.25em !important;
-    border-left: 2px solid rgba(148, 163, 184, 0.2);
-    margin-left: 0.25em !important;
-    padding-left: 1.5em !important;
+    border-left: 2px solid rgba(14, 165, 233, 0.35) !important;
+    box-shadow: -3px 0 12px -4px rgba(14, 165, 233, 0.2) !important;
+    margin-top: 0.3em !important;
+    margin-bottom: 0.3em !important;
+    margin-left: 0.2em !important;
+    padding-left: 1.6em !important;
   }
 
-  /* ─── Checklist styling ─── */
+  [contenteditable='true'] ul ul:hover,
+  [contenteditable='true'] ol ol:hover,
+  [contenteditable='true'] ul ol:hover,
+  [contenteditable='true'] ol ul:hover {
+    border-left-color: rgba(14, 165, 233, 0.65) !important;
+    box-shadow: -3px 0 18px -4px rgba(14, 165, 233, 0.35) !important;
+  }
+
+  /* Level 2 UL bullet → sky diamond */
+  [contenteditable='true'] ul ul > li:not(.checklist-item)::before {
+    content: '◇' !important;
+    color: #0ea5e9 !important;
+    text-shadow: 0 0 8px rgba(14, 165, 233, 0.5) !important;
+    font-size: 0.7em !important;
+    top: 0.15em !important;
+  }
+
+  [contenteditable='true'] ul ul > li:not(.checklist-item):hover::before {
+    color: #38bdf8 !important;
+    text-shadow: 0 0 14px rgba(56, 189, 248, 0.8) !important;
+  }
+
+  /* Level 2 OL counter → sky */
+  [contenteditable='true'] ol ol > li::before {
+    content: counter(futuristic-ol, lower-alpha) '.' !important;
+    color: #0ea5e9 !important;
+    text-shadow: 0 0 8px rgba(14, 165, 233, 0.45) !important;
+  }
+
+  [contenteditable='true'] ol ol > li:hover::before {
+    color: #38bdf8 !important;
+    text-shadow: 0 0 14px rgba(56, 189, 248, 0.7) !important;
+  }
+
+  /* Level 3 → amber */
+  [contenteditable='true'] ul ul ul,
+  [contenteditable='true'] ol ol ol,
+  [contenteditable='true'] ul ul ol,
+  [contenteditable='true'] ol ol ul {
+    border-left: 2px solid rgba(245, 158, 11, 0.35) !important;
+    box-shadow: -3px 0 12px -4px rgba(245, 158, 11, 0.18) !important;
+  }
+
+  [contenteditable='true'] ul ul ul:hover,
+  [contenteditable='true'] ol ol ol:hover {
+    border-left-color: rgba(245, 158, 11, 0.65) !important;
+    box-shadow: -3px 0 18px -4px rgba(245, 158, 11, 0.32) !important;
+  }
+
+  [contenteditable='true'] ul ul ul > li:not(.checklist-item)::before {
+    content: '▪' !important;
+    color: #d97706 !important;
+    text-shadow: 0 0 8px rgba(245, 158, 11, 0.5) !important;
+    font-size: 0.7em !important;
+  }
+
+  [contenteditable='true'] ul ul ul > li:not(.checklist-item):hover::before {
+    color: #f59e0b !important;
+    text-shadow: 0 0 14px rgba(251, 191, 36, 0.8) !important;
+  }
+
+  [contenteditable='true'] ol ol ol > li::before {
+    content: counter(futuristic-ol, lower-roman) '.' !important;
+    color: #d97706 !important;
+    text-shadow: 0 0 8px rgba(245, 158, 11, 0.45) !important;
+  }
+
+  /* Level 4 → violet */
+  [contenteditable='true'] ul ul ul ul,
+  [contenteditable='true'] ol ol ol ol {
+    border-left: 2px solid rgba(139, 92, 246, 0.35) !important;
+    box-shadow: -3px 0 12px -4px rgba(139, 92, 246, 0.18) !important;
+  }
+
+  [contenteditable='true'] ul ul ul ul > li:not(.checklist-item)::before {
+    content: '◆' !important;
+    color: #7c3aed !important;
+    text-shadow: 0 0 8px rgba(139, 92, 246, 0.5) !important;
+    font-size: 0.6em !important;
+    top: 0.2em !important;
+  }
+
+  /* Level 5 → pink */
+  [contenteditable='true'] ul ul ul ul ul {
+    border-left: 2px solid rgba(236, 72, 153, 0.35) !important;
+    box-shadow: -3px 0 12px -4px rgba(236, 72, 153, 0.18) !important;
+  }
+
+  [contenteditable='true'] ul ul ul ul ul > li:not(.checklist-item)::before {
+    content: '▹' !important;
+    color: #db2777 !important;
+    text-shadow: 0 0 8px rgba(236, 72, 153, 0.5) !important;
+  }
+
+  /* Level 6 → teal */
+  [contenteditable='true'] ul ul ul ul ul ul {
+    border-left: 2px solid rgba(20, 184, 166, 0.35) !important;
+    box-shadow: -3px 0 12px -4px rgba(20, 184, 166, 0.18) !important;
+  }
+
+  [contenteditable='true'] ul ul ul ul ul ul > li:not(.checklist-item)::before {
+    content: '◌' !important;
+    color: #0d9488 !important;
+    text-shadow: 0 0 8px rgba(20, 184, 166, 0.5) !important;
+  }
+
+  /* ─── Checklist container ─── */
   [contenteditable='true'] .checklist-list,
   [contenteditable='true'] [data-checklist='true'] {
     list-style: none !important;
     padding-left: 0.5em !important;
     margin-left: 0 !important;
+    border-left: 2px solid rgba(22, 163, 74, 0.25) !important;
+    box-shadow: -3px 0 12px -4px rgba(22, 163, 74, 0.15) !important;
+    border-radius: 0 6px 6px 0 !important;
+    padding-top: 0.25em !important;
+    padding-bottom: 0.25em !important;
+    background: linear-gradient(to right, rgba(22, 163, 74, 0.025), transparent 40%) !important;
+    transition: border-left-color 0.25s ease, box-shadow 0.25s ease !important;
   }
 
-  /* Checklist progress bar (pseudo-element on the list) */
+  [contenteditable='true'] .checklist-list:hover,
+  [contenteditable='true'] [data-checklist='true']:hover {
+    border-left-color: rgba(22, 163, 74, 0.55) !important;
+    box-shadow: -3px 0 18px -4px rgba(22, 163, 74, 0.3) !important;
+  }
+
+  /* Checklist progress bar — full-width terminal fill */
   [contenteditable='true'] .checklist-list[data-checklist-progress]::before {
-    content: attr(data-checklist-progress) ' completed';
-    display: block;
-    font-size: 0.7rem;
-    font-weight: 600;
-    color: #64748b;
-    letter-spacing: 0.025em;
-    margin-bottom: 0.5em;
-    padding: 0.2em 0.5em;
-    background: linear-gradient(
-      to right,
-      rgba(34, 197, 94, 0.12) 0%,
-      rgba(34, 197, 94, 0.12) calc(var(--checklist-pct, 0) * 1%),
-      rgba(148, 163, 184, 0.08) calc(var(--checklist-pct, 0) * 1%),
-      rgba(148, 163, 184, 0.08) 100%
-    );
-    border-radius: 0.5rem;
+    content: attr(data-checklist-progress) ' DONE';
+    display: block !important;
+    font-family: 'JetBrains Mono', 'Fira Code', ui-monospace, SFMono-Regular, Menlo, monospace !important;
+    font-size: 0.65rem !important;
+    font-weight: 700 !important;
+    color: #22c55e !important;
+    letter-spacing: 0.12em !important;
+    text-transform: uppercase !important;
+    text-shadow: 0 0 8px rgba(34, 197, 94, 0.5) !important;
+    margin-bottom: 0.6em !important;
+    margin-left: 0.25em !important;
+    padding: 0.3em 0.75em !important;
+    background:
+      linear-gradient(
+        to right,
+        rgba(34, 197, 94, 0.18) 0%,
+        rgba(34, 197, 94, 0.18) calc(var(--checklist-pct, 0) * 1%),
+        rgba(15, 23, 42, 0.04) calc(var(--checklist-pct, 0) * 1%),
+        rgba(15, 23, 42, 0.04) 100%
+      ) !important;
+    border: 1px solid rgba(34, 197, 94, 0.2) !important;
+    border-radius: 4px !important;
+    box-shadow: inset 0 0 0 1px rgba(34, 197, 94, 0.06),
+                0 0 12px -4px rgba(34, 197, 94, 0.15) !important;
   }
 
   /* Set the progress CSS variable from the data attribute */
@@ -336,26 +495,33 @@ aside[class*="backdrop-blur"] {
   [contenteditable='true'] .checklist-list[data-checklist-percent="90"] { --checklist-pct: 90; }
   [contenteditable='true'] .checklist-list[data-checklist-percent="100"] { --checklist-pct: 100; }
 
-  /* ─── List item styling ─── */
+  /* ─── List item base ─── */
   [contenteditable='true'] li {
-    margin: 0.35em 0 !important;
+    margin: 0.3em 0 !important;
     display: list-item !important;
-    position: relative;
-    transition: background-color 0.15s ease, opacity 0.15s ease;
-    border-radius: 0.25rem;
-    padding: 0.1em 0.25em !important;
+    position: relative !important;
+    border-radius: 5px !important;
+    padding: 0.18em 0.5em 0.18em 0.3em !important;
+    transition: background 0.15s ease, opacity 0.2s ease !important;
   }
 
+  /* Item hover — neon scanline sweep */
   [contenteditable='true'] li:hover {
-    background-color: rgba(148, 163, 184, 0.04);
+    background: linear-gradient(
+      to right,
+      rgba(22, 163, 74, 0.07) 0%,
+      rgba(14, 165, 233, 0.04) 40%,
+      transparent 100%
+    ) !important;
   }
 
+  /* Ordered and unordered list item markers (native fallback) */
   [contenteditable='true'] ul li {
-    list-style-type: disc !important;
+    list-style-type: none !important;
   }
 
   [contenteditable='true'] ol li {
-    list-style-type: decimal !important;
+    list-style-type: none !important;
   }
 
   /* ─── Checklist item ─── */
@@ -363,86 +529,102 @@ aside[class*="backdrop-blur"] {
     list-style: none !important;
     display: flex !important;
     align-items: flex-start !important;
-    gap: 0.25rem;
-    padding: 0.2em 0.4em !important;
-    border-radius: 0.375rem;
-    transition: background-color 0.2s ease, opacity 0.25s ease;
+    gap: 0.4rem !important;
+    padding: 0.25em 0.6em !important;
+    border-radius: 5px !important;
+    transition: background 0.2s ease, opacity 0.25s ease !important;
+    border: 1px solid transparent !important;
   }
 
   [contenteditable='true'] li.checklist-item:hover {
-    background-color: rgba(148, 163, 184, 0.06);
+    background: linear-gradient(
+      to right,
+      rgba(22, 163, 74, 0.08),
+      rgba(14, 165, 233, 0.04),
+      transparent
+    ) !important;
+    border-color: rgba(22, 163, 74, 0.18) !important;
   }
 
-  /* Checkbox within checklist */
+  /* Checkbox — neon green accent */
   [contenteditable='true'] li.checklist-item .checklist-checkbox {
     @apply mt-1 shrink-0;
-    width: 1.05rem;
-    height: 1.05rem;
-    accent-color: #22c55e;
-    border-radius: 0.25rem;
-    cursor: pointer;
-    transition: transform 0.15s ease;
+    width: 1.05rem !important;
+    height: 1.05rem !important;
+    accent-color: #22c55e !important;
+    border-radius: 0.25rem !important;
+    cursor: pointer !important;
+    transition: transform 0.15s ease, filter 0.15s ease !important;
+    filter: drop-shadow(0 0 0px rgba(34, 197, 94, 0)) !important;
   }
 
   [contenteditable='true'] li.checklist-item .checklist-checkbox:hover {
-    transform: scale(1.15);
+    transform: scale(1.2) !important;
+    filter: drop-shadow(0 0 4px rgba(34, 197, 94, 0.6)) !important;
   }
 
   [contenteditable='true'] li.checklist-item .checklist-checkbox:active {
-    transform: scale(0.95);
+    transform: scale(0.92) !important;
   }
 
-  /* Checked item → strikethrough + fade */
+  /* Checked item — glowing green strike */
   [contenteditable='true'] li.checklist-item:has(input[type='checkbox']:checked) {
-    opacity: 0.55;
+    opacity: 0.5 !important;
   }
 
   [contenteditable='true'] li.checklist-item:has(input[type='checkbox']:checked)::after {
-    content: '';
-    position: absolute;
-    left: 1.8rem;
-    right: 0.5rem;
-    top: 50%;
-    height: 1.5px;
-    background: #94a3b8;
-    border-radius: 1px;
-    pointer-events: none;
+    content: '' !important;
+    position: absolute !important;
+    left: 2.1rem !important;
+    right: 0.6rem !important;
+    top: 50% !important;
+    height: 1.5px !important;
+    background: linear-gradient(to right, #22c55e, #0ea5e9, transparent) !important;
+    border-radius: 2px !important;
+    box-shadow: 0 0 6px rgba(34, 197, 94, 0.4) !important;
+    pointer-events: none !important;
   }
 
-  /* ─── Drag-to-reorder ─── */
+  /* ─── Drag-to-reorder handle ─── */
   [contenteditable='true'] .list-drag-handle {
-    display: none;
-    cursor: grab;
-    opacity: 0;
-    transition: opacity 0.15s ease;
-    color: #94a3b8;
-    padding: 0.15rem;
-    margin-right: 0.25rem;
-    flex-shrink: 0;
-    user-select: none;
-    border-radius: 0.25rem;
-    align-self: center;
+    display: none !important;
+    cursor: grab !important;
+    opacity: 0 !important;
+    transition: opacity 0.15s ease, color 0.15s ease !important;
+    color: rgba(22, 163, 74, 0.4) !important;
+    padding: 0.15rem !important;
+    margin-right: 0.3rem !important;
+    flex-shrink: 0 !important;
+    user-select: none !important;
+    border-radius: 3px !important;
+    align-self: center !important;
   }
 
   [contenteditable='true'] li:hover > .list-drag-handle {
-    display: inline-flex;
-    opacity: 0.5;
+    display: inline-flex !important;
+    opacity: 0.55 !important;
   }
 
   [contenteditable='true'] li:hover > .list-drag-handle:hover {
-    opacity: 1;
-    background-color: rgba(148, 163, 184, 0.1);
+    opacity: 1 !important;
+    color: #22c55e !important;
+    background-color: rgba(22, 163, 74, 0.1) !important;
+    box-shadow: 0 0 8px rgba(22, 163, 74, 0.2) !important;
   }
 
+  /* Drag active state — neon outline */
   [contenteditable='true'] .list-item-dragging {
-    opacity: 0.4 !important;
-    background-color: rgba(59, 130, 246, 0.05) !important;
-    outline: 2px dashed rgba(59, 130, 246, 0.3) !important;
-    outline-offset: -2px;
+    opacity: 0.35 !important;
+    background: rgba(22, 163, 74, 0.04) !important;
+    outline: 1.5px dashed rgba(34, 197, 94, 0.45) !important;
+    outline-offset: -1px !important;
+    box-shadow: 0 0 0 3px rgba(34, 197, 94, 0.08) !important;
   }
 
+  /* Drop target indicator — neon green beam */
   [contenteditable='true'] .list-item-drop-target {
-    border-top: 2px solid #3b82f6 !important;
+    border-top: 2px solid #22c55e !important;
+    box-shadow: 0 -2px 12px rgba(34, 197, 94, 0.35) !important;
   }
 
   /* ─── Block-level spacing inside editor ─── */
@@ -1566,14 +1748,104 @@ aside[class*="backdrop-blur"] {
 }
 
 /* Dark editor list guides */
+/* (rails are styled inline above; dark overrides below) */
+
+/* Level 1 rail darkened */
+.dark [contenteditable='true'] ul,
+.dark [contenteditable='true'] ol {
+  border-left-color: rgba(34, 197, 94, 0.25) !important;
+  box-shadow: -3px 0 14px -4px rgba(34, 197, 94, 0.22) !important;
+}
+
+.dark [contenteditable='true'] ul:hover,
+.dark [contenteditable='true'] ol:hover {
+  border-left-color: rgba(34, 197, 94, 0.55) !important;
+  box-shadow: -3px 0 22px -4px rgba(34, 197, 94, 0.4) !important;
+}
+
+/* Custom bullet markers — brighter in dark */
+.dark [contenteditable='true'] ul > li:not(.checklist-item)::before {
+  color: #22c55e !important;
+  text-shadow: 0 0 10px rgba(34, 197, 94, 0.7) !important;
+}
+
+.dark [contenteditable='true'] ul > li:not(.checklist-item):hover::before {
+  color: #4ade80 !important;
+  text-shadow: 0 0 18px rgba(74, 222, 128, 0.9) !important;
+}
+
+/* OL counters */
+.dark [contenteditable='true'] ol > li::before {
+  color: #22c55e !important;
+  text-shadow: 0 0 10px rgba(34, 197, 94, 0.6) !important;
+}
+
+.dark [contenteditable='true'] ol > li:hover::before {
+  color: #4ade80 !important;
+  text-shadow: 0 0 18px rgba(74, 222, 128, 0.85) !important;
+}
+
+/* Level 2 — sky blue */
 .dark [contenteditable='true'] ul ul,
 .dark [contenteditable='true'] ol ol,
 .dark [contenteditable='true'] ul ol,
 .dark [contenteditable='true'] ol ul {
-  border-left-color: rgba(71, 85, 105, 0.4);
+  border-left-color: rgba(14, 165, 233, 0.3) !important;
+  box-shadow: -3px 0 14px -4px rgba(14, 165, 233, 0.22) !important;
 }
 
-/* Dark editor placeholder */
+.dark [contenteditable='true'] ul ul > li:not(.checklist-item)::before {
+  color: #38bdf8 !important;
+  text-shadow: 0 0 10px rgba(56, 189, 248, 0.7) !important;
+}
+
+.dark [contenteditable='true'] ol ol > li::before {
+  color: #38bdf8 !important;
+  text-shadow: 0 0 10px rgba(56, 189, 248, 0.6) !important;
+}
+
+/* Level 3 — amber */
+.dark [contenteditable='true'] ul ul ul,
+.dark [contenteditable='true'] ol ol ol {
+  border-left-color: rgba(245, 158, 11, 0.3) !important;
+  box-shadow: -3px 0 14px -4px rgba(245, 158, 11, 0.2) !important;
+}
+
+.dark [contenteditable='true'] ul ul ul > li:not(.checklist-item)::before {
+  color: #fbbf24 !important;
+  text-shadow: 0 0 10px rgba(251, 191, 36, 0.7) !important;
+}
+
+/* Item hover — dark scanline */
+.dark [contenteditable='true'] li:hover {
+  background: linear-gradient(
+    to right,
+    rgba(34, 197, 94, 0.07) 0%,
+    rgba(56, 189, 248, 0.04) 40%,
+    transparent 100%
+  ) !important;
+}
+
+/* Checklist container */
+.dark [contenteditable='true'] .checklist-list,
+.dark [contenteditable='true'] [data-checklist='true'] {
+  border-left-color: rgba(34, 197, 94, 0.22) !important;
+  background: linear-gradient(to right, rgba(34, 197, 94, 0.04), transparent 40%) !important;
+}
+
+/* Checklist hover */
+.dark [contenteditable='true'] li.checklist-item:hover {
+  background: linear-gradient(
+    to right,
+    rgba(34, 197, 94, 0.1),
+    rgba(56, 189, 248, 0.05),
+    transparent
+  ) !important;
+  border-color: rgba(34, 197, 94, 0.25) !important;
+}
+
+/* Dark checklist progress bar */
+
 .dark [data-placeholder]:empty:before {
   color: #475569;
 }
@@ -1599,30 +1871,49 @@ aside[class*="backdrop-blur"] {
   color: #93c5fd !important;
 }
 
-/* Dark checklist progress bar */
+/* Dark checklist progress bar — terminal neon fill */
 .dark [contenteditable='true'] .checklist-list[data-checklist-progress]::before {
-  color: #94a3b8;
-  background: linear-gradient(
-    to right,
-    rgba(34, 197, 94, 0.2) 0%,
-    rgba(34, 197, 94, 0.2) calc(var(--checklist-pct, 0) * 1%),
-    rgba(71, 85, 105, 0.15) calc(var(--checklist-pct, 0) * 1%),
-    rgba(71, 85, 105, 0.15) 100%
-  );
+  color: #22c55e !important;
+  text-shadow: 0 0 10px rgba(34, 197, 94, 0.7) !important;
+  border-color: rgba(34, 197, 94, 0.25) !important;
+  box-shadow: inset 0 0 0 1px rgba(34, 197, 94, 0.1),
+              0 0 16px -4px rgba(34, 197, 94, 0.25) !important;
+  background:
+    linear-gradient(
+      to right,
+      rgba(34, 197, 94, 0.25) 0%,
+      rgba(34, 197, 94, 0.25) calc(var(--checklist-pct, 0) * 1%),
+      rgba(2, 6, 23, 0.4) calc(var(--checklist-pct, 0) * 1%),
+      rgba(2, 6, 23, 0.4) 100%
+    ) !important;
 }
 
-/* Dark checkbox checked strikethrough */
+/* Dark checkbox checked strikethrough — neon green fade */
 .dark [contenteditable='true'] li.checklist-item:has(input[type='checkbox']:checked)::after {
-  background: #64748b;
+  background: linear-gradient(to right, #22c55e, #0ea5e9, transparent) !important;
+  box-shadow: 0 0 8px rgba(34, 197, 94, 0.5) !important;
 }
 
-/* Dark list item hover */
-.dark [contenteditable='true'] li:hover {
-  background-color: rgba(71, 85, 105, 0.08);
+/* Dark drag handle */
+.dark [contenteditable='true'] .list-drag-handle {
+  color: rgba(34, 197, 94, 0.4) !important;
 }
 
-.dark [contenteditable='true'] li.checklist-item:hover {
-  background-color: rgba(71, 85, 105, 0.1);
+.dark [contenteditable='true'] li:hover > .list-drag-handle:hover {
+  color: #22c55e !important;
+  background-color: rgba(34, 197, 94, 0.1) !important;
+  box-shadow: 0 0 10px rgba(34, 197, 94, 0.25) !important;
+}
+
+/* Dark dragging and drop target */
+.dark [contenteditable='true'] .list-item-dragging {
+  outline-color: rgba(34, 197, 94, 0.5) !important;
+  background: rgba(34, 197, 94, 0.05) !important;
+}
+
+.dark [contenteditable='true'] .list-item-drop-target {
+  border-top-color: #22c55e !important;
+  box-shadow: 0 -2px 16px rgba(34, 197, 94, 0.45) !important;
 }
 
 /* ── Dark hover effects for content types ── */
@@ -1708,15 +1999,6 @@ aside[class*="backdrop-blur"] {
 
 .dark [contenteditable='true'] p:hover {
   background: linear-gradient(to right, rgba(34, 197, 94, 0.04), transparent 40%) !important;
-}
-
-/* Dark drag handle */
-.dark [contenteditable='true'] .list-drag-handle {
-  color: #64748b;
-}
-
-.dark [contenteditable='true'] li:hover > .list-drag-handle:hover {
-  background-color: rgba(71, 85, 105, 0.2);
 }
 
 /* Dark border-l-4 for blockquotes */
