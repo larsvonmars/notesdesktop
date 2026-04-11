@@ -466,82 +466,146 @@ aside[class*="backdrop-blur"] {
 
   /* Pre / code blocks */
   [contenteditable='true'] pre {
-    margin: 0.5em 0 !important;
-    padding: 0.75em 1em !important;
-    @apply bg-gray-100 rounded-md overflow-x-auto;
+    position: relative !important;
+    margin: 1.25em 0 !important;
+    padding: 1em 1.25em !important;
+    background: #0d1117 !important;
+    color: #c9d1d9 !important;
+    border-radius: 10px !important;
+    overflow-x: auto !important;
+    font-family: 'JetBrains Mono', 'Fira Code', 'Cascadia Code', ui-monospace, SFMono-Regular, Menlo, monospace !important;
+    font-size: 0.875rem !important;
+    line-height: 1.7 !important;
+    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.14), inset 0 0 0 1px rgba(255, 255, 255, 0.06) !important;
   }
 
   /* Heading styles */
+
+  /* H1 — Grand title with gradient-fade underline */
   [contenteditable='true'] h1 {
-    font-size: 2.5rem !important;
-    @apply font-extrabold text-gray-900;
-    margin-top: 0.67em !important;
-    margin-bottom: 0.67em !important;
-    line-height: 1.2 !important;
+    font-size: 2.2rem !important;
+    font-weight: 800 !important;
+    color: #0f172a !important;
+    margin-top: 1.4em !important;
+    margin-bottom: 0.35em !important;
+    line-height: 1.15 !important;
     scroll-margin-top: 2rem !important;
     display: block !important;
+    letter-spacing: -0.03em !important;
+    padding-bottom: 0.4em !important;
+    border-bottom: 2px solid transparent !important;
+    border-image: linear-gradient(90deg, #16a34a 0%, #0ea5e9 45%, transparent 100%) 1 !important;
   }
 
+  /* H2 — Section header with left accent bar */
   [contenteditable='true'] h2 {
-    font-size: 2rem !important;
-    @apply font-bold text-gray-800;
-    margin-top: 0.83em !important;
-    margin-bottom: 0.83em !important;
-    line-height: 1.3 !important;
+    font-size: 1.65rem !important;
+    font-weight: 700 !important;
+    color: #1e293b !important;
+    margin-top: 1.4em !important;
+    margin-bottom: 0.3em !important;
+    line-height: 1.25 !important;
     scroll-margin-top: 2rem !important;
     display: block !important;
+    letter-spacing: -0.02em !important;
+    padding-left: 0.75em !important;
+    border-left: 3px solid #16a34a !important;
   }
 
+  /* H3 — Sub-section with thin sky-blue left bar */
   [contenteditable='true'] h3 {
-    font-size: 1.5rem !important;
-    @apply font-bold text-gray-700;
-    margin-top: 1em !important;
-    margin-bottom: 1em !important;
-    line-height: 1.4 !important;
+    font-size: 1.3rem !important;
+    font-weight: 700 !important;
+    color: #334155 !important;
+    margin-top: 1.2em !important;
+    margin-bottom: 0.3em !important;
+    line-height: 1.35 !important;
     scroll-margin-top: 2rem !important;
     display: block !important;
+    letter-spacing: -0.01em !important;
+    padding-left: 0.65em !important;
+    border-left: 2px solid #0ea5e9 !important;
   }
 
+  /* H4 — Uppercase label style */
   [contenteditable='true'] h4 {
-    font-size: 1.25rem !important;
-    @apply font-semibold text-gray-700;
-    margin-top: 1em !important;
-    margin-bottom: 0.75em !important;
+    font-size: 0.875rem !important;
+    font-weight: 700 !important;
+    color: #475569 !important;
+    margin-top: 1.1em !important;
+    margin-bottom: 0.25em !important;
     line-height: 1.4 !important;
     scroll-margin-top: 2rem !important;
     display: block !important;
+    text-transform: uppercase !important;
+    letter-spacing: 0.08em !important;
   }
 
+  /* H5 — Smaller label */
   [contenteditable='true'] h5 {
-    font-size: 1.1rem !important;
-    @apply font-semibold text-gray-600;
+    font-size: 0.78rem !important;
+    font-weight: 600 !important;
+    color: #64748b !important;
     margin-top: 1em !important;
-    margin-bottom: 0.5em !important;
+    margin-bottom: 0.2em !important;
     line-height: 1.5 !important;
     scroll-margin-top: 2rem !important;
     display: block !important;
+    text-transform: uppercase !important;
+    letter-spacing: 0.1em !important;
   }
 
+  /* H6 — Micro label */
   [contenteditable='true'] h6 {
-    font-size: 1rem !important;
-    @apply font-semibold text-gray-500;
+    font-size: 0.72rem !important;
+    font-weight: 500 !important;
+    color: #94a3b8 !important;
     margin-top: 1em !important;
-    margin-bottom: 0.5em !important;
+    margin-bottom: 0.2em !important;
     line-height: 1.5 !important;
     scroll-margin-top: 2rem !important;
     display: block !important;
+    text-transform: uppercase !important;
+    letter-spacing: 0.12em !important;
   }
 
   /* Blockquote styling */
   [contenteditable='true'] blockquote {
-    @apply border-l-4 border-gray-200 pl-4 ml-0 text-gray-500 italic;
+    position: relative !important;
+    border-left: 4px solid #16a34a !important;
+    padding: 0.65em 1.1em 0.65em 1.3em !important;
+    margin: 1em 0 !important;
+    color: #64748b !important;
+    font-style: italic !important;
+    background: linear-gradient(to right, rgba(22, 163, 74, 0.06), rgba(14, 165, 233, 0.02), transparent) !important;
+    border-radius: 0 8px 8px 0 !important;
     display: block !important;
   }
 
+  [contenteditable='true'] blockquote::before {
+    content: '\201C';
+    position: absolute;
+    top: -0.05em;
+    left: 0.45em;
+    font-size: 2.8em;
+    line-height: 1;
+    color: rgba(22, 163, 74, 0.18);
+    font-style: normal;
+    font-weight: 900;
+    pointer-events: none;
+    user-select: none;
+  }
+
   /* Inline code styling */
-  [contenteditable='true'] code {
-    @apply bg-gray-100 rounded font-mono text-sm;
-    padding: 0.125rem 0.25rem !important;
+  [contenteditable='true'] :not(pre) > code {
+    background: rgba(16, 185, 129, 0.08) !important;
+    color: #0f766e !important;
+    border: 1px solid rgba(16, 185, 129, 0.22) !important;
+    border-radius: 5px !important;
+    font-family: 'JetBrains Mono', 'Fira Code', ui-monospace, SFMono-Regular, Menlo, monospace !important;
+    font-size: 0.85em !important;
+    padding: 0.1em 0.42em !important;
+    font-style: normal !important;
   }
 
   /* Link styling - Enhanced */
@@ -583,17 +647,19 @@ aside[class*="backdrop-blur"] {
   /* Horizontal rule styling */
   [contenteditable='true'] hr {
     border: none !important;
-    border-top: 2px solid #94a3b8 !important;
-    @apply my-6;
-    display: block;
-    width: 100%;
-    opacity: 0.95;
+    height: 1px !important;
+    background: linear-gradient(to right, transparent, #cbd5e1 25%, #94a3b8 50%, #cbd5e1 75%, transparent) !important;
+    margin: 2em 0 !important;
+    display: block !important;
+    width: 100% !important;
   }
 
   /* Mark/highlight styling */
   [contenteditable='true'] mark {
-    @apply bg-yellow-200;
-    padding: 0.125rem 0 !important;
+    background-color: #fef08a !important;
+    color: #713f12 !important;
+    padding: 0.08em 0.25em !important;
+    border-radius: 3px !important;
   }
 
   /* Block outline styles - shown when block visibility is enabled */
@@ -914,27 +980,31 @@ aside[class*="backdrop-blur"] {
 
   /* Highlight colors persisted via data-highlight attribute */
   [contenteditable='true'] span[data-highlight='yellow'] {
-    background-color: #FEF3C7 !important;
-    padding: 0 0.12em !important;
-    border-radius: 2px !important;
+    background-color: #fef08a !important;
+    color: #854d0e !important;
+    padding: 0.06em 0.25em !important;
+    border-radius: 3px !important;
   }
 
   [contenteditable='true'] span[data-highlight='green'] {
-    background-color: #DCFCE7 !important;
-    padding: 0 0.12em !important;
-    border-radius: 2px !important;
+    background-color: #bbf7d0 !important;
+    color: #14532d !important;
+    padding: 0.06em 0.25em !important;
+    border-radius: 3px !important;
   }
 
   [contenteditable='true'] span[data-highlight='pink'] {
-    background-color: #FCE7F3 !important;
-    padding: 0 0.12em !important;
-    border-radius: 2px !important;
+    background-color: #fce7f3 !important;
+    color: #831843 !important;
+    padding: 0.06em 0.25em !important;
+    border-radius: 3px !important;
   }
 
   [contenteditable='true'] span[data-highlight='blue'] {
-    background-color: #E6F0FF !important;
-    padding: 0 0.12em !important;
-    border-radius: 2px !important;
+    background-color: #bfdbfe !important;
+    color: #1e3a8a !important;
+    padding: 0.06em 0.25em !important;
+    border-radius: 3px !important;
   }
 
   /* Text color mappings for persisted data-color attribute */
@@ -1207,37 +1277,51 @@ aside[class*="backdrop-blur"] {
 
 /* ── 12. ContentEditable editor — dark mode ── */
 .dark [contenteditable='true'] h1 {
-  color: #f1f5f9;
+  color: #f1f5f9 !important;
+  border-image: linear-gradient(90deg, #22c55e 0%, #38bdf8 45%, transparent 100%) 1 !important;
 }
 
 .dark [contenteditable='true'] h2 {
-  color: #e2e8f0;
+  color: #e2e8f0 !important;
+  border-left-color: #22c55e !important;
 }
 
 .dark [contenteditable='true'] h3 {
-  color: #cbd5e1;
+  color: #cbd5e1 !important;
+  border-left-color: #38bdf8 !important;
 }
 
 .dark [contenteditable='true'] h4 {
-  color: #b8c5d6;
+  color: #94a3b8 !important;
 }
 
 .dark [contenteditable='true'] h5 {
-  color: #a8b8cc;
+  color: #64748b !important;
 }
 
 .dark [contenteditable='true'] h6 {
-  color: #94a3b8;
+  color: #475569 !important;
 }
 
 .dark [contenteditable='true'] blockquote {
-  border-left-color: #475569;
-  color: #94a3b8;
+  border-left-color: #22c55e !important;
+  background: linear-gradient(to right, rgba(34, 197, 94, 0.08), rgba(56, 189, 248, 0.03), transparent) !important;
+  color: #94a3b8 !important;
 }
 
-.dark [contenteditable='true'] code {
-  background-color: #334155;
-  color: #e2e8f0;
+.dark [contenteditable='true'] blockquote::before {
+  color: rgba(34, 197, 94, 0.15) !important;
+}
+
+.dark [contenteditable='true'] :not(pre) > code {
+  background: rgba(16, 185, 129, 0.12) !important;
+  color: #6ee7b7 !important;
+  border-color: rgba(16, 185, 129, 0.25) !important;
+}
+
+.dark [contenteditable='true'] pre {
+  background: #161b22 !important;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.3), inset 0 0 0 1px rgba(255, 255, 255, 0.04) !important;
 }
 
 .dark [contenteditable='true'] a {
@@ -1251,13 +1335,12 @@ aside[class*="backdrop-blur"] {
 }
 
 .dark [contenteditable='true'] hr {
-  border-top-color: #64748b !important;
-  opacity: 1;
+  background: linear-gradient(to right, transparent, #334155 25%, #475569 50%, #334155 75%, transparent) !important;
 }
 
 .dark [contenteditable='true'] mark {
-  background-color: rgba(161, 98, 7, 0.4);
-  color: #fde68a;
+  background-color: rgba(161, 98, 7, 0.4) !important;
+  color: #fde68a !important;
 }
 
 /* Dark editor list guides */
@@ -1271,6 +1354,27 @@ aside[class*="backdrop-blur"] {
 /* Dark editor placeholder */
 .dark [data-placeholder]:empty:before {
   color: #475569;
+}
+
+/* Dark mode highlight colors */
+.dark [contenteditable='true'] span[data-highlight='yellow'] {
+  background-color: rgba(161, 98, 7, 0.35) !important;
+  color: #fde68a !important;
+}
+
+.dark [contenteditable='true'] span[data-highlight='green'] {
+  background-color: rgba(20, 83, 45, 0.4) !important;
+  color: #86efac !important;
+}
+
+.dark [contenteditable='true'] span[data-highlight='pink'] {
+  background-color: rgba(131, 24, 67, 0.35) !important;
+  color: #f9a8d4 !important;
+}
+
+.dark [contenteditable='true'] span[data-highlight='blue'] {
+  background-color: rgba(30, 58, 138, 0.4) !important;
+  color: #93c5fd !important;
 }
 
 /* Dark checklist progress bar */
