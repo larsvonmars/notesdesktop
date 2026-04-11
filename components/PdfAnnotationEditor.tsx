@@ -145,6 +145,8 @@ interface PdfAnnotationEditorProps {
   onChange: (data: PdfAnnotationData) => void
   disabled?: boolean
   noteId?: string | null
+  /** Called once after a PDF loads with the full extracted plain text (all pages). */
+  onTextExtracted?: (text: string) => void
 }
 
 // ============================================================================
@@ -232,7 +234,7 @@ async function loadPdfJs() {
 // ============================================================================
 
 const PdfAnnotationEditor = forwardRef<PdfAnnotationEditorHandle, PdfAnnotationEditorProps>(
-  function PdfAnnotationEditor({ value, onChange, disabled, noteId }, ref) {
+  function PdfAnnotationEditor({ value, onChange, disabled, noteId, onTextExtracted }, ref) {
     const toast = useToast()
 
     // PDF doc state
@@ -758,6 +760,29 @@ const PdfAnnotationEditor = forwardRef<PdfAnnotationEditorHandle, PdfAnnotationE
           if (cancelled) return
           setPdfDoc(doc)
           setTotalPages(doc.numPages)
+
+          // Extract full plain text from all PDF pages for AI context
+          if (onTextExtracted) {
+            ;(async () => {
+              const parts: string[] = []
+              for (let i = 1; i <= doc.numPages; i++) {
+                try {
+                  const pg = await doc.getPage(i)
+                  const tc = await pg.getTextContent()
+                  const pageText = tc.items
+                    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                    .map((item: any) => item.str ?? '')
+                    .join(' ')
+                    .replace(/\s+/g, ' ')
+                    .trim()
+                  if (pageText) parts.push(`[Page ${i}]\n${pageText}`)
+                } catch {
+                  // skip unreadable page
+                }
+              }
+              onTextExtracted(parts.join('\n\n'))
+            })()
+          }
 
           // Initialize page annotations if empty OR migrate existing notes (add pdfPageNumber)
           if (pages.length === 0) {

@@ -543,6 +543,7 @@ export default function NoteEditor({
   const bulletJournalRef = useRef<BulletJournalEditorHandle | null>(null)
   const dataSheetRef = useRef<DataSheetEditorHandle | null>(null)
   const pdfAnnotationRef = useRef<PdfAnnotationEditorHandle | null>(null)
+  const [pdfExtractedText, setPdfExtractedText] = useState<string>('')
   const headingUpdateTimeoutRef = useRef<number | null>(null)
   const autosaveTimeoutRef = useRef<number | null>(null)
   const isAutosavingRef = useRef(false)
@@ -2938,9 +2939,12 @@ export default function NoteEditor({
       return extractDataSheetForAI(dataSheetData.columns, dataSheetData.rows)
     }
     if (noteType === 'drawing') return '[This note contains a drawing — no text content is available for AI]'
-    if (noteType === 'pdf-annotation') return '[This note contains PDF annotations — no text content is available for AI]'
+    if (noteType === 'pdf-annotation') {
+      if (pdfExtractedText) return `[PDF document — extracted text below]\n\n${pdfExtractedText}`
+      return '[This note contains a PDF — text is still being extracted or the PDF has no selectable text]'
+    }
     return content
-  }, [noteType, content, mindmapData, bulletJournalData, dataSheetData])
+  }, [noteType, content, mindmapData, bulletJournalData, dataSheetData, pdfExtractedText])
 
   const handleAICreateMindmapNote = useCallback(async (input: {
     sourceText: string
@@ -3313,6 +3317,7 @@ export default function NoteEditor({
                     onChange={setPdfAnnotationData}
                     disabled={isSaving || isDeleting}
                     noteId={note?.id ?? null}
+                    onTextExtracted={setPdfExtractedText}
                   />
                 </ErrorBoundary>
               ) : (
