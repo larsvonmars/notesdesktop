@@ -1667,6 +1667,8 @@ const PdfAnnotationEditor = forwardRef<PdfAnnotationEditorHandle, PdfAnnotationE
 
     // ────────────────────────────────────────────────────────
     // Text layer rendering (pdfjs TextLayer class, pdfjs-dist 4.x)
+    // Always rendered in background so it's ready when the user enables text selection.
+    // Visibility/pointer-events are controlled separately by showTextLayer/tool.
     // ────────────────────────────────────────────────────────
     useEffect(() => {
       const el = textLayerRef.current
@@ -1677,7 +1679,7 @@ const PdfAnnotationEditor = forwardRef<PdfAnnotationEditorHandle, PdfAnnotationE
       }
       if (el) el.innerHTML = ''
 
-      if (!showTextLayer || !pdfDoc || !el) return
+      if (!pdfDoc || !el) return
 
       let cancelled = false
 
@@ -1717,7 +1719,7 @@ const PdfAnnotationEditor = forwardRef<PdfAnnotationEditorHandle, PdfAnnotationE
         textLayerInstanceRef.current = null
         if (el) el.innerHTML = ''
       }
-    }, [pdfDoc, currentPage, zoom, showTextLayer, pages])
+    }, [pdfDoc, currentPage, zoom, pages])
 
     // ────────────────────────────────────────────────────────
     // Search: highlight matching spans in text layer
