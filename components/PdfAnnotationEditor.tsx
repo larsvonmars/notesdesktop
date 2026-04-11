@@ -294,6 +294,9 @@ const PdfAnnotationEditor = forwardRef<PdfAnnotationEditorHandle, PdfAnnotationE
     useEffect(() => { pagesRef.current = pages }, [pages])
     useEffect(() => { currentPageRef.current = currentPage }, [currentPage])
 
+    // Toolbar tab
+    const [toolbarTab, setToolbarTab] = useState<'annotate' | 'view' | 'pages'>('annotate')
+
     // File picker (select existing uploaded file)
     const [showFilePicker, setShowFilePicker] = useState(false)
 
@@ -2108,298 +2111,312 @@ const PdfAnnotationEditor = forwardRef<PdfAnnotationEditorHandle, PdfAnnotationE
     // ────────────────────────────────────────────────────────
     return (
       <div ref={containerRef} className="flex h-full flex-col" tabIndex={-1}>
-        {/* Toolbar */}
-        <div className="flex flex-wrap items-center gap-1 border-b border-border bg-surface px-2 py-1.5">
-          {/* Tool buttons */}
-          {tools.map(t => {
-            const Icon = t.icon
-            return (
+        {/* ── Toolbar ─────────────────────────────────────────── */}
+        <div className="flex flex-col border-b border-border bg-surface">
+
+          {/* Tab bar row */}
+          <div className="flex items-center gap-0.5 px-2 pt-1.5">
+            {/* Tab buttons */}
+            {([ 
+              { id: 'annotate' as const, label: 'Annotate' },
+              { id: 'view'     as const, label: 'View' },
+              { id: 'pages'    as const, label: 'Pages' },
+            ] as const).map(tab => (
               <button
-                key={t.id}
-                title={t.label}
-                onClick={() => setTool(t.id)}
-                className={`rounded p-1.5 transition-colors ${
-                  tool === t.id
-                    ? 'bg-rose-100 text-rose-600 dark:bg-rose-900/40 dark:text-rose-400'
-                    : 'text-muted-foreground hover:bg-surface-hover'
+                key={tab.id}
+                onClick={() => setToolbarTab(tab.id)}
+                className={`rounded-t-md px-3 py-1 text-xs font-medium transition-colors ${
+                  toolbarTab === tab.id
+                    ? 'bg-surface-hover text-foreground'
+                    : 'text-muted-foreground hover:text-foreground hover:bg-surface-hover/60'
                 }`}
               >
-                <Icon size={16} />
+                {tab.label}
               </button>
-            )
-          })}
+            ))}
 
-          <div className="mx-1 h-5 w-px bg-border" />
+            <div className="flex-1" />
 
-          {/* Color picker */}
-          {COLORS.map(c => (
+            {/* Always-visible: Undo / Redo / Export */}
+            <button title="Undo (Ctrl+Z)" onClick={undo} disabled={historyIdx <= 0}
+              className="rounded p-1.5 text-muted-foreground transition-colors hover:bg-surface-hover disabled:opacity-30">
+              <Undo2 size={15} />
+            </button>
+            <button title="Redo (Ctrl+Shift+Z)" onClick={redo} disabled={historyIdx >= history.length - 1}
+              className="rounded p-1.5 text-muted-foreground transition-colors hover:bg-surface-hover disabled:opacity-30">
+              <Redo2 size={15} />
+            </button>
+            <div className="mx-1 h-4 w-px bg-border" />
             <button
-              key={c}
-              title={c}
-              onClick={() => setColor(c)}
-              className={`h-5 w-5 rounded-full border transition-transform ${
-                color === c ? 'scale-125 border-foreground' : 'border-border'
-              }`}
-              style={{ backgroundColor: c }}
-            />
-          ))}
+              title="Export annotated PDF"
+              onClick={handleExportPdf}
+              className="flex items-center gap-1 rounded px-2 py-1 text-xs text-muted-foreground transition-colors hover:bg-surface-hover"
+            >
+              <Download size={14} />
+              <span>Export</span>
+            </button>
+          </div>
 
-          <div className="mx-1 h-5 w-px bg-border" />
+          {/* Tab content row */}
+          <div className="flex flex-wrap items-center gap-1 px-2 pb-1.5 pt-0.5">
 
-          {/* Stroke size */}
-          <label className="flex items-center gap-1 text-xs text-muted-foreground">
-            Size
-            <input
-              type="range"
-              min={1}
-              max={20}
-              value={strokeSize}
-              onChange={e => setStrokeSize(Number(e.target.value))}
-              className="w-16"
-            />
-            <span className="w-4 text-center">{strokeSize}</span>
-          </label>
+            {/* ── ANNOTATE tab ─────────────────────────────── */}
+            {toolbarTab === 'annotate' && (
+              <>
+                {/* Drawing tools */}
+                {tools.map(t => {
+                  const Icon = t.icon
+                  return (
+                    <button
+                      key={t.id}
+                      title={t.label}
+                      onClick={() => setTool(t.id)}
+                      className={`rounded p-1.5 transition-colors ${
+                        tool === t.id
+                          ? 'bg-rose-100 text-rose-600 dark:bg-rose-900/40 dark:text-rose-400'
+                          : 'text-muted-foreground hover:bg-surface-hover'
+                      }`}
+                    >
+                      <Icon size={16} />
+                    </button>
+                  )
+                })}
 
-          {/* Shape fill toggle — visible when drawing rectangle or circle */}
-          {(tool === 'rectangle' || tool === 'circle') && (
-            <>
-              <div className="mx-1 h-5 w-px bg-border" />
-              <button
-                title={shapeFilled ? 'Filled shape (click to unfill)' : 'No fill (click to fill)'}
-                onClick={() => setShapeFilled(v => !v)}
-                className={`rounded px-2 py-1 text-xs font-medium transition-colors ${
-                  shapeFilled
-                    ? 'bg-rose-100 text-rose-600 dark:bg-rose-900/40 dark:text-rose-400'
-                    : 'text-muted-foreground hover:bg-surface-hover'
-                }`}
-              >
-                Fill
-              </button>
-            </>
-          )}
+                <div className="mx-1 h-5 w-px bg-border" />
 
-          {/* Double-ended arrow toggle — visible when drawing arrows */}
-          {tool === 'arrow' && (
-            <>
-              <div className="mx-1 h-5 w-px bg-border" />
-              <button
-                title={doubleEndedArrow ? 'Double-headed arrow (click for single)' : 'Single arrow (click for double-headed)'}
-                onClick={() => setDoubleEndedArrow(v => !v)}
-                className={`rounded px-2 py-1 text-base transition-colors ${
-                  doubleEndedArrow
-                    ? 'bg-rose-100 text-rose-600 dark:bg-rose-900/40 dark:text-rose-400'
-                    : 'text-muted-foreground hover:bg-surface-hover'
-                }`}
-              >
-                ↔
-              </button>
-            </>
-          )}
+                {/* Color picker */}
+                {COLORS.map(c => (
+                  <button
+                    key={c}
+                    title={c}
+                    onClick={() => setColor(c)}
+                    className={`h-5 w-5 rounded-full border transition-transform ${
+                      color === c ? 'scale-125 border-foreground' : 'border-border'
+                    }`}
+                    style={{ backgroundColor: c }}
+                  />
+                ))}
 
-          <div className="mx-1 h-5 w-px bg-border" />
+                <div className="mx-1 h-5 w-px bg-border" />
 
-          {/* Undo/Redo */}
-          <button
-            title="Undo (Ctrl+Z)"
-            onClick={undo}
-            disabled={historyIdx <= 0}
-            className="rounded p-1.5 text-muted-foreground transition-colors hover:bg-surface-hover disabled:opacity-30"
-          >
-            <Undo2 size={16} />
-          </button>
-          <button
-            title="Redo (Ctrl+Shift+Z)"
-            onClick={redo}
-            disabled={historyIdx >= history.length - 1}
-            className="rounded p-1.5 text-muted-foreground transition-colors hover:bg-surface-hover disabled:opacity-30"
-          >
-            <Redo2 size={16} />
-          </button>
+                {/* Stroke size */}
+                <label className="flex items-center gap-1 text-xs text-muted-foreground">
+                  Size
+                  <input
+                    type="range" min={1} max={20} value={strokeSize}
+                    onChange={e => setStrokeSize(Number(e.target.value))}
+                    className="w-16"
+                  />
+                  <span className="w-4 text-center">{strokeSize}</span>
+                </label>
 
-          <div className="mx-1 h-5 w-px bg-border" />
+                {/* Shape fill toggle — rect / circle */}
+                {(tool === 'rectangle' || tool === 'circle') && (
+                  <>
+                    <div className="mx-1 h-5 w-px bg-border" />
+                    <button
+                      title={shapeFilled ? 'Filled (click to unfill)' : 'No fill (click to fill)'}
+                      onClick={() => setShapeFilled(v => !v)}
+                      className={`rounded px-2 py-1 text-xs font-medium transition-colors ${
+                        shapeFilled
+                          ? 'bg-rose-100 text-rose-600 dark:bg-rose-900/40 dark:text-rose-400'
+                          : 'text-muted-foreground hover:bg-surface-hover'
+                      }`}
+                    >
+                      Fill
+                    </button>
+                  </>
+                )}
 
-          {/* Zoom */}
-          <button
-            title="Zoom out"
-            onClick={handleZoomOut}
-            disabled={zoom <= MIN_ZOOM}
-            className="rounded p-1.5 text-muted-foreground transition-colors hover:bg-surface-hover disabled:opacity-30"
-          >
-            <ZoomOut size={16} />
-          </button>
-          <input
-            type="range"
-            min={MIN_ZOOM}
-            max={MAX_ZOOM}
-            step={0.05}
-            value={zoom}
-            onChange={handleZoomSlider}
-            className="w-20"
-            title={`Zoom: ${Math.round(zoom * 100)}%`}
-          />
-          <button
-            title="Zoom in"
-            onClick={handleZoomIn}
-            disabled={zoom >= MAX_ZOOM}
-            className="rounded p-1.5 text-muted-foreground transition-colors hover:bg-surface-hover disabled:opacity-30"
-          >
-            <ZoomIn size={16} />
-          </button>
-          <span className="min-w-[3rem] text-center text-xs text-muted-foreground">
-            {Math.round(zoom * 100)}%
-          </span>
-          <button
-            title="Fit to width"
-            onClick={handleFitWidth}
-            className="rounded px-1.5 py-1 text-[10px] font-medium text-muted-foreground transition-colors hover:bg-surface-hover"
-          >
-            W
-          </button>
-          <button
-            title="Fit to page"
-            onClick={handleFitPage}
-            className="rounded p-1.5 text-muted-foreground transition-colors hover:bg-surface-hover"
-          >
-            <Maximize size={14} />
-          </button>
+                {/* Double-ended arrow toggle */}
+                {tool === 'arrow' && (
+                  <>
+                    <div className="mx-1 h-5 w-px bg-border" />
+                    <button
+                      title={doubleEndedArrow ? 'Double-headed (click for single)' : 'Single arrow (click for double)'}
+                      onClick={() => setDoubleEndedArrow(v => !v)}
+                      className={`rounded px-2 py-1 text-base transition-colors ${
+                        doubleEndedArrow
+                          ? 'bg-rose-100 text-rose-600 dark:bg-rose-900/40 dark:text-rose-400'
+                          : 'text-muted-foreground hover:bg-surface-hover'
+                      }`}
+                    >
+                      ↔
+                    </button>
+                  </>
+                )}
+              </>
+            )}
 
-          <div className="mx-1 h-5 w-px bg-border" />
+            {/* ── VIEW tab ─────────────────────────────────── */}
+            {toolbarTab === 'view' && (
+              <>
+                {/* Zoom */}
+                <button title="Zoom out" onClick={handleZoomOut} disabled={zoom <= MIN_ZOOM}
+                  className="rounded p-1.5 text-muted-foreground transition-colors hover:bg-surface-hover disabled:opacity-30">
+                  <ZoomOut size={16} />
+                </button>
+                <input
+                  type="range" min={MIN_ZOOM} max={MAX_ZOOM} step={0.05} value={zoom}
+                  onChange={handleZoomSlider} className="w-24"
+                  title={`Zoom: ${Math.round(zoom * 100)}%`}
+                />
+                <button title="Zoom in" onClick={handleZoomIn} disabled={zoom >= MAX_ZOOM}
+                  className="rounded p-1.5 text-muted-foreground transition-colors hover:bg-surface-hover disabled:opacity-30">
+                  <ZoomIn size={16} />
+                </button>
+                <span className="min-w-[3rem] text-center text-xs text-muted-foreground">
+                  {Math.round(zoom * 100)}%
+                </span>
+                <button title="Fit to width" onClick={handleFitWidth}
+                  className="rounded px-1.5 py-1 text-[10px] font-medium text-muted-foreground transition-colors hover:bg-surface-hover">
+                  W
+                </button>
+                <button title="Fit to page" onClick={handleFitPage}
+                  className="rounded p-1.5 text-muted-foreground transition-colors hover:bg-surface-hover">
+                  <Maximize size={14} />
+                </button>
 
-          {/* Rotate */}
-          <button
-            title="Rotate 90° counter-clockwise"
-            onClick={() => setViewRotation(r => ((r + 270) % 360) as 0 | 90 | 180 | 270)}
-            className="rounded p-1.5 text-muted-foreground transition-colors hover:bg-surface-hover"
-          >
-            <RotateCcw size={15} />
-          </button>
-          <select
-            value={viewRotation}
-            onChange={e => setViewRotation(Number(e.target.value) as 0 | 90 | 180 | 270)}
-            title="Page rotation"
-            className="rounded border border-border bg-surface px-1 py-0.5 text-xs text-muted-foreground focus:outline-none"
-          >
-            <option value={0}>0°</option>
-            <option value={90}>90° CW</option>
-            <option value={180}>180°</option>
-            <option value={270}>90° CCW</option>
-          </select>
-          <button
-            title="Rotate 90° clockwise"
-            onClick={() => setViewRotation(r => ((r + 90) % 360) as 0 | 90 | 180 | 270)}
-            className="rounded p-1.5 text-muted-foreground transition-colors hover:bg-surface-hover"
-          >
-            <RotateCw size={15} />
-          </button>
+                <div className="mx-1 h-5 w-px bg-border" />
 
-          <div className="mx-1 h-5 w-px bg-border" />
+                {/* Rotate */}
+                <button title="Rotate 90° counter-clockwise"
+                  onClick={() => setViewRotation(r => ((r + 270) % 360) as 0 | 90 | 180 | 270)}
+                  className="rounded p-1.5 text-muted-foreground transition-colors hover:bg-surface-hover">
+                  <RotateCcw size={15} />
+                </button>
+                <select
+                  value={viewRotation}
+                  onChange={e => setViewRotation(Number(e.target.value) as 0 | 90 | 180 | 270)}
+                  title="Page rotation"
+                  className="rounded border border-border bg-surface px-1 py-0.5 text-xs text-muted-foreground focus:outline-none"
+                >
+                  <option value={0}>0°</option>
+                  <option value={90}>90° CW</option>
+                  <option value={180}>180°</option>
+                  <option value={270}>90° CCW</option>
+                </select>
+                <button title="Rotate 90° clockwise"
+                  onClick={() => setViewRotation(r => ((r + 90) % 360) as 0 | 90 | 180 | 270)}
+                  className="rounded p-1.5 text-muted-foreground transition-colors hover:bg-surface-hover">
+                  <RotateCw size={15} />
+                </button>
 
-          {/* Page navigation */}
-          <button
-            title="Toggle page thumbnails"
-            onClick={() => setShowThumbnails(v => !v)}
-            className={`rounded p-1.5 transition-colors ${
-              showThumbnails
-                ? 'bg-rose-100 text-rose-600 dark:bg-rose-900/40 dark:text-rose-400'
-                : 'text-muted-foreground hover:bg-surface-hover'
-            }`}
-          >
-            <PanelLeft size={16} />
-          </button>
-          <div className="mx-0.5 h-5 w-px bg-border" />
-          <button
-            title="Insert blank page before current page"
-            onClick={() => insertBlankPage(currentPage - 1)}
-            disabled={disabled}
-            className="rounded p-1 text-muted-foreground transition-colors hover:bg-surface-hover disabled:opacity-30"
-          >
-            <Plus size={13} />
-          </button>
-          <button
-            title="Previous page"
-            onClick={() => goToPage(Math.max(0, currentPage - 1))}
-            disabled={currentPage <= 0}
-            className="rounded p-1.5 text-muted-foreground transition-colors hover:bg-surface-hover disabled:opacity-30"
-          >
-            <ChevronLeft size={16} />
-          </button>
-          <span className="min-w-[4rem] text-center text-xs text-muted-foreground">
-            {currentPage + 1} / {totalPages}
-          </span>
-          <button
-            title="Next page"
-            onClick={() => goToPage(Math.min(totalPages - 1, currentPage + 1))}
-            disabled={currentPage >= totalPages - 1}
-            className="rounded p-1.5 text-muted-foreground transition-colors hover:bg-surface-hover disabled:opacity-30"
-          >
-            <ChevronRight size={16} />
-          </button>
-          <button
-            title="Insert blank page after current page"
-            onClick={() => insertBlankPage(currentPage)}
-            disabled={disabled}
-            className="rounded p-1 text-muted-foreground transition-colors hover:bg-surface-hover disabled:opacity-30"
-          >
-            <Plus size={13} />
-          </button>
-          <button
-            title={pages.length <= 1 ? 'Cannot delete the only page' : 'Delete current page'}
-            onClick={() => {
-              const pg = pages.find(p => p.pageNumber === currentPage)
-              if (pg?.isBlank) {
-                deletePage(currentPage)
-              } else {
-                setDeleteConfirmIdx(currentPage)
-              }
-            }}
-            disabled={disabled || pages.length <= 1}
-            className="rounded p-1.5 text-muted-foreground transition-colors hover:bg-surface-hover disabled:opacity-30"
-          >
-            <Trash2 size={14} />
-          </button>
+                <div className="mx-1 h-5 w-px bg-border" />
 
-          <div className="flex-1" />
+                {/* Text layer */}
+                <button
+                  title={showTextLayer ? 'Hide PDF text layer' : 'Show PDF text layer (enables text selection & search)'}
+                  onClick={() => {
+                    setShowTextLayer(v => {
+                      if (v) { setSearchVisible(false); setSearchQuery('') }
+                      return !v
+                    })
+                  }}
+                  className={`flex items-center gap-1 rounded px-2 py-1 text-xs transition-colors ${
+                    showTextLayer
+                      ? 'bg-rose-100 text-rose-600 dark:bg-rose-900/40 dark:text-rose-400'
+                      : 'text-muted-foreground hover:bg-surface-hover'
+                  }`}
+                >
+                  <Layers size={14} />
+                  Text layer
+                </button>
 
-          {/* Text layer toggle */}
-          <button
-            title={showTextLayer ? 'Hide PDF text layer' : 'Show PDF text layer (enables text selection & search)'}
-            onClick={() => {
-              setShowTextLayer(v => {
-                if (v) { setSearchVisible(false); setSearchQuery('') }
-                return !v
-              })
-            }}
-            className={`flex items-center gap-1 rounded px-2 py-1 text-xs transition-colors ${
-              showTextLayer
-                ? 'bg-rose-100 text-rose-600 dark:bg-rose-900/40 dark:text-rose-400'
-                : 'text-muted-foreground hover:bg-surface-hover'
-            }`}
-          >
-            <Layers size={14} />
-            Text
-          </button>
+                {/* Search */}
+                <button
+                  title="Find in PDF (Ctrl+F)"
+                  onClick={() => {
+                    setShowTextLayer(true)
+                    setSearchVisible(v => { if (!v) setSearchQuery(''); return true })
+                  }}
+                  className={`flex items-center gap-1 rounded px-2 py-1 text-xs transition-colors ${
+                    searchVisible ? 'bg-rose-100 text-rose-600 dark:bg-rose-900/40 dark:text-rose-400' : 'text-muted-foreground hover:bg-surface-hover'
+                  }`}
+                >
+                  <Search size={14} />
+                  Find
+                </button>
+              </>
+            )}
 
-          {/* Search (Ctrl+F) */}
-          <button
-            title="Find in PDF (Ctrl+F)"
-            onClick={() => {
-              setShowTextLayer(true)
-              setSearchVisible(v => { if (!v) setSearchQuery(''); return true })
-            }}
-            className="rounded p-1.5 text-muted-foreground transition-colors hover:bg-surface-hover"
-          >
-            <Search size={14} />
-          </button>
+            {/* ── PAGES tab ────────────────────────────────── */}
+            {toolbarTab === 'pages' && (
+              <>
+                {/* Thumbnails */}
+                <button
+                  title="Toggle page thumbnails"
+                  onClick={() => setShowThumbnails(v => !v)}
+                  className={`flex items-center gap-1 rounded px-2 py-1 text-xs transition-colors ${
+                    showThumbnails
+                      ? 'bg-rose-100 text-rose-600 dark:bg-rose-900/40 dark:text-rose-400'
+                      : 'text-muted-foreground hover:bg-surface-hover'
+                  }`}
+                >
+                  <PanelLeft size={14} />
+                  Thumbnails
+                </button>
 
-          {/* Export */}
-          <button
-            title="Export annotated PDF"
-            onClick={handleExportPdf}
-            className="flex items-center gap-1 rounded px-2 py-1 text-xs text-muted-foreground transition-colors hover:bg-surface-hover"
-          >
-            <Download size={14} />
-            Export PDF
-          </button>
+                <div className="mx-1 h-5 w-px bg-border" />
+
+                {/* Insert before */}
+                <button
+                  title="Insert blank page before current page"
+                  onClick={() => insertBlankPage(currentPage - 1)}
+                  disabled={disabled}
+                  className="flex items-center gap-1 rounded px-2 py-1 text-xs text-muted-foreground transition-colors hover:bg-surface-hover disabled:opacity-30"
+                >
+                  <Plus size={13} />
+                  Before
+                </button>
+
+                {/* Page navigation */}
+                <button title="Previous page (←)"
+                  onClick={() => goToPage(Math.max(0, currentPage - 1))}
+                  disabled={currentPage <= 0}
+                  className="rounded p-1.5 text-muted-foreground transition-colors hover:bg-surface-hover disabled:opacity-30">
+                  <ChevronLeft size={16} />
+                </button>
+                <span className="min-w-[4rem] text-center text-xs text-muted-foreground">
+                  {currentPage + 1} / {totalPages}
+                </span>
+                <button title="Next page (→)"
+                  onClick={() => goToPage(Math.min(totalPages - 1, currentPage + 1))}
+                  disabled={currentPage >= totalPages - 1}
+                  className="rounded p-1.5 text-muted-foreground transition-colors hover:bg-surface-hover disabled:opacity-30">
+                  <ChevronRight size={16} />
+                </button>
+
+                {/* Insert after */}
+                <button
+                  title="Insert blank page after current page"
+                  onClick={() => insertBlankPage(currentPage)}
+                  disabled={disabled}
+                  className="flex items-center gap-1 rounded px-2 py-1 text-xs text-muted-foreground transition-colors hover:bg-surface-hover disabled:opacity-30"
+                >
+                  <Plus size={13} />
+                  After
+                </button>
+
+                <div className="mx-1 h-5 w-px bg-border" />
+
+                {/* Delete page */}
+                <button
+                  title={pages.length <= 1 ? 'Cannot delete the only page' : 'Delete current page'}
+                  onClick={() => {
+                    const pg = pages.find(p => p.pageNumber === currentPage)
+                    if (pg?.isBlank) { deletePage(currentPage) } else { setDeleteConfirmIdx(currentPage) }
+                  }}
+                  disabled={disabled || pages.length <= 1}
+                  className="flex items-center gap-1 rounded px-2 py-1 text-xs text-red-500 transition-colors hover:bg-red-50 dark:hover:bg-red-950/30 disabled:opacity-30"
+                >
+                  <Trash2 size={13} />
+                  Delete page
+                </button>
+              </>
+            )}
+
+          </div>
         </div>
 
         {/* Find/search bar */}
