@@ -105,6 +105,7 @@ function WorkspaceContent() {
   // Workspace view state
   const [activeView, setActiveView] = useState<WorkspaceView>('notes')
   const [showFilesPanel, setShowFilesPanel] = useState(false)
+  const [showFileExplorerModal, setShowFileExplorerModal] = useState(false)
   const [workspaceNavCollapsed, setWorkspaceNavCollapsed] = useState(false)
   const [workspaceNavOpen, setWorkspaceNavOpen] = useState(false)
   const mobileSwipeStartRef = useRef<{ x: number; y: number } | null>(null)
@@ -1202,7 +1203,7 @@ function WorkspaceContent() {
             setSelectedProjectId(projectId)
             setActiveView('projects')
           }}
-          onOpenFileExplorer={() => setShowFilesPanel(prev => !prev)}
+          onOpenFileExplorer={() => setShowFileExplorerModal(true)}
           collapsed={sidebarCollapsed}
           onToggleCollapsed={() => setSidebarCollapsed(prev => !prev)}
         />
@@ -1331,7 +1332,7 @@ function WorkspaceContent() {
                   setWorkspaceNavOpen(false)
                 }}
                 onOpenFileExplorer={() => {
-                  setActiveView('files')
+                  setShowFileExplorerModal(true)
                   setWorkspaceNavOpen(false)
                 }}
                 collapsed={false}
@@ -1425,6 +1426,11 @@ function WorkspaceContent() {
             onClose={() => setActiveView('notes')}
           />
         )}
+
+        <FileExplorerModal
+          isOpen={showFileExplorerModal}
+          onClose={() => setShowFileExplorerModal(false)}
+        />
 
         {activeView === 'projects' && selectedProjectId && (() => {
           const dashboardProject = projects.find(p => p.id === selectedProjectId)
