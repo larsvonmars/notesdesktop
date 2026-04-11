@@ -1046,33 +1046,107 @@ aside[class*="backdrop-blur"] {
     width: 0;
   }
 
-  /* Default table styles: Tailwind Preflight resets all native borders, so
-     tables (including those from pasted markdown) need explicit borders. */
+  /* ─────────────────────────────────────────
+     FUTURISTIC TABLE DESIGN
+     Data-terminal aesthetic: glowing borders,
+     dark headers, scanline row effects.
+     ───────────────────────────────────────── */
+
   [contenteditable='true'] table {
-    border-collapse: collapse;
-    min-width: 100%;
-    table-layout: fixed;
+    border-collapse: separate !important;
+    border-spacing: 0 !important;
+    min-width: 100% !important;
+    table-layout: fixed !important;
+    margin: 1.75em 0 !important;
+    border-radius: 12px !important;
+    overflow: hidden !important;
+    /* Outer glow: green primary, sky hint */
+    border: 1.5px solid rgba(22, 163, 74, 0.35) !important;
+    box-shadow:
+      0 0 0 1px rgba(14, 165, 233, 0.08),
+      0 4px 32px rgba(0, 0, 0, 0.08),
+      0 0 60px -15px rgba(22, 163, 74, 0.12) !important;
+    background: #ffffff !important;
+    font-size: 0.9rem !important;
   }
 
-  [contenteditable='true'] table th,
-  [contenteditable='true'] table td {
-    border: 1px solid var(--border-color, #e5e7eb);
-    padding: 0.25rem 0.5rem;
-    vertical-align: top;
-  }
-
+  /* Header cells — data-terminal dark header */
   [contenteditable='true'] table th {
-    font-weight: 600;
+    background: linear-gradient(135deg, #0f172a 0%, #1e293b 100%) !important;
+    color: #22c55e !important;
+    font-weight: 700 !important;
+    font-size: 0.72rem !important;
+    text-transform: uppercase !important;
+    letter-spacing: 0.1em !important;
+    padding: 0.7rem 1rem !important;
+    vertical-align: middle !important;
+    border-right: 1px solid rgba(34, 197, 94, 0.2) !important;
+    border-bottom: 2px solid rgba(34, 197, 94, 0.4) !important;
+    font-family: 'JetBrains Mono', 'Fira Code', ui-monospace, SFMono-Regular, Menlo, monospace !important;
+    text-shadow: 0 0 12px rgba(34, 197, 94, 0.45) !important;
+    transition: background 0.2s ease, color 0.2s ease, text-shadow 0.2s ease !important;
+    position: relative !important;
+    white-space: nowrap !important;
+    overflow: hidden !important;
   }
 
-  :is(.dark, [data-theme='dark']) [contenteditable='true'] table th,
-  :is(.dark, [data-theme='dark']) [contenteditable='true'] table td {
-    border-color: #374151;
+  /* Header shimmer line at top */
+  [contenteditable='true'] table th::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    height: 1px;
+    background: linear-gradient(to right, transparent, rgba(34, 197, 94, 0.6), rgba(14, 165, 233, 0.4), transparent);
+    pointer-events: none;
   }
 
-  /* Table outline visibility toggle: when the root has .hide-table-outlines,
-     remove visible table borders/outlines for a cleaner look. This is a UI
-     preference and is applied at runtime (not persisted to sanitized HTML). */
+  /* Last column header: no right border */
+  [contenteditable='true'] table th:last-child {
+    border-right: none !important;
+  }
+
+  /* Data cells */
+  [contenteditable='true'] table td {
+    padding: 0.55rem 1rem !important;
+    vertical-align: top !important;
+    border-right: 1px solid rgba(22, 163, 74, 0.1) !important;
+    border-bottom: 1px solid rgba(22, 163, 74, 0.07) !important;
+    color: #1e293b !important;
+    transition: background 0.15s ease !important;
+    line-height: 1.55 !important;
+  }
+
+  [contenteditable='true'] table td:last-child {
+    border-right: none !important;
+  }
+
+  /* Last row: no bottom border (table handles outer) */
+  [contenteditable='true'] table tr:last-child td,
+  [contenteditable='true'] table tr:last-child th {
+    border-bottom: none !important;
+  }
+
+  /* Alternating rows — scanline ghost */
+  [contenteditable='true'] table tbody tr:nth-child(even) td {
+    background: rgba(22, 163, 74, 0.025) !important;
+  }
+
+  /* Row hover — sky blue scanline sweep */
+  [contenteditable='true'] table tbody tr:hover td {
+    background: rgba(14, 165, 233, 0.07) !important;
+  }
+
+  /* Header cell hover */
+  [contenteditable='true'] table th:hover {
+    background: linear-gradient(135deg, #1e293b 0%, #334155 100%) !important;
+    color: #38bdf8 !important;
+    text-shadow: 0 0 14px rgba(56, 189, 248, 0.55) !important;
+  }
+
+  /* ── Table outline visibility toggles (preserve existing behaviour) ── */
+
   .hide-table-outlines [contenteditable='true'] table,
   .hide-table-outlines [contenteditable='true'] table th,
   .hide-table-outlines [contenteditable='true'] table td {
@@ -1082,11 +1156,24 @@ aside[class*="backdrop-blur"] {
 
   .hide-table-outlines [contenteditable='true'] table {
     border-collapse: collapse !important;
+    background: transparent !important;
   }
 
-  /* Per-table attribute to hide outlines on an individual table element. Using
-     a data attribute ensures the preference is preserved in the editor HTML
-     (DOMPurify is configured to allow data-* attributes). */
+  .hide-table-outlines [contenteditable='true'] table th {
+    background: transparent !important;
+    color: inherit !important;
+    text-shadow: none !important;
+    text-transform: none !important;
+    letter-spacing: normal !important;
+    font-size: inherit !important;
+    font-family: inherit !important;
+  }
+
+  .hide-table-outlines [contenteditable='true'] table th::before {
+    display: none !important;
+  }
+
+  /* Per-table data-no-outline attribute */
   [contenteditable='true'] table[data-no-outline='true'],
   [contenteditable='true'] table[data-no-outline='true'] th,
   [contenteditable='true'] table[data-no-outline='true'] td {
@@ -1096,6 +1183,21 @@ aside[class*="backdrop-blur"] {
 
   [contenteditable='true'] table[data-no-outline='true'] {
     border-collapse: collapse !important;
+    background: transparent !important;
+  }
+
+  [contenteditable='true'] table[data-no-outline='true'] th {
+    background: transparent !important;
+    color: inherit !important;
+    text-shadow: none !important;
+    text-transform: none !important;
+    letter-spacing: normal !important;
+    font-size: inherit !important;
+    font-family: inherit !important;
+  }
+
+  [contenteditable='true'] table[data-no-outline='true'] th::before {
+    display: none !important;
   }
 
   /* Highlight colors persisted via data-highlight attribute */
@@ -1619,6 +1721,67 @@ aside[class*="backdrop-blur"] {
 
 /* Dark border-l-4 for blockquotes */
 .dark .border-l-4.border-gray-200 { border-left-color: #475569; }
+
+/* ── Dark mode futuristic table overrides ── */
+
+.dark [contenteditable='true'] table {
+  background: #0c0f18 !important;
+  border-color: rgba(34, 197, 94, 0.3) !important;
+  box-shadow:
+    0 0 0 1px rgba(56, 189, 248, 0.07),
+    0 4px 32px rgba(0, 0, 0, 0.35),
+    0 0 80px -20px rgba(34, 197, 94, 0.18) !important;
+}
+
+.dark [contenteditable='true'] table th {
+  background: linear-gradient(135deg, #020617 0%, #0a0f1a 100%) !important;
+  color: #22c55e !important;
+  border-right-color: rgba(34, 197, 94, 0.18) !important;
+  border-bottom-color: rgba(34, 197, 94, 0.45) !important;
+  text-shadow: 0 0 14px rgba(34, 197, 94, 0.6) !important;
+}
+
+.dark [contenteditable='true'] table th::before {
+  background: linear-gradient(to right, transparent, rgba(34, 197, 94, 0.7), rgba(56, 189, 248, 0.5), transparent) !important;
+}
+
+.dark [contenteditable='true'] table td {
+  color: #cbd5e1 !important;
+  border-right-color: rgba(34, 197, 94, 0.08) !important;
+  border-bottom-color: rgba(34, 197, 94, 0.05) !important;
+}
+
+.dark [contenteditable='true'] table tbody tr:nth-child(even) td {
+  background: rgba(34, 197, 94, 0.03) !important;
+}
+
+.dark [contenteditable='true'] table tbody tr:hover td {
+  background: rgba(56, 189, 248, 0.08) !important;
+}
+
+.dark [contenteditable='true'] table th:hover {
+  background: linear-gradient(135deg, #0f172a 0%, #1e293b 100%) !important;
+  color: #38bdf8 !important;
+  text-shadow: 0 0 16px rgba(56, 189, 248, 0.65) !important;
+}
+
+.dark .hide-table-outlines [contenteditable='true'] table,
+.dark .hide-table-outlines [contenteditable='true'] table th,
+.dark .hide-table-outlines [contenteditable='true'] table td {
+  background: transparent !important;
+  border: none !important;
+  box-shadow: none !important;
+  text-shadow: none !important;
+}
+
+.dark [contenteditable='true'] table[data-no-outline='true'],
+.dark [contenteditable='true'] table[data-no-outline='true'] th,
+.dark [contenteditable='true'] table[data-no-outline='true'] td {
+  background: transparent !important;
+  border: none !important;
+  box-shadow: none !important;
+  text-shadow: none !important;
+}
 
 /* ── 13. Alpine surface class — dark variant ── */
 .dark .alpine-surface {
