@@ -291,8 +291,12 @@ const PdfAnnotationEditor = forwardRef<PdfAnnotationEditorHandle, PdfAnnotationE
     // Refs for stable access inside non-reactive listeners (e.g. wheel handler)
     const pagesRef = useRef(pages)
     const currentPageRef = useRef(currentPage)
+    const zoomRef = useRef(zoom)
+    const totalPagesRef = useRef(totalPages)
     useEffect(() => { pagesRef.current = pages }, [pages])
     useEffect(() => { currentPageRef.current = currentPage }, [currentPage])
+    useEffect(() => { zoomRef.current = zoom }, [zoom])
+    useEffect(() => { totalPagesRef.current = totalPages }, [totalPages])
 
     // Toolbar tab
     const [toolbarTab, setToolbarTab] = useState<'annotate' | 'view' | 'pages'>('annotate')
@@ -1597,19 +1601,65 @@ const PdfAnnotationEditor = forwardRef<PdfAnnotationEditorHandle, PdfAnnotationE
       emitChange(pages, currentPage, newZoom)
     }, [naturalWidth, naturalHeight, pages, currentPage, emitChange, clampZoom])
 
-    // Ctrl/Cmd + scroll wheel zoom — uses refs to avoid stale closures on pages/currentPage
+    // Ctrl/Cmd + scroll wheel zoom — plain scroll at 100% navigates pages
+    // Uses refs to avoid stale closures
     useEffect(() => {
       const el = scrollAreaRef.current
       if (!el) return
+
+      let scrollAccum = 0
+      const SCROLL_THRESHOLD = 60 // px accumulated scroll to trigger page turn
+
       function onWheel(e: WheelEvent) {
-        if (!(e.ctrlKey || e.metaKey)) return
-        e.preventDefault()
-        const delta = e.deltaY > 0 ? -ZOOM_STEP : ZOOM_STEP
-        setZoom(prev => {
-          const newZoom = clampZoom(prev + delta)
-          queueMicrotask(() => emitChange(pagesRef.current, currentPageRef.current, newZoom))
-          return newZoom
-        })
+        if (e.ctrlKey || e.metaKey) {
+          // Zoom in/out
+          e.preventDefault()
+          const delta = e.deltaY > 0 ? -ZOOM_STEP : ZOOM_STEP
+          setZoom(prev => {
+            const newZoom = clampZoom(prev + delta)
+            queueMicrotask(() => emitChange(pagesRef.current, currentPageRef.current, newZoom))
+            return newZoom
+          })
+          return
+        }
+
+        // Page navigation by scroll — only at 100% zoom
+        if (Math.abs(zoomRef.current - 1) > 0.01) return
+        if (!el) return
+
+        const atTop = el.scrollTop === 0
+        const atBottom = Math.abs(el.scrollTop + el.clientHeight - el.scrollHeight) < 2
+
+        const scrollingDown = e.deltaY > 0
+        const scrollingUp = e.deltaY < 0
+
+        if ((scrollingDown && atBottom) || (scrollingUp && atTop)) {
+          e.preventDefault()
+          scrollAccum += e.deltaY
+          if (Math.abs(scrollAccum) >= SCROLL_THRESHOLD) {
+            const pg = currentPageRef.current
+            const total = totalPagesRef.current
+            if (scrollingDown && pg < total - 1) {
+              setCurrentPage(pg + 1)
+              queueMicrotask(() => {
+                // Scroll to top of new page
+                el.scrollTop = 0
+                emitChange(pagesRef.current, pg + 1, zoomRef.current)
+              })
+            } else if (scrollingUp && pg > 0) {
+              setCurrentPage(pg - 1)
+              queueMicrotask(() => {
+                // Scroll to bottom of previous page
+                el.scrollTop = el.scrollHeight
+                emitChange(pagesRef.current, pg - 1, zoomRef.current)
+              })
+            }
+            scrollAccum = 0
+          }
+        } else {
+          // Normal scroll within page — reset accumulator
+          scrollAccum = 0
+        }
       }
       el.addEventListener('wheel', onWheel, { passive: false })
       return () => el.removeEventListener('wheel', onWheel)
