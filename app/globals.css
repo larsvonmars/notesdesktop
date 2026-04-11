@@ -83,7 +83,7 @@ aside[class*="backdrop-blur"] {
 
   body {
     @apply min-h-screen bg-background text-foreground;
-    font-family: var(--font-geist-sans), ui-sans-serif, system-ui, sans-serif;
+    font-family: var(--font-roboto-flex), 'Roboto Flex', ui-sans-serif, system-ui, sans-serif;
     /* Prevent pull-to-refresh and rubber-banding on mobile */
     overscroll-behavior: none;
     /* Prevent iOS text-size adjust on rotation */
