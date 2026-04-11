@@ -1542,6 +1542,8 @@ aside[class*="backdrop-blur"] {
   forced-color-adjust: none;
   transform-origin: 0 0;
   z-index: 1;
+  user-select: text;
+  -webkit-user-select: text;
 }
 
 .pdf-text-layer span,
@@ -1551,6 +1553,8 @@ aside[class*="backdrop-blur"] {
   white-space: pre;
   cursor: text;
   transform-origin: 0% 0%;
+  user-select: text;
+  -webkit-user-select: text;
 }
 
 /* Browser text selection in PDF text layer */
