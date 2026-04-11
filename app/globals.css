@@ -1558,6 +1558,28 @@ aside[class*="backdrop-blur"] {
 }
 
 /* Browser text selection in PDF text layer */
+/* ── PDF page slide animations ───────────────────────────────── */
+@keyframes pdfPageExitUp {
+  from { transform: translateY(0);    opacity: 1; }
+  to   { transform: translateY(-56px); opacity: 0; }
+}
+@keyframes pdfPageExitDown {
+  from { transform: translateY(0);    opacity: 1; }
+  to   { transform: translateY(56px);  opacity: 0; }
+}
+@keyframes pdfPageEnterFromBottom {
+  from { transform: translateY(56px);  opacity: 0; }
+  to   { transform: translateY(0);    opacity: 1; }
+}
+@keyframes pdfPageEnterFromTop {
+  from { transform: translateY(-56px); opacity: 0; }
+  to   { transform: translateY(0);    opacity: 1; }
+}
+.pdf-page-exit-up           { animation: pdfPageExitUp          220ms ease forwards; }
+.pdf-page-exit-down         { animation: pdfPageExitDown        220ms ease forwards; }
+.pdf-page-enter-from-bottom { animation: pdfPageEnterFromBottom 300ms ease forwards; }
+.pdf-page-enter-from-top    { animation: pdfPageEnterFromTop    300ms ease forwards; }
+
 .pdf-text-layer ::selection {
   background: rgba(0, 120, 255, 0.3);
   color: transparent;

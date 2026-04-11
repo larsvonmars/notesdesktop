@@ -298,6 +298,10 @@ const PdfAnnotationEditor = forwardRef<PdfAnnotationEditorHandle, PdfAnnotationE
     useEffect(() => { zoomRef.current = zoom }, [zoom])
     useEffect(() => { totalPagesRef.current = totalPages }, [totalPages])
 
+    // Page slide animation
+    const [pageAnim, setPageAnim] = useState<'exit-up' | 'exit-down' | 'enter-from-bottom' | 'enter-from-top' | null>(null)
+    const pageAnimLockRef = useRef(false)
+
     // Toolbar tab
     const [toolbarTab, setToolbarTab] = useState<'annotate' | 'view' | 'pages'>('annotate')
 
@@ -1608,7 +1612,7 @@ const PdfAnnotationEditor = forwardRef<PdfAnnotationEditorHandle, PdfAnnotationE
       if (!el) return
 
       let scrollAccum = 0
-      const SCROLL_THRESHOLD = 60 // px accumulated scroll to trigger page turn
+      const SCROLL_THRESHOLD = 150 // px accumulated over-scroll needed to trigger page turn
 
       function onWheel(e: WheelEvent) {
         if (e.ctrlKey || e.metaKey) {
@@ -1636,25 +1640,29 @@ const PdfAnnotationEditor = forwardRef<PdfAnnotationEditorHandle, PdfAnnotationE
         if ((scrollingDown && atBottom) || (scrollingUp && atTop)) {
           e.preventDefault()
           scrollAccum += e.deltaY
-          if (Math.abs(scrollAccum) >= SCROLL_THRESHOLD) {
+          if (Math.abs(scrollAccum) >= SCROLL_THRESHOLD && !pageAnimLockRef.current) {
             const pg = currentPageRef.current
             const total = totalPagesRef.current
-            if (scrollingDown && pg < total - 1) {
-              setCurrentPage(pg + 1)
-              queueMicrotask(() => {
-                // Scroll to top of new page
-                el.scrollTop = 0
-                emitChange(pagesRef.current, pg + 1, zoomRef.current)
-              })
-            } else if (scrollingUp && pg > 0) {
-              setCurrentPage(pg - 1)
-              queueMicrotask(() => {
-                // Scroll to bottom of previous page
-                el.scrollTop = el.scrollHeight
-                emitChange(pagesRef.current, pg - 1, zoomRef.current)
-              })
+            const canGo = scrollingDown ? pg < total - 1 : pg > 0
+            if (canGo) {
+              pageAnimLockRef.current = true
+              scrollAccum = 0
+              // Start exit animation then switch page
+              setPageAnim(scrollingDown ? 'exit-up' : 'exit-down')
+              setTimeout(() => {
+                const newPg = scrollingDown ? pg + 1 : pg - 1
+                setCurrentPage(newPg)
+                el.scrollTop = scrollingDown ? 0 : 99999
+                emitChange(pagesRef.current, newPg, zoomRef.current)
+                setPageAnim(scrollingDown ? 'enter-from-bottom' : 'enter-from-top')
+                setTimeout(() => {
+                  setPageAnim(null)
+                  pageAnimLockRef.current = false
+                }, 300)
+              }, 220)
+            } else {
+              scrollAccum = 0
             }
-            scrollAccum = 0
           }
         } else {
           // Normal scroll within page — reset accumulator
@@ -2585,7 +2593,13 @@ const PdfAnnotationEditor = forwardRef<PdfAnnotationEditorHandle, PdfAnnotationE
 
             {/* Outer div reserves the correct bounding-box size in the scroll area */}
             <div
-              className="relative mx-auto my-4"
+              className={`relative mx-auto my-4${
+                pageAnim === 'exit-up'           ? ' pdf-page-exit-up'
+                : pageAnim === 'exit-down'       ? ' pdf-page-exit-down'
+                : pageAnim === 'enter-from-bottom' ? ' pdf-page-enter-from-bottom'
+                : pageAnim === 'enter-from-top'  ? ' pdf-page-enter-from-top'
+                : ''
+              }`}
               style={{
                 width:  (viewRotation === 90 || viewRotation === 270) ? canvasHeight : canvasWidth,
                 height: (viewRotation === 90 || viewRotation === 270) ? canvasWidth  : canvasHeight,
