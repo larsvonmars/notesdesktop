@@ -656,17 +656,7 @@ function renderNoteBody(share: PublishedNoteShare) {
 
       return (
         <article
-          className="share-note-content prose prose-slate dark:prose-invert max-w-none
-            prose-headings:font-semibold prose-headings:tracking-tight prose-headings:text-slate-900 dark:prose-headings:text-slate-100
-            prose-p:text-slate-700 dark:prose-p:text-slate-300 prose-p:leading-relaxed
-            prose-a:text-teal-700 dark:prose-a:text-teal-400 prose-a:no-underline hover:prose-a:underline
-            prose-blockquote:border-l-teal-400 dark:prose-blockquote:border-l-teal-600 prose-blockquote:text-slate-600 dark:prose-blockquote:text-slate-400 prose-blockquote:not-italic
-            prose-pre:bg-slate-950 prose-pre:text-slate-100 prose-pre:rounded-2xl
-            prose-code:rounded prose-code:bg-slate-100 dark:prose-code:bg-slate-700 prose-code:text-teal-800 dark:prose-code:text-teal-300 prose-code:before:content-none prose-code:after:content-none
-            prose-img:rounded-2xl prose-img:shadow-md
-            prose-table:rounded-xl prose-th:bg-slate-100 dark:prose-th:bg-slate-700 prose-th:text-slate-700 dark:prose-th:text-slate-200
-            prose-hr:border-slate-200 dark:prose-hr:border-slate-600
-            prose-strong:text-slate-900 dark:prose-strong:text-slate-100 prose-li:text-slate-700 dark:prose-li:text-slate-300"
+          className="share-note-content max-w-none"
           dangerouslySetInnerHTML={{ __html: processed }}
         />
       )
@@ -722,6 +712,7 @@ export default function SharedNoteView({ share }: SharedNoteViewProps) {
   const TypeIcon = getTypeIcon(share.note_type)
   const publishedLabel = useMemo(() => formatPublishedDate(share.published_at), [share.published_at])
   const { resolvedTheme, toggleTheme } = useTheme()
+  const [readingProgress, setReadingProgress] = useState(0)
 
   const { processedHtml, tocHeadings } = useMemo(() => {
     if (share.note_type !== 'rich-text') return { processedHtml: '', tocHeadings: [] as TocHeading[] }
@@ -734,11 +725,53 @@ export default function SharedNoteView({ share }: SharedNoteViewProps) {
     return { processedHtml: html, tocHeadings: extractHeadings(html) }
   }, [share.note_type, share.content])
 
+  // Reading progress bar
+  useEffect(() => {
+    if (share.note_type !== 'rich-text') return
+
+    const handleScroll = () => {
+      const scrollTop = window.scrollY
+      const docHeight = document.documentElement.scrollHeight - window.innerHeight
+      if (docHeight <= 0) {
+        setReadingProgress(100)
+        return
+      }
+      setReadingProgress(Math.min(100, Math.round((scrollTop / docHeight) * 100)))
+    }
+
+    window.addEventListener('scroll', handleScroll, { passive: true })
+    handleScroll()
+    return () => window.removeEventListener('scroll', handleScroll)
+  }, [share.note_type])
+
+  // Compute estimated reading time for rich-text
+  const readingTime = useMemo(() => {
+    if (share.note_type !== 'rich-text') return null
+    const text = share.content.replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').trim()
+    const wordCount = text.split(/\s+/).filter(Boolean).length
+    const minutes = Math.max(1, Math.round(wordCount / 200))
+    return { minutes, wordCount }
+  }, [share.note_type, share.content])
+
   return (
-    <main className="min-h-screen bg-[radial-gradient(circle_at_top,#ccfbf1_0%,#f8fafc_40%,#e2e8f0_100%)] dark:bg-[radial-gradient(circle_at_top,#0f2922_0%,#0c0a09_40%,#1c1917_100%)] px-4 py-8 text-slate-950 dark:text-slate-50 sm:px-6 lg:px-8 transition-colors duration-300">
+    <main className="min-h-screen bg-[radial-gradient(circle_at_top,#ccfbf1_0%,#f8fafc_40%,#e2e8f0_100%)] dark:bg-[radial-gradient(circle_at_top,#0f2922_0%,#0c0a09_40%,#1c1917_100%)] px-4 py-8 text-slate-950 dark:text-slate-50 sm:px-6 lg:px-8 transition-colors duration-300 scroll-smooth">
+      {/* Reading progress bar */}
+      {share.note_type === 'rich-text' && (
+        <div className="fixed top-0 left-0 right-0 z-50 h-[3px]">
+          <div
+            className="h-full bg-gradient-to-r from-green-500 via-emerald-400 to-sky-400 transition-[width] duration-150 ease-out shadow-[0_0_12px_rgba(34,197,94,0.5)]"
+            style={{ width: `${readingProgress}%` }}
+          />
+        </div>
+      )}
+
       <div className="mx-auto max-w-5xl">
-        {/* Theme toggle - floating top right */}
-        <div className="flex justify-end mb-4">
+        {/* Top bar: theme toggle + back to top */}
+        <div className="flex items-center justify-between mb-6">
+          <div className="flex items-center gap-2 text-xs text-slate-400 dark:text-slate-500">
+            <Globe className="h-3.5 w-3.5" />
+            <span className="font-medium tracking-wide uppercase">MindViz Published Note</span>
+          </div>
           <button
             type="button"
             onClick={toggleTheme}
@@ -748,35 +781,48 @@ export default function SharedNoteView({ share }: SharedNoteViewProps) {
             {resolvedTheme === 'dark' ? (
               <>
                 <Sun className="h-4 w-4 transition-transform group-hover:rotate-45" />
-                <span>Light mode</span>
+                <span className="hidden sm:inline">Light mode</span>
               </>
             ) : (
               <>
                 <Moon className="h-4 w-4 transition-transform group-hover:-rotate-12" />
-                <span>Dark mode</span>
+                <span className="hidden sm:inline">Dark mode</span>
               </>
             )}
           </button>
         </div>
 
         <header className="mb-8 overflow-hidden rounded-[32px] border border-white/70 dark:border-slate-700/70 bg-white dark:bg-slate-800 shadow-[0_30px_120px_-60px_rgba(15,23,42,0.5)] dark:shadow-[0_30px_120px_-60px_rgba(0,0,0,0.7)] transition-colors duration-300">
+          {/* Decorative top gradient bar matching editor neon theme */}
+          <div className="h-1 bg-gradient-to-r from-green-500 via-emerald-400 to-sky-400" />
+
           <div className="grid gap-6 px-6 py-8 sm:px-8 lg:grid-cols-[1.4fr_0.8fr] lg:items-end">
             <div className="space-y-4">
-              <div className="inline-flex items-center gap-2 rounded-full border border-teal-200 dark:border-teal-800 bg-teal-50 dark:bg-teal-900/30 px-3 py-1 text-xs font-semibold uppercase tracking-[0.18em] text-teal-800 dark:text-teal-300">
-                <Globe className="h-3.5 w-3.5" />
-                <span>Published Note</span>
+              <div className="flex flex-wrap items-center gap-2">
+                <div className="inline-flex items-center gap-2 rounded-full border border-teal-200 dark:border-teal-800 bg-teal-50 dark:bg-teal-900/30 px-3 py-1 text-xs font-semibold uppercase tracking-[0.18em] text-teal-800 dark:text-teal-300">
+                  <Globe className="h-3.5 w-3.5" />
+                  <span>Published</span>
+                </div>
+                {readingTime && (
+                  <div className="inline-flex items-center gap-1.5 rounded-full border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-700/50 px-3 py-1 text-xs font-medium text-slate-500 dark:text-slate-400">
+                    <BookOpen className="h-3 w-3" />
+                    <span>{readingTime.minutes} min read</span>
+                    <span className="text-slate-300 dark:text-slate-600">·</span>
+                    <span>{readingTime.wordCount.toLocaleString()} words</span>
+                  </div>
+                )}
               </div>
               <div>
-                <h1 className="text-3xl font-semibold tracking-tight text-slate-950 dark:text-white sm:text-4xl">{share.title || 'Untitled note'}</h1>
-                <p className="mt-3 max-w-2xl text-sm leading-6 text-slate-600 dark:text-slate-400 sm:text-base">
-                  This is a read-only published view of a MindViz note. Editing stays private in the app.
+                <h1 className="text-3xl font-bold tracking-tight text-slate-950 dark:text-white sm:text-4xl leading-tight">{share.title || 'Untitled note'}</h1>
+                <p className="mt-3 max-w-2xl text-sm leading-6 text-slate-500 dark:text-slate-400 sm:text-base">
+                  Read-only published view. Editing stays private in the app.
                 </p>
               </div>
             </div>
 
             <div className="grid gap-3 rounded-[28px] border border-slate-200 dark:border-slate-600 bg-slate-950/95 dark:bg-slate-900 p-5 text-slate-50 shadow-inner">
               <div className="flex items-center gap-3">
-                <div className={`flex h-11 w-11 items-center justify-center rounded-2xl ${typePresentation.iconClassName.replace('text-', 'bg-').replace('500', '100')} bg-white text-white`}>
+                <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-gradient-to-br from-green-500 to-emerald-600 text-white shadow-md shadow-green-500/20">
                   <TypeIcon className="h-5 w-5" />
                 </div>
                 <div>
@@ -785,7 +831,7 @@ export default function SharedNoteView({ share }: SharedNoteViewProps) {
                 </div>
               </div>
               <div className="flex items-center gap-3">
-                <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-white text-white">
+                <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-gradient-to-br from-sky-500 to-blue-600 text-white shadow-md shadow-sky-500/20">
                   <Calendar className="h-5 w-5" />
                 </div>
                 <div>
@@ -799,26 +845,25 @@ export default function SharedNoteView({ share }: SharedNoteViewProps) {
 
         {share.note_type === 'rich-text' && <FloatingTOC headings={tocHeadings} />}
 
-        <section className="overflow-hidden rounded-[32px] border border-white/70 dark:border-slate-700/70 bg-white dark:bg-slate-800 px-6 py-8 shadow-[0_30px_100px_-60px_rgba(15,23,42,0.45)] dark:shadow-[0_30px_100px_-60px_rgba(0,0,0,0.6)] transition-colors duration-300 sm:px-8">
+        <section className="overflow-hidden rounded-[32px] border border-white/70 dark:border-slate-700/70 bg-white dark:bg-slate-800 px-6 py-8 shadow-[0_30px_100px_-60px_rgba(15,23,42,0.45)] dark:shadow-[0_30px_100px_-60px_rgba(0,0,0,0.6)] transition-colors duration-300 sm:px-10 lg:px-12">
           {share.note_type === 'rich-text' ? (
             <article
-              className="share-note-content prose prose-slate dark:prose-invert max-w-none
-                prose-headings:font-semibold prose-headings:tracking-tight prose-headings:text-slate-900 dark:prose-headings:text-slate-100
-                prose-p:text-slate-700 dark:prose-p:text-slate-300 prose-p:leading-relaxed
-                prose-a:text-teal-700 dark:prose-a:text-teal-400 prose-a:no-underline hover:prose-a:underline
-                prose-blockquote:border-l-teal-400 dark:prose-blockquote:border-l-teal-600 prose-blockquote:text-slate-600 dark:prose-blockquote:text-slate-400 prose-blockquote:not-italic
-                prose-pre:bg-slate-950 prose-pre:text-slate-100 prose-pre:rounded-2xl
-                prose-code:rounded prose-code:bg-slate-100 dark:prose-code:bg-slate-700 prose-code:text-teal-800 dark:prose-code:text-teal-300 prose-code:before:content-none prose-code:after:content-none
-                prose-img:rounded-2xl prose-img:shadow-md
-                prose-table:rounded-xl prose-th:bg-slate-100 dark:prose-th:bg-slate-700 prose-th:text-slate-700 dark:prose-th:text-slate-200
-                prose-hr:border-slate-200 dark:prose-hr:border-slate-600
-                prose-strong:text-slate-900 dark:prose-strong:text-slate-100 prose-li:text-slate-700 dark:prose-li:text-slate-300"
+              className="share-note-content max-w-none"
               dangerouslySetInnerHTML={{ __html: processedHtml }}
             />
           ) : (
             renderNoteBody(share)
           )}
         </section>
+
+        {/* Footer */}
+        <footer className="mt-8 mb-4 flex flex-col items-center gap-3 text-center">
+          <div className="h-px w-24 bg-gradient-to-r from-transparent via-slate-300 dark:via-slate-600 to-transparent" />
+          <div className="flex items-center gap-2 text-xs text-slate-400 dark:text-slate-500">
+            <span>Published with</span>
+            <span className="font-semibold text-slate-600 dark:text-slate-300">MindViz Notes</span>
+          </div>
+        </footer>
       </div>
     </main>
   )

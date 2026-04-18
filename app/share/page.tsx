@@ -2,9 +2,11 @@
 
 import { Suspense, useEffect, useState } from 'react'
 import { useSearchParams } from 'next/navigation'
-import { Loader2, SearchX } from 'lucide-react'
+import { AlertTriangle, Loader2, SearchX } from 'lucide-react'
 import SharedNoteView from '@/components/SharedNoteView'
 import { getPublishedNoteShareByToken, type PublishedNoteShare } from '@/lib/note-shares'
+
+const BG_CLASS = "min-h-screen bg-[radial-gradient(circle_at_top,#ccfbf1_0%,#f8fafc_40%,#e2e8f0_100%)] dark:bg-[radial-gradient(circle_at_top,#0f2922_0%,#0c0a09_40%,#1c1917_100%)] transition-colors duration-300"
 
 function SharePageContent() {
   const searchParams = useSearchParams()
@@ -12,6 +14,7 @@ function SharePageContent() {
   const [share, setShare] = useState<PublishedNoteShare | null>(null)
   const [loading, setLoading] = useState(true)
   const [errorMessage, setErrorMessage] = useState<string | null>(null)
+  const [errorType, setErrorType] = useState<'missing-token' | 'not-found' | 'error'>('not-found')
 
   useEffect(() => {
     let cancelled = false
@@ -19,6 +22,7 @@ function SharePageContent() {
     const loadShare = async () => {
       if (!token) {
         setShare(null)
+        setErrorType('missing-token')
         setErrorMessage('A share token is required to open this page.')
         setLoading(false)
         return
@@ -33,6 +37,7 @@ function SharePageContent() {
 
         if (!publishedShare) {
           setShare(null)
+          setErrorType('not-found')
           setErrorMessage('This shared note could not be found or is no longer published.')
           return
         }
@@ -42,7 +47,8 @@ function SharePageContent() {
         console.error('Failed to load shared note:', error)
         if (!cancelled) {
           setShare(null)
-          setErrorMessage('The shared note could not be loaded right now.')
+          setErrorType('error')
+          setErrorMessage('The shared note could not be loaded right now. Please try again later.')
         }
       } finally {
         if (!cancelled) {
@@ -60,24 +66,42 @@ function SharePageContent() {
 
   if (loading) {
     return (
-      <main className="flex min-h-screen items-center justify-center bg-[radial-gradient(circle_at_top,#ccfbf1_0%,#f8fafc_40%,#e2e8f0_100%)] dark:bg-[radial-gradient(circle_at_top,#0f2922_0%,#0c0a09_40%,#1c1917_100%)] px-6 py-10 transition-colors duration-300">
-        <div className="flex items-center gap-3 rounded-full border border-white/70 dark:border-slate-700 bg-white/80 dark:bg-slate-800/80 px-5 py-3 text-sm font-medium text-slate-700 dark:text-slate-200 shadow-lg backdrop-blur">
-          <Loader2 className="h-4 w-4 animate-spin" />
-          <span>Loading shared note...</span>
+      <main className={`flex items-center justify-center px-6 py-10 ${BG_CLASS}`}>
+        <div className="flex flex-col items-center gap-4">
+          <div className="flex items-center gap-3 rounded-full border border-white/70 dark:border-slate-700 bg-white/80 dark:bg-slate-800/80 px-6 py-3 text-sm font-medium text-slate-700 dark:text-slate-200 shadow-lg backdrop-blur">
+            <Loader2 className="h-4 w-4 animate-spin text-green-500" />
+            <span>Loading shared note...</span>
+          </div>
+          <div className="h-1 w-32 overflow-hidden rounded-full bg-slate-200 dark:bg-slate-700">
+            <div className="h-full w-full animate-pulse rounded-full bg-gradient-to-r from-green-500 via-emerald-400 to-sky-400" />
+          </div>
         </div>
       </main>
     )
   }
 
   if (!share) {
+    const ErrorIcon = errorType === 'error' ? AlertTriangle : SearchX
+    const iconBg = errorType === 'error'
+      ? 'bg-amber-100 dark:bg-amber-900/30 text-amber-600 dark:text-amber-400'
+      : 'bg-slate-100 dark:bg-slate-700 text-slate-500 dark:text-slate-400'
+
     return (
-      <main className="flex min-h-screen items-center justify-center bg-[radial-gradient(circle_at_top,#ccfbf1_0%,#f8fafc_40%,#e2e8f0_100%)] dark:bg-[radial-gradient(circle_at_top,#0f2922_0%,#0c0a09_40%,#1c1917_100%)] px-6 py-10 transition-colors duration-300">
+      <main className={`flex items-center justify-center px-6 py-10 ${BG_CLASS}`}>
         <div className="max-w-md rounded-[28px] border border-white/70 dark:border-slate-700 bg-white/85 dark:bg-slate-800/85 p-8 text-center shadow-[0_30px_100px_-60px_rgba(15,23,42,0.45)] dark:shadow-[0_30px_100px_-60px_rgba(0,0,0,0.6)] backdrop-blur">
-          <div className="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-2xl bg-slate-100 dark:bg-slate-700 text-slate-500 dark:text-slate-400">
-            <SearchX className="h-6 w-6" />
+          {/* Decorative top gradient bar */}
+          <div className="mx-auto mb-6 h-1 w-16 rounded-full bg-gradient-to-r from-green-500 via-emerald-400 to-sky-400" />
+          <div className={`mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-2xl ${iconBg}`}>
+            <ErrorIcon className="h-6 w-6" />
           </div>
-          <h1 className="text-2xl font-semibold text-slate-950 dark:text-white">Shared note unavailable</h1>
-          <p className="mt-3 text-sm leading-6 text-slate-600 dark:text-slate-400">{errorMessage || 'This share link is invalid or no longer available.'}</p>
+          <h1 className="text-2xl font-bold text-slate-950 dark:text-white">
+            {errorType === 'missing-token' ? 'Invalid share link' : errorType === 'error' ? 'Something went wrong' : 'Note unavailable'}
+          </h1>
+          <p className="mt-3 text-sm leading-6 text-slate-500 dark:text-slate-400">{errorMessage || 'This share link is invalid or no longer available.'}</p>
+          <div className="mt-6 text-xs text-slate-400 dark:text-slate-500">
+            <span>Powered by </span>
+            <span className="font-semibold text-slate-600 dark:text-slate-300">MindViz Notes</span>
+          </div>
         </div>
       </main>
     )
@@ -88,9 +112,9 @@ function SharePageContent() {
 
 function SharePageFallback() {
   return (
-    <main className="flex min-h-screen items-center justify-center bg-[radial-gradient(circle_at_top,#ccfbf1_0%,#f8fafc_40%,#e2e8f0_100%)] dark:bg-[radial-gradient(circle_at_top,#0f2922_0%,#0c0a09_40%,#1c1917_100%)] px-6 py-10 transition-colors duration-300">
+    <main className={`flex items-center justify-center px-6 py-10 ${BG_CLASS}`}>
       <div className="flex items-center gap-3 rounded-full border border-white/70 dark:border-slate-700 bg-white/80 dark:bg-slate-800/80 px-5 py-3 text-sm font-medium text-slate-700 dark:text-slate-200 shadow-lg backdrop-blur">
-        <Loader2 className="h-4 w-4 animate-spin" />
+        <Loader2 className="h-4 w-4 animate-spin text-green-500" />
         <span>Loading shared note...</span>
       </div>
     </main>
