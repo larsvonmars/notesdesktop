@@ -219,20 +219,21 @@ export function cleanPastedHtml(html: string): string {
 }
 
 /**
- * Convert HTML to Markdown (basic implementation for export)
+ * Convert HTML to Markdown
  */
 export function htmlToMarkdown(html: string): string {
-  // Create a temporary div to parse HTML
   const div = document.createElement('div')
   div.innerHTML = html
   
-  return processNodeToMarkdown(div)
+  const raw = processNodeToMarkdown(div, 0)
+  // Collapse 3+ consecutive newlines into 2
+  return raw.replace(/\n{3,}/g, '\n\n').trim() + '\n'
 }
 
 /**
  * Process a DOM node to Markdown
  */
-function processNodeToMarkdown(node: Node): string {
+function processNodeToMarkdown(node: Node, depth: number): string {
   if (node.nodeType === Node.TEXT_NODE) {
     return node.textContent || ''
   }
@@ -243,59 +244,84 @@ function processNodeToMarkdown(node: Node): string {
   
   const element = node as HTMLElement
   const tagName = element.tagName.toLowerCase()
-  const children = Array.from(element.childNodes).map(child => processNodeToMarkdown(child)).join('')
+  const children = Array.from(element.childNodes).map(child => processNodeToMarkdown(child, depth)).join('')
   
   switch (tagName) {
     case 'h1':
-      return `# ${children}\n\n`
+      return `# ${children.trim()}\n\n`
     case 'h2':
-      return `## ${children}\n\n`
+      return `## ${children.trim()}\n\n`
     case 'h3':
-      return `### ${children}\n\n`
+      return `### ${children.trim()}\n\n`
     case 'h4':
-      return `#### ${children}\n\n`
+      return `#### ${children.trim()}\n\n`
     case 'h5':
-      return `##### ${children}\n\n`
+      return `##### ${children.trim()}\n\n`
     case 'h6':
-      return `###### ${children}\n\n`
+      return `###### ${children.trim()}\n\n`
     case 'p':
       return `${children}\n\n`
     case 'strong':
     case 'b':
-      return `**${children}**`
+      return children.trim() ? `**${children}**` : ''
     case 'em':
     case 'i':
-      return `*${children}*`
+      return children.trim() ? `*${children}*` : ''
     case 'code':
-      // Check if parent is pre for code block
       if (element.parentElement?.tagName.toLowerCase() === 'pre') {
         return children
       }
-      return `\`${children}\``
-    case 'pre':
-      return `\`\`\`\n${children}\n\`\`\`\n\n`
-    case 'blockquote':
-      return children.split('\n').map(line => `> ${line}`).join('\n') + '\n\n'
+      return children.trim() ? `\`${children}\`` : ''
+    case 'pre': {
+      const codeEl = element.querySelector('code')
+      const lang = codeEl?.className?.match(/language-(\w+)/)?.[1] || ''
+      const codeContent = codeEl ? (codeEl.textContent || '') : children
+      return `\`\`\`${lang}\n${codeContent}\n\`\`\`\n\n`
+    }
+    case 'blockquote': {
+      const inner = children.trim().split('\n')
+      return inner.map(line => `> ${line}`).join('\n') + '\n\n'
+    }
     case 'ul':
-      return processListToMarkdown(element, false) + '\n'
+      return processListToMarkdown(element, false, depth) + '\n'
     case 'ol':
-      return processListToMarkdown(element, true) + '\n'
+      return processListToMarkdown(element, true, depth) + '\n'
     case 'li':
-      // Handled by processListToMarkdown
       return children
-    case 'a':
+    case 'a': {
       const href = element.getAttribute('href') || ''
-      return `[${children}](${href})`
+      return href ? `[${children}](${href})` : children
+    }
+    case 'img': {
+      const src = element.getAttribute('src') || ''
+      const alt = element.getAttribute('alt') || ''
+      return src ? `![${alt}](${src})` : ''
+    }
     case 'hr':
       return '---\n\n'
     case 'u':
-      return children // Markdown doesn't have underline, keep as plain text
+      return children
     case 's':
-      return `~~${children}~~`
+    case 'del':
+    case 'strike':
+      return children.trim() ? `~~${children}~~` : ''
     case 'br':
       return '\n'
+    case 'sup':
+      return `^${children}^`
+    case 'sub':
+      return `~${children}~`
+    case 'mark':
+      return `==${children}==`
+    case 'table':
+      return processTableToMarkdown(element) + '\n'
     case 'div':
     case 'span':
+    case 'section':
+    case 'article':
+    case 'main':
+    case 'header':
+    case 'footer':
       return children
     default:
       return children
@@ -303,31 +329,78 @@ function processNodeToMarkdown(node: Node): string {
 }
 
 /**
- * Process a list element to Markdown
+ * Process a table element to Markdown
  */
-function processListToMarkdown(listElement: HTMLElement, ordered: boolean): string {
+function processTableToMarkdown(table: HTMLElement): string {
+  const rows = Array.from(table.querySelectorAll('tr'))
+  if (rows.length === 0) return ''
+
+  const result: string[][] = []
+  for (const row of rows) {
+    const cells = Array.from(row.querySelectorAll('th, td'))
+    result.push(cells.map(cell => (cell.textContent || '').trim().replace(/\|/g, '\\|')))
+  }
+
+  // Normalize column count
+  const colCount = Math.max(...result.map(r => r.length))
+  for (const row of result) {
+    while (row.length < colCount) row.push('')
+  }
+
+  if (result.length === 0) return ''
+
+  const lines: string[] = []
+  // Header row
+  lines.push('| ' + result[0].join(' | ') + ' |')
+  // Separator
+  lines.push('| ' + result[0].map(() => '---').join(' | ') + ' |')
+  // Body rows
+  for (let i = 1; i < result.length; i++) {
+    lines.push('| ' + result[i].join(' | ') + ' |')
+  }
+
+  return lines.join('\n') + '\n'
+}
+
+/**
+ * Process a list element to Markdown with nesting support
+ */
+function processListToMarkdown(listElement: HTMLElement, ordered: boolean, depth: number): string {
   const items = Array.from(listElement.children).filter(child => child.tagName.toLowerCase() === 'li')
+  const indent = '  '.repeat(depth)
   
   return items.map((item, index) => {
     const li = item as HTMLLIElement
-    const checkbox = li.querySelector('input[type="checkbox"]') as HTMLInputElement | null
+    const checkbox = li.querySelector(':scope > input[type="checkbox"]') as HTMLInputElement | null
     
     let prefix = ordered ? `${index + 1}. ` : '- '
     
-    // Handle checkboxes
     if (checkbox) {
       const checked = checkbox.checked || checkbox.getAttribute('data-checked') === 'true'
       prefix = `- [${checked ? 'x' : ' '}] `
     }
     
-    // Get text content excluding the checkbox
-    let content = ''
+    // Separate inline content from nested lists
+    let inlineContent = ''
+    let nestedContent = ''
+    
     Array.from(li.childNodes).forEach(node => {
-      if (!(node instanceof HTMLInputElement && node.type === 'checkbox')) {
-        content += processNodeToMarkdown(node)
+      if (node instanceof HTMLInputElement && node.type === 'checkbox') return
+      
+      const el = node as HTMLElement
+      if (el.tagName?.toLowerCase() === 'ul') {
+        nestedContent += processListToMarkdown(el, false, depth + 1)
+      } else if (el.tagName?.toLowerCase() === 'ol') {
+        nestedContent += processListToMarkdown(el, true, depth + 1)
+      } else {
+        inlineContent += processNodeToMarkdown(node, depth)
       }
     })
     
-    return prefix + content.trim()
+    let line = indent + prefix + inlineContent.trim()
+    if (nestedContent) {
+      line += '\n' + nestedContent
+    }
+    return line
   }).join('\n')
 }

@@ -2598,6 +2598,7 @@ export default function NoteEditor({
 
   const handleExportDocx = useCallback(async () => {
     const fileBase = sanitizePathSegment(title || note?.title || '', 'untitled-note')
+    const docTitle = title || note?.title || 'Untitled note'
 
     if (noteType !== 'rich-text') {
       toast.push({ title: 'DOCX export only supported for Rich Text notes' })
@@ -2605,26 +2606,85 @@ export default function NoteEditor({
     }
 
     try {
-      const bodyHtml = editorRef.current?.getHTML() || content
+      toast.push({ title: 'Generating DOCX…' })
+
+      let bodyHtml = editorRef.current?.getHTML() || content
+
+      // Convert checklist checkboxes to visual representation for Word
+      bodyHtml = bodyHtml
+        .replace(/<input[^>]*type="checkbox"[^>]*checked[^>]*>/gi, '☑ ')
+        .replace(/<input[^>]*type="checkbox"[^>]*>/gi, '☐ ')
+
+      // Wrap images in paragraph tags if they're bare
+      bodyHtml = bodyHtml.replace(
+        /<img([^>]*)>/gi,
+        '<p><img$1 style="max-width:100%;height:auto;"></p>'
+      )
+
+      const now = new Date()
+      const dateStr = now.toLocaleDateString(undefined, { year: 'numeric', month: 'long', day: 'numeric' })
+
       const htmlContent = `<!DOCTYPE html>
 <html>
 <head>
   <meta charset="utf-8">
   <style>
-    body, p, h1, h2, h3, h4, h5, h6, ul, ol, li, table, th, td, blockquote, div { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; }
-    body { font-size: 11pt; line-height: 1.5; color: #111827; }
-    h1 { font-size: 24pt; font-weight: bold; margin-top: 18pt; margin-bottom: 12pt; }
-    h2 { font-size: 18pt; font-weight: bold; margin-top: 16pt; margin-bottom: 10pt; }
-    h3 { font-size: 14pt; font-weight: bold; margin-top: 14pt; margin-bottom: 8pt; }
-    p { margin-bottom: 10pt; }
-    table { border-collapse: collapse; width: 100%; margin-bottom: 10pt; }
-    th, td { border: 1px solid #e5e7eb; padding: 6pt; }
-    blockquote { margin-left: 0; padding-left: 14pt; border-left: 4px solid #cbd5e1; color: #4b5563; font-style: italic; }
-    pre { font-family: monospace; background-color: #f8fafc; padding: 12pt; display: block; border-radius: 4px; border: 1px solid #e5e7eb; }
-    code { font-family: monospace; background-color: #f8fafc; padding: 2pt 4pt; border-radius: 3px; }
+    @page { margin: 1in; }
+    body, p, h1, h2, h3, h4, h5, h6, ul, ol, li, table, th, td, blockquote, div {
+      font-family: Calibri, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    }
+    body { font-size: 11pt; line-height: 1.6; color: #1a1a1a; }
+    h1 { font-size: 26pt; font-weight: bold; margin-top: 0pt; margin-bottom: 6pt; color: #1a1a1a; }
+    h2 { font-size: 20pt; font-weight: bold; margin-top: 18pt; margin-bottom: 8pt; color: #2c2c2c; }
+    h3 { font-size: 15pt; font-weight: bold; margin-top: 16pt; margin-bottom: 6pt; color: #2c2c2c; }
+    h4 { font-size: 13pt; font-weight: bold; margin-top: 14pt; margin-bottom: 6pt; }
+    h5 { font-size: 12pt; font-weight: bold; margin-top: 12pt; margin-bottom: 4pt; }
+    h6 { font-size: 11pt; font-weight: bold; margin-top: 10pt; margin-bottom: 4pt; color: #555; }
+    p { margin-top: 0; margin-bottom: 8pt; }
+    table { border-collapse: collapse; width: 100%; margin-top: 8pt; margin-bottom: 12pt; }
+    th { border: 1px solid #999; padding: 6pt 8pt; background-color: #f2f2f2; font-weight: bold; text-align: left; }
+    td { border: 1px solid #bbb; padding: 6pt 8pt; vertical-align: top; }
+    tr:nth-child(even) td { background-color: #fafafa; }
+    blockquote {
+      margin: 10pt 0;
+      padding: 8pt 14pt;
+      border-left: 4px solid #94a3b8;
+      color: #4b5563;
+      font-style: italic;
+      background-color: #f8fafc;
+    }
+    pre {
+      font-family: "Courier New", Consolas, monospace;
+      background-color: #f4f4f5;
+      padding: 10pt 12pt;
+      border: 1px solid #d4d4d8;
+      border-radius: 4pt;
+      font-size: 9.5pt;
+      line-height: 1.4;
+      white-space: pre-wrap;
+      word-break: break-word;
+    }
+    code {
+      font-family: "Courier New", Consolas, monospace;
+      background-color: #f4f4f5;
+      padding: 1pt 3pt;
+      border-radius: 2pt;
+      font-size: 9.5pt;
+    }
+    ul, ol { margin-top: 4pt; margin-bottom: 8pt; padding-left: 24pt; }
+    li { margin-bottom: 3pt; }
+    hr { border: none; border-top: 1px solid #d1d5db; margin: 16pt 0; }
+    a { color: #2563eb; text-decoration: underline; }
+    img { max-width: 100%; height: auto; }
+    mark { background-color: #fef08a; padding: 1pt 2pt; }
+    s, del, strike { text-decoration: line-through; color: #888; }
+    .doc-title { font-size: 28pt; font-weight: bold; margin-bottom: 4pt; color: #111; }
+    .doc-meta { font-size: 10pt; color: #666; margin-bottom: 24pt; border-bottom: 1px solid #e5e7eb; padding-bottom: 12pt; }
   </style>
 </head>
 <body>
+  <div class="doc-title">${escapeHtml(docTitle)}</div>
+  <div class="doc-meta">${escapeHtml(dateStr)}</div>
   ${bodyHtml}
 </body>
 </html>`
@@ -2641,6 +2701,139 @@ export default function NoteEditor({
       toast.push({ title: 'Failed to export DOCX' })
     }
   }, [title, note?.title, noteType, content, downloadBlobFile, toast])
+
+  const handleExportHtml = useCallback(() => {
+    const fileBase = sanitizePathSegment(title || note?.title || '', 'untitled-note')
+    const docTitle = escapeHtml(title || note?.title || 'Untitled note')
+    const bodyHtml = noteType === 'rich-text'
+      ? (editorRef.current?.getHTML() || content)
+      : `<pre>${escapeHtml(getStructuredExportContent())}</pre>`
+
+    const htmlContent = `<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>${docTitle}</title>
+  <style>
+    :root { color-scheme: light dark; }
+    * { box-sizing: border-box; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+      max-width: 780px;
+      margin: 0 auto;
+      padding: 40px 24px;
+      line-height: 1.65;
+      color: #1a1a1a;
+      background: #fff;
+    }
+    @media (prefers-color-scheme: dark) {
+      body { background: #1a1a2e; color: #e2e8f0; }
+      pre, code { background: #2d2d44; border-color: #3d3d55; }
+      td, th { border-color: #3d3d55; }
+      th { background: #2d2d44; }
+      blockquote { border-color: #4a5568; color: #94a3b8; background: #2d2d44; }
+      a { color: #60a5fa; }
+      hr { border-color: #3d3d55; }
+    }
+    h1 { font-size: 2em; margin: 0 0 0.2em; font-weight: 700; }
+    h2 { font-size: 1.5em; margin-top: 1.5em; }
+    h3 { font-size: 1.25em; margin-top: 1.3em; }
+    p { margin: 0 0 1em; }
+    a { color: #2563eb; }
+    img { max-width: 100%; height: auto; border-radius: 6px; }
+    table { border-collapse: collapse; width: 100%; margin: 1em 0; }
+    th, td { border: 1px solid #e5e7eb; padding: 8px 12px; text-align: left; }
+    th { background: #f9fafb; font-weight: 600; }
+    pre { background: #f8fafc; border: 1px solid #e5e7eb; border-radius: 6px; padding: 14px; overflow-x: auto; font-size: 0.9em; }
+    code { font-family: "SF Mono", Consolas, "Liberation Mono", Menlo, monospace; background: #f1f5f9; padding: 2px 5px; border-radius: 3px; font-size: 0.9em; }
+    pre code { background: none; padding: 0; }
+    blockquote { margin: 1em 0; padding: 10px 16px; border-left: 4px solid #cbd5e1; color: #4b5563; font-style: italic; background: #f8fafc; border-radius: 0 6px 6px 0; }
+    hr { border: none; border-top: 1px solid #e5e7eb; margin: 2em 0; }
+    ul, ol { padding-left: 1.5em; }
+    li { margin-bottom: 0.3em; }
+    mark { background: #fef08a; padding: 2px 4px; border-radius: 2px; }
+    .meta { font-size: 0.85em; color: #6b7280; margin-bottom: 2em; padding-bottom: 1em; border-bottom: 1px solid #e5e7eb; }
+  </style>
+</head>
+<body>
+  <h1>${docTitle}</h1>
+  <div class="meta">Exported on ${new Date().toLocaleDateString(undefined, { year: 'numeric', month: 'long', day: 'numeric', hour: '2-digit', minute: '2-digit' })}</div>
+  ${bodyHtml}
+</body>
+</html>`
+
+    downloadTextFile(`${fileBase}.html`, htmlContent, 'text/html;charset=utf-8')
+    toast.push({ title: 'HTML exported' })
+  }, [title, note?.title, noteType, content, getStructuredExportContent, downloadTextFile, toast])
+
+  const handleExportPlainText = useCallback(() => {
+    const fileBase = sanitizePathSegment(title || note?.title || '', 'untitled-note')
+    const docTitle = title || note?.title || 'Untitled note'
+
+    let plainText: string
+    if (noteType === 'rich-text') {
+      const html = editorRef.current?.getHTML() || content
+      // Parse HTML and extract text with basic formatting
+      const div = document.createElement('div')
+      div.innerHTML = html
+
+      const extractText = (node: Node): string => {
+        if (node.nodeType === Node.TEXT_NODE) return node.textContent || ''
+        if (node.nodeType !== Node.ELEMENT_NODE) return ''
+
+        const el = node as HTMLElement
+        const tag = el.tagName.toLowerCase()
+        const children = Array.from(el.childNodes).map(extractText).join('')
+
+        switch (tag) {
+          case 'h1': return `${children.trim()}\n${'='.repeat(Math.min(children.trim().length, 60))}\n\n`
+          case 'h2': return `${children.trim()}\n${'-'.repeat(Math.min(children.trim().length, 60))}\n\n`
+          case 'h3': case 'h4': case 'h5': case 'h6':
+            return `${children.trim()}\n\n`
+          case 'p': return `${children}\n\n`
+          case 'br': return '\n'
+          case 'li': {
+            const checkbox = el.querySelector('input[type="checkbox"]') as HTMLInputElement | null
+            if (checkbox) {
+              const checked = checkbox.checked || checkbox.getAttribute('data-checked') === 'true'
+              return `  ${checked ? '[x]' : '[ ]'} ${children.trim()}\n`
+            }
+            return `  • ${children.trim()}\n`
+          }
+          case 'ul': case 'ol': return `${children}\n`
+          case 'blockquote': return children.trim().split('\n').map(l => `  | ${l}`).join('\n') + '\n\n'
+          case 'pre': return `---\n${children.trim()}\n---\n\n`
+          case 'hr': return '\n' + '─'.repeat(40) + '\n\n'
+          case 'table': {
+            const rows = Array.from(el.querySelectorAll('tr'))
+            const data = rows.map(r =>
+              Array.from(r.querySelectorAll('th, td')).map(c => (c.textContent || '').trim())
+            )
+            if (data.length === 0) return ''
+            const colWidths = data[0].map((_, ci) =>
+              Math.max(...data.map(row => (row[ci] || '').length), 3)
+            )
+            return data.map((row, ri) => {
+              const line = row.map((cell, ci) => cell.padEnd(colWidths[ci])).join('  |  ')
+              if (ri === 0) {
+                return line + '\n' + colWidths.map(w => '-'.repeat(w)).join('--+--')
+              }
+              return line
+            }).join('\n') + '\n\n'
+          }
+          default: return children
+        }
+      }
+
+      plainText = `${docTitle}\n${'='.repeat(docTitle.length)}\n\n${extractText(div).replace(/\n{3,}/g, '\n\n').trim()}\n`
+    } else {
+      plainText = `${docTitle}\n\n${getStructuredExportContent()}`
+    }
+
+    downloadTextFile(`${fileBase}.txt`, plainText, 'text/plain;charset=utf-8')
+    toast.push({ title: 'Plain text exported' })
+  }, [title, note?.title, noteType, content, getStructuredExportContent, downloadTextFile, toast])
 
   const handleImportDocx = useCallback(() => {
     const input = document.createElement('input')
@@ -2715,17 +2908,156 @@ export default function NoteEditor({
     input.click()
   }, [content, handleContentChange, toast])
 
-  const handleExportPdf = useCallback(() => {
-    const printableTitle = escapeHtml(title || note?.title || 'Untitled note')
+  const handleExportPdf = useCallback(async () => {
+    const fileBase = sanitizePathSegment(title || note?.title || '', 'untitled-note')
+    const printableTitle = title || note?.title || 'Untitled note'
     const bodyHtml = noteType === 'rich-text'
       ? (editorRef.current?.getHTML() || content)
       : `<pre>${escapeHtml(getStructuredExportContent())}</pre>`
 
-    const htmlContent = `<!doctype html>
+    try {
+      toast.push({ title: 'Generating PDF…' })
+
+      // Create an off-screen container for rendering
+      const container = document.createElement('div')
+      container.style.cssText = 'position:fixed;left:-9999px;top:0;width:794px;padding:40px;background:white;color:#111827;font-family:Inter,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;font-size:14px;line-height:1.6;'
+      container.innerHTML = `<h1 style="margin:0 0 20px;font-size:24px;font-weight:700;">${escapeHtml(printableTitle)}</h1>${bodyHtml}`
+
+      // Force light theme styles for rendering
+      container.querySelectorAll('*').forEach(el => {
+        const htmlEl = el as HTMLElement
+        htmlEl.style.colorScheme = 'light'
+      })
+
+      // Style tables, code blocks, blockquotes for PDF
+      container.querySelectorAll('table').forEach(t => {
+        const table = t as HTMLElement
+        table.style.borderCollapse = 'collapse'
+        table.style.width = '100%'
+        table.style.marginBottom = '12px'
+      })
+      container.querySelectorAll('td, th').forEach(c => {
+        const cell = c as HTMLElement
+        cell.style.border = '1px solid #e5e7eb'
+        cell.style.padding = '6px 8px'
+        cell.style.verticalAlign = 'top'
+      })
+      container.querySelectorAll('pre').forEach(p => {
+        const pre = p as HTMLElement
+        pre.style.background = '#f8fafc'
+        pre.style.border = '1px solid #e5e7eb'
+        pre.style.borderRadius = '6px'
+        pre.style.padding = '12px'
+        pre.style.whiteSpace = 'pre-wrap'
+        pre.style.wordBreak = 'break-word'
+        pre.style.fontFamily = 'monospace'
+        pre.style.fontSize = '12px'
+      })
+      container.querySelectorAll('blockquote').forEach(bq => {
+        const el = bq as HTMLElement
+        el.style.borderLeft = '4px solid #cbd5e1'
+        el.style.paddingLeft = '14px'
+        el.style.margin = '12px 0'
+        el.style.color = '#4b5563'
+        el.style.fontStyle = 'italic'
+      })
+      container.querySelectorAll('img').forEach(img => {
+        const imgEl = img as HTMLImageElement
+        imgEl.style.maxWidth = '100%'
+        imgEl.style.height = 'auto'
+      })
+      container.querySelectorAll('code').forEach(c => {
+        const el = c as HTMLElement
+        if (el.parentElement?.tagName !== 'PRE') {
+          el.style.background = '#f1f5f9'
+          el.style.padding = '2px 5px'
+          el.style.borderRadius = '3px'
+          el.style.fontFamily = 'monospace'
+          el.style.fontSize = '0.9em'
+        }
+      })
+      container.querySelectorAll('a').forEach(a => {
+        const el = a as HTMLElement
+        el.style.color = '#2563eb'
+        el.style.textDecoration = 'underline'
+      })
+
+      document.body.appendChild(container)
+
+      const html2canvas = (await import('html2canvas')).default
+      const { jsPDF } = await import('jspdf')
+
+      const canvas = await html2canvas(container, {
+        scale: 2,
+        useCORS: true,
+        allowTaint: true,
+        backgroundColor: '#ffffff',
+        logging: false,
+      })
+
+      document.body.removeChild(container)
+
+      // A4 dimensions in mm
+      const pageWidth = 210
+      const pageHeight = 297
+      const margin = 15
+      const contentWidth = pageWidth - margin * 2
+      const contentHeight = pageHeight - margin * 2
+
+      const imgWidth = contentWidth
+      const imgHeight = (canvas.height * contentWidth) / canvas.width
+
+      const pdf = new jsPDF('p', 'mm', 'a4')
+
+      // Multi-page support
+      let remainingHeight = imgHeight
+      let srcY = 0
+      let pageIndex = 0
+
+      while (remainingHeight > 0) {
+        if (pageIndex > 0) pdf.addPage()
+
+        const sliceHeight = Math.min(contentHeight, remainingHeight)
+        const srcSliceHeight = (sliceHeight / imgHeight) * canvas.height
+
+        // Create a slice canvas for this page
+        const sliceCanvas = document.createElement('canvas')
+        sliceCanvas.width = canvas.width
+        sliceCanvas.height = srcSliceHeight
+        const ctx = sliceCanvas.getContext('2d')
+        if (ctx) {
+          ctx.fillStyle = '#ffffff'
+          ctx.fillRect(0, 0, sliceCanvas.width, sliceCanvas.height)
+          ctx.drawImage(canvas, 0, srcY, canvas.width, srcSliceHeight, 0, 0, canvas.width, srcSliceHeight)
+        }
+
+        const sliceData = sliceCanvas.toDataURL('image/jpeg', 0.95)
+        pdf.addImage(sliceData, 'JPEG', margin, margin, imgWidth, sliceHeight)
+
+        srcY += srcSliceHeight
+        remainingHeight -= contentHeight
+        pageIndex++
+      }
+
+      // Add page numbers
+      const totalPages = pdf.getNumberOfPages()
+      for (let i = 1; i <= totalPages; i++) {
+        pdf.setPage(i)
+        pdf.setFontSize(9)
+        pdf.setTextColor(150)
+        pdf.text(`${i} / ${totalPages}`, pageWidth / 2, pageHeight - 8, { align: 'center' })
+      }
+
+      pdf.save(`${fileBase}.pdf`)
+      toast.push({ title: 'PDF exported' })
+    } catch (error) {
+      console.error('Export PDF error:', error)
+      // Fallback to print dialog
+      const htmlContent = `<!doctype html>
 <html>
   <head>
     <meta charset="utf-8" />
-    <title>${printableTitle}</title>
+    <title>${escapeHtml(printableTitle)}</title>
     <style>
       :root { color-scheme: light; }
       body { font-family: Inter, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; margin: 32px; color: #111827; }
@@ -2737,31 +3069,27 @@ export default function NoteEditor({
     </style>
   </head>
   <body>
-    <h1>${printableTitle}</h1>
+    <h1>${escapeHtml(printableTitle)}</h1>
     ${bodyHtml}
   </body>
 </html>`
 
-    const blob = new Blob([htmlContent], { type: 'text/html;charset=utf-8' })
-    const blobUrl = URL.createObjectURL(blob)
-
-    const printWindow = window.open(blobUrl, '_blank', 'width=980,height=1200')
-    if (!printWindow) {
-      URL.revokeObjectURL(blobUrl)
-      toast.push({ title: 'Could not open print dialog', description: 'Please allow pop-ups to export PDF.' })
-      return
+      const blob = new Blob([htmlContent], { type: 'text/html;charset=utf-8' })
+      const blobUrl = URL.createObjectURL(blob)
+      const printWindow = window.open(blobUrl, '_blank', 'width=980,height=1200')
+      if (printWindow) {
+        printWindow.onload = () => {
+          URL.revokeObjectURL(blobUrl)
+          printWindow.focus()
+          printWindow.print()
+        }
+        window.setTimeout(() => URL.revokeObjectURL(blobUrl), 60_000)
+        toast.push({ title: 'Print dialog opened (fallback)', description: 'Choose "Save as PDF" to export.' })
+      } else {
+        URL.revokeObjectURL(blobUrl)
+        toast.push({ title: 'Could not export PDF' })
+      }
     }
-
-    printWindow.onload = () => {
-      URL.revokeObjectURL(blobUrl)
-      printWindow.focus()
-      printWindow.print()
-    }
-
-    // Fallback: revoke after 60 s in case onload never fires
-    window.setTimeout(() => URL.revokeObjectURL(blobUrl), 60_000)
-
-    toast.push({ title: 'Print dialog opened', description: 'Choose "Save as PDF" to export.' })
   }, [title, note?.title, noteType, content, getStructuredExportContent, toast])
 
   const handleCopyShareLink = useCallback(async () => {
@@ -3209,6 +3537,8 @@ export default function NoteEditor({
           onExportMarkdown={handleExportMarkdown}
           onExportPdf={handleExportPdf}
           onExportDocx={handleExportDocx}
+          onExportHtml={handleExportHtml}
+          onExportPlainText={handleExportPlainText}
           onImportDocx={handleImportDocx}
           onOpenConnections={() => setShowKnowledgeGraph(true)}
           backlinks={connectionData.backlinks}

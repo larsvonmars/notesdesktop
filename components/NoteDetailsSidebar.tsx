@@ -72,6 +72,8 @@ export interface NoteDetailsSidebarProps {
   onExportMarkdown?: () => void
   onExportPdf?: () => void
   onExportDocx?: () => void
+  onExportHtml?: () => void
+  onExportPlainText?: () => void
   onImportDocx?: () => void
 
   // Connections
@@ -136,6 +138,8 @@ export default function NoteDetailsSidebar({
   onExportMarkdown,
   onExportPdf,
   onExportDocx,
+  onExportHtml,
+  onExportPlainText,
   onImportDocx,
   onOpenConnections,
   backlinks = [],
@@ -164,7 +168,7 @@ export default function NoteDetailsSidebar({
   const [tocExpanded, setTocExpanded] = useState(true)
   const [showFileModal, setShowFileModal] = useState(false)
 
-  const hasFileActions = !!(onExportMarkdown || onExportPdf || onExportDocx || onImportDocx || onPublish || shareUrl || shareHint)
+  const hasFileActions = !!(onExportMarkdown || onExportPdf || onExportDocx || onExportHtml || onExportPlainText || onImportDocx || onPublish || shareUrl || shareHint)
 
   // Focus word goal input when it opens
   useEffect(() => {
@@ -664,24 +668,10 @@ export default function NoteDetailsSidebar({
           {/* Modal Body */}
           <div className="px-5 pb-5 space-y-5 max-h-[70vh] overflow-y-auto">
             {/* Export / Import Section */}
-            {(onExportMarkdown || onExportPdf || onExportDocx || onImportDocx) && (
+            {(onExportMarkdown || onExportPdf || onExportDocx || onExportHtml || onExportPlainText || onImportDocx) && (
               <div>
                 <label className="text-[10px] font-semibold text-muted/60 uppercase tracking-widest mb-2 block">Export &amp; Import</label>
                 <div className="rounded-2xl border border-border/40 bg-surface-hover/20 divide-y divide-border/30 overflow-hidden">
-                  {onExportMarkdown && (
-                    <button
-                      onClick={() => { onExportMarkdown(); setShowFileModal(false) }}
-                      className="flex w-full items-center gap-3 px-4 py-3 text-xs text-foreground/80 transition-all duration-200 hover:bg-surface-hover/50 hover:text-foreground"
-                    >
-                      <div className="flex h-8 w-8 items-center justify-center rounded-xl bg-blue-50 dark:bg-blue-900/30">
-                        <FileText size={14} className="text-blue-600 dark:text-blue-400" />
-                      </div>
-                      <div className="text-left">
-                        <div className="font-medium">Export as Markdown</div>
-                        <div className="text-[10px] text-muted/60 mt-0.5">.md file</div>
-                      </div>
-                    </button>
-                  )}
                   {onExportPdf && (
                     <button
                       onClick={() => { onExportPdf(); setShowFileModal(false) }}
@@ -692,7 +682,7 @@ export default function NoteDetailsSidebar({
                       </div>
                       <div className="text-left">
                         <div className="font-medium">Export as PDF</div>
-                        <div className="text-[10px] text-muted/60 mt-0.5">.pdf document</div>
+                        <div className="text-[10px] text-muted/60 mt-0.5">Styled .pdf with page numbers</div>
                       </div>
                     </button>
                   )}
@@ -706,7 +696,49 @@ export default function NoteDetailsSidebar({
                       </div>
                       <div className="text-left">
                         <div className="font-medium">Export as DOCX</div>
-                        <div className="text-[10px] text-muted/60 mt-0.5">Word document</div>
+                        <div className="text-[10px] text-muted/60 mt-0.5">Word document with title &amp; date</div>
+                      </div>
+                    </button>
+                  )}
+                  {onExportMarkdown && (
+                    <button
+                      onClick={() => { onExportMarkdown(); setShowFileModal(false) }}
+                      className="flex w-full items-center gap-3 px-4 py-3 text-xs text-foreground/80 transition-all duration-200 hover:bg-surface-hover/50 hover:text-foreground"
+                    >
+                      <div className="flex h-8 w-8 items-center justify-center rounded-xl bg-blue-50 dark:bg-blue-900/30">
+                        <FileText size={14} className="text-blue-600 dark:text-blue-400" />
+                      </div>
+                      <div className="text-left">
+                        <div className="font-medium">Export as Markdown</div>
+                        <div className="text-[10px] text-muted/60 mt-0.5">.md with tables &amp; task lists</div>
+                      </div>
+                    </button>
+                  )}
+                  {onExportHtml && (
+                    <button
+                      onClick={() => { onExportHtml(); setShowFileModal(false) }}
+                      className="flex w-full items-center gap-3 px-4 py-3 text-xs text-foreground/80 transition-all duration-200 hover:bg-surface-hover/50 hover:text-foreground"
+                    >
+                      <div className="flex h-8 w-8 items-center justify-center rounded-xl bg-emerald-50 dark:bg-emerald-900/30">
+                        <FileText size={14} className="text-emerald-600 dark:text-emerald-400" />
+                      </div>
+                      <div className="text-left">
+                        <div className="font-medium">Export as HTML</div>
+                        <div className="text-[10px] text-muted/60 mt-0.5">Standalone web page with styles</div>
+                      </div>
+                    </button>
+                  )}
+                  {onExportPlainText && (
+                    <button
+                      onClick={() => { onExportPlainText(); setShowFileModal(false) }}
+                      className="flex w-full items-center gap-3 px-4 py-3 text-xs text-foreground/80 transition-all duration-200 hover:bg-surface-hover/50 hover:text-foreground"
+                    >
+                      <div className="flex h-8 w-8 items-center justify-center rounded-xl bg-gray-50 dark:bg-gray-800/50">
+                        <FileText size={14} className="text-gray-600 dark:text-gray-400" />
+                      </div>
+                      <div className="text-left">
+                        <div className="font-medium">Export as Plain Text</div>
+                        <div className="text-[10px] text-muted/60 mt-0.5">.txt without formatting</div>
                       </div>
                     </button>
                   )}
