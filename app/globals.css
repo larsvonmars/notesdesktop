@@ -1532,3 +1532,102 @@ aside[class*="backdrop-blur"] {
   font-size: 0.875em;
 }
 
+/* ── Share Note Dark Mode ── */
+:is(.dark) .share-note-content a {
+  color: #2dd4bf; /* teal-400 */
+  text-decoration-color: rgba(45, 212, 191, 0.4);
+}
+
+:is(.dark) .share-note-content mark {
+  background-color: rgba(113, 63, 18, 0.4); /* warm yellow-900/40 */
+  color: #fef08a;
+}
+
+:is(.dark) .share-note-content :not(pre) > code {
+  background-color: #334155; /* slate-700 */
+  color: #2dd4bf;             /* teal-400 */
+}
+
+:is(.dark) .share-note-content input[type='checkbox'] {
+  accent-color: #2dd4bf; /* teal-400 */
+}
+
+:is(.dark) .share-note-content [data-checklist='true'] li:has(input[type='checkbox']:checked) {
+  color: #64748b; /* slate-500 */
+}
+
+:is(.dark) .share-note-content table th,
+:is(.dark) .share-note-content table td {
+  border-color: #334155; /* slate-700 */
+}
+
+:is(.dark) .share-note-content table th {
+  background-color: #1e293b; /* slate-800 */
+  color: #e2e8f0;
+}
+
+:is(.dark) .share-note-content table td {
+  color: #cbd5e1; /* slate-300 */
+}
+
+:is(.dark) .share-note-content hr {
+  border-color: #334155;
+}
+
+:is(.dark) .share-note-content blockquote {
+  border-left-color: #0d9488; /* teal-600 */
+  color: #94a3b8;
+}
+
+/* Highlight colors in dark mode – match editor data-highlight attributes */
+:is(.dark) .share-note-content span[data-highlight="yellow"],
+:is(.dark) .share-note-content span[style*="background-color: #fef08a"] {
+  background-color: rgba(113, 63, 18, 0.4) !important;
+  color: #fef08a !important;
+}
+
+:is(.dark) .share-note-content span[data-highlight="green"],
+:is(.dark) .share-note-content span[style*="background-color: #bbf7d0"] {
+  background-color: rgba(20, 83, 45, 0.4) !important;
+  color: #bbf7d0 !important;
+}
+
+:is(.dark) .share-note-content span[data-highlight="blue"],
+:is(.dark) .share-note-content span[style*="background-color: #bfdbfe"] {
+  background-color: rgba(30, 58, 138, 0.4) !important;
+  color: #bfdbfe !important;
+}
+
+:is(.dark) .share-note-content span[data-highlight="pink"],
+:is(.dark) .share-note-content span[style*="background-color: #fbcfe8"] {
+  background-color: rgba(131, 24, 67, 0.4) !important;
+  color: #fbcfe8 !important;
+}
+
+:is(.dark) .share-note-content span[data-highlight="purple"],
+:is(.dark) .share-note-content span[style*="background-color: #e9d5ff"] {
+  background-color: rgba(88, 28, 135, 0.4) !important;
+  color: #e9d5ff !important;
+}
+
+/* Text colors in dark mode – match editor data-color attributes */
+:is(.dark) .share-note-content span[data-color="red"] {
+  color: #f87171 !important;
+}
+
+:is(.dark) .share-note-content span[data-color="blue"] {
+  color: #60a5fa !important;
+}
+
+:is(.dark) .share-note-content span[data-color="green"] {
+  color: #4ade80 !important;
+}
+
+:is(.dark) .share-note-content span[data-color="purple"] {
+  color: #c084fc !important;
+}
+
+:is(.dark) .share-note-content span[data-color="orange"] {
+  color: #fb923c !important;
+}
+
