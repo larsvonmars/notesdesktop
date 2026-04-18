@@ -1,6 +1,6 @@
 'use client'
 
-import {
+import React, {
   forwardRef,
   useCallback,
   useEffect,
@@ -38,14 +38,26 @@ import {
   PanelLeft,
   RotateCw,
   RotateCcw,
+  Minus,
+  Search,
+  X,
+  Layers,
+  TextCursor,
+  ChevronUp,
+  ChevronDown,
+  FolderOpen,
 } from 'lucide-react'
+import FileExplorerModal from '@/components/FileExplorerModal'
 import { uploadFile, getFileSignedUrl, downloadFile } from '@/lib/file-storage'
+import { useToast } from '@/components/ToastProvider'
+
+const PDF_ANNOTATION_MAX_FILE_SIZE_BYTES = 50 * 1024 * 1024
 
 // ============================================================================
 // TYPES
 // ============================================================================
 
-type PdfTool = 'select' | 'pen' | 'highlighter' | 'eraser' | 'text' | 'rectangle' | 'circle' | 'arrow' | 'sticky'
+type PdfTool = 'select' | 'pen' | 'highlighter' | 'eraser' | 'text' | 'rectangle' | 'circle' | 'arrow' | 'line' | 'sticky' | 'textselect'
 type StickyColor = 'yellow' | 'blue' | 'green' | 'pink'
 
 export interface PdfPoint {
@@ -73,17 +85,21 @@ export interface TextAnnotation {
   color: string
   bold?: boolean
   italic?: boolean
+  fontFamily?: string
 }
 
 export interface ShapeAnnotation {
   id: string
-  type: 'rectangle' | 'circle' | 'arrow'
+  type: 'rectangle' | 'circle' | 'arrow' | 'line'
   x1: number
   y1: number
   x2: number
   y2: number
   color: string
   strokeWidth: number
+  filled?: boolean
+  fillOpacity?: number
+  doubleEnded?: boolean
 }
 
 export interface StickyNoteAnnotation {
@@ -129,6 +145,8 @@ interface PdfAnnotationEditorProps {
   onChange: (data: PdfAnnotationData) => void
   disabled?: boolean
   noteId?: string | null
+  /** Called once after a PDF loads with the full extracted plain text (all pages). */
+  onTextExtracted?: (text: string) => void
 }
 
 // ============================================================================
@@ -216,7 +234,9 @@ async function loadPdfJs() {
 // ============================================================================
 
 const PdfAnnotationEditor = forwardRef<PdfAnnotationEditorHandle, PdfAnnotationEditorProps>(
-  function PdfAnnotationEditor({ value, onChange, disabled, noteId }, ref) {
+  function PdfAnnotationEditor({ value, onChange, disabled, noteId, onTextExtracted }, ref) {
+    const toast = useToast()
+
     // PDF doc state
     const [pdfDoc, setPdfDoc] = useState<PDFDocumentProxy | null>(null)
     const [pdfLoading, setPdfLoading] = useState(false)
@@ -237,6 +257,9 @@ const PdfAnnotationEditor = forwardRef<PdfAnnotationEditorHandle, PdfAnnotationE
     const [editingText, setEditingText] = useState<TextAnnotation | null>(null)
     const [selectedId, setSelectedId] = useState<string | null>(null)
     const [dragOffset, setDragOffset] = useState<{ x: number; y: number } | null>(null)
+    const [resizeHandle, setResizeHandle] = useState<string | null>(null)
+    const [shapeFilled, setShapeFilled] = useState(false)
+    const [doubleEndedArrow, setDoubleEndedArrow] = useState(false)
 
     // Undo/redo
     const [history, setHistory] = useState<PdfAnnotationPage[][]>([])
@@ -266,6 +289,41 @@ const PdfAnnotationEditor = forwardRef<PdfAnnotationEditorHandle, PdfAnnotationE
     const [showThumbnails, setShowThumbnails] = useState(false)
     const [deleteConfirmIdx, setDeleteConfirmIdx] = useState<number | null>(null)
     const [thumbnailUrls, setThumbnailUrls] = useState<string[]>([])
+
+    // Refs for stable access inside non-reactive listeners (e.g. wheel handler)
+    const pagesRef = useRef(pages)
+    const currentPageRef = useRef(currentPage)
+    const zoomRef = useRef(zoom)
+    const totalPagesRef = useRef(totalPages)
+    useEffect(() => { pagesRef.current = pages }, [pages])
+    useEffect(() => { currentPageRef.current = currentPage }, [currentPage])
+    useEffect(() => { zoomRef.current = zoom }, [zoom])
+    useEffect(() => { totalPagesRef.current = totalPages }, [totalPages])
+
+    // Page slide animation
+    const [pageAnim, setPageAnim] = useState<'exit-up' | 'exit-down' | 'enter-from-bottom' | 'enter-from-top' | null>(null)
+    const pageAnimLockRef = useRef(false)
+
+    // Toolbar tab
+    const [toolbarTab, setToolbarTab] = useState<'annotate' | 'view' | 'pages'>('annotate')
+
+    // File picker (select existing uploaded file)
+    const [showFilePicker, setShowFilePicker] = useState(false)
+
+    // Text layer state & refs
+    const [showTextLayer, setShowTextLayer] = useState(false)
+    const [searchQuery, setSearchQuery] = useState('')
+    const [searchVisible, setSearchVisible] = useState(false)
+    const [searchMatchCount, setSearchMatchCount] = useState(0)
+    const [searchCurrentIdx, setSearchCurrentIdx] = useState(0)
+    const [textLayerVersion, setTextLayerVersion] = useState(0)
+    const textLayerRef = useRef<HTMLDivElement>(null)
+    const textLayerInstanceRef = useRef<{ cancel: () => void } | null>(null)
+    // Cross-page search index (built once per PDF; rebuilt when page count changes)
+    const [searchIndex, setSearchIndex] = useState<{ pageNumber: number; texts: string[] }[]>([])
+    const [searchIndexBuilding, setSearchIndexBuilding] = useState(false)
+    const searchGlobalResultsRef = useRef<{ pageNumber: number; spanIdx: number }[]>([])
+    const pendingHighlightRef = useRef<{ spanIdx: number } | null>(null)
 
     // ────────────────────────────────────────────────────────
     // Imperative handle
@@ -512,6 +570,89 @@ const PdfAnnotationEditor = forwardRef<PdfAnnotationEditorHandle, PdfAnnotationE
       pushHistory(pages)
     }, [pushHistory, pages])
 
+    // ────────────────────────────────────────────────────────
+    // Eraser helper — erases all annotation types at a point
+    // ────────────────────────────────────────────────────────
+    const eraseAtPoint = useCallback(
+      (pos: PdfPoint) => {
+        const pageAnnot = getPageAnnotations(currentPage)
+        const hitRadius = 12 / zoom
+
+        const newStrokes = pageAnnot.strokes.filter(s =>
+          !s.points.some(p =>
+            Math.abs(p.x - pos.x) < hitRadius && Math.abs(p.y - pos.y) < hitRadius
+          )
+        )
+        const newShapes = pageAnnot.shapes.filter(s => {
+          const minX = Math.min(s.x1, s.x2) - hitRadius
+          const maxX = Math.max(s.x1, s.x2) + hitRadius
+          const minY = Math.min(s.y1, s.y2) - hitRadius
+          const maxY = Math.max(s.y1, s.y2) + hitRadius
+          return !(pos.x >= minX && pos.x <= maxX && pos.y >= minY && pos.y <= maxY)
+        })
+        const newTexts = pageAnnot.textAnnotations.filter(t =>
+          !(pos.x >= t.x && pos.x <= t.x + t.width &&
+            pos.y >= t.y && pos.y <= t.y + (t.height || t.fontSize * 1.5))
+        )
+        const newStickies = (pageAnnot.stickyNotes ?? []).filter(sn =>
+          !(pos.x >= sn.x && pos.x <= sn.x + sn.width &&
+            pos.y >= sn.y && pos.y <= sn.y + sn.height)
+        )
+
+        const changed =
+          newStrokes.length !== pageAnnot.strokes.length ||
+          newShapes.length !== pageAnnot.shapes.length ||
+          newTexts.length !== pageAnnot.textAnnotations.length ||
+          newStickies.length !== (pageAnnot.stickyNotes ?? []).length
+
+        if (changed) {
+          const newPages = updatePageAnnotations(currentPage, p => ({
+            ...p,
+            strokes: newStrokes,
+            shapes: newShapes,
+            textAnnotations: newTexts,
+            stickyNotes: newStickies,
+          }))
+          setPages(newPages)
+          emitChange(newPages)
+        }
+      },
+      [currentPage, zoom, getPageAnnotations, updatePageAnnotations, emitChange]
+    )
+
+    // ────────────────────────────────────────────────────────
+    // Text color helper
+    // ────────────────────────────────────────────────────────
+    const changeTextColor = useCallback(
+      (id: string, newColor: string) => {
+        const newPages = updatePageAnnotations(currentPage, page => ({
+          ...page,
+          textAnnotations: page.textAnnotations.map(t =>
+            t.id === id ? { ...t, color: newColor } : t
+          ),
+        }))
+        setPages(newPages)
+        pushHistory(newPages)
+        emitChange(newPages)
+      },
+      [currentPage, updatePageAnnotations, pushHistory, emitChange]
+    )
+
+    const changeTextFontFamily = useCallback(
+      (id: string, family: string) => {
+        const newPages = updatePageAnnotations(currentPage, page => ({
+          ...page,
+          textAnnotations: page.textAnnotations.map(t =>
+            t.id === id ? { ...t, fontFamily: family } : t
+          ),
+        }))
+        setPages(newPages)
+        pushHistory(newPages)
+        emitChange(newPages)
+      },
+      [currentPage, updatePageAnnotations, pushHistory, emitChange]
+    )
+
     const deleteStickyNote = useCallback(
       (id: string) => {
         const newPages = updatePageAnnotations(currentPage, page => ({
@@ -530,35 +671,70 @@ const PdfAnnotationEditor = forwardRef<PdfAnnotationEditorHandle, PdfAnnotationE
     // ────────────────────────────────────────────────────────
     const renderThumbnails = useCallback(async () => {
       const urls: string[] = []
+      const thumbScale = 0.18
       for (let i = 0; i < pages.length; i++) {
         const page = pages[i]
         const thumbCanvas = document.createElement('canvas')
+        let thumbCtx: CanvasRenderingContext2D | null = null
+        let renderedW = 0
+        let renderedH = 0
         if (page.isBlank) {
-          const w = naturalWidth > 0 ? Math.round(naturalWidth * 0.18) : 112
-          const h = naturalHeight > 0 ? Math.round(naturalHeight * 0.18) : 155
+          const w = naturalWidth > 0 ? Math.round(naturalWidth * thumbScale) : 112
+          const h = naturalHeight > 0 ? Math.round(naturalHeight * thumbScale) : 155
           thumbCanvas.width = w
           thumbCanvas.height = h
-          const ctx = thumbCanvas.getContext('2d')!
-          ctx.fillStyle = '#ffffff'
-          ctx.fillRect(0, 0, w, h)
-          ctx.strokeStyle = '#e5e7eb'
-          ctx.strokeRect(0.5, 0.5, w - 1, h - 1)
+          thumbCtx = thumbCanvas.getContext('2d')!
+          thumbCtx.fillStyle = '#ffffff'
+          thumbCtx.fillRect(0, 0, w, h)
+          thumbCtx.strokeStyle = '#e5e7eb'
+          thumbCtx.strokeRect(0.5, 0.5, w - 1, h - 1)
+          renderedW = w
+          renderedH = h
           urls.push(thumbCanvas.toDataURL())
         } else if (pdfDoc && page.pdfPageNumber) {
           try {
             const pdfPage = await pdfDoc.getPage(page.pdfPageNumber)
-            const vp = pdfPage.getViewport({ scale: 0.18 })
+            const vp = pdfPage.getViewport({ scale: thumbScale })
             thumbCanvas.width = vp.width
             thumbCanvas.height = vp.height
-            const ctx = thumbCanvas.getContext('2d')!
-            await pdfPage.render({ canvasContext: ctx, viewport: vp }).promise
-            urls.push(thumbCanvas.toDataURL())
+            thumbCtx = thumbCanvas.getContext('2d')!
+            await pdfPage.render({ canvasContext: thumbCtx, viewport: vp }).promise
+            renderedW = vp.width
+            renderedH = vp.height
           } catch {
             urls.push('')
+            thumbCanvas.remove()
+            continue
           }
         } else {
           urls.push('')
+          thumbCanvas.remove()
+          continue
         }
+
+        // Composite annotations onto the thumbnail
+        if (thumbCtx && renderedW > 0) {
+          const pageAnnot = pages.find(p => p.pageNumber === i) ?? {
+            pageNumber: i, strokes: [], textAnnotations: [], shapes: [], stickyNotes: [],
+          }
+          for (const stroke of pageAnnot.strokes) {
+            renderStrokeToCtx(thumbCtx, stroke, thumbScale)
+          }
+          for (const shape of pageAnnot.shapes) {
+            drawShape(thumbCtx, shape, thumbScale, false)
+          }
+          for (const ta of pageAnnot.textAnnotations) {
+            thumbCtx.save()
+            thumbCtx.font = `${ta.italic ? 'italic ' : ''}${ta.bold ? 'bold ' : ''}${ta.fontSize * thumbScale}px sans-serif`
+            thumbCtx.fillStyle = ta.color
+            ta.text.split('\n').forEach((line, li) => {
+              thumbCtx!.fillText(line, ta.x * thumbScale, (ta.y + ta.fontSize + li * ta.fontSize * 1.2) * thumbScale)
+            })
+            thumbCtx.restore()
+          }
+          urls.push(thumbCanvas.toDataURL())
+        }
+
         thumbCanvas.remove()
       }
       setThumbnailUrls(urls)
@@ -589,6 +765,29 @@ const PdfAnnotationEditor = forwardRef<PdfAnnotationEditorHandle, PdfAnnotationE
           if (cancelled) return
           setPdfDoc(doc)
           setTotalPages(doc.numPages)
+
+          // Extract full plain text from all PDF pages for AI context
+          if (onTextExtracted) {
+            ;(async () => {
+              const parts: string[] = []
+              for (let i = 1; i <= doc.numPages; i++) {
+                try {
+                  const pg = await doc.getPage(i)
+                  const tc = await pg.getTextContent()
+                  const pageText = tc.items
+                    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                    .map((item: any) => item.str ?? '')
+                    .join(' ')
+                    .replace(/\s+/g, ' ')
+                    .trim()
+                  if (pageText) parts.push(`[Page ${i}]\n${pageText}`)
+                } catch {
+                  // skip unreadable page
+                }
+              }
+              onTextExtracted(parts.join('\n\n'))
+            })()
+          }
 
           // Initialize page annotations if empty OR migrate existing notes (add pdfPageNumber)
           if (pages.length === 0) {
@@ -734,6 +933,20 @@ const PdfAnnotationEditor = forwardRef<PdfAnnotationEditorHandle, PdfAnnotationE
       // Draw strokes
       for (const stroke of pageAnnot.strokes) {
         renderStrokeToCtx(ctx, stroke, scale)
+        if (stroke.id === selectedId) {
+          const xs = stroke.points.map(p => p.x * scale)
+          const ys = stroke.points.map(p => p.y * scale)
+          const minX = Math.min(...xs) - stroke.size * scale / 2
+          const minY = Math.min(...ys) - stroke.size * scale / 2
+          const maxX = Math.max(...xs) + stroke.size * scale / 2
+          const maxY = Math.max(...ys) + stroke.size * scale / 2
+          ctx.save()
+          ctx.strokeStyle = '#3b82f6'
+          ctx.lineWidth = 1.5
+          ctx.setLineDash([4, 4])
+          ctx.strokeRect(minX - 4, minY - 4, maxX - minX + 8, maxY - minY + 8)
+          ctx.restore()
+        }
       }
 
       // Draw in-progress stroke
@@ -751,6 +964,27 @@ const PdfAnnotationEditor = forwardRef<PdfAnnotationEditorHandle, PdfAnnotationE
       // Draw shapes
       for (const shape of pageAnnot.shapes) {
         drawShape(ctx, shape, scale, shape.id === selectedId)
+        if (shape.id === selectedId && shape.type !== 'arrow') {
+          // Draw resize handles at the 4 corners
+          const handles = [
+            { x: shape.x1 * scale, y: shape.y1 * scale },
+            { x: shape.x2 * scale, y: shape.y1 * scale },
+            { x: shape.x1 * scale, y: shape.y2 * scale },
+            { x: shape.x2 * scale, y: shape.y2 * scale },
+          ]
+          ctx.save()
+          ctx.fillStyle = '#3b82f6'
+          ctx.strokeStyle = '#ffffff'
+          ctx.lineWidth = 1.5
+          ctx.setLineDash([])
+          for (const h of handles) {
+            ctx.beginPath()
+            ctx.rect(h.x - 5, h.y - 5, 10, 10)
+            ctx.fill()
+            ctx.stroke()
+          }
+          ctx.restore()
+        }
       }
 
       // Draw shape preview
@@ -761,7 +995,7 @@ const PdfAnnotationEditor = forwardRef<PdfAnnotationEditorHandle, PdfAnnotationE
       // Draw text annotations
       for (const ta of pageAnnot.textAnnotations) {
         ctx.save()
-        const fontStyle = `${ta.italic ? 'italic ' : ''}${ta.bold ? 'bold ' : ''}${ta.fontSize * scale}px sans-serif`
+        const fontStyle = `${ta.italic ? 'italic ' : ''}${ta.bold ? 'bold ' : ''}${ta.fontSize * scale}px ${ta.fontFamily ?? 'sans-serif'}`
         ctx.font = fontStyle
         ctx.fillStyle = ta.color
         const lines = ta.text.split('\n')
@@ -790,6 +1024,15 @@ const PdfAnnotationEditor = forwardRef<PdfAnnotationEditorHandle, PdfAnnotationE
     // ────────────────────────────────────────────────────────
     // Shape drawing helper
     // ────────────────────────────────────────────────────────
+    function distToSegment(p: PdfPoint, a: PdfPoint, b: PdfPoint): number {
+      const dx = b.x - a.x
+      const dy = b.y - a.y
+      const lenSq = dx * dx + dy * dy
+      if (lenSq === 0) return Math.hypot(p.x - a.x, p.y - a.y)
+      const t = Math.max(0, Math.min(1, ((p.x - a.x) * dx + (p.y - a.y) * dy) / lenSq))
+      return Math.hypot(p.x - (a.x + t * dx), p.y - (a.y + t * dy))
+    }
+
     function drawShape(
       ctx: CanvasRenderingContext2D,
       shape: ShapeAnnotation,
@@ -809,6 +1052,13 @@ const PdfAnnotationEditor = forwardRef<PdfAnnotationEditorHandle, PdfAnnotationE
       const y2 = shape.y2 * scale
 
       if (shape.type === 'rectangle') {
+        if (shape.filled) {
+          ctx.save()
+          ctx.globalAlpha = shape.fillOpacity ?? 0.2
+          ctx.fillStyle = shape.color
+          ctx.fillRect(x1, y1, x2 - x1, y2 - y1)
+          ctx.restore()
+        }
         ctx.strokeRect(x1, y1, x2 - x1, y2 - y1)
       } else if (shape.type === 'circle') {
         const rx = Math.abs(x2 - x1) / 2
@@ -817,6 +1067,18 @@ const PdfAnnotationEditor = forwardRef<PdfAnnotationEditorHandle, PdfAnnotationE
         const cy = (y1 + y2) / 2
         ctx.beginPath()
         ctx.ellipse(cx, cy, rx, ry, 0, 0, Math.PI * 2)
+        if (shape.filled) {
+          ctx.save()
+          ctx.globalAlpha = shape.fillOpacity ?? 0.2
+          ctx.fillStyle = shape.color
+          ctx.fill()
+          ctx.restore()
+        }
+        ctx.stroke()
+      } else if (shape.type === 'line') {
+        ctx.beginPath()
+        ctx.moveTo(x1, y1)
+        ctx.lineTo(x2, y2)
         ctx.stroke()
       } else if (shape.type === 'arrow') {
         // Line
@@ -824,7 +1086,7 @@ const PdfAnnotationEditor = forwardRef<PdfAnnotationEditorHandle, PdfAnnotationE
         ctx.moveTo(x1, y1)
         ctx.lineTo(x2, y2)
         ctx.stroke()
-        // Arrowhead
+        // Arrowhead at end
         const angle = Math.atan2(y2 - y1, x2 - x1)
         const headLen = 12 * scale
         ctx.beginPath()
@@ -833,6 +1095,16 @@ const PdfAnnotationEditor = forwardRef<PdfAnnotationEditorHandle, PdfAnnotationE
         ctx.moveTo(x2, y2)
         ctx.lineTo(x2 - headLen * Math.cos(angle + Math.PI / 6), y2 - headLen * Math.sin(angle + Math.PI / 6))
         ctx.stroke()
+        // Arrowhead at start (double-ended)
+        if (shape.doubleEnded) {
+          const startAngle = Math.atan2(y1 - y2, x1 - x2)
+          ctx.beginPath()
+          ctx.moveTo(x1, y1)
+          ctx.lineTo(x1 - headLen * Math.cos(startAngle - Math.PI / 6), y1 - headLen * Math.sin(startAngle - Math.PI / 6))
+          ctx.moveTo(x1, y1)
+          ctx.lineTo(x1 - headLen * Math.cos(startAngle + Math.PI / 6), y1 - headLen * Math.sin(startAngle + Math.PI / 6))
+          ctx.stroke()
+        }
       }
       ctx.restore()
     }
@@ -879,20 +1151,8 @@ const PdfAnnotationEditor = forwardRef<PdfAnnotationEditorHandle, PdfAnnotationE
           setIsDrawing(true)
           setCurrentStrokePoints([pos])
         } else if (tool === 'eraser') {
-          // Remove stroke under pointer
-          const pageAnnot = getPageAnnotations(currentPage)
-          const hitRadius = 10 / zoom
-          const remaining = pageAnnot.strokes.filter(s => {
-            return !s.points.some(p =>
-              Math.abs(p.x - pos.x) < hitRadius && Math.abs(p.y - pos.y) < hitRadius
-            )
-          })
-          if (remaining.length !== pageAnnot.strokes.length) {
-            const newPages = updatePageAnnotations(currentPage, p => ({ ...p, strokes: remaining }))
-            setPages(newPages)
-            pushHistory(newPages)
-            emitChange(newPages)
-          }
+          setIsDrawing(true)
+          eraseAtPoint(pos)
         } else if (tool === 'text') {
           // Place a new text annotation
           const newText: TextAnnotation = {
@@ -906,7 +1166,7 @@ const PdfAnnotationEditor = forwardRef<PdfAnnotationEditorHandle, PdfAnnotationE
             color,
           }
           setEditingText(newText)
-        } else if (tool === 'rectangle' || tool === 'circle' || tool === 'arrow') {
+        } else if (tool === 'rectangle' || tool === 'circle' || tool === 'arrow' || tool === 'line') {
           setIsDrawing(true)
           setShapeStart({ x: pos.x, y: pos.y })
         } else if (tool === 'sticky') {
@@ -932,17 +1192,40 @@ const PdfAnnotationEditor = forwardRef<PdfAnnotationEditorHandle, PdfAnnotationE
           // Hit-test shapes and text
           const pageAnnot = getPageAnnotations(currentPage)
           let hit = false
+          const HANDLE_RADIUS = 8 / zoom
+
+          // Check resize handles on the currently selected shape first
+          if (selectedId && !hit) {
+            const selShape = pageAnnot.shapes.find(s => s.id === selectedId)
+            if (selShape && selShape.type !== 'arrow') {
+              const handles: [string, number, number][] = [
+                ['x1y1', selShape.x1, selShape.y1],
+                ['x2y1', selShape.x2, selShape.y1],
+                ['x1y2', selShape.x1, selShape.y2],
+                ['x2y2', selShape.x2, selShape.y2],
+              ]
+              for (const [hKey, hx, hy] of handles) {
+                if (Math.hypot(pos.x - hx, pos.y - hy) < HANDLE_RADIUS) {
+                  setResizeHandle(hKey)
+                  hit = true
+                  break
+                }
+              }
+            }
+          }
 
           // Check text annotations
-          for (const ta of pageAnnot.textAnnotations) {
-            if (
-              pos.x >= ta.x && pos.x <= ta.x + ta.width &&
-              pos.y >= ta.y && pos.y <= ta.y + (ta.height || ta.fontSize * 1.5)
-            ) {
-              setSelectedId(ta.id)
-              setDragOffset({ x: pos.x - ta.x, y: pos.y - ta.y })
-              hit = true
-              break
+          if (!hit) {
+            for (const ta of pageAnnot.textAnnotations) {
+              if (
+                pos.x >= ta.x && pos.x <= ta.x + ta.width &&
+                pos.y >= ta.y && pos.y <= ta.y + (ta.height || ta.fontSize * 1.5)
+              ) {
+                setSelectedId(ta.id)
+                setDragOffset({ x: pos.x - ta.x, y: pos.y - ta.y })
+                hit = true
+                break
+              }
             }
           }
 
@@ -962,15 +1245,36 @@ const PdfAnnotationEditor = forwardRef<PdfAnnotationEditorHandle, PdfAnnotationE
             }
           }
 
+          // Check strokes (distance-to-path)
+          if (!hit) {
+            const hitR = Math.max(6, strokeSize) / zoom
+            for (let si = pageAnnot.strokes.length - 1; si >= 0; si--) {
+              const stroke = pageAnnot.strokes[si]
+              const pts = stroke.points
+              let minDist = Infinity
+              for (let i = 1; i < pts.length; i++) {
+                const d = distToSegment(pos, pts[i - 1], pts[i])
+                if (d < minDist) minDist = d
+              }
+              if (minDist < hitR + stroke.size / 2) {
+                setSelectedId(stroke.id)
+                setDragOffset({ x: pos.x, y: pos.y })
+                hit = true
+                break
+              }
+            }
+          }
+
           if (!hit) {
             setSelectedId(null)
             setDragOffset(null)
+            setResizeHandle(null)
           }
           setIsDrawing(hit)
         }
       },
       // eslint-disable-next-line react-hooks/exhaustive-deps
-      [disabled, tool, color, currentPage, zoom, pages]
+      [disabled, tool, color, currentPage, zoom, pages, selectedId, strokeSize]
     )
 
     const handlePointerMove = useCallback(
@@ -981,10 +1285,12 @@ const PdfAnnotationEditor = forwardRef<PdfAnnotationEditorHandle, PdfAnnotationE
 
         if (tool === 'pen' || tool === 'highlighter') {
           setCurrentStrokePoints(prev => [...prev, pos])
-        } else if ((tool === 'rectangle' || tool === 'circle' || tool === 'arrow') && shapeStart) {
+        } else if (tool === 'eraser') {
+          eraseAtPoint(pos)
+        } else if ((tool === 'rectangle' || tool === 'circle' || tool === 'arrow' || tool === 'line') && shapeStart) {
           setShapePreview({
             id: 'preview',
-            type: tool,
+            type: tool as ShapeAnnotation['type'],
             x1: shapeStart.x,
             y1: shapeStart.y,
             x2: pos.x,
@@ -992,33 +1298,65 @@ const PdfAnnotationEditor = forwardRef<PdfAnnotationEditorHandle, PdfAnnotationE
             color,
             strokeWidth: strokeSize,
           })
-        } else if (tool === 'select' && selectedId && dragOffset) {
-          // Move selected annotation
-          const dx = pos.x - dragOffset.x
-          const dy = pos.y - dragOffset.y
+        } else if (tool === 'select' && selectedId && resizeHandle) {
+          // Resize selected shape via drag handle
           const newPages = updatePageAnnotations(currentPage, page => {
-            const textIdx = page.textAnnotations.findIndex(t => t.id === selectedId)
-            if (textIdx >= 0) {
-              const updated = [...page.textAnnotations]
-              updated[textIdx] = { ...updated[textIdx], x: dx, y: dy }
-              return { ...page, textAnnotations: updated }
-            }
             const shapeIdx = page.shapes.findIndex(s => s.id === selectedId)
-            if (shapeIdx >= 0) {
-              const s = page.shapes[shapeIdx]
-              const w = s.x2 - s.x1
-              const h = s.y2 - s.y1
-              const updated = [...page.shapes]
-              updated[shapeIdx] = { ...updated[shapeIdx], x1: dx, y1: dy, x2: dx + w, y2: dy + h }
-              return { ...page, shapes: updated }
-            }
-            return page
+            if (shapeIdx < 0) return page
+            const s = { ...page.shapes[shapeIdx] }
+            if (resizeHandle.includes('x1')) s.x1 = pos.x
+            if (resizeHandle.includes('x2')) s.x2 = pos.x
+            if (resizeHandle.includes('y1')) s.y1 = pos.y
+            if (resizeHandle.includes('y2')) s.y2 = pos.y
+            const updated = [...page.shapes]
+            updated[shapeIdx] = s
+            return { ...page, shapes: updated }
           })
           setPages(newPages)
+        } else if (tool === 'select' && selectedId && dragOffset) {
+          // Move selected annotation
+          const pageAnnot = getPageAnnotations(currentPage)
+          const isStroke = pageAnnot.strokes.some(s => s.id === selectedId)
+          if (isStroke) {
+            const dx = pos.x - dragOffset.x
+            const dy = pos.y - dragOffset.y
+            const newPages = updatePageAnnotations(currentPage, page => ({
+              ...page,
+              strokes: page.strokes.map(s =>
+                s.id === selectedId
+                  ? { ...s, points: s.points.map(p => ({ ...p, x: p.x + dx, y: p.y + dy })) }
+                  : s
+              ),
+            }))
+            setPages(newPages)
+            setDragOffset({ x: pos.x, y: pos.y })
+          } else {
+            const dx = pos.x - dragOffset.x
+            const dy = pos.y - dragOffset.y
+            const newPages = updatePageAnnotations(currentPage, page => {
+              const textIdx = page.textAnnotations.findIndex(t => t.id === selectedId)
+              if (textIdx >= 0) {
+                const updated = [...page.textAnnotations]
+                updated[textIdx] = { ...updated[textIdx], x: dx, y: dy }
+                return { ...page, textAnnotations: updated }
+              }
+              const shapeIdx = page.shapes.findIndex(s => s.id === selectedId)
+              if (shapeIdx >= 0) {
+                const s = page.shapes[shapeIdx]
+                const w = s.x2 - s.x1
+                const h = s.y2 - s.y1
+                const updated = [...page.shapes]
+                updated[shapeIdx] = { ...updated[shapeIdx], x1: dx, y1: dy, x2: dx + w, y2: dy + h }
+                return { ...page, shapes: updated }
+              }
+              return page
+            })
+            setPages(newPages)
+          }
         }
       },
       // eslint-disable-next-line react-hooks/exhaustive-deps
-      [isDrawing, tool, shapeStart, color, strokeSize, selectedId, dragOffset, currentPage, pages]
+      [isDrawing, tool, shapeStart, color, strokeSize, selectedId, dragOffset, currentPage, pages, eraseAtPoint, resizeHandle, getPageAnnotations, updatePageAnnotations]
     )
 
     const handlePointerUp = useCallback(
@@ -1044,19 +1382,21 @@ const PdfAnnotationEditor = forwardRef<PdfAnnotationEditorHandle, PdfAnnotationE
             emitChange(newPages)
           }
           setCurrentStrokePoints([])
-        } else if ((tool === 'rectangle' || tool === 'circle' || tool === 'arrow') && shapeStart) {
+        } else if ((tool === 'rectangle' || tool === 'circle' || tool === 'arrow' || tool === 'line') && shapeStart) {
           const pos = getPointerPos(e)
           const minDist = 5 / zoom
           if (Math.abs(pos.x - shapeStart.x) > minDist || Math.abs(pos.y - shapeStart.y) > minDist) {
             const newShape: ShapeAnnotation = {
               id: uid(),
-              type: tool,
+              type: tool as ShapeAnnotation['type'],
               x1: shapeStart.x,
               y1: shapeStart.y,
               x2: pos.x,
               y2: pos.y,
               color,
               strokeWidth: strokeSize,
+              ...(tool !== 'arrow' && tool !== 'line' && shapeFilled ? { filled: true, fillOpacity: 0.2 } : {}),
+              ...(tool === 'arrow' && doubleEndedArrow ? { doubleEnded: true } : {}),
             }
             const newPages = updatePageAnnotations(currentPage, p => ({
               ...p,
@@ -1071,12 +1411,51 @@ const PdfAnnotationEditor = forwardRef<PdfAnnotationEditorHandle, PdfAnnotationE
         } else if (tool === 'select' && selectedId) {
           pushHistory(pages)
           emitChange(pages)
+        } else if (tool === 'eraser') {
+          // Commit the erased state to history
+          pushHistory(pages)
         }
 
         setIsDrawing(false)
+        setResizeHandle(null)
       },
       // eslint-disable-next-line react-hooks/exhaustive-deps
-      [isDrawing, tool, currentStrokePoints, color, strokeSize, currentPage, shapeStart, selectedId, pages, zoom]
+      [isDrawing, tool, currentStrokePoints, color, strokeSize, currentPage, shapeStart, selectedId, pages, zoom, shapeFilled, doubleEndedArrow]
+    )
+
+    // ────────────────────────────────────────────────────────
+    // Double-click: re-enter edit mode on a committed text annotation
+    // ────────────────────────────────────────────────────────
+    const handleDoubleClick = useCallback(
+      (e: React.MouseEvent<HTMLCanvasElement>) => {
+        const rect = annotCanvasRef.current!.getBoundingClientRect()
+        const vx = e.clientX - rect.left
+        const vy = e.clientY - rect.top
+        let cx: number, cy: number
+        switch (viewRotation) {
+          case 90:  cx = vy / zoom; cy = (canvasWidth - vx) / zoom; break
+          case 180: cx = (canvasWidth - vx) / zoom; cy = (canvasHeight - vy) / zoom; break
+          case 270: cx = (canvasHeight - vy) / zoom; cy = vx / zoom; break
+          default:  cx = vx / zoom; cy = vy / zoom
+        }
+        const pos = { x: cx, y: cy }
+        const pageAnnot = getPageAnnotations(currentPage)
+        const ta = pageAnnot.textAnnotations.find(t =>
+          pos.x >= t.x && pos.x <= t.x + t.width &&
+          pos.y >= t.y && pos.y <= t.y + (t.height || t.fontSize * 1.5)
+        )
+        if (ta) {
+          // Pull the annotation back out of committed state and into editing
+          const newPages = updatePageAnnotations(currentPage, p => ({
+            ...p,
+            textAnnotations: p.textAnnotations.filter(t => t.id !== ta.id),
+          }))
+          setPages(newPages)
+          setEditingText(ta)
+          setTool('text')
+        }
+      },
+      [currentPage, zoom, viewRotation, canvasWidth, canvasHeight, getPageAnnotations, updatePageAnnotations]
     )
 
     // ────────────────────────────────────────────────────────
@@ -1098,35 +1477,6 @@ const PdfAnnotationEditor = forwardRef<PdfAnnotationEditorHandle, PdfAnnotationE
     }, [editingText, currentPage, updatePageAnnotations, pushHistory, emitChange])
 
     // ────────────────────────────────────────────────────────
-    // Delete selected annotation
-    // ────────────────────────────────────────────────────────
-    useEffect(() => {
-      function handleKeyDown(e: KeyboardEvent) {
-        if (e.key === 'Delete' || e.key === 'Backspace') {
-          if (selectedId && tool === 'select' && !editingText) {
-            const newPages = updatePageAnnotations(currentPage, page => ({
-              ...page,
-              textAnnotations: page.textAnnotations.filter(t => t.id !== selectedId),
-              shapes: page.shapes.filter(s => s.id !== selectedId),
-            }))
-            setPages(newPages)
-            pushHistory(newPages)
-            emitChange(newPages)
-            setSelectedId(null)
-          }
-        }
-        // Undo/redo keyboard shortcuts
-        if ((e.metaKey || e.ctrlKey) && e.key === 'z') {
-          e.preventDefault()
-          if (e.shiftKey) redo()
-          else undo()
-        }
-      }
-      window.addEventListener('keydown', handleKeyDown)
-      return () => window.removeEventListener('keydown', handleKeyDown)
-    }, [selectedId, tool, editingText, currentPage, updatePageAnnotations, pushHistory, emitChange, undo, redo])
-
-    // ────────────────────────────────────────────────────────
     // Page navigation
     // ────────────────────────────────────────────────────────
     const goToPage = useCallback((pg: number) => {
@@ -1143,6 +1493,82 @@ const PdfAnnotationEditor = forwardRef<PdfAnnotationEditorHandle, PdfAnnotationE
         })
       }
     }, [value?.pdfStoragePath, pages, totalPages, zoom, onChange])
+
+    // ────────────────────────────────────────────────────────
+    // Keyboard shortcuts: delete, undo/redo, tool switching, page nav
+    // ────────────────────────────────────────────────────────
+    useEffect(() => {
+      function handleKeyDown(e: KeyboardEvent) {
+        if (e.key === 'Delete' || e.key === 'Backspace') {
+          if (selectedId && tool === 'select' && !editingText) {
+            const newPages = updatePageAnnotations(currentPage, page => ({
+              ...page,
+              textAnnotations: page.textAnnotations.filter(t => t.id !== selectedId),
+              shapes: page.shapes.filter(s => s.id !== selectedId),
+              strokes: page.strokes.filter(s => s.id !== selectedId),
+            }))
+            setPages(newPages)
+            pushHistory(newPages)
+            emitChange(newPages)
+            setSelectedId(null)
+          }
+        }
+        // Undo/redo keyboard shortcuts
+        if ((e.metaKey || e.ctrlKey) && e.key === 'z') {
+          e.preventDefault()
+          if (e.shiftKey) redo()
+          else undo()
+        }
+        // Find/search shortcut (Ctrl/Cmd+F)
+        if ((e.metaKey || e.ctrlKey) && e.key === 'f') {
+          e.preventDefault()
+          setShowTextLayer(true)
+          setSearchVisible(v => {
+            if (!v) setSearchQuery('')
+            return true
+          })
+        }
+        // Close search on Escape
+        if (e.key === 'Escape') {
+          if (searchVisible) {
+            setSearchVisible(false)
+            setSearchQuery('')
+          }
+        }
+        // Tool switching shortcuts (only when not editing text/textarea)
+        if (!editingText && !e.metaKey && !e.ctrlKey && !e.altKey) {
+          const keyToTool: Record<string, PdfTool> = {
+            's': 'select', 'p': 'pen', 'h': 'highlighter', 'e': 'eraser',
+            't': 'text', 'r': 'rectangle', 'c': 'circle', 'a': 'arrow',
+            'l': 'line', 'n': 'sticky', 'i': 'textselect',
+          }
+          if (keyToTool[e.key.toLowerCase()]) {
+            const target = e.target as HTMLElement
+            const isInput = target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.tagName === 'SELECT'
+            if (!isInput) setTool(keyToTool[e.key.toLowerCase()])
+          }
+          // Page navigation
+          if (e.key === 'ArrowRight' || e.key === 'ArrowDown') {
+            const target = e.target as HTMLElement
+            const isInput = target.tagName === 'INPUT' || target.tagName === 'TEXTAREA'
+            if (!isInput && currentPage < totalPages - 1) {
+              e.preventDefault()
+              goToPage(currentPage + 1)
+            }
+          }
+          if (e.key === 'ArrowLeft' || e.key === 'ArrowUp') {
+            const target = e.target as HTMLElement
+            const isInput = target.tagName === 'INPUT' || target.tagName === 'TEXTAREA'
+            if (!isInput && currentPage > 0) {
+              e.preventDefault()
+              goToPage(currentPage - 1)
+            }
+          }
+        }
+      }
+      window.addEventListener('keydown', handleKeyDown)
+      return () => window.removeEventListener('keydown', handleKeyDown)
+    }, [selectedId, tool, editingText, currentPage, totalPages, updatePageAnnotations, pushHistory, emitChange, undo, redo, goToPage, searchVisible])
 
     // ────────────────────────────────────────────────────────
     // Zoom
@@ -1209,24 +1635,344 @@ const PdfAnnotationEditor = forwardRef<PdfAnnotationEditorHandle, PdfAnnotationE
       emitChange(pages, currentPage, newZoom)
     }, [naturalWidth, naturalHeight, pages, currentPage, emitChange, clampZoom])
 
-    // Ctrl/Cmd + scroll wheel zoom
+    // Ctrl/Cmd + scroll wheel zoom — plain scroll at 100% navigates pages
+    // Uses refs to avoid stale closures
     useEffect(() => {
       const el = scrollAreaRef.current
       if (!el) return
+
+      let scrollAccum = 0
+      const SCROLL_THRESHOLD = 150 // px accumulated over-scroll needed to trigger page turn
+
       function onWheel(e: WheelEvent) {
-        if (!(e.ctrlKey || e.metaKey)) return
-        e.preventDefault()
-        const delta = e.deltaY > 0 ? -ZOOM_STEP : ZOOM_STEP
-        setZoom(prev => {
-          const newZoom = clampZoom(prev + delta)
-          // We push emitChange via a microtask so state is in sync
-          queueMicrotask(() => emitChange(pages, currentPage, newZoom))
-          return newZoom
-        })
+        if (e.ctrlKey || e.metaKey) {
+          // Zoom in/out
+          e.preventDefault()
+          const delta = e.deltaY > 0 ? -ZOOM_STEP : ZOOM_STEP
+          setZoom(prev => {
+            const newZoom = clampZoom(prev + delta)
+            queueMicrotask(() => emitChange(pagesRef.current, currentPageRef.current, newZoom))
+            return newZoom
+          })
+          return
+        }
+
+        // Page navigation by scroll — only at 100% zoom
+        if (Math.abs(zoomRef.current - 1) > 0.01) return
+        if (!el) return
+
+        const atTop = el.scrollTop === 0
+        const atBottom = Math.abs(el.scrollTop + el.clientHeight - el.scrollHeight) < 2
+
+        const scrollingDown = e.deltaY > 0
+        const scrollingUp = e.deltaY < 0
+
+        if ((scrollingDown && atBottom) || (scrollingUp && atTop)) {
+          e.preventDefault()
+          scrollAccum += e.deltaY
+          if (Math.abs(scrollAccum) >= SCROLL_THRESHOLD && !pageAnimLockRef.current) {
+            const pg = currentPageRef.current
+            const total = totalPagesRef.current
+            const canGo = scrollingDown ? pg < total - 1 : pg > 0
+            if (canGo) {
+              pageAnimLockRef.current = true
+              scrollAccum = 0
+              // Start exit animation then switch page
+              setPageAnim(scrollingDown ? 'exit-up' : 'exit-down')
+              setTimeout(() => {
+                const newPg = scrollingDown ? pg + 1 : pg - 1
+                setCurrentPage(newPg)
+                el.scrollTop = scrollingDown ? 0 : 99999
+                emitChange(pagesRef.current, newPg, zoomRef.current)
+                setPageAnim(scrollingDown ? 'enter-from-bottom' : 'enter-from-top')
+                setTimeout(() => {
+                  setPageAnim(null)
+                  pageAnimLockRef.current = false
+                }, 300)
+              }, 220)
+            } else {
+              scrollAccum = 0
+            }
+          }
+        } else {
+          // Normal scroll within page — reset accumulator
+          scrollAccum = 0
+        }
       }
       el.addEventListener('wheel', onWheel, { passive: false })
       return () => el.removeEventListener('wheel', onWheel)
-    }, [clampZoom, emitChange, pages, currentPage])
+    }, [clampZoom, emitChange])
+
+    // ────────────────────────────────────────────────────────
+    // Text layer rendering (pdfjs TextLayer class, pdfjs-dist 4.x)
+    // Always rendered in background so it's ready when the user enables text selection.
+    // Visibility/pointer-events are controlled separately by showTextLayer/tool.
+    // ────────────────────────────────────────────────────────
+    useEffect(() => {
+      const el = textLayerRef.current
+      // Cancel any in-flight render
+      if (textLayerInstanceRef.current) {
+        textLayerInstanceRef.current.cancel()
+        textLayerInstanceRef.current = null
+      }
+      if (el) el.innerHTML = ''
+
+      if (!pdfDoc || !el) return
+
+      let cancelled = false
+
+      async function renderTextLayerForPage() {
+        const lib = pdfjsLib
+        if (!lib) return
+        const pageData = pages.find(p => p.pageNumber === currentPage)
+        if (!pageData?.pdfPageNumber) return
+
+        const page = await pdfDoc!.getPage(pageData.pdfPageNumber)
+        if (cancelled) return
+
+        const viewport = page.getViewport({ scale: zoom })
+
+        // pdfjs-dist 4.x exposes TextLayer class
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const tl: { render: () => Promise<void>; cancel: () => void } = new (lib as any).TextLayer({
+          textContentSource: page.streamTextContent(),
+          container: el!,
+          viewport,
+        })
+        textLayerInstanceRef.current = tl
+
+        try {
+          await tl.render()
+          if (!cancelled) setTextLayerVersion(v => v + 1)
+        } catch {
+          // cancelled or error — ignore
+        }
+      }
+
+      renderTextLayerForPage()
+
+      return () => {
+        cancelled = true
+        textLayerInstanceRef.current?.cancel()
+        textLayerInstanceRef.current = null
+        if (el) el.innerHTML = ''
+      }
+    }, [pdfDoc, currentPage, zoom, pages])
+
+    // ────────────────────────────────────────────────────────
+    // Build cross-page search index (text items per page)
+    // Runs once when the PDF doc loads or page count changes
+    // ────────────────────────────────────────────────────────
+    useEffect(() => {
+      if (!pdfDoc) { setSearchIndex([]); return }
+      let cancelled = false
+      // Show loading indicator only after 400ms (hides flicker for fast PDFs)
+      const loadingTimer = setTimeout(() => { if (!cancelled) setSearchIndexBuilding(true) }, 400)
+
+      ;(async () => {
+        const idx: { pageNumber: number; texts: string[] }[] = []
+        for (const pg of pagesRef.current) {
+          if (cancelled) break
+          if (pg.isBlank || !pg.pdfPageNumber) {
+            idx.push({ pageNumber: pg.pageNumber, texts: [] })
+            continue
+          }
+          try {
+            const page = await pdfDoc.getPage(pg.pdfPageNumber)
+            const tc = await page.getTextContent()
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            const texts = tc.items.map((item: any) => ('str' in item ? (item.str as string) : ''))
+            idx.push({ pageNumber: pg.pageNumber, texts })
+          } catch {
+            idx.push({ pageNumber: pg.pageNumber, texts: [] })
+          }
+        }
+        if (!cancelled) {
+          clearTimeout(loadingTimer)
+          setSearchIndex(idx)
+          setSearchIndexBuilding(false)
+        }
+      })()
+
+      return () => {
+        cancelled = true
+        clearTimeout(loadingTimer)
+        setSearchIndexBuilding(false)
+      }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [pdfDoc, totalPages])
+
+    // ────────────────────────────────────────────────────────
+    // Search: build cross-page results when query or index changes
+    // ────────────────────────────────────────────────────────
+
+    /** Apply per-page DOM highlights for the current page. `activeGlobalIdx`
+     *  is the index into searchGlobalResultsRef.current to mark as active. */
+    const applyPageHighlights = useCallback((activeGlobalIdx: number) => {
+      const el = textLayerRef.current
+      if (!el) return
+      const spans = Array.from(el.querySelectorAll('span')) as HTMLElement[]
+      // Clear old
+      for (const s of spans) s.classList.remove('pdfannot-match', 'pdfannot-match-active')
+
+      const results = searchGlobalResultsRef.current
+      const pg = currentPageRef.current
+      // Mark all matches on this page
+      for (const r of results) {
+        if (r.pageNumber === pg && r.spanIdx < spans.length) {
+          spans[r.spanIdx].classList.add('pdfannot-match')
+        }
+      }
+      // Mark the active one if it's on this page
+      const active = results[activeGlobalIdx]
+      if (active && active.pageNumber === pg && active.spanIdx < spans.length) {
+        spans[active.spanIdx].classList.remove('pdfannot-match')
+        spans[active.spanIdx].classList.add('pdfannot-match-active')
+        spans[active.spanIdx].scrollIntoView({ block: 'nearest', behavior: 'smooth' })
+      }
+    }, [])
+
+    useEffect(() => {
+      // Clear DOM highlights whenever the query changes
+      const el = textLayerRef.current
+      if (el) {
+        el.querySelectorAll('.pdfannot-match, .pdfannot-match-active')
+          .forEach(s => s.classList.remove('pdfannot-match', 'pdfannot-match-active'))
+      }
+
+      if (!searchQuery.trim() || searchIndex.length === 0) {
+        searchGlobalResultsRef.current = []
+        setSearchMatchCount(0)
+        setSearchCurrentIdx(-1)
+        return
+      }
+
+      const q = searchQuery.toLowerCase()
+      const allMatches: { pageNumber: number; spanIdx: number }[] = []
+      for (const entry of searchIndex) {
+        for (let i = 0; i < entry.texts.length; i++) {
+          if (entry.texts[i].toLowerCase().includes(q)) {
+            allMatches.push({ pageNumber: entry.pageNumber, spanIdx: i })
+          }
+        }
+      }
+
+      searchGlobalResultsRef.current = allMatches
+      setSearchMatchCount(allMatches.length)
+
+      if (allMatches.length === 0) {
+        setSearchCurrentIdx(-1)
+        return
+      }
+
+      // Start from the first match on or after the current page
+      let startIdx = allMatches.findIndex(m => m.pageNumber >= currentPageRef.current)
+      if (startIdx === -1) startIdx = 0
+      setSearchCurrentIdx(startIdx)
+
+      const target = allMatches[startIdx]
+      if (target.pageNumber !== currentPageRef.current) {
+        pendingHighlightRef.current = { spanIdx: target.spanIdx }
+        goToPage(target.pageNumber)
+      } else {
+        // Apply highlights after state flushes (textLayerVersion will bump if needed)
+        queueMicrotask(() => applyPageHighlights(startIdx))
+      }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [searchQuery, searchIndex])
+
+    // After the text layer re-renders (new page), restore pending highlight
+    useEffect(() => {
+      if (pendingHighlightRef.current === null) return
+      applyPageHighlights(searchGlobalResultsRef.current.findIndex(
+        (r, i) => {
+          void i
+          return r.pageNumber === currentPageRef.current && r.spanIdx === pendingHighlightRef.current!.spanIdx
+        }
+      ) !== -1
+        ? searchGlobalResultsRef.current.findIndex(
+            r => r.pageNumber === currentPageRef.current && r.spanIdx === pendingHighlightRef.current!.spanIdx
+          )
+        : searchGlobalResultsRef.current.findIndex(r => r.pageNumber === currentPageRef.current)
+      )
+      pendingHighlightRef.current = null
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [textLayerVersion])
+
+    const navigateSearch = useCallback(
+      (dir: 1 | -1) => {
+        const results = searchGlobalResultsRef.current
+        if (results.length === 0) return
+        const prev = searchCurrentIdx < 0 ? 0 : searchCurrentIdx
+        const next = (prev + dir + results.length) % results.length
+        setSearchCurrentIdx(next)
+        const target = results[next]
+        if (target.pageNumber !== currentPageRef.current) {
+          pendingHighlightRef.current = { spanIdx: target.spanIdx }
+          goToPage(target.pageNumber)
+        } else {
+          applyPageHighlights(next)
+        }
+      },
+      [searchCurrentIdx, goToPage, applyPageHighlights]
+    )
+
+    // ────────────────────────────────────────────────────────
+    // Select an already-uploaded PDF from storage
+    // ────────────────────────────────────────────────────────
+    const handleSelectExistingFile = useCallback(
+      async (files: Array<{ name: string; path: string; size: number; type: string }>) => {
+        const file = files[0]
+        if (!file) return
+
+        const isPdf = file.type === 'application/pdf' || file.name.toLowerCase().endsWith('.pdf')
+        if (!isPdf) {
+          setPdfError('Please select a PDF file')
+          return
+        }
+
+        setShowFilePicker(false)
+        setPdfLoading(true)
+        setPdfError(null)
+
+        try {
+          const lib = await loadPdfJs()
+          const blob = await downloadFile(file.path)
+          const arrayBuf = await blob.arrayBuffer()
+          const doc = await lib.getDocument({ data: arrayBuf }).promise
+          setPdfDoc(doc)
+          setTotalPages(doc.numPages)
+
+          const initialPages: PdfAnnotationPage[] = []
+          for (let i = 0; i < doc.numPages; i++) {
+            initialPages.push({
+              pageNumber: i,
+              pdfPageNumber: i + 1,
+              strokes: [],
+              textAnnotations: [],
+              shapes: [],
+              stickyNotes: [],
+            })
+          }
+          setPages(initialPages)
+          setCurrentPage(0)
+          pushHistory(initialPages)
+
+          onChange({
+            pdfStoragePath: file.path,
+            pages: initialPages,
+            currentPage: 0,
+            totalPages: doc.numPages,
+            zoom: 1,
+          })
+        } catch (err) {
+          setPdfError(err instanceof Error ? err.message : 'Failed to load PDF')
+        } finally {
+          setPdfLoading(false)
+        }
+      },
+      [onChange, pushHistory]
+    )
 
     // ────────────────────────────────────────────────────────
     // File upload
@@ -1239,8 +1985,8 @@ const PdfAnnotationEditor = forwardRef<PdfAnnotationEditorHandle, PdfAnnotationE
           setPdfError('Please select a PDF file')
           return
         }
-        if (file.size > 10 * 1024 * 1024) {
-          setPdfError('PDF must be under 10 MB')
+        if (file.size > PDF_ANNOTATION_MAX_FILE_SIZE_BYTES) {
+          setPdfError('PDF must be under 50 MB')
           return
         }
 
@@ -1248,7 +1994,15 @@ const PdfAnnotationEditor = forwardRef<PdfAnnotationEditorHandle, PdfAnnotationE
         setPdfError(null)
         try {
           const folderPath = 'pdf-annotations'
-          const result = await uploadFile(file, folderPath)
+          const result = await uploadFile(file, folderPath, {
+            maxFileSizeBytes: PDF_ANNOTATION_MAX_FILE_SIZE_BYTES,
+          })
+          if (result.file.name !== file.name) {
+            toast.push({
+              title: 'Filename adjusted',
+              description: `Stored as "${result.file.name}" for compatibility.`,
+            })
+          }
           const storagePath = result.path
 
           // Initialize annotation data
@@ -1286,7 +2040,7 @@ const PdfAnnotationEditor = forwardRef<PdfAnnotationEditorHandle, PdfAnnotationE
           setPdfLoading(false)
         }
       },
-      [onChange, pushHistory]
+      [onChange, pushHistory, toast]
     )
 
     // ────────────────────────────────────────────────────────
@@ -1309,10 +2063,12 @@ const PdfAnnotationEditor = forwardRef<PdfAnnotationEditorHandle, PdfAnnotationE
           defaultH = fvp.height
         }
 
+        const firstPageW = (viewRotation === 90 || viewRotation === 270) ? defaultH : defaultW
+        const firstPageH = (viewRotation === 90 || viewRotation === 270) ? defaultW : defaultH
         const pdf = new jsPDF({
-          orientation: defaultW > defaultH ? 'landscape' : 'portrait',
+          orientation: firstPageW > firstPageH ? 'landscape' : 'portrait',
           unit: 'px',
-          format: [defaultW, defaultH],
+          format: [firstPageW, firstPageH],
         })
 
         for (let i = 0; i < pages.length; i++) {
@@ -1345,7 +2101,9 @@ const PdfAnnotationEditor = forwardRef<PdfAnnotationEditorHandle, PdfAnnotationE
           }
 
           if (i > 0) {
-            pdf.addPage([canvasW, canvasH], canvasW > canvasH ? 'landscape' : 'portrait')
+            const pageW = (viewRotation === 90 || viewRotation === 270) ? canvasH : canvasW
+            const pageH = (viewRotation === 90 || viewRotation === 270) ? canvasW : canvasH
+            pdf.addPage([pageW, pageH], pageW > pageH ? 'landscape' : 'portrait')
           }
 
           // Render strokes
@@ -1359,7 +2117,7 @@ const PdfAnnotationEditor = forwardRef<PdfAnnotationEditorHandle, PdfAnnotationE
           // Render text annotations
           for (const ta of pageAnnot.textAnnotations) {
             tempCtx.save()
-            tempCtx.font = `${ta.italic ? 'italic ' : ''}${ta.bold ? 'bold ' : ''}${ta.fontSize * exportScale}px sans-serif`
+            tempCtx.font = `${ta.italic ? 'italic ' : ''}${ta.bold ? 'bold ' : ''}${ta.fontSize * exportScale}px ${ta.fontFamily ?? 'sans-serif'}`
             tempCtx.fillStyle = ta.color
             ta.text.split('\n').forEach((line, li) => {
               tempCtx.fillText(line, ta.x * exportScale, (ta.y + ta.fontSize + li * ta.fontSize * 1.2) * exportScale)
@@ -1391,30 +2149,69 @@ const PdfAnnotationEditor = forwardRef<PdfAnnotationEditorHandle, PdfAnnotationE
             tempCtx.restore()
           }
 
-          const imgData = tempCanvas.toDataURL('image/png')
-          pdf.addImage(imgData, 'PNG', 0, 0, canvasW, canvasH)
+          // Apply viewRotation if needed: composite tempCanvas into a rotated finalCanvas
+          let exportCanvas = tempCanvas
+          let exportW = canvasW
+          let exportH = canvasH
+          if (viewRotation !== 0) {
+            const rotated = document.createElement('canvas')
+            if (viewRotation === 90 || viewRotation === 270) {
+              rotated.width = canvasH
+              rotated.height = canvasW
+              exportW = canvasH
+              exportH = canvasW
+            } else {
+              rotated.width = canvasW
+              rotated.height = canvasH
+            }
+            const rCtx = rotated.getContext('2d')!
+            rCtx.save()
+            switch (viewRotation) {
+              case 90:
+                rCtx.translate(canvasH, 0)
+                rCtx.rotate(Math.PI / 2)
+                break
+              case 180:
+                rCtx.translate(canvasW, canvasH)
+                rCtx.rotate(Math.PI)
+                break
+              case 270:
+                rCtx.translate(0, canvasW)
+                rCtx.rotate(-Math.PI / 2)
+                break
+            }
+            rCtx.drawImage(tempCanvas, 0, 0)
+            rCtx.restore()
+            exportCanvas = rotated
+          }
+
+          const imgData = exportCanvas.toDataURL('image/png')
+          pdf.addImage(imgData, 'PNG', 0, 0, exportW, exportH)
           tempCanvas.remove()
+          if (exportCanvas !== tempCanvas) exportCanvas.remove()
         }
 
         pdf.save('annotated.pdf')
       } catch (err) {
         console.error('PDF export failed:', err)
       }
-    }, [pdfDoc, pages, getPageAnnotations, naturalWidth, naturalHeight])
+    }, [pdfDoc, pages, getPageAnnotations, naturalWidth, naturalHeight, viewRotation])
 
     // ────────────────────────────────────────────────────────
     // Tool buttons
     // ────────────────────────────────────────────────────────
     const tools: { id: PdfTool; icon: typeof Pen; label: string }[] = [
-      { id: 'select', icon: MousePointer2, label: 'Select' },
-      { id: 'pen', icon: Pen, label: 'Pen' },
-      { id: 'highlighter', icon: Highlighter, label: 'Highlighter' },
-      { id: 'eraser', icon: Eraser, label: 'Eraser' },
-      { id: 'text', icon: Type, label: 'Text' },
-      { id: 'rectangle', icon: Square, label: 'Rectangle' },
-      { id: 'circle', icon: Circle, label: 'Circle' },
-      { id: 'arrow', icon: ArrowUpRight, label: 'Arrow' },
-      { id: 'sticky', icon: StickyNoteIcon, label: 'Sticky Note' },
+      { id: 'select', icon: MousePointer2, label: 'Select (S)' },
+      { id: 'pen', icon: Pen, label: 'Pen (P)' },
+      { id: 'highlighter', icon: Highlighter, label: 'Highlighter (H)' },
+      { id: 'eraser', icon: Eraser, label: 'Eraser (E)' },
+      { id: 'text', icon: Type, label: 'Text (T)' },
+      { id: 'rectangle', icon: Square, label: 'Rectangle (R)' },
+      { id: 'circle', icon: Circle, label: 'Circle (C)' },
+      { id: 'arrow', icon: ArrowUpRight, label: 'Arrow (A)' },
+      { id: 'line', icon: Minus, label: 'Line (L)' },
+      { id: 'sticky', icon: StickyNoteIcon, label: 'Sticky Note (N)' },
+      { id: 'textselect', icon: TextCursor, label: 'Select PDF Text (I)' },
     ]
 
     // ────────────────────────────────────────────────────────
@@ -1425,25 +2222,40 @@ const PdfAnnotationEditor = forwardRef<PdfAnnotationEditorHandle, PdfAnnotationE
         <div className="flex h-full flex-col items-center justify-center gap-4 p-8">
           <div className="rounded-xl border-2 border-dashed border-border p-12 text-center">
             <Upload className="mx-auto mb-4 h-12 w-12 text-muted-foreground" />
-            <h3 className="mb-2 text-lg font-semibold text-foreground">Upload a PDF to annotate</h3>
-            <p className="mb-4 text-sm text-muted-foreground">Max file size: 10 MB</p>
+            <h3 className="mb-2 text-lg font-semibold text-foreground">Add a PDF to annotate</h3>
+            <p className="mb-6 text-sm text-muted-foreground">Upload a new file or pick one you've already uploaded</p>
             {pdfError && (
               <p className="mb-4 text-sm text-red-500">{pdfError}</p>
             )}
-            <button
-              onClick={() => fileInputRef.current?.click()}
-              disabled={pdfLoading || disabled}
-              className="rounded-lg bg-rose-500 px-6 py-2.5 text-sm font-medium text-white transition-colors hover:bg-rose-600 disabled:opacity-50"
-            >
-              {pdfLoading ? (
-                <span className="flex items-center gap-2">
-                  <Loader2 className="h-4 w-4 animate-spin" />
-                  Uploading...
-                </span>
-              ) : (
-                'Choose PDF File'
-              )}
-            </button>
+            <div className="flex flex-col items-center gap-3 sm:flex-row sm:justify-center">
+              <button
+                onClick={() => fileInputRef.current?.click()}
+                disabled={pdfLoading || disabled}
+                className="flex items-center gap-2 rounded-lg bg-rose-500 px-6 py-2.5 text-sm font-medium text-white transition-colors hover:bg-rose-600 disabled:opacity-50"
+              >
+                {pdfLoading ? (
+                  <>
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                    Loading...
+                  </>
+                ) : (
+                  <>
+                    <Upload size={15} />
+                    Upload new PDF
+                  </>
+                )}
+              </button>
+              <span className="text-xs text-muted-foreground">or</span>
+              <button
+                onClick={() => setShowFilePicker(true)}
+                disabled={pdfLoading || disabled}
+                className="flex items-center gap-2 rounded-lg border border-border bg-surface px-6 py-2.5 text-sm font-medium text-foreground transition-colors hover:bg-surface-hover disabled:opacity-50"
+              >
+                <FolderOpen size={15} />
+                Browse uploaded files
+              </button>
+            </div>
+            <p className="mt-4 text-xs text-muted-foreground">Max upload size: 50 MB</p>
             <input
               ref={fileInputRef}
               type="file"
@@ -1452,6 +2264,14 @@ const PdfAnnotationEditor = forwardRef<PdfAnnotationEditorHandle, PdfAnnotationE
               onChange={handleFileSelect}
             />
           </div>
+
+          {/* File picker modal */}
+          <FileExplorerModal
+            isOpen={showFilePicker}
+            onClose={() => setShowFilePicker(false)}
+            title="Select a PDF"
+            onSelectFiles={handleSelectExistingFile}
+          />
         </div>
       )
     }
@@ -1487,232 +2307,367 @@ const PdfAnnotationEditor = forwardRef<PdfAnnotationEditorHandle, PdfAnnotationE
     // ────────────────────────────────────────────────────────
     return (
       <div ref={containerRef} className="flex h-full flex-col" tabIndex={-1}>
-        {/* Toolbar */}
-        <div className="flex flex-wrap items-center gap-1 border-b border-border bg-surface px-2 py-1.5">
-          {/* Tool buttons */}
-          {tools.map(t => {
-            const Icon = t.icon
-            return (
+        {/* ── Toolbar ─────────────────────────────────────────── */}
+        <div className="flex flex-col border-b border-border bg-surface">
+
+          {/* Tab bar row */}
+          <div className="flex items-center gap-0.5 px-2 pt-1.5">
+            {/* Tab buttons */}
+            {([ 
+              { id: 'annotate' as const, label: 'Annotate' },
+              { id: 'view'     as const, label: 'View' },
+              { id: 'pages'    as const, label: 'Pages' },
+            ] as const).map(tab => (
               <button
-                key={t.id}
-                title={t.label}
-                onClick={() => setTool(t.id)}
-                className={`rounded p-1.5 transition-colors ${
-                  tool === t.id
-                    ? 'bg-rose-100 text-rose-600 dark:bg-rose-900/40 dark:text-rose-400'
-                    : 'text-muted-foreground hover:bg-surface-hover'
+                key={tab.id}
+                onClick={() => setToolbarTab(tab.id)}
+                className={`rounded-t-md px-3 py-1 text-xs font-medium transition-colors ${
+                  toolbarTab === tab.id
+                    ? 'bg-surface-hover text-foreground'
+                    : 'text-muted-foreground hover:text-foreground hover:bg-surface-hover/60'
                 }`}
               >
-                <Icon size={16} />
+                {tab.label}
               </button>
-            )
-          })}
+            ))}
 
-          <div className="mx-1 h-5 w-px bg-border" />
+            <div className="flex-1" />
 
-          {/* Color picker */}
-          {COLORS.map(c => (
+            {/* Always-visible: Undo / Redo / Export */}
+            <button title="Undo (Ctrl+Z)" onClick={undo} disabled={historyIdx <= 0}
+              className="rounded p-1.5 text-muted-foreground transition-colors hover:bg-surface-hover disabled:opacity-30">
+              <Undo2 size={15} />
+            </button>
+            <button title="Redo (Ctrl+Shift+Z)" onClick={redo} disabled={historyIdx >= history.length - 1}
+              className="rounded p-1.5 text-muted-foreground transition-colors hover:bg-surface-hover disabled:opacity-30">
+              <Redo2 size={15} />
+            </button>
+            <div className="mx-1 h-4 w-px bg-border" />
             <button
-              key={c}
-              title={c}
-              onClick={() => setColor(c)}
-              className={`h-5 w-5 rounded-full border transition-transform ${
-                color === c ? 'scale-125 border-foreground' : 'border-border'
-              }`}
-              style={{ backgroundColor: c }}
-            />
-          ))}
+              title="Export annotated PDF"
+              onClick={handleExportPdf}
+              className="flex items-center gap-1 rounded px-2 py-1 text-xs text-muted-foreground transition-colors hover:bg-surface-hover"
+            >
+              <Download size={14} />
+              <span>Export</span>
+            </button>
+          </div>
 
-          <div className="mx-1 h-5 w-px bg-border" />
+          {/* Tab content row */}
+          <div className="flex flex-wrap items-center gap-1 px-2 pb-1.5 pt-0.5">
 
-          {/* Stroke size */}
-          <label className="flex items-center gap-1 text-xs text-muted-foreground">
-            Size
-            <input
-              type="range"
-              min={1}
-              max={20}
-              value={strokeSize}
-              onChange={e => setStrokeSize(Number(e.target.value))}
-              className="w-16"
-            />
-            <span className="w-4 text-center">{strokeSize}</span>
-          </label>
+            {/* ── ANNOTATE tab ─────────────────────────────── */}
+            {toolbarTab === 'annotate' && (
+              <>
+                {/* Drawing tools */}
+                {tools.map(t => {
+                  const Icon = t.icon
+                  return (
+                    <button
+                      key={t.id}
+                      title={t.label}
+                      onClick={() => setTool(t.id)}
+                      className={`rounded p-1.5 transition-colors ${
+                        tool === t.id
+                          ? 'bg-rose-100 text-rose-600 dark:bg-rose-900/40 dark:text-rose-400'
+                          : 'text-muted-foreground hover:bg-surface-hover'
+                      }`}
+                    >
+                      <Icon size={16} />
+                    </button>
+                  )
+                })}
 
-          <div className="mx-1 h-5 w-px bg-border" />
+                <div className="mx-1 h-5 w-px bg-border" />
 
-          {/* Undo/Redo */}
-          <button
-            title="Undo (Ctrl+Z)"
-            onClick={undo}
-            disabled={historyIdx <= 0}
-            className="rounded p-1.5 text-muted-foreground transition-colors hover:bg-surface-hover disabled:opacity-30"
-          >
-            <Undo2 size={16} />
-          </button>
-          <button
-            title="Redo (Ctrl+Shift+Z)"
-            onClick={redo}
-            disabled={historyIdx >= history.length - 1}
-            className="rounded p-1.5 text-muted-foreground transition-colors hover:bg-surface-hover disabled:opacity-30"
-          >
-            <Redo2 size={16} />
-          </button>
+                {/* Color picker */}
+                {COLORS.map(c => (
+                  <button
+                    key={c}
+                    title={c}
+                    onClick={() => setColor(c)}
+                    className={`h-5 w-5 rounded-full border transition-transform ${
+                      color === c ? 'scale-125 border-foreground' : 'border-border'
+                    }`}
+                    style={{ backgroundColor: c }}
+                  />
+                ))}
 
-          <div className="mx-1 h-5 w-px bg-border" />
+                <div className="mx-1 h-5 w-px bg-border" />
 
-          {/* Zoom */}
-          <button
-            title="Zoom out"
-            onClick={handleZoomOut}
-            disabled={zoom <= MIN_ZOOM}
-            className="rounded p-1.5 text-muted-foreground transition-colors hover:bg-surface-hover disabled:opacity-30"
-          >
-            <ZoomOut size={16} />
-          </button>
-          <input
-            type="range"
-            min={MIN_ZOOM}
-            max={MAX_ZOOM}
-            step={0.05}
-            value={zoom}
-            onChange={handleZoomSlider}
-            className="w-20"
-            title={`Zoom: ${Math.round(zoom * 100)}%`}
-          />
-          <button
-            title="Zoom in"
-            onClick={handleZoomIn}
-            disabled={zoom >= MAX_ZOOM}
-            className="rounded p-1.5 text-muted-foreground transition-colors hover:bg-surface-hover disabled:opacity-30"
-          >
-            <ZoomIn size={16} />
-          </button>
-          <span className="min-w-[3rem] text-center text-xs text-muted-foreground">
-            {Math.round(zoom * 100)}%
-          </span>
-          <button
-            title="Fit to width"
-            onClick={handleFitWidth}
-            className="rounded px-1.5 py-1 text-[10px] font-medium text-muted-foreground transition-colors hover:bg-surface-hover"
-          >
-            W
-          </button>
-          <button
-            title="Fit to page"
-            onClick={handleFitPage}
-            className="rounded p-1.5 text-muted-foreground transition-colors hover:bg-surface-hover"
-          >
-            <Maximize size={14} />
-          </button>
+                {/* Stroke size */}
+                <label className="flex items-center gap-1 text-xs text-muted-foreground">
+                  Size
+                  <input
+                    type="range" min={1} max={20} value={strokeSize}
+                    onChange={e => setStrokeSize(Number(e.target.value))}
+                    className="w-16"
+                  />
+                  <span className="w-4 text-center">{strokeSize}</span>
+                </label>
 
-          <div className="mx-1 h-5 w-px bg-border" />
+                {/* Shape fill toggle — rect / circle */}
+                {(tool === 'rectangle' || tool === 'circle') && (
+                  <>
+                    <div className="mx-1 h-5 w-px bg-border" />
+                    <button
+                      title={shapeFilled ? 'Filled (click to unfill)' : 'No fill (click to fill)'}
+                      onClick={() => setShapeFilled(v => !v)}
+                      className={`rounded px-2 py-1 text-xs font-medium transition-colors ${
+                        shapeFilled
+                          ? 'bg-rose-100 text-rose-600 dark:bg-rose-900/40 dark:text-rose-400'
+                          : 'text-muted-foreground hover:bg-surface-hover'
+                      }`}
+                    >
+                      Fill
+                    </button>
+                  </>
+                )}
 
-          {/* Rotate */}
-          <button
-            title="Rotate 90° counter-clockwise"
-            onClick={() => setViewRotation(r => ((r + 270) % 360) as 0 | 90 | 180 | 270)}
-            className="rounded p-1.5 text-muted-foreground transition-colors hover:bg-surface-hover"
-          >
-            <RotateCcw size={15} />
-          </button>
-          <select
-            value={viewRotation}
-            onChange={e => setViewRotation(Number(e.target.value) as 0 | 90 | 180 | 270)}
-            title="Page rotation"
-            className="rounded border border-border bg-surface px-1 py-0.5 text-xs text-muted-foreground focus:outline-none"
-          >
-            <option value={0}>0°</option>
-            <option value={90}>90° CW</option>
-            <option value={180}>180°</option>
-            <option value={270}>90° CCW</option>
-          </select>
-          <button
-            title="Rotate 90° clockwise"
-            onClick={() => setViewRotation(r => ((r + 90) % 360) as 0 | 90 | 180 | 270)}
-            className="rounded p-1.5 text-muted-foreground transition-colors hover:bg-surface-hover"
-          >
-            <RotateCw size={15} />
-          </button>
+                {/* Double-ended arrow toggle */}
+                {tool === 'arrow' && (
+                  <>
+                    <div className="mx-1 h-5 w-px bg-border" />
+                    <button
+                      title={doubleEndedArrow ? 'Double-headed (click for single)' : 'Single arrow (click for double)'}
+                      onClick={() => setDoubleEndedArrow(v => !v)}
+                      className={`rounded px-2 py-1 text-base transition-colors ${
+                        doubleEndedArrow
+                          ? 'bg-rose-100 text-rose-600 dark:bg-rose-900/40 dark:text-rose-400'
+                          : 'text-muted-foreground hover:bg-surface-hover'
+                      }`}
+                    >
+                      ↔
+                    </button>
+                  </>
+                )}
+              </>
+            )}
 
-          <div className="mx-1 h-5 w-px bg-border" />
+            {/* ── VIEW tab ─────────────────────────────────── */}
+            {toolbarTab === 'view' && (
+              <>
+                {/* Zoom */}
+                <button title="Zoom out" onClick={handleZoomOut} disabled={zoom <= MIN_ZOOM}
+                  className="rounded p-1.5 text-muted-foreground transition-colors hover:bg-surface-hover disabled:opacity-30">
+                  <ZoomOut size={16} />
+                </button>
+                <input
+                  type="range" min={MIN_ZOOM} max={MAX_ZOOM} step={0.05} value={zoom}
+                  onChange={handleZoomSlider} className="w-24"
+                  title={`Zoom: ${Math.round(zoom * 100)}%`}
+                />
+                <button title="Zoom in" onClick={handleZoomIn} disabled={zoom >= MAX_ZOOM}
+                  className="rounded p-1.5 text-muted-foreground transition-colors hover:bg-surface-hover disabled:opacity-30">
+                  <ZoomIn size={16} />
+                </button>
+                <span className="min-w-[3rem] text-center text-xs text-muted-foreground">
+                  {Math.round(zoom * 100)}%
+                </span>
+                <button title="Fit to width" onClick={handleFitWidth}
+                  className="rounded px-1.5 py-1 text-[10px] font-medium text-muted-foreground transition-colors hover:bg-surface-hover">
+                  W
+                </button>
+                <button title="Fit to page" onClick={handleFitPage}
+                  className="rounded p-1.5 text-muted-foreground transition-colors hover:bg-surface-hover">
+                  <Maximize size={14} />
+                </button>
 
-          {/* Page navigation */}
-          <button
-            title="Toggle page thumbnails"
-            onClick={() => setShowThumbnails(v => !v)}
-            className={`rounded p-1.5 transition-colors ${
-              showThumbnails
-                ? 'bg-rose-100 text-rose-600 dark:bg-rose-900/40 dark:text-rose-400'
-                : 'text-muted-foreground hover:bg-surface-hover'
-            }`}
-          >
-            <PanelLeft size={16} />
-          </button>
-          <div className="mx-0.5 h-5 w-px bg-border" />
-          <button
-            title="Insert blank page before current page"
-            onClick={() => insertBlankPage(currentPage - 1)}
-            disabled={disabled}
-            className="rounded p-1 text-muted-foreground transition-colors hover:bg-surface-hover disabled:opacity-30"
-          >
-            <Plus size={13} />
-          </button>
-          <button
-            title="Previous page"
-            onClick={() => goToPage(Math.max(0, currentPage - 1))}
-            disabled={currentPage <= 0}
-            className="rounded p-1.5 text-muted-foreground transition-colors hover:bg-surface-hover disabled:opacity-30"
-          >
-            <ChevronLeft size={16} />
-          </button>
-          <span className="min-w-[4rem] text-center text-xs text-muted-foreground">
-            {currentPage + 1} / {totalPages}
-          </span>
-          <button
-            title="Next page"
-            onClick={() => goToPage(Math.min(totalPages - 1, currentPage + 1))}
-            disabled={currentPage >= totalPages - 1}
-            className="rounded p-1.5 text-muted-foreground transition-colors hover:bg-surface-hover disabled:opacity-30"
-          >
-            <ChevronRight size={16} />
-          </button>
-          <button
-            title="Insert blank page after current page"
-            onClick={() => insertBlankPage(currentPage)}
-            disabled={disabled}
-            className="rounded p-1 text-muted-foreground transition-colors hover:bg-surface-hover disabled:opacity-30"
-          >
-            <Plus size={13} />
-          </button>
-          <button
-            title={pages.length <= 1 ? 'Cannot delete the only page' : 'Delete current page'}
-            onClick={() => {
-              const pg = pages.find(p => p.pageNumber === currentPage)
-              if (pg?.isBlank) {
-                deletePage(currentPage)
-              } else {
-                setDeleteConfirmIdx(currentPage)
-              }
-            }}
-            disabled={disabled || pages.length <= 1}
-            className="rounded p-1.5 text-muted-foreground transition-colors hover:bg-surface-hover disabled:opacity-30"
-          >
-            <Trash2 size={14} />
-          </button>
+                <div className="mx-1 h-5 w-px bg-border" />
 
-          <div className="flex-1" />
+                {/* Rotate */}
+                <button title="Rotate 90° counter-clockwise"
+                  onClick={() => setViewRotation(r => ((r + 270) % 360) as 0 | 90 | 180 | 270)}
+                  className="rounded p-1.5 text-muted-foreground transition-colors hover:bg-surface-hover">
+                  <RotateCcw size={15} />
+                </button>
+                <select
+                  value={viewRotation}
+                  onChange={e => setViewRotation(Number(e.target.value) as 0 | 90 | 180 | 270)}
+                  title="Page rotation"
+                  className="rounded border border-border bg-surface px-1 py-0.5 text-xs text-muted-foreground focus:outline-none"
+                >
+                  <option value={0}>0°</option>
+                  <option value={90}>90° CW</option>
+                  <option value={180}>180°</option>
+                  <option value={270}>90° CCW</option>
+                </select>
+                <button title="Rotate 90° clockwise"
+                  onClick={() => setViewRotation(r => ((r + 90) % 360) as 0 | 90 | 180 | 270)}
+                  className="rounded p-1.5 text-muted-foreground transition-colors hover:bg-surface-hover">
+                  <RotateCw size={15} />
+                </button>
 
-          {/* Export */}
-          <button
-            title="Export annotated PDF"
-            onClick={handleExportPdf}
-            className="flex items-center gap-1 rounded px-2 py-1 text-xs text-muted-foreground transition-colors hover:bg-surface-hover"
-          >
-            <Download size={14} />
-            Export PDF
-          </button>
+                <div className="mx-1 h-5 w-px bg-border" />
+
+                {/* Text layer */}
+                <button
+                  title={showTextLayer ? 'Hide PDF text layer' : 'Show PDF text layer (enables text selection & search)'}
+                  onClick={() => {
+                    setShowTextLayer(v => {
+                      if (v) { setSearchVisible(false); setSearchQuery('') }
+                      return !v
+                    })
+                  }}
+                  className={`flex items-center gap-1 rounded px-2 py-1 text-xs transition-colors ${
+                    showTextLayer
+                      ? 'bg-rose-100 text-rose-600 dark:bg-rose-900/40 dark:text-rose-400'
+                      : 'text-muted-foreground hover:bg-surface-hover'
+                  }`}
+                >
+                  <Layers size={14} />
+                  Text layer
+                </button>
+
+                {/* Search */}
+                <button
+                  title="Find in PDF (Ctrl+F)"
+                  onClick={() => {
+                    setShowTextLayer(true)
+                    setSearchVisible(v => { if (!v) setSearchQuery(''); return true })
+                  }}
+                  className={`flex items-center gap-1 rounded px-2 py-1 text-xs transition-colors ${
+                    searchVisible ? 'bg-rose-100 text-rose-600 dark:bg-rose-900/40 dark:text-rose-400' : 'text-muted-foreground hover:bg-surface-hover'
+                  }`}
+                >
+                  <Search size={14} />
+                  Find
+                </button>
+              </>
+            )}
+
+            {/* ── PAGES tab ────────────────────────────────── */}
+            {toolbarTab === 'pages' && (
+              <>
+                {/* Thumbnails */}
+                <button
+                  title="Toggle page thumbnails"
+                  onClick={() => setShowThumbnails(v => !v)}
+                  className={`flex items-center gap-1 rounded px-2 py-1 text-xs transition-colors ${
+                    showThumbnails
+                      ? 'bg-rose-100 text-rose-600 dark:bg-rose-900/40 dark:text-rose-400'
+                      : 'text-muted-foreground hover:bg-surface-hover'
+                  }`}
+                >
+                  <PanelLeft size={14} />
+                  Thumbnails
+                </button>
+
+                <div className="mx-1 h-5 w-px bg-border" />
+
+                {/* Insert before */}
+                <button
+                  title="Insert blank page before current page"
+                  onClick={() => insertBlankPage(currentPage - 1)}
+                  disabled={disabled}
+                  className="flex items-center gap-1 rounded px-2 py-1 text-xs text-muted-foreground transition-colors hover:bg-surface-hover disabled:opacity-30"
+                >
+                  <Plus size={13} />
+                  Before
+                </button>
+
+                {/* Page navigation */}
+                <button title="Previous page (←)"
+                  onClick={() => goToPage(Math.max(0, currentPage - 1))}
+                  disabled={currentPage <= 0}
+                  className="rounded p-1.5 text-muted-foreground transition-colors hover:bg-surface-hover disabled:opacity-30">
+                  <ChevronLeft size={16} />
+                </button>
+                <span className="min-w-[4rem] text-center text-xs text-muted-foreground">
+                  {currentPage + 1} / {totalPages}
+                </span>
+                <button title="Next page (→)"
+                  onClick={() => goToPage(Math.min(totalPages - 1, currentPage + 1))}
+                  disabled={currentPage >= totalPages - 1}
+                  className="rounded p-1.5 text-muted-foreground transition-colors hover:bg-surface-hover disabled:opacity-30">
+                  <ChevronRight size={16} />
+                </button>
+
+                {/* Insert after */}
+                <button
+                  title="Insert blank page after current page"
+                  onClick={() => insertBlankPage(currentPage)}
+                  disabled={disabled}
+                  className="flex items-center gap-1 rounded px-2 py-1 text-xs text-muted-foreground transition-colors hover:bg-surface-hover disabled:opacity-30"
+                >
+                  <Plus size={13} />
+                  After
+                </button>
+
+                <div className="mx-1 h-5 w-px bg-border" />
+
+                {/* Delete page */}
+                <button
+                  title={pages.length <= 1 ? 'Cannot delete the only page' : 'Delete current page'}
+                  onClick={() => {
+                    const pg = pages.find(p => p.pageNumber === currentPage)
+                    if (pg?.isBlank) { deletePage(currentPage) } else { setDeleteConfirmIdx(currentPage) }
+                  }}
+                  disabled={disabled || pages.length <= 1}
+                  className="flex items-center gap-1 rounded px-2 py-1 text-xs text-red-500 transition-colors hover:bg-red-50 dark:hover:bg-red-950/30 disabled:opacity-30"
+                >
+                  <Trash2 size={13} />
+                  Delete page
+                </button>
+              </>
+            )}
+
+          </div>
         </div>
+
+        {/* Find/search bar */}
+        {searchVisible && showTextLayer && (
+          <div className="flex items-center gap-1.5 border-b border-border bg-surface px-3 py-1.5">
+            {searchIndexBuilding
+              ? <Loader2 size={13} className="shrink-0 animate-spin text-muted-foreground" />
+              : <Search size={13} className="shrink-0 text-muted-foreground" />
+            }
+            <input
+              autoFocus
+              type="text"
+              placeholder="Find in PDF…"
+              value={searchQuery}
+              onChange={e => setSearchQuery(e.target.value)}
+              onKeyDown={e => {
+                if (e.key === 'Enter') navigateSearch(e.shiftKey ? -1 : 1)
+                if (e.key === 'Escape') { setSearchVisible(false); setSearchQuery('') }
+              }}
+              className="min-w-0 flex-1 bg-transparent text-xs text-foreground outline-none placeholder:text-muted-foreground"
+            />
+            {searchQuery.trim() && (
+              <span className="shrink-0 text-[11px] text-muted-foreground">
+                {searchIndexBuilding
+                  ? 'Indexing…'
+                  : searchMatchCount === 0
+                  ? 'No results'
+                  : `${searchCurrentIdx + 1} / ${searchMatchCount}`}
+              </span>
+            )}
+            <button
+              onClick={() => navigateSearch(-1)}
+              disabled={searchMatchCount === 0}
+              title="Previous match (Shift+Enter)"
+              className="rounded p-0.5 text-muted-foreground hover:bg-surface-hover disabled:opacity-30"
+            >
+              <ChevronUp size={14} />
+            </button>
+            <button
+              onClick={() => navigateSearch(1)}
+              disabled={searchMatchCount === 0}
+              title="Next match (Enter)"
+              className="rounded p-0.5 text-muted-foreground hover:bg-surface-hover disabled:opacity-30"
+            >
+              <ChevronDown size={14} />
+            </button>
+            <button
+              onClick={() => { setSearchVisible(false); setSearchQuery('') }}
+              title="Close search (Escape)"
+              className="rounded p-0.5 text-muted-foreground hover:bg-surface-hover"
+            >
+              <X size={14} />
+            </button>
+          </div>
+        )}
 
         {/* Canvas area + optional thumbnail strip */}
         <div className="flex flex-1 overflow-hidden">
@@ -1779,7 +2734,13 @@ const PdfAnnotationEditor = forwardRef<PdfAnnotationEditorHandle, PdfAnnotationE
 
             {/* Outer div reserves the correct bounding-box size in the scroll area */}
             <div
-              className="relative mx-auto my-4"
+              className={`relative mx-auto my-4${
+                pageAnim === 'exit-up'           ? ' pdf-page-exit-up'
+                : pageAnim === 'exit-down'       ? ' pdf-page-exit-down'
+                : pageAnim === 'enter-from-bottom' ? ' pdf-page-enter-from-bottom'
+                : pageAnim === 'enter-from-top'  ? ' pdf-page-enter-from-top'
+                : ''
+              }`}
               style={{
                 width:  (viewRotation === 90 || viewRotation === 270) ? canvasHeight : canvasWidth,
                 height: (viewRotation === 90 || viewRotation === 270) ? canvasWidth  : canvasHeight,
@@ -1803,6 +2764,17 @@ const PdfAnnotationEditor = forwardRef<PdfAnnotationEditorHandle, PdfAnnotationE
                 className="absolute left-0 top-0"
                 style={{ width: canvasWidth, height: canvasHeight }}
               />
+              {/* Text layer (pdfjs TextLayer) — between PDF and annotation canvas */}
+              <div
+                ref={textLayerRef}
+                className="pdf-text-layer absolute left-0 top-0"
+                style={{
+                  width: canvasWidth,
+                  height: canvasHeight,
+                  display: showTextLayer ? 'block' : 'none',
+                  pointerEvents: showTextLayer && tool === 'textselect' ? 'auto' : 'none',
+                }}
+              />
               {/* Annotation overlay layer */}
               <canvas
                 ref={annotCanvasRef}
@@ -1810,6 +2782,7 @@ const PdfAnnotationEditor = forwardRef<PdfAnnotationEditorHandle, PdfAnnotationE
                 style={{
                   width: canvasWidth,
                   height: canvasHeight,
+                  pointerEvents: tool === 'textselect' ? 'none' : 'auto',
                   cursor:
                     tool === 'pen' || tool === 'highlighter'
                       ? 'crosshair'
@@ -1821,11 +2794,14 @@ const PdfAnnotationEditor = forwardRef<PdfAnnotationEditorHandle, PdfAnnotationE
                       ? 'cell'
                       : tool === 'select'
                       ? 'default'
+                      : tool === 'textselect'
+                      ? 'text'
                       : 'crosshair',
                 }}
                 onPointerDown={handlePointerDown}
                 onPointerMove={handlePointerMove}
                 onPointerUp={handlePointerUp}
+                onDoubleClick={handleDoubleClick}
               />
               </div>{/* end rotation wrapper */}
 
@@ -1874,12 +2850,99 @@ const PdfAnnotationEditor = forwardRef<PdfAnnotationEditorHandle, PdfAnnotationE
                       title="Increase font size"
                       className="rounded px-1.5 text-sm text-muted-foreground hover:bg-surface-hover"
                     >+</button>
+                    <div className="mx-0.5 h-4 w-px bg-border" />
+                    {COLORS.map(c => (
+                      <button
+                        key={c}
+                        title={`Text color: ${c}`}
+                        onMouseDown={e => { e.preventDefault(); changeTextColor(ta.id, c) }}
+                        className={`h-4 w-4 rounded-full border transition-transform ${
+                          ta.color === c ? 'scale-125 border-foreground' : 'border-border'
+                        }`}
+                        style={{ backgroundColor: c }}
+                      />
+                    ))}
+                    <div className="mx-0.5 h-4 w-px bg-border" />
+                    <select
+                      value={ta.fontFamily ?? 'sans-serif'}
+                      onMouseDown={e => e.stopPropagation()}
+                      onChange={e => changeTextFontFamily(ta.id, e.target.value)}
+                      className="rounded border border-border bg-surface py-0.5 text-[11px] text-muted-foreground focus:outline-none"
+                      title="Font family"
+                    >
+                      <option value="sans-serif">Sans</option>
+                      <option value="serif">Serif</option>
+                      <option value="monospace">Mono</option>
+                    </select>
                   </div>
                 )
               })()}
 
-              {/* Sticky notes overlay — rendered at 0° outside the rotation wrapper */}
-              {getPageAnnotations(currentPage).stickyNotes?.map(sn => {
+
+              {/* Shape formatting toolbar — fill + double-ended arrow for selected shape */}
+              {tool === 'select' && selectedId && (() => {
+                const pageAnnot = getPageAnnotations(currentPage)
+                const shape = pageAnnot.shapes.find(s => s.id === selectedId)
+                if (!shape) return null
+                const { vx, vy } = logicalToVisual(Math.min(shape.x1, shape.x2), Math.min(shape.y1, shape.y2))
+                return (
+                  <div
+                    className="absolute z-40 flex items-center gap-0.5 rounded-lg border border-border bg-surface px-1.5 py-1 shadow-md"
+                    style={{ left: vx, top: Math.max(0, vy - 40) }}
+                  >
+                    {(shape.type === 'rectangle' || shape.type === 'circle') && (
+                      <button
+                        onMouseDown={e => {
+                          e.preventDefault()
+                          const newPages = updatePageAnnotations(currentPage, page => ({
+                            ...page,
+                            shapes: page.shapes.map(s =>
+                              s.id === shape.id ? { ...s, filled: !s.filled } : s
+                            ),
+                          }))
+                          setPages(newPages)
+                          pushHistory(newPages)
+                          emitChange(newPages)
+                        }}
+                        title={shape.filled ? 'Remove fill' : 'Add fill'}
+                        className={`rounded px-1.5 py-0.5 text-[11px] font-medium transition-colors ${
+                          shape.filled
+                            ? 'bg-rose-100 text-rose-600 dark:bg-rose-900/40 dark:text-rose-400'
+                            : 'text-muted-foreground hover:bg-surface-hover'
+                        }`}
+                      >
+                        Fill
+                      </button>
+                    )}
+                    {shape.type === 'arrow' && (
+                      <button
+                        onMouseDown={e => {
+                          e.preventDefault()
+                          const newPages = updatePageAnnotations(currentPage, page => ({
+                            ...page,
+                            shapes: page.shapes.map(s =>
+                              s.id === shape.id ? { ...s, doubleEnded: !s.doubleEnded } : s
+                            ),
+                          }))
+                          setPages(newPages)
+                          pushHistory(newPages)
+                          emitChange(newPages)
+                        }}
+                        title={shape.doubleEnded ? 'Single arrow' : 'Double-headed arrow'}
+                        className={`rounded px-1.5 py-0.5 text-base transition-colors ${
+                          shape.doubleEnded
+                            ? 'bg-rose-100 text-rose-600 dark:bg-rose-900/40 dark:text-rose-400'
+                            : 'text-muted-foreground hover:bg-surface-hover'
+                        }`}
+                      >
+                        ↔
+                      </button>
+                    )}
+                  </div>
+                )
+              })()}
+
+              {/* Sticky notes overlay — rendered at 0° outside the rotation wrapper */}              {getPageAnnotations(currentPage).stickyNotes?.map(sn => {
                 const { vx, vy } = logicalToVisual(sn.x, sn.y)
                 return (
                 <div
@@ -1965,6 +3028,33 @@ const PdfAnnotationEditor = forwardRef<PdfAnnotationEditorHandle, PdfAnnotationE
                       onClick={() => setSelectedId(sn.id)}
                       onChange={e => updateStickyNote(sn.id, { text: e.target.value })}
                       onBlur={commitStickyMove}
+                    />
+                  )}
+                  {/* Resize handle */}
+                  {!sn.collapsed && (
+                    <div
+                      className="absolute bottom-0 right-0 h-3 w-3 cursor-se-resize"
+                      style={{ background: 'rgba(0,0,0,0.15)', borderRadius: '0 0 4px 0' }}
+                      onMouseDown={e => {
+                        e.stopPropagation()
+                        const startX = e.clientX
+                        const startY = e.clientY
+                        const origW = sn.width
+                        const origH = sn.height
+                        const onMove = (me: MouseEvent) => {
+                          updateStickyNote(sn.id, {
+                            width: Math.max(100, origW + (me.clientX - startX) / zoom),
+                            height: Math.max(80, origH + (me.clientY - startY) / zoom),
+                          })
+                        }
+                        const onUp = () => {
+                          window.removeEventListener('mousemove', onMove)
+                          window.removeEventListener('mouseup', onUp)
+                          commitStickyMove()
+                        }
+                        window.addEventListener('mousemove', onMove)
+                        window.addEventListener('mouseup', onUp)
+                      }}
                     />
                   )}
                 </div>

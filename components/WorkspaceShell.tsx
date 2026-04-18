@@ -104,6 +104,8 @@ function WorkspaceContent() {
   
   // Workspace view state
   const [activeView, setActiveView] = useState<WorkspaceView>('notes')
+  const [showFilesPanel, setShowFilesPanel] = useState(false)
+  const [showFileExplorerModal, setShowFileExplorerModal] = useState(false)
   const [workspaceNavCollapsed, setWorkspaceNavCollapsed] = useState(false)
   const [workspaceNavOpen, setWorkspaceNavOpen] = useState(false)
   const mobileSwipeStartRef = useRef<{ x: number; y: number } | null>(null)
@@ -1113,7 +1115,13 @@ function WorkspaceContent() {
           currentFolderName={getCurrentFolderName()}
           onSignOut={handleSignOut}
           userEmail={user.email}
-          onOpenFileExplorer={() => setActiveView('files')}
+          onOpenFileExplorer={() => {
+            if (isMobile) {
+              setActiveView('files')
+            } else {
+              setShowFilesPanel(prev => !prev)
+            }
+          }}
           onOpenProjectsView={() => setActiveView('projects')}
         />
       )
@@ -1195,6 +1203,7 @@ function WorkspaceContent() {
             setSelectedProjectId(projectId)
             setActiveView('projects')
           }}
+          onOpenFileExplorer={() => setShowFileExplorerModal(true)}
           collapsed={sidebarCollapsed}
           onToggleCollapsed={() => setSidebarCollapsed(prev => !prev)}
         />
@@ -1322,6 +1331,10 @@ function WorkspaceContent() {
                   setActiveView('projects')
                   setWorkspaceNavOpen(false)
                 }}
+                onOpenFileExplorer={() => {
+                  setShowFileExplorerModal(true)
+                  setWorkspaceNavOpen(false)
+                }}
                 collapsed={false}
                 onToggleCollapsed={() => {}}
               />
@@ -1365,7 +1378,46 @@ function WorkspaceContent() {
           />
         )}
 
-        {activeView === 'notes' && renderNotesView()}
+        {activeView === 'notes' && (
+          <div className="relative flex h-full overflow-hidden">
+            {/* Main editor area */}
+            <div className="flex-1 min-w-0 overflow-hidden">
+              {renderNotesView()}
+            </div>
+
+            {/* Right files panel (desktop only) */}
+            {!isMobile && showFilesPanel && (
+              <div
+                className="flex-shrink-0 border-l border-gray-200 dark:border-slate-700 flex flex-col overflow-hidden"
+                style={{ width: '360px' }}
+              >
+                <FileExplorerModal
+                  isOpen
+                  asView
+                  onClose={() => setShowFilesPanel(false)}
+                  title="Files"
+                />
+              </div>
+            )}
+
+            {/* Files panel toggle tab (desktop only) */}
+            {!isMobile && (
+              <button
+                onClick={() => setShowFilesPanel(prev => !prev)}
+                className={`absolute top-1/2 -translate-y-1/2 z-20 flex items-center justify-center w-5 h-14 rounded-l-lg border border-r-0 shadow-sm transition-all ${
+                  showFilesPanel
+                    ? 'bg-alpine-600 border-alpine-600 text-white'
+                    : 'bg-white dark:bg-slate-800 border-gray-200 dark:border-slate-700 text-gray-400 dark:text-slate-500 hover:bg-alpine-50 dark:hover:bg-alpine-900/20 hover:text-alpine-600 hover:border-alpine-300'
+                }`}
+                style={{ right: showFilesPanel ? '360px' : '0' }}
+                title={showFilesPanel ? 'Close files panel' : 'Open files panel'}
+                aria-label={showFilesPanel ? 'Close files panel' : 'Open files panel'}
+              >
+                <FolderOpen size={12} />
+              </button>
+            )}
+          </div>
+        )}
 
         {activeView === 'files' && (
           <FileExplorerModal
@@ -1374,6 +1426,11 @@ function WorkspaceContent() {
             onClose={() => setActiveView('notes')}
           />
         )}
+
+        <FileExplorerModal
+          isOpen={showFileExplorerModal}
+          onClose={() => setShowFileExplorerModal(false)}
+        />
 
         {activeView === 'projects' && selectedProjectId && (() => {
           const dashboardProject = projects.find(p => p.id === selectedProjectId)

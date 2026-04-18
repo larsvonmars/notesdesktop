@@ -78,14 +78,11 @@ import {
   type FileBlockPayload,
   initializeFileBlockInteractions,
   FILE_BLOCK_ANNOTATE_PDF_EVENT,
-  FILE_BLOCK_PREVIEW_PDF_EVENT,
   FILE_BLOCK_PREVIEW_DOCX_EVENT,
-  type FileBlockPreviewPdfEventDetail,
   type FileBlockPreviewDocxEventDetail,
   type FileBlockAnnotatePdfEventDetail,
 } from '../lib/editor/fileBlock'
 import FileExplorerModal from './FileExplorerModal'
-import PdfPreviewModal from './PdfPreviewModal'
 import DocxPreviewModal from './DocxPreviewModal'
 import SettingsModal from './SettingsModal'
 import AIAssistant from './AIAssistant'
@@ -543,6 +540,7 @@ export default function NoteEditor({
   const bulletJournalRef = useRef<BulletJournalEditorHandle | null>(null)
   const dataSheetRef = useRef<DataSheetEditorHandle | null>(null)
   const pdfAnnotationRef = useRef<PdfAnnotationEditorHandle | null>(null)
+  const [pdfExtractedText, setPdfExtractedText] = useState<string>('')
   const headingUpdateTimeoutRef = useRef<number | null>(null)
   const autosaveTimeoutRef = useRef<number | null>(null)
   const isAutosavingRef = useRef(false)
@@ -573,13 +571,6 @@ export default function NoteEditor({
   const [showProjectsModal, setShowProjectsModal] = useState(false)
   const [showFilePicker, setShowFilePicker] = useState(false)
   
-  // PDF Preview Modal State
-  const [pdfPreview, setPdfPreview] = useState<{isOpen: boolean, filePath: string | null, fileName: string | null}>({
-    isOpen: false,
-    filePath: null,
-    fileName: null
-  })
-
   // DOCX Preview Modal State
   const [docxPreview, setDocxPreview] = useState<{isOpen: boolean, filePath: string | null, fileName: string | null}>({
     isOpen: false,
@@ -1940,18 +1931,6 @@ export default function NoteEditor({
       }
     }
 
-    const handlePreviewPdfFromFileBlock = (event: Event) => {
-      const customEvent = event as CustomEvent<FileBlockPreviewPdfEventDetail>
-      const detail = customEvent.detail
-      if (!detail?.filePath) return
-      
-      setPdfPreview({
-        isOpen: true,
-        filePath: detail.filePath,
-        fileName: detail.fileName
-      })
-    }
-
     const handlePreviewDocxFromFileBlock = (event: Event) => {
       const customEvent = event as CustomEvent<FileBlockPreviewDocxEventDetail>
       const detail = customEvent.detail
@@ -1981,13 +1960,11 @@ export default function NoteEditor({
     }
 
     window.addEventListener(FILE_BLOCK_ANNOTATE_PDF_EVENT, handleAnnotatePdfFromFileBlock as EventListener)
-    window.addEventListener(FILE_BLOCK_PREVIEW_PDF_EVENT, handlePreviewPdfFromFileBlock as EventListener)
     window.addEventListener(FILE_BLOCK_PREVIEW_DOCX_EVENT, handlePreviewDocxFromFileBlock as EventListener)
     window.addEventListener('click', handleOpenEmbeddedPdfNote)
 
     return () => {
       window.removeEventListener(FILE_BLOCK_ANNOTATE_PDF_EVENT, handleAnnotatePdfFromFileBlock as EventListener)
-      window.removeEventListener(FILE_BLOCK_PREVIEW_PDF_EVENT, handlePreviewPdfFromFileBlock as EventListener)
       window.removeEventListener(FILE_BLOCK_PREVIEW_DOCX_EVENT, handlePreviewDocxFromFileBlock as EventListener)
       window.removeEventListener('click', handleOpenEmbeddedPdfNote)
     }
@@ -2938,9 +2915,12 @@ export default function NoteEditor({
       return extractDataSheetForAI(dataSheetData.columns, dataSheetData.rows)
     }
     if (noteType === 'drawing') return '[This note contains a drawing — no text content is available for AI]'
-    if (noteType === 'pdf-annotation') return '[This note contains PDF annotations — no text content is available for AI]'
+    if (noteType === 'pdf-annotation') {
+      if (pdfExtractedText) return `[PDF document — extracted text below]\n\n${pdfExtractedText}`
+      return '[This note contains a PDF — text is still being extracted or the PDF has no selectable text]'
+    }
     return content
-  }, [noteType, content, mindmapData, bulletJournalData, dataSheetData])
+  }, [noteType, content, mindmapData, bulletJournalData, dataSheetData, pdfExtractedText])
 
   const handleAICreateMindmapNote = useCallback(async (input: {
     sourceText: string
@@ -3313,6 +3293,7 @@ export default function NoteEditor({
                     onChange={setPdfAnnotationData}
                     disabled={isSaving || isDeleting}
                     noteId={note?.id ?? null}
+                    onTextExtracted={setPdfExtractedText}
                   />
                 </ErrorBoundary>
               ) : (
@@ -3506,14 +3487,6 @@ export default function NoteEditor({
         title="Attach File"
         initialPath={noteFileUploadPath}
         uploadPath={noteFileUploadPath}
-      />
-
-      {/* PDF Action Previews */}
-      <PdfPreviewModal 
-        isOpen={pdfPreview.isOpen}
-        onClose={() => setPdfPreview({isOpen: false, filePath: null, fileName: null})}
-        filePath={pdfPreview.filePath}
-        fileName={pdfPreview.fileName}
       />
 
       {/* DOCX Action Previews */}

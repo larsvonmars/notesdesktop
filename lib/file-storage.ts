@@ -9,6 +9,10 @@ const MAX_FILE_SIZE_BYTES = 10 * 1024 * 1024 // 10 MB
 const MAX_IMAGE_SIZE_BYTES = 10 * 1024 * 1024 // 10 MB
 const LONG_LIVED_URL_EXPIRY_SECONDS = 60 * 60 * 24 * 30 // 30 days
 
+interface UploadFileOptions {
+  maxFileSizeBytes?: number
+}
+
 // File types that can be previewed inline
 export const PREVIEWABLE_IMAGE_TYPES = [
   'image/jpeg',
@@ -265,14 +269,18 @@ export async function listItems(folderPath: string = ''): Promise<StorageItem[]>
  */
 export async function uploadFile(
   file: File,
-  folderPath: string = ''
+  folderPath: string = '',
+  options: UploadFileOptions = {}
 ): Promise<UploadResult> {
-  if (file.size > MAX_FILE_SIZE_BYTES) {
-    throw new Error(`File "${file.name}" exceeds the 10 MB size limit (${formatFileSize(file.size)})`)
+  const maxFileSizeBytes = options.maxFileSizeBytes ?? MAX_FILE_SIZE_BYTES
+  if (file.size > maxFileSizeBytes) {
+    const sizeLimitMb = Math.round(maxFileSizeBytes / (1024 * 1024))
+    throw new Error(`File "${file.name}" exceeds the ${sizeLimitMb} MB size limit (${formatFileSize(file.size)})`)
   }
 
   const userId = await getUserId()
-  const relativePath = folderPath ? `${folderPath}/${file.name}` : file.name
+  const sanitizedFileName = sanitizeFileName(file.name)
+  const relativePath = folderPath ? `${folderPath}/${sanitizedFileName}` : sanitizedFileName
   const fullPath = buildFullPath(userId, relativePath)
 
   const { data, error } = await supabase.storage
@@ -287,10 +295,10 @@ export async function uploadFile(
   return {
     path: relativePath,
     file: {
-      name: file.name,
+      name: sanitizedFileName,
       id: data.id ?? null,
       size: file.size,
-      type: file.type || guessMimeType(file.name),
+      type: file.type || guessMimeType(sanitizedFileName),
       created_at: new Date().toISOString(),
       updated_at: new Date().toISOString(),
       path: relativePath,

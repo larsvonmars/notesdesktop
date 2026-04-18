@@ -21,13 +21,19 @@ import {
   Eye,
   MoreVertical,
   ArrowLeft,
+  ArrowUp,
+  ArrowDown,
+  ArrowUpDown,
   Search,
   Loader2,
   Check,
+  CheckSquare,
+  Square,
   FolderOpen,
   AlertCircle,
   RefreshCw,
   Pencil,
+  Copy,
 } from 'lucide-react'
 import ModalCloseButton from './ModalCloseButton'
 import BaseModal, { ModalHeader } from './BaseModal'
@@ -158,6 +164,13 @@ export default function FileExplorerModal({
   // Context menu
   const [contextMenu, setContextMenu] = useState<{ x: number; y: number; item: StorageItem } | null>(null)
 
+  // Sort
+  const [sortField, setSortField] = useState<'name' | 'date' | 'size'>('name')
+  const [sortDir, setSortDir] = useState<'asc' | 'desc'>('asc')
+
+  // Keyboard focus
+  const [focusedPath, setFocusedPath] = useState<string | null>(null)
+
   // ============================================================================
   // BREADCRUMB
   // ============================================================================
@@ -235,10 +248,33 @@ export default function FileExplorerModal({
   // ============================================================================
 
   const filteredItems = useMemo(() => {
-    if (!searchQuery.trim()) return items
-    const q = searchQuery.toLowerCase()
-    return items.filter((item) => item.name.toLowerCase().includes(q))
-  }, [items, searchQuery])
+    let result = !searchQuery.trim()
+      ? items
+      : items.filter((item) => item.name.toLowerCase().includes(searchQuery.toLowerCase()))
+
+    // Sort: folders always first, then by chosen field
+    result = [...result].sort((a, b) => {
+      if (a.kind !== b.kind) return a.kind === 'folder' ? -1 : 1
+      let cmp = 0
+      if (sortField === 'name') {
+        cmp = a.name.localeCompare(b.name)
+      } else if (sortField === 'date') {
+        const at = a.updated_at ? new Date(a.updated_at).getTime() : 0
+        const bt = b.updated_at ? new Date(b.updated_at).getTime() : 0
+        cmp = at - bt
+      } else if (sortField === 'size') {
+        cmp = (a.size ?? 0) - (b.size ?? 0)
+      }
+      return sortDir === 'asc' ? cmp : -cmp
+    })
+
+    return result
+  }, [items, searchQuery, sortField, sortDir])
+
+  const totalSize = useMemo(
+    () => items.filter((i) => i.kind === 'file').reduce((sum, i) => sum + (i.size ?? 0), 0),
+    [items]
+  )
 
   // ============================================================================
   // UPLOAD HANDLERS
@@ -253,9 +289,31 @@ export default function FileExplorerModal({
       setUploadProgress({ done: 0, total: fileArray.length })
       try {
         const targetPath = uploadPath ?? currentPath
-        await uploadFiles(fileArray, targetPath, (done, total) => {
+        const uploadResults = await uploadFiles(fileArray, targetPath, (done, total) => {
           setUploadProgress({ done, total })
         })
+
+        const renamedFiles = uploadResults
+          .map((result, idx) => ({
+            original: fileArray[idx]?.name,
+            stored: result.file.name,
+          }))
+          .filter((entry) => entry.original && entry.original !== entry.stored) as Array<{ original: string; stored: string }>
+
+        if (renamedFiles.length > 0) {
+          const preview = renamedFiles
+            .slice(0, 2)
+            .map((entry) => `${entry.original} -> ${entry.stored}`)
+            .join('; ')
+          const remainder = renamedFiles.length > 2 ? ` (+${renamedFiles.length - 2} more)` : ''
+
+          toast.push({
+            title: 'Some filenames were adjusted',
+            description: `${preview}${remainder}`,
+            duration: 5000,
+          })
+        }
+
         toast.push({
           title: 'Upload complete',
           description: `${fileArray.length} file${fileArray.length > 1 ? 's' : ''} uploaded`,
@@ -558,6 +616,81 @@ export default function FileExplorerModal({
   }, [showNewFolderInput])
 
   // ============================================================================
+  // KEYBOARD NAVIGATION
+  // ============================================================================
+
+  useEffect(() => {
+    if (!isOpen) return
+    const handleKeyDown = (e: KeyboardEvent) => {
+      const tag = (document.activeElement as HTMLElement)?.tagName
+      if (tag === 'INPUT' || tag === 'TEXTAREA') return
+
+      const focusedIdx = focusedPath ? filteredItems.findIndex((i) => i.path === focusedPath) : -1
+
+      switch (e.key) {
+        case 'ArrowDown': {
+          e.preventDefault()
+          const next = focusedIdx < filteredItems.length - 1 ? focusedIdx + 1 : 0
+          setFocusedPath(filteredItems[next]?.path ?? null)
+          break
+        }
+        case 'ArrowUp': {
+          e.preventDefault()
+          const prev = focusedIdx > 0 ? focusedIdx - 1 : filteredItems.length - 1
+          setFocusedPath(filteredItems[prev]?.path ?? null)
+          break
+        }
+        case 'Enter': {
+          if (focusedPath) {
+            const item = filteredItems.find((i) => i.path === focusedPath)
+            if (item) {
+              e.preventDefault()
+              if (item.kind === 'folder') navigateTo(item.path)
+              else openPreview(item)
+            }
+          }
+          break
+        }
+        case 'Delete':
+        case 'Backspace': {
+          if (selectedPaths.size > 0 && !onSelectFiles) {
+            e.preventDefault()
+            handleDeleteSelected()
+          }
+          break
+        }
+        case 'a':
+        case 'A': {
+          if (e.metaKey || e.ctrlKey) {
+            e.preventDefault()
+            setSelectedPaths(new Set(filteredItems.filter((i) => i.kind === 'file').map((i) => i.path)))
+          }
+          break
+        }
+        case 'Escape': {
+          if (contextMenu) setContextMenu(null)
+          else if (selectedPaths.size > 0) setSelectedPaths(new Set())
+          else if (focusedPath) setFocusedPath(null)
+          break
+        }
+      }
+    }
+
+    window.addEventListener('keydown', handleKeyDown)
+    return () => window.removeEventListener('keydown', handleKeyDown)
+  }, [
+    isOpen,
+    focusedPath,
+    filteredItems,
+    selectedPaths,
+    onSelectFiles,
+    contextMenu,
+    navigateTo,
+    openPreview,
+    handleDeleteSelected,
+  ])
+
+  // ============================================================================
   // RENDER
   // ============================================================================
 
@@ -667,6 +800,30 @@ export default function FileExplorerModal({
                 title={viewMode === 'grid' ? 'Switch to list view' : 'Switch to grid view'}
               >
                 {viewMode === 'grid' ? <List size={16} /> : <Grid3x3 size={16} />}
+              </button>
+
+              <div className="h-5 w-px bg-gray-200 dark:bg-slate-700" />
+
+              {/* Sort controls */}
+              <button
+                onClick={() => {
+                  const fields: Array<'name' | 'date' | 'size'> = ['name', 'date', 'size']
+                  const next = fields[(fields.indexOf(sortField) + 1) % fields.length]
+                  setSortField(next)
+                  setSortDir('asc')
+                }}
+                className="flex items-center gap-1 rounded-lg px-2 py-1.5 text-xs text-gray-500 dark:text-slate-400 transition hover:bg-gray-100 dark:hover:bg-slate-700 hover:text-gray-700 dark:hover:text-slate-100"
+                title={`Sort by: ${sortField} (click to cycle)`}
+              >
+                <ArrowUpDown size={13} />
+                <span className="capitalize hidden sm:inline">{sortField}</span>
+              </button>
+              <button
+                onClick={() => setSortDir((d) => (d === 'asc' ? 'desc' : 'asc'))}
+                className="rounded-lg p-1.5 text-gray-500 dark:text-slate-400 transition hover:bg-gray-100 dark:hover:bg-slate-700 hover:text-gray-700 dark:hover:text-slate-100"
+                title={sortDir === 'asc' ? 'Ascending — click to descend' : 'Descending — click to ascend'}
+              >
+                {sortDir === 'asc' ? <ArrowUp size={13} /> : <ArrowDown size={13} />}
               </button>
 
               <div className="h-5 w-px bg-gray-200 dark:bg-slate-700" />
@@ -855,6 +1012,7 @@ export default function FileExplorerModal({
                       key={item.path}
                       item={item}
                       isSelected={selectedPaths.has(item.path)}
+                      isFocused={focusedPath === item.path}
                       isSelectMode={isSelectMode}
                       isRenaming={renamingItem === item.path}
                       renameValue={renameValue}
@@ -862,7 +1020,7 @@ export default function FileExplorerModal({
                       onRenameChange={setRenameValue}
                       onRenameCommit={commitRename}
                       onRenameCancel={() => setRenamingItem(null)}
-                      onClick={() => handleItemClick(item)}
+                      onClick={() => { setFocusedPath(item.path); handleItemClick(item) }}
                       onDoubleClick={() => handleItemDoubleClick(item)}
                       onContextMenu={(e) => handleContextMenu(e, item)}
                       onToggleSelect={() => toggleSelection(item.path)}
@@ -872,6 +1030,7 @@ export default function FileExplorerModal({
                       key={item.path}
                       item={item}
                       isSelected={selectedPaths.has(item.path)}
+                      isFocused={focusedPath === item.path}
                       isSelectMode={isSelectMode}
                       isRenaming={renamingItem === item.path}
                       renameValue={renameValue}
@@ -879,7 +1038,7 @@ export default function FileExplorerModal({
                       onRenameChange={setRenameValue}
                       onRenameCommit={commitRename}
                       onRenameCancel={() => setRenamingItem(null)}
-                      onClick={() => handleItemClick(item)}
+                      onClick={() => { setFocusedPath(item.path); handleItemClick(item) }}
                       onDoubleClick={() => handleItemDoubleClick(item)}
                       onContextMenu={(e) => handleContextMenu(e, item)}
                       onToggleSelect={() => toggleSelection(item.path)}
@@ -892,9 +1051,34 @@ export default function FileExplorerModal({
 
           {/* ============ FOOTER ============ */}
           <div className="flex flex-wrap items-center justify-between gap-2 border-t border-gray-200 dark:border-slate-700 bg-gray-50 dark:bg-slate-800 px-4 sm:px-5 py-3">
-            <div className="text-xs text-gray-500 dark:text-slate-400">
-              {filteredItems.length} item{filteredItems.length !== 1 ? 's' : ''}
-              {hasSelection && ` · ${selectedPaths.size} selected`}
+            <div className="flex items-center gap-3 text-xs text-gray-500 dark:text-slate-400">
+              <span>
+                {filteredItems.length} item{filteredItems.length !== 1 ? 's' : ''}
+                {hasSelection && ` · ${selectedPaths.size} selected`}
+              </span>
+              {totalSize > 0 && (
+                <span className="text-gray-400 dark:text-slate-500">{formatFileSize(totalSize)} total</span>
+              )}
+              {/* Select All / Deselect All */}
+              {!isSelectMode && filteredItems.some((i) => i.kind === 'file') && (
+                <button
+                  onClick={() => {
+                    const allFilePaths = filteredItems.filter((i) => i.kind === 'file').map((i) => i.path)
+                    if (selectedPaths.size === allFilePaths.length) {
+                      setSelectedPaths(new Set())
+                    } else {
+                      setSelectedPaths(new Set(allFilePaths))
+                    }
+                  }}
+                  className="flex items-center gap-1 text-xs text-gray-500 dark:text-slate-400 hover:text-alpine-600 dark:hover:text-alpine-400 transition"
+                  title="Select all / deselect all files (or Ctrl+A)"
+                >
+                  {selectedPaths.size > 0 && selectedPaths.size === filteredItems.filter((i) => i.kind === 'file').length
+                    ? <><CheckSquare size={13} /> Deselect all</>
+                    : <><Square size={13} /> Select all</>
+                  }
+                </button>
+              )}
             </div>
             <div className="flex items-center gap-2">
               {hasSelection && !isSelectMode && (
@@ -984,6 +1168,22 @@ export default function FileExplorerModal({
               >
                 <Pencil size={15} />
                 <span>Rename</span>
+              </button>
+              <button
+                onClick={async () => {
+                  try {
+                    const url = await getFileUrl(contextMenu.item.path)
+                    await navigator.clipboard.writeText(url)
+                    toast.push({ title: 'Link copied', description: 'File URL copied to clipboard' })
+                  } catch (err: any) {
+                    toast.push({ title: 'Copy failed', description: err.message })
+                  }
+                  setContextMenu(null)
+                }}
+                className="flex w-full items-center gap-2.5 px-3.5 py-2 text-sm text-gray-700 dark:text-slate-200 transition hover:bg-gray-50 dark:hover:bg-slate-800"
+              >
+                <Copy size={15} />
+                <span>Copy link</span>
               </button>
             </>
           )}
@@ -1087,6 +1287,7 @@ export default function FileExplorerModal({
 interface ItemProps {
   item: StorageItem
   isSelected: boolean
+  isFocused: boolean
   isSelectMode: boolean
   isRenaming: boolean
   renameValue: string
@@ -1103,6 +1304,7 @@ interface ItemProps {
 function GridItem({
   item,
   isSelected,
+  isFocused,
   isSelectMode,
   isRenaming,
   renameValue,
@@ -1132,8 +1334,10 @@ function GridItem({
     <div
       className={`group relative flex flex-col items-center justify-center gap-2 rounded-xl border p-3 cursor-pointer transition-all ${
         isSelected
-          ? 'border-alpine-400 bg-alpine-50 ring-1 ring-alpine-300'
-          : 'border-gray-200 dark:border-slate-700 hover:border-gray-300 dark:hover:border-slate-600 hover:bg-gray-50 dark:hover:bg-slate-800'
+          ? 'border-alpine-400 bg-alpine-50 dark:bg-alpine-900/25 ring-1 ring-alpine-300'
+          : isFocused
+            ? 'border-alpine-300 dark:border-alpine-600 bg-alpine-50/60 dark:bg-alpine-900/15 ring-1 ring-alpine-200 dark:ring-alpine-700'
+            : 'border-gray-200 dark:border-slate-700 hover:border-gray-300 dark:hover:border-slate-600 hover:bg-gray-50 dark:hover:bg-slate-800'
       }`}
       onClick={onClick}
       onDoubleClick={onDoubleClick}
@@ -1216,6 +1420,7 @@ function GridItem({
 function ListItem({
   item,
   isSelected,
+  isFocused,
   isSelectMode,
   isRenaming,
   renameValue,
@@ -1231,7 +1436,11 @@ function ListItem({
   return (
     <div
       className={`group flex items-center gap-3 px-5 py-2.5 cursor-pointer transition-colors ${
-        isSelected ? 'bg-alpine-50 dark:bg-alpine-900/25' : 'hover:bg-gray-50 dark:hover:bg-slate-800'
+        isSelected
+          ? 'bg-alpine-50 dark:bg-alpine-900/25'
+          : isFocused
+            ? 'bg-alpine-50/60 dark:bg-alpine-900/15'
+            : 'hover:bg-gray-50 dark:hover:bg-slate-800'
       }`}
       onClick={onClick}
       onDoubleClick={onDoubleClick}

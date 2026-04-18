@@ -1,5 +1,5 @@
 import type { Metadata, Viewport } from 'next'
-import { Geist, Geist_Mono } from 'next/font/google'
+import { Roboto_Flex } from 'next/font/google'
 import './globals.css'
 import { AuthProvider } from '@/lib/auth-context'
 import { ThemeProvider } from '@/lib/theme-context'
@@ -7,14 +7,10 @@ import { WebViewPolyfillsInitializer } from '@/components/WebViewPolyfillsInitia
 import ToastProvider from '@/components/ToastProvider'
 import CookieConsentBanner from '@/components/CookieConsentBanner'
 
-const geistSans = Geist({
+const robotoFlex = Roboto_Flex({
   subsets: ['latin'],
-  variable: '--font-geist-sans',
-})
-
-const geistMono = Geist_Mono({
-  subsets: ['latin'],
-  variable: '--font-geist-mono',
+  variable: '--font-roboto-flex',
+  axes: ['wdth'],
 })
 
 export const metadata: Metadata = {
@@ -55,7 +51,7 @@ export default function RootLayout({
           }}
         />
       </head>
-      <body className={`${geistSans.variable} ${geistMono.variable} safe-top bg-background text-foreground antialiased`}>
+      <body className={`${robotoFlex.variable} safe-top bg-background text-foreground antialiased`}>
         <WebViewPolyfillsInitializer />
         <ThemeProvider>
           <AuthProvider>

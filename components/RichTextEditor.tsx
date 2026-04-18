@@ -70,6 +70,7 @@ import {
 } from '@/lib/editor/selectionUtils'
 import { useLinkPopover } from '@/lib/editor/useLinkPopover'
 import { useTableToolbar } from '@/lib/editor/useTableToolbar'
+import { useTableColumnResize } from '@/lib/editor/useTableColumnResize'
 import {
   applyAutoformat,
   shouldApplyAutoformat,
@@ -81,6 +82,11 @@ import {
   useTableDialogState,
   type SearchMatch,
 } from '@/lib/editor/useEditorDialogState'
+import {
+  FILE_BLOCK_PREVIEW_PDF_EVENT,
+  type FileBlockPreviewPdfEventDetail,
+} from '@/lib/editor/fileBlock'
+import PdfPreviewModal from './PdfPreviewModal'
 
 
 // Re-export RichTextCommand type for external use
@@ -147,7 +153,7 @@ const SANITIZE_CONFIG: Config = {
     'a', 'b', 'strong', 'i', 'em', 'u', 's', 'code', 'pre', 'p', 'br',
     'div', 'span', 'blockquote', 'ul', 'ol', 'li', 'hr', 'input',
     'h1', 'h2', 'h3', 'h4', 'h5', 'h6', 'mark', 'img', 'button', 'svg', 'path', 'table',
-    'thead', 'tbody', 'tr', 'td', 'th',
+    'thead', 'tbody', 'tr', 'td', 'th', 'colgroup', 'col',
     // SVG shape elements used by file-block / annotation-embed icons
     'line', 'polyline', 'polygon', 'circle', 'rect', 'ellipse', 'g'
   ],
@@ -439,6 +445,22 @@ const RichTextEditor = forwardRef<RichTextEditorHandle, RichTextEditorProps>(
     const savedSelectionRef = useRef<Range | null>(null)
     const [autoformatEnabled] = useState(true)
     const [activeFormats, setActiveFormats] = useState<Set<string>>(new Set())
+    const [pdfPreview, setPdfPreview] = useState<{ isOpen: boolean; filePath: string | null; fileName: string | null }>({
+      isOpen: false,
+      filePath: null,
+      fileName: null,
+    })
+
+    useEffect(() => {
+      const handlePreviewPdf = (event: Event) => {
+        const customEvent = event as CustomEvent<FileBlockPreviewPdfEventDetail>
+        const detail = customEvent.detail
+        if (!detail?.filePath) return
+        setPdfPreview({ isOpen: true, filePath: detail.filePath, fileName: detail.fileName })
+      }
+      window.addEventListener(FILE_BLOCK_PREVIEW_PDF_EVENT, handlePreviewPdf as EventListener)
+      return () => window.removeEventListener(FILE_BLOCK_PREVIEW_PDF_EVENT, handlePreviewPdf as EventListener)
+    }, [])
 
     const isSelectionInsideEditor = useCallback(() => {
       return isSelectionInsideRoot(editorRef.current)
@@ -926,6 +948,8 @@ const RichTextEditor = forwardRef<RichTextEditorHandle, RichTextEditorProps>(
       toggleHeaderRow,
       getTableDimensionsLabel,
     } = useTableToolbar({ editorRef, onEmitChange: emitChange })
+
+    useTableColumnResize({ editorRef, onEmitChange: emitChange, disabled })
 
     const toggleTableOutlines = useCallback(() => {
       try {
@@ -3106,6 +3130,13 @@ const RichTextEditor = forwardRef<RichTextEditorHandle, RichTextEditorProps>(
           onToggleHeaderRow={toggleHeaderRow}
           outlinesVisible={outlinesVisibleForToolbar}
           onToggleOutlines={toggleTableOutlines}
+        />
+
+        <PdfPreviewModal
+          isOpen={pdfPreview.isOpen}
+          onClose={() => setPdfPreview({ isOpen: false, filePath: null, fileName: null })}
+          filePath={pdfPreview.filePath}
+          fileName={pdfPreview.fileName}
         />
       </div>
     )
