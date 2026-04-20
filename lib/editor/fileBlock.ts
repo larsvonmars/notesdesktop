@@ -183,26 +183,40 @@ function getFileIconSvg(mimeType: string): string {
 function getFileBgClass(mimeType: string): string {
   const hint = getFileIconHint(mimeType)
   switch (hint) {
-    case 'image': return 'bg-pink-50 dark:bg-pink-950/40'
-    case 'pdf': return 'bg-red-50 dark:bg-red-950/40'
-    case 'spreadsheet': return 'bg-green-50 dark:bg-green-950/40'
-    case 'audio': return 'bg-purple-50 dark:bg-purple-950/40'
-    case 'video': return 'bg-indigo-50 dark:bg-indigo-950/40'
-    case 'archive': return 'bg-yellow-50 dark:bg-yellow-950/40'
-    case 'text': return 'bg-blue-50 dark:bg-blue-950/40'
-    default: return 'bg-gray-50 dark:bg-gray-800'
+    case 'image': return 'bg-pink-100 dark:bg-pink-900/40'
+    case 'pdf': return 'bg-red-100 dark:bg-red-900/40'
+    case 'spreadsheet': return 'bg-green-100 dark:bg-green-900/40'
+    case 'audio': return 'bg-purple-100 dark:bg-purple-900/40'
+    case 'video': return 'bg-indigo-100 dark:bg-indigo-900/40'
+    case 'archive': return 'bg-amber-100 dark:bg-amber-900/40'
+    case 'text': return 'bg-blue-100 dark:bg-blue-900/40'
+    default: return 'bg-slate-100 dark:bg-slate-700/60'
   }
 }
 
-// ---------------------------------------------------------------------------
-// SVG icon constants for action buttons (kept small for compactness)
-// ---------------------------------------------------------------------------
-const ICON_14 = 'xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"'
+function getFileTypeLabel(mimeType: string): string {
+  const hint = getFileIconHint(mimeType)
+  const labels: Record<string, string> = {
+    pdf: 'PDF Document',
+    image: 'Image',
+    spreadsheet: 'Spreadsheet',
+    audio: 'Audio File',
+    video: 'Video',
+    archive: 'Archive',
+    text: 'Text Document',
+  }
+  return labels[hint] ?? 'File'
+}
 
-const SVG_ANNOTATE = `<svg ${ICON_14}><path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg>`
-const SVG_EYE = `<svg ${ICON_14}><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>`
-const SVG_DOWNLOAD = `<svg ${ICON_14}><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>`
-const SVG_REMOVE = `<svg ${ICON_14}><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>`
+// ---------------------------------------------------------------------------
+// SVG icon constants for action buttons
+// ---------------------------------------------------------------------------
+const ICON_15 = 'xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"'
+
+const SVG_ANNOTATE = `<svg ${ICON_15}><path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg>`
+const SVG_EYE = `<svg ${ICON_15}><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>`
+const SVG_DOWNLOAD = `<svg ${ICON_15}><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>`
+const SVG_REMOVE = `<svg ${ICON_15}><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>`
 
 // ---------------------------------------------------------------------------
 // Render
@@ -213,6 +227,7 @@ function renderFileBlock(payload: FileBlockPayload): string {
   const type = payload.type || 'application/octet-stream'
   const size = payload.size || 0
   const sizeStr = escapeHtml(formatFileSize(size))
+  const typeLabel = escapeHtml(getFileTypeLabel(type))
   const iconSvg = getFileIconSvg(type)
   const bgClass = getFileBgClass(type)
   const escapedType = escapeHtml(type)
@@ -225,33 +240,33 @@ function renderFileBlock(payload: FileBlockPayload): string {
   let extraButtons = ''
 
   if (pdf) {
-    // Preview (eye icon) + Annotate (pen icon)
     extraButtons += `
-      <button type="button" class="file-block-action file-block-preview-pdf inline-flex items-center justify-center p-1.5 text-red-500 dark:text-red-400 transition-colors hover:bg-red-50 dark:hover:bg-red-900/30 hover:text-red-600 dark:hover:text-red-300 rounded" data-file-action="preview-pdf" aria-label="Preview PDF" title="Preview PDF" contenteditable="false">${SVG_EYE}</button>
-      <button type="button" class="file-block-action file-block-annotate-pdf inline-flex items-center justify-center p-1.5 text-indigo-600 dark:text-indigo-400 transition-colors hover:bg-indigo-50 dark:hover:bg-indigo-900/30 hover:text-indigo-700 dark:hover:text-indigo-300 rounded" data-file-action="annotate-pdf" aria-label="Annotate PDF" title="Create PDF annotation" contenteditable="false">${SVG_ANNOTATE}</button>`
+      <button type="button" class="file-block-action file-block-preview-pdf inline-flex items-center justify-center w-8 h-8 rounded-lg text-red-500 dark:text-red-400 transition-colors hover:bg-red-50 dark:hover:bg-red-900/30 hover:text-red-600 dark:hover:text-red-300" data-file-action="preview-pdf" aria-label="Preview PDF" title="Preview PDF" contenteditable="false">${SVG_EYE}</button>
+      <button type="button" class="file-block-action file-block-annotate-pdf inline-flex items-center justify-center w-8 h-8 rounded-lg text-indigo-600 dark:text-indigo-400 transition-colors hover:bg-indigo-50 dark:hover:bg-indigo-900/30 hover:text-indigo-700 dark:hover:text-indigo-300" data-file-action="annotate-pdf" aria-label="Annotate PDF" title="Create PDF annotation" contenteditable="false">${SVG_ANNOTATE}</button>`
   }
 
   if (docx) {
-    // Preview (eye icon)
     extraButtons += `
-      <button type="button" class="file-block-action file-block-preview-docx inline-flex items-center justify-center p-1.5 text-blue-600 dark:text-blue-400 transition-colors hover:bg-blue-50 dark:hover:bg-blue-900/30 hover:text-blue-700 dark:hover:text-blue-300 rounded" data-file-action="preview-docx" aria-label="Preview Document" title="Preview Document" contenteditable="false">${SVG_EYE}</button>`
+      <button type="button" class="file-block-action file-block-preview-docx inline-flex items-center justify-center w-8 h-8 rounded-lg text-blue-600 dark:text-blue-400 transition-colors hover:bg-blue-50 dark:hover:bg-blue-900/30 hover:text-blue-700 dark:hover:text-blue-300" data-file-action="preview-docx" aria-label="Preview Document" title="Preview Document" contenteditable="false">${SVG_EYE}</button>`
   }
 
-  return `<div class="file-block-container my-1 inline-block select-none align-middle" data-block="true" data-block-type="file" data-file-path="${path}" data-file-name="${name}" data-file-size="${size}" data-file-type="${escapedType}" data-file-attached-at="${attachedAtIso}" contenteditable="false">
-  <div class="file-block-card flex max-w-sm items-center gap-2 rounded-full border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 pr-1 pl-1.5 py-1 shadow-sm transition-all hover:border-slate-300 dark:hover:border-slate-600 hover:shadow">
+  return `<div class="file-block-container my-2 select-none" data-block="true" data-block-type="file" data-file-path="${path}" data-file-name="${name}" data-file-size="${size}" data-file-type="${escapedType}" data-file-attached-at="${attachedAtIso}" contenteditable="false">
+  <div class="file-block-card flex items-center gap-3 p-3 rounded-xl border border-slate-200 dark:border-slate-700/70 bg-white dark:bg-slate-900/50 shadow-sm hover:shadow-md transition-shadow duration-200 max-w-lg">
 
-    <button type="button" class="file-block-surface file-block-surface-button flex min-w-0 items-center gap-1.5 outline-none" aria-label="Open file" title="Open ${name}" contenteditable="false">
-      <div class="file-block-icon-wrap flex h-6 w-6 flex-shrink-0 items-center justify-center rounded-full bg-slate-100 dark:bg-slate-700 text-slate-500 dark:text-slate-400 [&>svg]:h-3.5 [&>svg]:w-3.5 ${bgClass}">
+    <button type="button" class="file-block-surface file-block-surface-button flex flex-1 min-w-0 items-center gap-3 outline-none text-left" aria-label="Open file" title="Open ${name}" contenteditable="false">
+      <div class="file-block-icon-wrap flex-shrink-0 flex h-11 w-11 items-center justify-center rounded-xl [&>svg]:h-5 [&>svg]:w-5 ${bgClass}">
         ${iconSvg}
       </div>
-      <span class="truncate text-xs font-medium text-slate-700 dark:text-slate-200" title="${name}">${name}</span>
-      <span class="flex-shrink-0 text-[10px] text-slate-400 dark:text-slate-500" data-file-size-label="true">${sizeStr}</span>
+      <div class="min-w-0 flex-1">
+        <p class="truncate text-sm font-semibold text-slate-800 dark:text-slate-100 leading-snug" title="${name}">${name}</p>
+        <p class="text-xs text-slate-400 dark:text-slate-500 mt-0.5" data-file-size-label="true">${typeLabel}&nbsp;&middot;&nbsp;${sizeStr}</p>
+      </div>
     </button>
 
-    <div class="flex items-center flex-shrink-0 ml-1 border-l border-slate-100 dark:border-slate-700 pl-1">
+    <div class="flex items-center gap-0.5 flex-shrink-0 pl-2 border-l border-slate-100 dark:border-slate-700/50">
       ${extraButtons}
-      <button type="button" class="file-block-action file-block-download inline-flex items-center justify-center p-1.5 text-slate-400 dark:text-slate-500 transition-colors hover:bg-slate-50 dark:hover:bg-slate-700 hover:text-slate-600 dark:hover:text-slate-300 rounded" data-file-action="download" aria-label="Download file" title="Download ${name}" contenteditable="false">${SVG_DOWNLOAD}</button>
-      <button type="button" class="file-block-action file-block-delete inline-flex items-center justify-center p-1.5 text-slate-400 dark:text-slate-500 transition-colors hover:bg-red-50 dark:hover:bg-red-900/30 hover:text-red-500 dark:hover:text-red-400 rounded" data-file-action="remove" aria-label="Remove file attachment" title="Remove from note" contenteditable="false">${SVG_REMOVE}</button>
+      <button type="button" class="file-block-action file-block-download inline-flex items-center justify-center w-8 h-8 rounded-lg text-slate-400 dark:text-slate-500 transition-colors hover:bg-slate-100 dark:hover:bg-slate-700 hover:text-slate-600 dark:hover:text-slate-300" data-file-action="download" aria-label="Download file" title="Download ${name}" contenteditable="false">${SVG_DOWNLOAD}</button>
+      <button type="button" class="file-block-action file-block-delete inline-flex items-center justify-center w-8 h-8 rounded-lg text-slate-400 dark:text-slate-500 transition-colors hover:bg-red-50 dark:hover:bg-red-900/30 hover:text-red-500 dark:hover:text-red-400" data-file-action="remove" aria-label="Remove file attachment" title="Remove from note" contenteditable="false">${SVG_REMOVE}</button>
     </div>
   </div>
 </div>`
