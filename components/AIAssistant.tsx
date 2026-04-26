@@ -287,7 +287,7 @@ function MarkdownContent({ content, className = '' }: { content: string; classNa
   )
 }
 
-/** Collapsible reasoning chain for deepseek-v3.2-thinking responses */
+/** Collapsible reasoning chain for deepseek-v4-pro responses */
 function ThinkingSection({ reasoning }: { reasoning: string }) {
   const [open, setOpen] = useState(false)
   const wordCount = Math.round(reasoning.split(/\s+/).filter(Boolean).length)
@@ -878,7 +878,7 @@ export default function AIAssistant({
         aiContext,
         chatHistoryRef.current.slice(0, -1),
         (token) => { fullResponse += token; setStreamingContent(fullResponse) },
-        (!isReasonerToolCallingEnabled() && model === 'deepseek-v3.2-thinking') ? undefined : (allNotes?.length ? handleToolCall : undefined),
+        (!isReasonerToolCallingEnabled() && model === 'deepseek-v4-pro') ? undefined : (allNotes?.length ? handleToolCall : undefined),
         model,
         (token) => { reasoningContent += token; setStreamingReasoning(prev => prev + token) },
       )
@@ -1840,15 +1840,15 @@ export default function AIAssistant({
                   Chat
                 </button>
                 <button
-                  onClick={() => setModel('deepseek-v3.2-thinking')}
+                  onClick={() => setModel('deepseek-v4-pro')}
                   className={`px-2 py-1 text-[10px] font-medium rounded-md transition-all flex items-center gap-1 ${
-                    model === 'deepseek-v3.2-thinking'
+                    model === 'deepseek-v4-pro'
                       ? 'bg-surface text-foreground shadow-sm'
                       : 'text-muted hover:text-foreground'
                   }`}
                 >
                   <Cpu size={9} />
-                  V3.2 Thinking
+                  V4 Pro
                 </button>
               </div>
 
@@ -1947,7 +1947,7 @@ export default function AIAssistant({
                         <span>{contextDiagnostics.totalIncludedChars.toLocaleString()} chars in context</span>
                         {contextDiagnostics.nearLimit && <span className="text-warning">Near limit</span>}
                       </div>
-                      {model === 'deepseek-v3.2-thinking' && !isReasonerToolCallingEnabled() && (
+                      {model === 'deepseek-v4-pro' && !isReasonerToolCallingEnabled() && (
                         <div className="text-[10px] text-muted mt-1">Thinking tools disabled by default</div>
                       )}
                     </div>
@@ -2121,7 +2121,7 @@ export default function AIAssistant({
             </h3>
             {!showChatHistory && (
               <p className="text-[10px] text-muted leading-tight mt-0.5">
-                {model === 'deepseek-v3.2-thinking' ? 'DeepSeek V3.2 Thinking' : 'DeepSeek Chat'}
+                {model === 'deepseek-v4-pro' ? 'DeepSeek V4 Pro' : 'DeepSeek Chat'}
                 {quotaInfo && (
                   <span className={`ml-1.5 ${quotaInfo.low ? 'text-warning' : ''}`}>
                     · {quotaInfo.remaining} left

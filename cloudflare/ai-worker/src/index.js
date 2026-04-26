@@ -1,6 +1,6 @@
 const DEEPSEEK_API_URL = 'https://api.deepseek.com/chat/completions'
 
-const ALLOWED_MODELS = new Set(['deepseek-chat', 'deepseek-v3.2-thinking'])
+const ALLOWED_MODELS = new Set(['deepseek-chat', 'deepseek-v4-pro'])
 const ALLOWED_ROLES = new Set(['system', 'user', 'assistant', 'tool'])
 
 function jsonResponse(body, status = 200, headers = {}) {
