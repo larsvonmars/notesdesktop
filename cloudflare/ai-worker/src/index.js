@@ -96,6 +96,41 @@ function validateAndSanitizeAIPayload(input, options = {}) {
     payload.tool_choice = input.tool_choice
   }
 
+  if (input.response_format !== undefined) {
+    if (!isRecord(input.response_format)) {
+      return { valid: false, message: 'Invalid payload: response_format is not supported.' }
+    }
+
+    const formatType = input.response_format.type
+    if (formatType !== 'text' && formatType !== 'json_object') {
+      return { valid: false, message: 'Invalid payload: response_format is not supported.' }
+    }
+
+    payload.response_format = input.response_format
+  }
+
+  if (input.thinking !== undefined) {
+    if (!isRecord(input.thinking)) {
+      return { valid: false, message: 'Invalid payload: thinking is not supported.' }
+    }
+
+    const thinkingType = input.thinking.type
+    if (thinkingType !== 'enabled' && thinkingType !== 'disabled') {
+      return { valid: false, message: 'Invalid payload: thinking is not supported.' }
+    }
+
+    payload.thinking = input.thinking
+  }
+
+  if (input.reasoning_effort !== undefined) {
+    const reasoningEffort = input.reasoning_effort
+    if (reasoningEffort !== 'high' && reasoningEffort !== 'max') {
+      return { valid: false, message: 'Invalid payload: reasoning_effort is not supported.' }
+    }
+
+    payload.reasoning_effort = reasoningEffort
+  }
+
   const stream = options.forceStream ? true : input.stream
   if (stream !== undefined) {
     if (typeof stream !== 'boolean') {

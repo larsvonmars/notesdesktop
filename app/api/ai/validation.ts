@@ -1,6 +1,13 @@
 const ALLOWED_MODELS = new Set(['deepseek-v4-flash', 'deepseek-v4-pro'])
 const ALLOWED_ROLES = new Set(['system', 'user', 'assistant', 'tool'])
-const ALLOWED_TOOL_NAMES = new Set(['list_notes', 'read_note', 'search_notes', 'create_mindmap_note'])
+const ALLOWED_TOOL_NAMES = new Set([
+  'list_notes',
+  'read_note',
+  'search_notes',
+  'create_mindmap_note',
+  'replace_note_content',
+  'edit_note_content',
+])
 const MAX_MESSAGES = 100
 const MAX_MESSAGE_CONTENT_CHARS = 320000
 const MAX_TOTAL_MESSAGE_CHARS = 640000
@@ -75,6 +82,20 @@ function validateToolChoice(toolChoice: unknown): boolean {
   return typeof fn.name === 'string' && ALLOWED_TOOL_NAMES.has(fn.name)
 }
 
+function validateResponseFormat(responseFormat: unknown): boolean {
+  if (!isRecord(responseFormat)) return false
+  return responseFormat.type === 'text' || responseFormat.type === 'json_object'
+}
+
+function validateThinking(thinking: unknown): boolean {
+  if (!isRecord(thinking)) return false
+  return thinking.type === 'enabled' || thinking.type === 'disabled'
+}
+
+function validateReasoningEffort(reasoningEffort: unknown): boolean {
+  return reasoningEffort === 'high' || reasoningEffort === 'max'
+}
+
 export function validateAndSanitizeAIPayload(
   input: unknown,
   options?: { forceStream?: boolean },
@@ -146,6 +167,36 @@ export function validateAndSanitizeAIPayload(
       }
     }
     payload.tool_choice = input.tool_choice
+  }
+
+  if (input.response_format !== undefined) {
+    if (!validateResponseFormat(input.response_format)) {
+      return {
+        valid: false,
+        message: 'Invalid payload: response_format is not supported.',
+      }
+    }
+    payload.response_format = input.response_format
+  }
+
+  if (input.thinking !== undefined) {
+    if (!validateThinking(input.thinking)) {
+      return {
+        valid: false,
+        message: 'Invalid payload: thinking is not supported.',
+      }
+    }
+    payload.thinking = input.thinking
+  }
+
+  if (input.reasoning_effort !== undefined) {
+    if (!validateReasoningEffort(input.reasoning_effort)) {
+      return {
+        valid: false,
+        message: 'Invalid payload: reasoning_effort is not supported.',
+      }
+    }
+    payload.reasoning_effort = input.reasoning_effort
   }
 
   const stream = options?.forceStream ? true : input.stream

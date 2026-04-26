@@ -114,6 +114,39 @@ describe('AI proxy routes', () => {
     expect(fetchMock.mock.calls[0]?.[0]).toBe('https://api.deepseek.com/chat/completions')
   })
 
+  it('forwards V4 Pro thinking controls through the chat proxy', async () => {
+    getUserMock.mockResolvedValue({ data: { user: { id: 'user-1' } }, error: null })
+
+    const upstream = new Response(
+      JSON.stringify({ choices: [{ message: { content: 'ok' } }] }),
+      { status: 200, headers: { 'Content-Type': 'application/json' } },
+    )
+    const fetchMock = vi.spyOn(globalThis, 'fetch').mockResolvedValue(upstream)
+
+    const { POST } = await import('@/app/api/ai/chat/route')
+    const req = new Request('http://localhost/api/ai/chat', {
+      method: 'POST',
+      body: JSON.stringify({
+        model: 'deepseek-v4-pro',
+        messages: [{ role: 'user', content: 'Hi' }],
+        thinking: { type: 'enabled' },
+        reasoning_effort: 'max',
+      }),
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: 'Bearer token-1',
+      },
+    })
+
+    const res = await POST(req)
+    expect(res.status).toBe(200)
+
+    const requestInit = fetchMock.mock.calls[0]?.[1] as RequestInit
+    const body = JSON.parse(String(requestInit.body))
+    expect(body.thinking).toEqual({ type: 'enabled' })
+    expect(body.reasoning_effort).toBe('max')
+  })
+
   it('forces stream=true in stream proxy', async () => {
     getUserMock.mockResolvedValue({ data: { user: { id: 'user-1' } }, error: null })
 

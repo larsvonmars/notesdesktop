@@ -16,11 +16,35 @@ import type { NoteType } from './notes'
 // ============================================================================
 
 export interface AIMessage {
-  role: 'system' | 'user' | 'assistant'
+  role: 'system' | 'user' | 'assistant' | 'tool'
   content: string
+  reasoning_content?: string
+  tool_calls?: AIToolCall[]
+  tool_call_id?: string
 }
 
 export type DeepSeekModel = 'deepseek-v4-flash' | 'deepseek-v4-pro'
+
+export type AIResponseFormat = {
+  type: 'text' | 'json_object'
+}
+
+export type AIThinkingConfig = {
+  type: 'enabled' | 'disabled'
+}
+
+export type AIReasoningEffort = 'high' | 'max'
+
+export type AIContextLimits = {
+  maxCharsPerNote: number
+  maxTotalInjectedChars: number
+  maxSelectedNotes: number
+  selectedTextContextChars: number
+  readNoteToolChars: number
+  searchExcerptChars: number
+  searchMaxResultsDefault: number
+  searchMaxResultsHard: number
+}
 
 export interface AIStreamCallbacks {
   onToken?: (token: string) => void
@@ -31,6 +55,9 @@ export interface AIStreamCallbacks {
 
 export interface AIRequestOptions {
   model?: DeepSeekModel
+  responseFormat?: AIResponseFormat
+  thinking?: AIThinkingConfig
+  reasoningEffort?: AIReasoningEffort
   temperature?: number
   maxTokens?: number
   stream?: boolean
@@ -187,16 +214,61 @@ const DEFAULT_RETRY_COUNT = 2
 const RETRY_BASE_DELAY_MS = 500
 const RETRYABLE_STATUS_CODES = new Set([408, 409, 425, 429, 500, 502, 503, 504])
 
-export const AI_NOTE_CONTEXT_LIMITS = {
-  maxCharsPerNote: 32000,
-  maxTotalInjectedChars: 320000,
-  maxSelectedNotes: 12,
-  selectedTextContextChars: 4000,
-  readNoteToolChars: 32000,
-  searchExcerptChars: 900,
-  searchMaxResultsDefault: 8,
-  searchMaxResultsHard: 15,
-} as const
+type AIModelProfile = {
+  defaultMaxTokens: number
+  maxToolIterations: number
+  thinking: AIThinkingConfig
+  reasoningEffort?: AIReasoningEffort
+  contextLimits: AIContextLimits
+}
+
+const AI_MODEL_PROFILES: Record<DeepSeekModel, AIModelProfile> = {
+  'deepseek-v4-flash': {
+    defaultMaxTokens: 4096,
+    maxToolIterations: 5,
+    thinking: { type: 'disabled' },
+    contextLimits: {
+      maxCharsPerNote: 32000,
+      maxTotalInjectedChars: 320000,
+      maxSelectedNotes: 12,
+      selectedTextContextChars: 4000,
+      readNoteToolChars: 32000,
+      searchExcerptChars: 900,
+      searchMaxResultsDefault: 8,
+      searchMaxResultsHard: 15,
+    },
+  },
+  'deepseek-v4-pro': {
+    defaultMaxTokens: 16384,
+    maxToolIterations: 8,
+    thinking: { type: 'enabled' },
+    reasoningEffort: 'max',
+    contextLimits: {
+      maxCharsPerNote: 120000,
+      maxTotalInjectedChars: 1200000,
+      maxSelectedNotes: 24,
+      selectedTextContextChars: 12000,
+      readNoteToolChars: 120000,
+      searchExcerptChars: 1800,
+      searchMaxResultsDefault: 12,
+      searchMaxResultsHard: 24,
+    },
+  },
+}
+
+export const AI_NOTE_CONTEXT_LIMITS = AI_MODEL_PROFILES[DEFAULT_MODEL].contextLimits
+
+const AI_TOOL_SEARCH_MAX_RESULTS_HARD = Math.max(
+  ...Object.values(AI_MODEL_PROFILES).map(profile => profile.contextLimits.searchMaxResultsHard),
+)
+
+export function getAIModelProfile(model: DeepSeekModel = DEFAULT_MODEL): AIModelProfile {
+  return AI_MODEL_PROFILES[model]
+}
+
+export function getAIContextLimits(model: DeepSeekModel = DEFAULT_MODEL): AIContextLimits {
+  return getAIModelProfile(model).contextLimits
+}
 
 type AIKeyStatus = {
   available: boolean
@@ -456,6 +528,41 @@ async function sendAIRequestPayload(payload: Record<string, unknown>): Promise<a
   return response.json()
 }
 
+function buildAIChatPayload(
+  messages: AIMessage[],
+  options: AIRequestOptions = {},
+): Record<string, unknown> {
+  const resolvedModel = options.model || DEFAULT_MODEL
+  const profile = getAIModelProfile(resolvedModel)
+  const thinking = options.thinking ?? profile.thinking
+  const reasoningEffort = options.reasoningEffort ?? profile.reasoningEffort
+
+  const payload: Record<string, unknown> = {
+    model: resolvedModel,
+    messages,
+    max_tokens: options.maxTokens ?? profile.defaultMaxTokens,
+    stream: options.stream ?? false,
+  }
+
+  if (options.responseFormat) {
+    payload.response_format = options.responseFormat
+  }
+
+  if (thinking) {
+    payload.thinking = thinking
+  }
+
+  if (thinking.type === 'enabled' && reasoningEffort) {
+    payload.reasoning_effort = reasoningEffort
+  }
+
+  if (thinking.type !== 'enabled') {
+    payload.temperature = options.temperature ?? DEFAULT_TEMPERATURE
+  }
+
+  return payload
+}
+
 /** @deprecated Key is now managed via DEEPSEEK_API_KEY in .env.local */
 export function setAIApiKey(key: string) {
   runtimeApiKey = key
@@ -510,7 +617,14 @@ const SYSTEM_PROMPTS = {
 - Managing tasks and calendar events
 - Creating and expanding mindmap nodes
 
-Be concise, helpful, and context-aware. When editing content, preserve the user's voice and style.`,
+Be concise, helpful, and context-aware. When editing content, preserve the user's voice and style.
+
+Work like an embedded copilot inside the app:
+- Use directly injected note context first when it is sufficient.
+- When precise note lookup matters or the answer depends on notes outside the injected context, proactively use tools such as search_notes and read_note.
+- When the user wants a note changed, prefer edit_note_content or replace_note_content instead of only describing edits.
+- When the user wants text turned into a mindmap, use create_mindmap_note.
+- Mention which note or source text you relied on when that improves clarity.`,
 
   summarize: `You are a note summarization expert. Your task is to:
 1. Create a concise summary of the note content
@@ -600,9 +714,9 @@ export const AI_TOOLS: AITool[] = [
           },
           maxResults: {
             type: 'number',
-            description: `Optional number of search results to return (1-${AI_NOTE_CONTEXT_LIMITS.searchMaxResultsHard})`,
+            description: `Optional number of search results to return (1-${AI_TOOL_SEARCH_MAX_RESULTS_HARD})`,
             minimum: 1,
-            maximum: AI_NOTE_CONTEXT_LIMITS.searchMaxResultsHard,
+            maximum: AI_TOOL_SEARCH_MAX_RESULTS_HARD,
           },
         },
         required: ['query'],
@@ -694,22 +808,12 @@ export async function sendAIRequest(
   options: AIRequestOptions = {}
 ): Promise<string> {
   const {
-    model = DEFAULT_MODEL,
-    temperature = DEFAULT_TEMPERATURE,
-    maxTokens = DEFAULT_MAX_TOKENS,
-    stream = false,
     retryCount = DEFAULT_RETRY_COUNT,
     signal,
   } = options
 
   const data = await withRetry(
-    () => sendAIRequestPayload({
-      model,
-      messages,
-      temperature,
-      max_tokens: maxTokens,
-      stream,
-    }),
+    () => sendAIRequestPayload(buildAIChatPayload(messages, options)),
     retryCount,
     signal,
   )
@@ -725,9 +829,6 @@ export async function sendAIRequestStream(
   options: AIRequestOptions = {}
 ): Promise<void> {
   const {
-    model = DEFAULT_MODEL,
-    temperature = DEFAULT_TEMPERATURE,
-    maxTokens = DEFAULT_MAX_TOKENS,
     signal,
   } = options
 
@@ -738,13 +839,10 @@ export async function sendAIRequestStream(
 
   if (isTauriRuntime()) {
     try {
-      const data = await sendAIRequestPayload({
-        model,
-        messages,
-        temperature,
-        max_tokens: maxTokens,
+      const data = await sendAIRequestPayload(buildAIChatPayload(messages, {
+        ...options,
         stream: false,
-      })
+      }))
 
       const reasoning = data.choices?.[0]?.message?.reasoning_content || ''
       const content = data.choices?.[0]?.message?.content || ''
@@ -772,13 +870,10 @@ export async function sendAIRequestStream(
         'Content-Type': 'application/json',
         ...authHeaders,
       },
-      body: JSON.stringify({
-        model,
-        messages,
-        temperature,
-        max_tokens: maxTokens,
+      body: JSON.stringify(buildAIChatPayload(messages, {
+        ...options,
         stream: true,
-      }),
+      })),
     })
 
     updateRateLimitStatusFromResponse(response)
@@ -855,41 +950,69 @@ export async function chat(
   toolHandler?: ToolCallHandler,
   model?: DeepSeekModel,
   onReasoning?: (token: string) => void,
+  onConversationUpdate?: (messages: AIMessage[]) => void,
 ): Promise<string> {
-  const systemMessage = buildSystemMessage(context)
+  const resolvedModel = model || DEFAULT_MODEL
+  const profile = getAIModelProfile(resolvedModel)
+  const systemMessage = buildSystemMessage(context, resolvedModel)
   const messages: AIMessage[] = [
     { role: 'system', content: systemMessage },
     ...history,
     { role: 'user', content: userMessage },
   ]
 
-  const resolvedModel = model || DEFAULT_MODEL
-  const resolvedMaxTokens = resolvedModel === 'deepseek-v4-pro' ? 8192 : DEFAULT_MAX_TOKENS
+  const resolvedMaxTokens = profile.defaultMaxTokens
 
   const shouldUseTools =
     !!toolHandler &&
     !!context?.allNotes
 
   if (shouldUseTools) {
-    return chatWithTools(messages, toolHandler, onStream, 5, resolvedModel)
+    return chatWithTools(
+      messages,
+      toolHandler,
+      onStream,
+      profile.maxToolIterations,
+      resolvedModel,
+      resolvedMaxTokens,
+      onReasoning,
+      onConversationUpdate,
+    )
   }
 
   if (onStream) {
     let response = ''
+    let reasoning = ''
     await sendAIRequestStream(messages, {
       onToken: (token) => {
         response += token
         onStream(token)
       },
-      onReasoning,
+      onReasoning: (token) => {
+        reasoning += token
+        onReasoning?.(token)
+      },
       onError: (error) => {
         throw error
       },
     }, { model: resolvedModel, maxTokens: resolvedMaxTokens })
+    onConversationUpdate?.([
+      ...messages.slice(1),
+      {
+        role: 'assistant',
+        content: response,
+        reasoning_content: reasoning || undefined,
+      },
+    ])
     return response
   }
 
-  return sendAIRequest(messages, { model: resolvedModel, maxTokens: resolvedMaxTokens })
+  const response = await sendAIRequest(messages, { model: resolvedModel, maxTokens: resolvedMaxTokens })
+  onConversationUpdate?.([
+    ...messages.slice(1),
+    { role: 'assistant', content: response },
+  ])
+  return response
 }
 
 /**
@@ -901,18 +1024,21 @@ async function chatWithTools(
   onStream?: (token: string) => void,
   maxIterations: number = 5,
   model: DeepSeekModel = 'deepseek-v4-flash',
+  maxTokens: number = DEFAULT_MAX_TOKENS,
+  onReasoning?: (token: string) => void,
+  onConversationUpdate?: (messages: AIMessage[]) => void,
 ): Promise<string> {
   let currentMessages = [...messages]
   
   for (let i = 0; i < maxIterations; i++) {
-    const data = await sendAIRequestPayload({
+    const payload = buildAIChatPayload(currentMessages, {
       model,
-      messages: currentMessages,
-      tools: AI_TOOLS,
-      tool_choice: 'auto',
-      temperature: DEFAULT_TEMPERATURE,
-      max_tokens: DEFAULT_MAX_TOKENS,
+      maxTokens,
     })
+    payload.tools = AI_TOOLS
+    payload.tool_choice = 'auto'
+
+    const data = await sendAIRequestPayload(payload)
     const choice = data.choices?.[0]
     const assistantMessage = choice?.message
 
@@ -926,8 +1052,13 @@ async function chatWithTools(
       currentMessages.push({
         role: 'assistant',
         content: assistantMessage.content || '',
+        reasoning_content: assistantMessage.reasoning_content || undefined,
         tool_calls: assistantMessage.tool_calls,
-      } as any)
+      })
+
+      if (assistantMessage.reasoning_content) {
+        onReasoning?.(assistantMessage.reasoning_content)
+      }
 
       // Process each tool call
       for (const toolCall of assistantMessage.tool_calls) {
@@ -948,7 +1079,7 @@ async function chatWithTools(
           role: 'tool',
           tool_call_id: toolCall.id,
           content: toolResult,
-        } as any)
+        })
       }
 
       // Continue to next iteration
@@ -957,6 +1088,15 @@ async function chatWithTools(
 
     // No tool calls — deliver the final response
     const finalContent = assistantMessage.content || ''
+    if (assistantMessage.reasoning_content) {
+      onReasoning?.(assistantMessage.reasoning_content)
+    }
+    currentMessages.push({
+      role: 'assistant',
+      content: finalContent,
+      reasoning_content: assistantMessage.reasoning_content || undefined,
+    })
+    onConversationUpdate?.(currentMessages.slice(1))
     // Deliver synchronously (no fake word-by-word delays)
     if (onStream && finalContent) onStream(finalContent)
     return finalContent
@@ -970,7 +1110,8 @@ async function chatWithTools(
  */
 export async function summarizeNote(
   noteContent: string,
-  noteTitle?: string
+  noteTitle?: string,
+  model?: DeepSeekModel,
 ): Promise<NoteSummary> {
   const messages: AIMessage[] = [
     { role: 'system', content: SYSTEM_PROMPTS.summarize },
@@ -980,7 +1121,7 @@ export async function summarizeNote(
     },
   ]
 
-  const response = await sendAIRequest(messages, { temperature: 0.5 })
+  const response = await sendAIRequest(messages, { temperature: 0.5, model })
 
   // Strip ```json ... ``` or ``` ... ``` code fences that the model sometimes wraps around JSON
   const stripped = stripJsonCodeFence(response)
@@ -1007,7 +1148,8 @@ export async function summarizeNote(
 export async function editText(
   originalText: string,
   instruction: string,
-  onStream?: (token: string) => void
+  onStream?: (token: string) => void,
+  model?: DeepSeekModel,
 ): Promise<string> {
   const messages: AIMessage[] = [
     { role: 'system', content: SYSTEM_PROMPTS.editText },
@@ -1024,11 +1166,11 @@ export async function editText(
         response += token
         onStream(token)
       },
-    })
+    }, { model })
     return response
   }
 
-  return sendAIRequest(messages)
+  return sendAIRequest(messages, { model })
 }
 
 /**
@@ -1037,7 +1179,8 @@ export async function editText(
 export async function suggestMindmapNodes(
   currentNodeText: string,
   currentNodeDescription?: string,
-  parentContext?: string
+  parentContext?: string,
+  model?: DeepSeekModel,
 ): Promise<MindmapSuggestion[]> {
   const contextParts: string[] = []
   if (parentContext) {
@@ -1057,7 +1200,7 @@ export async function suggestMindmapNodes(
     },
   ]
 
-  const response = await sendAIRequest(messages, { temperature: 0.8 })
+  const response = await sendAIRequest(messages, { temperature: 0.8, model })
 
   try {
     return JSON.parse(stripJsonCodeFence(response))
@@ -1076,7 +1219,8 @@ export async function suggestMindmapNodes(
 export async function generateMindmapOutline(
   sourceText: string,
   rootTextHint?: string,
-  additionalPrompt?: string
+  additionalPrompt?: string,
+  model?: DeepSeekModel,
 ): Promise<MindmapOutline> {
   const trimmedSource = sourceText.trim()
   if (!trimmedSource) {
@@ -1119,7 +1263,12 @@ ${trimmedSource.slice(0, 8000)}`,
     },
   ]
 
-  const response = await sendAIRequest(messages, { temperature: 0.5 })
+  const response = await sendAIRequest(messages, {
+    temperature: 0.5,
+    model,
+    maxTokens: model === 'deepseek-v4-pro' ? 8192 : DEFAULT_MAX_TOKENS,
+    responseFormat: { type: 'json_object' },
+  })
   const parsed = parseMindmapOutlineResponse(response)
 
   if (!parsed) {
@@ -1140,7 +1289,8 @@ ${trimmedSource.slice(0, 8000)}`,
  * Suggest tasks based on context
  */
 export async function suggestTasks(
-  context: AIContext
+  context: AIContext,
+  model?: DeepSeekModel,
 ): Promise<TaskSuggestion[]> {
   const contextParts: string[] = []
 
@@ -1165,7 +1315,7 @@ export async function suggestTasks(
     },
   ]
 
-  const response = await sendAIRequest(messages, { temperature: 0.6 })
+  const response = await sendAIRequest(messages, { temperature: 0.6, model })
 
   try {
     return JSON.parse(stripJsonCodeFence(response))
@@ -1182,7 +1332,8 @@ export async function suggestTasks(
  * Suggest calendar events based on context
  */
 export async function suggestEvents(
-  context: AIContext
+  context: AIContext,
+  model?: DeepSeekModel,
 ): Promise<CalendarSuggestion[]> {
   const contextParts: string[] = []
 
@@ -1217,7 +1368,7 @@ export async function suggestEvents(
     },
   ]
 
-  const response = await sendAIRequest(messages, { temperature: 0.6 })
+  const response = await sendAIRequest(messages, { temperature: 0.6, model })
 
   try {
     return JSON.parse(stripJsonCodeFence(response))
@@ -1233,9 +1384,10 @@ export async function suggestEvents(
 /**
  * Build a system message with context
  */
-function buildSystemMessage(context?: AIContext): string {
+function buildSystemMessage(context?: AIContext, model: DeepSeekModel = DEFAULT_MODEL): string {
+  const contextLimits = getAIContextLimits(model)
   let message = SYSTEM_PROMPTS.general
-  let remainingContextChars = AI_NOTE_CONTEXT_LIMITS.maxTotalInjectedChars
+  let remainingContextChars = contextLimits.maxTotalInjectedChars
 
   if (context) {
     const contextParts: string[] = ['\n\nCurrent context:']
@@ -1246,7 +1398,7 @@ function buildSystemMessage(context?: AIContext): string {
 
     // Include selected text for context-aware interactions
     if (context.selectedText) {
-      contextParts.push(`- User has selected the following text: "${context.selectedText.slice(0, AI_NOTE_CONTEXT_LIMITS.selectedTextContextChars)}${context.selectedText.length > AI_NOTE_CONTEXT_LIMITS.selectedTextContextChars ? '...' : ''}"`)
+      contextParts.push(`- User has selected the following text: "${context.selectedText.slice(0, contextLimits.selectedTextContextChars)}${context.selectedText.length > contextLimits.selectedTextContextChars ? '...' : ''}"`)
       contextParts.push(`  When the user asks about "this", "the selection", or "selected text", refer to this text.`)
     }
 
@@ -1271,7 +1423,7 @@ function buildSystemMessage(context?: AIContext): string {
     if (context.currentNote?.content) {
       const current = fitContentIntoContextBudget(
         context.currentNote.content,
-        AI_NOTE_CONTEXT_LIMITS.maxCharsPerNote,
+        contextLimits.maxCharsPerNote,
         remainingContextChars,
       )
       remainingContextChars -= current.usedChars
@@ -1282,12 +1434,12 @@ function buildSystemMessage(context?: AIContext): string {
     }
 
     if (context.additionalNoteContents && context.additionalNoteContents.length > 0) {
-      const limitedNotes = context.additionalNoteContents.slice(0, AI_NOTE_CONTEXT_LIMITS.maxSelectedNotes)
+      const limitedNotes = context.additionalNoteContents.slice(0, contextLimits.maxSelectedNotes)
       message += '\n\n---\n## Notes in Context\n'
       for (const n of limitedNotes) {
         const noteContent = fitContentIntoContextBudget(
           n.content,
-          AI_NOTE_CONTEXT_LIMITS.maxCharsPerNote,
+          contextLimits.maxCharsPerNote,
           remainingContextChars,
         )
         remainingContextChars -= noteContent.usedChars

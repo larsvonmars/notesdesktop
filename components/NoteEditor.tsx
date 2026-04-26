@@ -3256,6 +3256,7 @@ export default function NoteEditor({
     sourceType: 'selection' | 'current-note'
     targetTitle?: string
     additionalPrompt?: string
+    model?: import('@/lib/ai').DeepSeekModel
   }) => {
     const sourceText = input.sourceText?.trim()
     if (!sourceText) {
@@ -3275,7 +3276,7 @@ export default function NoteEditor({
     let usedAI = true
 
     try {
-      const outline = await generateMindmapOutline(sourceText, rootHint, input.additionalPrompt)
+      const outline = await generateMindmapOutline(sourceText, rootHint, input.additionalPrompt, input.model)
       mindmapDataForNote = buildMindmapDataFromOutline(outline, rootHint)
     } catch (error) {
       console.warn('AI mindmap generation failed, falling back to text outline conversion:', error)

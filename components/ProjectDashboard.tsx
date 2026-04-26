@@ -39,7 +39,7 @@ import {
 } from '@/lib/projects'
 import { getTasks, type Task } from '@/lib/tasks'
 import { getNoteTypePresentation, type NoteTypeIconKey } from '@/lib/note-types'
-import { sendAIRequestStream, type AIMessage } from '@/lib/ai'
+import { sendAIRequestStream, type AIMessage, type DeepSeekModel } from '@/lib/ai'
 import NoteGraph from '@/components/NoteGraph'
 
 // ────────────────────────────────────────────────────────────────────────────
@@ -190,6 +190,7 @@ export default function ProjectDashboard({
   const [aiSummary, setAiSummary] = useState('')
   const [isGeneratingSummary, setIsGeneratingSummary] = useState(false)
   const [summaryError, setSummaryError] = useState<string | null>(null)
+  const [summaryModel, setSummaryModel] = useState<DeepSeekModel>('deepseek-v4-flash')
   const summaryAbortRef = useRef<AbortController | null>(null)
   const descriptionRef = useRef<HTMLTextAreaElement>(null)
   const linkLabelRef = useRef<HTMLInputElement>(null)
@@ -402,7 +403,12 @@ export default function ProjectDashboard({
       await sendAIRequestStream(messages, {
         onToken: (token) => setAiSummary(prev => prev + token),
         onError: (error) => setSummaryError(error.message),
-      }, { signal: controller.signal, maxTokens: 1024, temperature: 0.7 })
+      }, {
+        model: summaryModel,
+        signal: controller.signal,
+        maxTokens: summaryModel === 'deepseek-v4-pro' ? 2048 : 1024,
+        temperature: 0.7,
+      })
     } catch (err: unknown) {
       if (err instanceof Error && err.name !== 'AbortError') {
         setSummaryError(err.message)
@@ -411,7 +417,7 @@ export default function ProjectDashboard({
       setIsGeneratingSummary(false)
       summaryAbortRef.current = null
     }
-  }, [isGeneratingSummary, projectNotes, projectFolders, tasks, openTasks, completedTaskCount, stats.totalWords, project])
+  }, [isGeneratingSummary, projectNotes, projectFolders, tasks, openTasks, completedTaskCount, stats.totalWords, project, summaryModel])
 
   // ── Render helpers ──────────────────────────────────────────────────────
   const NoteTypeIcon = ({ noteType, size = 14 }: { noteType: NoteType; size?: number }) => {
@@ -514,24 +520,52 @@ export default function ProjectDashboard({
           icon={Sparkles}
           className="mb-6"
           action={
-            <button
-              onClick={handleGenerateSummary}
-              disabled={projectNotes.length === 0 && tasks.length === 0}
-              className="inline-flex items-center gap-1.5 rounded-lg px-2.5 py-1 text-[11px] font-medium text-muted hover:bg-surface-hover hover:text-foreground transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
-              title={isGeneratingSummary ? 'Stop generating' : 'Generate AI summary'}
-            >
-              {isGeneratingSummary ? (
-                <>
-                  <div className="h-3 w-3 border-[1.5px] border-accent border-t-transparent rounded-full animate-spin" />
-                  Stop
-                </>
-              ) : (
-                <>
-                  <Sparkles size={12} />
-                  {aiSummary ? 'Regenerate' : 'Generate'}
-                </>
-              )}
-            </button>
+            <div className="flex items-center gap-2">
+              <div className="flex items-center rounded-lg bg-surface-hover/70 p-0.5">
+                <button
+                  onClick={() => setSummaryModel('deepseek-v4-flash')}
+                  disabled={isGeneratingSummary}
+                  className={`rounded-md px-2 py-1 text-[10px] font-medium transition-colors disabled:opacity-50 ${
+                    summaryModel === 'deepseek-v4-flash'
+                      ? 'bg-surface text-foreground shadow-sm'
+                      : 'text-muted hover:text-foreground'
+                  }`}
+                  title="Use DeepSeek V4 Flash"
+                >
+                  Flash
+                </button>
+                <button
+                  onClick={() => setSummaryModel('deepseek-v4-pro')}
+                  disabled={isGeneratingSummary}
+                  className={`rounded-md px-2 py-1 text-[10px] font-medium transition-colors disabled:opacity-50 ${
+                    summaryModel === 'deepseek-v4-pro'
+                      ? 'bg-surface text-foreground shadow-sm'
+                      : 'text-muted hover:text-foreground'
+                  }`}
+                  title="Use DeepSeek V4 Pro"
+                >
+                  Pro
+                </button>
+              </div>
+              <button
+                onClick={handleGenerateSummary}
+                disabled={projectNotes.length === 0 && tasks.length === 0}
+                className="inline-flex items-center gap-1.5 rounded-lg px-2.5 py-1 text-[11px] font-medium text-muted hover:bg-surface-hover hover:text-foreground transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+                title={isGeneratingSummary ? 'Stop generating' : 'Generate AI summary'}
+              >
+                {isGeneratingSummary ? (
+                  <>
+                    <div className="h-3 w-3 border-[1.5px] border-accent border-t-transparent rounded-full animate-spin" />
+                    Stop
+                  </>
+                ) : (
+                  <>
+                    <Sparkles size={12} />
+                    {aiSummary ? 'Regenerate' : 'Generate'}
+                  </>
+                )}
+              </button>
+            </div>
           }
         >
           {summaryError ? (
