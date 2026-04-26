@@ -20,7 +20,7 @@ export interface AIMessage {
   content: string
 }
 
-export type DeepSeekModel = 'deepseek-chat' | 'deepseek-reasoner'
+export type DeepSeekModel = 'deepseek-chat' | 'deepseek-v3.2-thinking'
 
 export interface AIStreamCallbacks {
   onToken?: (token: string) => void
@@ -868,12 +868,12 @@ export async function chat(
   ]
 
   const resolvedModel = model || DEFAULT_MODEL
-  const resolvedMaxTokens = resolvedModel === 'deepseek-reasoner' ? 8192 : DEFAULT_MAX_TOKENS
+  const resolvedMaxTokens = resolvedModel === 'deepseek-v3.2-thinking' ? 8192 : DEFAULT_MAX_TOKENS
 
   const shouldUseTools =
     !!toolHandler &&
     !!context?.allNotes &&
-    (resolvedModel !== 'deepseek-reasoner' || isReasonerToolCallingEnabled())
+    (resolvedModel !== 'deepseek-v3.2-thinking' || isReasonerToolCallingEnabled())
 
   if (shouldUseTools) {
     return chatWithTools(messages, toolHandler, onStream, 5, resolvedModel)

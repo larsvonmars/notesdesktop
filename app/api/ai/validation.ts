@@ -1,4 +1,4 @@
-const ALLOWED_MODELS = new Set(['deepseek-chat', 'deepseek-reasoner'])
+const ALLOWED_MODELS = new Set(['deepseek-chat', 'deepseek-v3.2-thinking'])
 const ALLOWED_ROLES = new Set(['system', 'user', 'assistant', 'tool'])
 const ALLOWED_TOOL_NAMES = new Set(['list_notes', 'read_note', 'search_notes', 'create_mindmap_note'])
 const MAX_MESSAGES = 100
