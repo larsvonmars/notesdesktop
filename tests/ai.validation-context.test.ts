@@ -18,7 +18,7 @@ describe('AI validation and context shaping', () => {
 
   it('rejects payloads when aggregate message content is too large', () => {
     const payload = {
-      model: 'deepseek-chat',
+      model: 'deepseek-v4-flash',
       messages: [
         { role: 'user', content: 'a'.repeat(250000) },
         { role: 'assistant', content: 'b'.repeat(250000) },
@@ -35,7 +35,7 @@ describe('AI validation and context shaping', () => {
 
   it('rejects unsupported tool definitions', () => {
     const payload = {
-      model: 'deepseek-chat',
+      model: 'deepseek-v4-flash',
       messages: [{ role: 'user', content: 'hello' }],
       tools: [
         {

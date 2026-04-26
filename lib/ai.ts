@@ -20,7 +20,7 @@ export interface AIMessage {
   content: string
 }
 
-export type DeepSeekModel = 'deepseek-chat' | 'deepseek-v4-pro'
+export type DeepSeekModel = 'deepseek-v4-flash' | 'deepseek-v4-pro'
 
 export interface AIStreamCallbacks {
   onToken?: (token: string) => void
@@ -180,7 +180,7 @@ export type ToolCallHandler = (name: string, args: Record<string, unknown>) => P
 // CONFIGURATION
 // ============================================================================
 
-const DEFAULT_MODEL = 'deepseek-chat'
+const DEFAULT_MODEL = 'deepseek-v4-flash'
 const DEFAULT_TEMPERATURE = 0.7
 const DEFAULT_MAX_TOKENS = 4096
 const DEFAULT_RETRY_COUNT = 2
@@ -240,10 +240,6 @@ function getWebAIEndpoint(path: string): string {
   const normalizedBase = baseUrl.endsWith('/') ? baseUrl.slice(0, -1) : baseUrl
   const normalizedPath = path.startsWith('/') ? path : `/${path}`
   return `${normalizedBase}${normalizedPath}`
-}
-
-export function isReasonerToolCallingEnabled(): boolean {
-  return (process.env.NEXT_PUBLIC_DEEPSEEK_REASONER_TOOLS || '').trim().toLowerCase() === 'true'
 }
 
 async function tauriInvoke<T>(command: string, args?: Record<string, unknown>): Promise<T> {
@@ -872,8 +868,7 @@ export async function chat(
 
   const shouldUseTools =
     !!toolHandler &&
-    !!context?.allNotes &&
-    (resolvedModel !== 'deepseek-v4-pro' || isReasonerToolCallingEnabled())
+    !!context?.allNotes
 
   if (shouldUseTools) {
     return chatWithTools(messages, toolHandler, onStream, 5, resolvedModel)
@@ -905,7 +900,7 @@ async function chatWithTools(
   toolHandler: ToolCallHandler,
   onStream?: (token: string) => void,
   maxIterations: number = 5,
-  model: DeepSeekModel = 'deepseek-chat',
+  model: DeepSeekModel = 'deepseek-v4-flash',
 ): Promise<string> {
   let currentMessages = [...messages]
   

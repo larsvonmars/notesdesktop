@@ -1,4 +1,4 @@
-const ALLOWED_MODELS = new Set(['deepseek-chat', 'deepseek-v4-pro'])
+const ALLOWED_MODELS = new Set(['deepseek-v4-flash', 'deepseek-v4-pro'])
 const ALLOWED_ROLES = new Set(['system', 'user', 'assistant', 'tool'])
 const ALLOWED_TOOL_NAMES = new Set(['list_notes', 'read_note', 'search_notes', 'create_mindmap_note'])
 const MAX_MESSAGES = 100
@@ -101,7 +101,7 @@ export function validateAndSanitizeAIPayload(
 
   const payload: Record<string, unknown> = {
     messages,
-    model: 'deepseek-chat',
+    model: 'deepseek-v4-flash',
   }
 
   const model = input.model

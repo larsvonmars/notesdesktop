@@ -1,6 +1,6 @@
 const DEEPSEEK_API_URL = 'https://api.deepseek.com/chat/completions'
 
-const ALLOWED_MODELS = new Set(['deepseek-chat', 'deepseek-v4-pro'])
+const ALLOWED_MODELS = new Set(['deepseek-v4-flash', 'deepseek-v4-pro'])
 const ALLOWED_ROLES = new Set(['system', 'user', 'assistant', 'tool'])
 
 function jsonResponse(body, status = 200, headers = {}) {
@@ -61,7 +61,7 @@ function validateAndSanitizeAIPayload(input, options = {}) {
 
   const payload = {
     messages,
-    model: 'deepseek-chat',
+    model: 'deepseek-v4-flash',
   }
 
   const model = input.model
