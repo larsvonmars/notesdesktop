@@ -41,6 +41,7 @@ import {
   CornerDownLeft,
   StopCircle,
   Settings2,
+  FolderOpen,
 } from 'lucide-react'
 import {
   chat,
@@ -78,6 +79,8 @@ import {
   type AIChat,
   type AIMessage as DBMessage,
 } from '@/lib/ai-chats'
+import { buildFolderTree, getFolders, type Folder, type FolderNode } from '@/lib/folders'
+import type { Project } from '@/lib/projects'
 import type { Note } from './NoteEditor'
 import type { Task, TaskStats } from '@/lib/tasks'
 import type { CalendarEvent } from '@/lib/events'
@@ -124,6 +127,7 @@ interface AIAssistantProps {
   noteContent?: string
   selectedText?: string
   allNotes?: Note[]
+  projects?: Project[]
   mindmapData?: MindmapData | null
   selectedMindmapNodeId?: string | null
   tasks?: Task[]
@@ -150,6 +154,57 @@ interface AIAssistantProps {
   isLargeWindow?: boolean
   isExpanded?: boolean
   onToggleExpand?: () => void
+}
+
+interface ContextFolderGroup {
+  folder: FolderNode
+  notes: Note[]
+  children: ContextFolderGroup[]
+}
+
+interface ContextProjectGroup {
+  key: string
+  label: string
+  color?: string | null
+  notes: Note[]
+  folders: ContextFolderGroup[]
+}
+
+function sortNotesByTitle(notes: Note[]): Note[] {
+  return [...notes].sort((a, b) => (a.title || 'Untitled').localeCompare(b.title || 'Untitled'))
+}
+
+function appendMapValue<K, V>(map: Map<K, V[]>, key: K, value: V) {
+  const existing = map.get(key)
+  if (existing) {
+    existing.push(value)
+    return
+  }
+
+  map.set(key, [value])
+}
+
+function buildContextFolderGroups(
+  nodes: FolderNode[],
+  notesByFolderId: Map<string, Note[]>
+): ContextFolderGroup[] {
+  return nodes.flatMap((node) => {
+    const children = buildContextFolderGroups(node.children, notesByFolderId)
+    const notes = sortNotesByTitle(notesByFolderId.get(node.id) ?? [])
+    if (notes.length === 0 && children.length === 0) {
+      return []
+    }
+
+    return [{ folder: node, notes, children }]
+  })
+}
+
+function countNotesInFolderGroup(folderGroup: ContextFolderGroup): number {
+  return folderGroup.notes.length + folderGroup.children.reduce((total, child) => total + countNotesInFolderGroup(child), 0)
+}
+
+function countNotesInProjectGroup(projectGroup: ContextProjectGroup): number {
+  return projectGroup.notes.length + projectGroup.folders.reduce((total, folder) => total + countNotesInFolderGroup(folder), 0)
 }
 
 type QuickAction =
@@ -343,6 +398,7 @@ export default function AIAssistant({
   noteContent,
   selectedText,
   allNotes,
+  projects = [],
   mindmapData,
   selectedMindmapNodeId,
   tasks,
@@ -405,6 +461,7 @@ export default function AIAssistant({
   } | null>(null)
   const [showContextSidebar, setShowContextSidebar] = useState(isLargeWindow)
   const [showQuickActions, setShowQuickActions] = useState(false)
+  const [folders, setFolders] = useState<Folder[]>([])
   const contextLimits = useMemo(() => getAIContextLimits(model), [model])
 
   const messagesEndRef = useRef<HTMLDivElement>(null)
@@ -422,6 +479,30 @@ export default function AIAssistant({
       setHasNoteContextConsent(stored === 'accepted')
     } catch {
       setHasNoteContextConsent(false)
+    }
+  }, [])
+
+  useEffect(() => {
+    let mounted = true
+
+    const loadFolders = async () => {
+      try {
+        const fetchedFolders = await getFolders()
+        if (mounted) {
+          setFolders(fetchedFolders)
+        }
+      } catch (err) {
+        console.error('Failed to load assistant folders:', err)
+        if (mounted) {
+          setFolders([])
+        }
+      }
+    }
+
+    loadFolders()
+
+    return () => {
+      mounted = false
     }
   }, [])
 
@@ -529,11 +610,122 @@ export default function AIAssistant({
       .sort((a, b) => (a.title || 'Untitled').localeCompare(b.title || 'Untitled'))
   }, [allNotes, note?.id])
 
+  const folderTree = useMemo(() => buildFolderTree(folders), [folders])
+
+  const folderIdSet = useMemo(() => new Set(folders.map(folder => folder.id)), [folders])
+
+  const projectLookup = useMemo(
+    () => new Map(projects.map(project => [project.id, project] as const)),
+    [projects]
+  )
+
+  const folderPathLookup = useMemo(() => {
+    const folderLookup = new Map(folders.map(folder => [folder.id, folder] as const))
+    const cache = new Map<string, string>()
+
+    const resolvePath = (folderId: string): string => {
+      const cached = cache.get(folderId)
+      if (cached !== undefined) {
+        return cached
+      }
+
+      const folder = folderLookup.get(folderId)
+      if (!folder) {
+        cache.set(folderId, '')
+        return ''
+      }
+
+      const parentPath = folder.parent_id ? resolvePath(folder.parent_id) : ''
+      const path = parentPath ? `${parentPath} / ${folder.name}` : folder.name
+      cache.set(folderId, path)
+      return path
+    }
+
+    folders.forEach(folder => {
+      resolvePath(folder.id)
+    })
+
+    return cache
+  }, [folders])
+
   const filteredSelectableNotes = useMemo(() => {
     const query = notePickerSearch.trim().toLowerCase()
     if (!query) return selectableNotes
-    return selectableNotes.filter(n => (n.title || 'Untitled').toLowerCase().includes(query))
-  }, [notePickerSearch, selectableNotes])
+    return selectableNotes.filter((availableNote) => {
+      const title = (availableNote.title || 'Untitled').toLowerCase()
+      if (title.includes(query)) return true
+
+      const projectName = availableNote.project_id
+        ? projectLookup.get(availableNote.project_id)?.name.toLowerCase() ?? ''
+        : 'unfiled'
+      if (projectName.includes(query)) return true
+
+      const folderPath = availableNote.folder_id
+        ? folderPathLookup.get(availableNote.folder_id)?.toLowerCase() ?? ''
+        : ''
+      return folderPath.includes(query)
+    })
+  }, [folderPathLookup, notePickerSearch, projectLookup, selectableNotes])
+
+  const groupedSelectableNotes = useMemo((): ContextProjectGroup[] => {
+    if (filteredSelectableNotes.length === 0) return []
+
+    const notesByFolderId = new Map<string, Note[]>()
+    const rootNotesByProjectId = new Map<string | null, Note[]>()
+
+    for (const availableNote of filteredSelectableNotes) {
+      const hasKnownFolder = !!availableNote.folder_id && folderIdSet.has(availableNote.folder_id)
+
+      if (availableNote.folder_id && hasKnownFolder) {
+        appendMapValue(notesByFolderId, availableNote.folder_id, availableNote)
+        continue
+      }
+
+      appendMapValue(rootNotesByProjectId, availableNote.project_id ?? null, availableNote)
+    }
+
+    const groups: ContextProjectGroup[] = []
+
+    const appendProjectGroup = (projectId: string | null, label: string, color?: string | null) => {
+      const notes = sortNotesByTitle(rootNotesByProjectId.get(projectId) ?? [])
+      const folders = buildContextFolderGroups(
+        folderTree.filter(folder => folder.project_id === projectId),
+        notesByFolderId
+      )
+
+      if (notes.length === 0 && folders.length === 0) {
+        return
+      }
+
+      groups.push({
+        key: projectId ?? '__UNFILED__',
+        label,
+        color: color ?? null,
+        notes,
+        folders,
+      })
+    }
+
+    projects.forEach(project => {
+      appendProjectGroup(project.id, project.name, project.color)
+    })
+
+    const unknownProjectIds = Array.from(
+      new Set(
+        filteredSelectableNotes
+          .map(availableNote => availableNote.project_id)
+          .filter((projectId): projectId is string => !!projectId && !projectLookup.has(projectId))
+      )
+    ).sort()
+
+    unknownProjectIds.forEach(projectId => {
+      appendProjectGroup(projectId, 'Unknown Project', null)
+    })
+
+    appendProjectGroup(null, 'Unfiled', null)
+
+    return groups
+  }, [filteredSelectableNotes, folderIdSet, folderTree, projectLookup, projects])
 
   const selectedAdditionalNotes = useMemo(() => {
     if (!allNotes?.length || selectedNoteIds.length === 0) return []
@@ -1208,6 +1400,64 @@ export default function AIAssistant({
     if (!note) return ''
     return noteContent ? stripHtmlForAI(noteContent) : stripHtmlForAI(note.content || '')
   }, [note, noteContent])
+
+  function renderSelectableNote(availableNote: Note, index: number) {
+    const isSelected = selectedNoteIds.includes(availableNote.id)
+    const selectionLimitReached = !isSelected && selectedNoteIds.length >= contextLimits.maxSelectedNotes
+
+    return (
+      <button
+        key={availableNote.id}
+        onClick={() => setSelectedNoteIds(prev =>
+          prev.includes(availableNote.id)
+            ? prev.filter(id => id !== availableNote.id)
+            : prev.length >= contextLimits.maxSelectedNotes
+              ? prev
+              : [...prev, availableNote.id]
+        )}
+        disabled={selectionLimitReached}
+        className={`assistant-soft-pop assistant-hover-lift flex w-full items-start gap-3 rounded-2xl border px-3 py-3 text-left transition-all ${
+          isSelected
+            ? 'border-alpine-500/30 bg-alpine-600/10 shadow-sm'
+            : selectionLimitReached
+              ? 'cursor-not-allowed border-border/50 bg-surface opacity-50'
+              : 'border-border/60 bg-surface hover:border-border-strong hover:bg-surface-hover/40'
+        }`}
+        style={{ animationDelay: `${160 + Math.min(index, 5) * 25}ms` }}
+      >
+        <div className={`mt-0.5 flex h-4 w-4 flex-shrink-0 items-center justify-center rounded border-2 transition-all ${
+          isSelected ? 'border-alpine-600 bg-alpine-600 text-white' : 'border-border-strong'
+        }`}>
+          {isSelected && <Check size={10} />}
+        </div>
+        <div className="min-w-0 flex-1">
+          <div className="truncate text-sm font-medium text-foreground">{availableNote.title || 'Untitled'}</div>
+          <div className="mt-1 text-[11px] text-muted">{availableNote.note_type || 'note'}</div>
+        </div>
+      </button>
+    )
+  }
+
+  function renderContextFolderGroup(folderGroup: ContextFolderGroup, depth = 0) {
+    const totalNotes = countNotesInFolderGroup(folderGroup)
+
+    return (
+      <div key={folderGroup.folder.id} className="space-y-2">
+        <div className="flex items-center gap-2 px-1 text-[11px] font-semibold text-foreground/70" style={{ paddingLeft: `${depth * 12}px` }}>
+          <FolderOpen size={12} className="text-muted" />
+          <span className="truncate">{folderGroup.folder.name}</span>
+          <span className="inline-flex items-center rounded-full border border-border/50 px-1.5 py-0.5 text-[10px] font-medium text-muted">
+            {totalNotes}
+          </span>
+        </div>
+
+        <div className="space-y-1.5 border-l border-border/50 pl-3" style={{ marginLeft: `${depth * 12}px` }}>
+          {folderGroup.notes.map((availableNote, noteIndex) => renderSelectableNote(availableNote, noteIndex))}
+          {folderGroup.children.map((childGroup) => renderContextFolderGroup(childGroup, depth + 1))}
+        </div>
+      </div>
+    )
+  }
 
   const contextUsagePercent = useMemo(() => {
     return Math.min(
@@ -2091,7 +2341,7 @@ export default function AIAssistant({
               <input
                 value={notePickerSearch}
                 onChange={(e) => setNotePickerSearch(e.target.value)}
-                placeholder="Search notes to attach…"
+                placeholder="Search notes, projects, or folders…"
                 className="h-10 w-full rounded-2xl border border-border bg-surface-hover/50 pl-9 pr-3 text-sm text-foreground placeholder:text-muted/60 focus:outline-none focus:ring-2 focus:ring-alpine-500/15 focus:border-alpine-500/35"
               />
             </div>
@@ -2104,47 +2354,42 @@ export default function AIAssistant({
             </div>
 
             <div className="mt-3 max-h-[280px] space-y-1.5 overflow-y-auto pr-1">
-              {filteredSelectableNotes.length === 0 ? (
+              {groupedSelectableNotes.length === 0 ? (
                 <div className="rounded-2xl border border-dashed border-border/60 px-3 py-4 text-center text-[11px] text-muted">
                   No notes match this search.
                 </div>
               ) : (
-                filteredSelectableNotes.map((availableNote, index) => {
-                  const isSelected = selectedNoteIds.includes(availableNote.id)
-                  const selectionLimitReached = !isSelected && selectedNoteIds.length >= contextLimits.maxSelectedNotes
+                groupedSelectableNotes.map((projectGroup) => (
+                  <div key={projectGroup.key} className="rounded-2xl border border-border/60 bg-surface-hover/25 px-3 py-3">
+                    <div className="flex items-center gap-2">
+                      <span
+                        className="h-2.5 w-2.5 rounded-full border border-white/60 shadow-sm"
+                        style={{ backgroundColor: projectGroup.color || 'var(--color-border-strong)' }}
+                      />
+                      <div className="min-w-0 flex-1 truncate text-[11px] font-semibold uppercase tracking-[0.18em] text-muted">
+                        {projectGroup.label}
+                      </div>
+                      <span className="inline-flex items-center rounded-full border border-border/50 px-1.5 py-0.5 text-[10px] font-medium text-muted">
+                        {countNotesInProjectGroup(projectGroup)}
+                      </span>
+                    </div>
 
-                  return (
-                    <button
-                      key={availableNote.id}
-                      onClick={() => setSelectedNoteIds(prev =>
-                        prev.includes(availableNote.id)
-                          ? prev.filter(id => id !== availableNote.id)
-                          : prev.length >= contextLimits.maxSelectedNotes
-                            ? prev
-                            : [...prev, availableNote.id]
+                    <div className="mt-3 space-y-3">
+                      {projectGroup.notes.length > 0 && (
+                        <div className="space-y-1.5">
+                          {projectGroup.folders.length > 0 && (
+                            <div className="px-1 text-[10px] font-semibold uppercase tracking-[0.16em] text-muted">
+                              Project Notes
+                            </div>
+                          )}
+                          {projectGroup.notes.map((availableNote, noteIndex) => renderSelectableNote(availableNote, noteIndex))}
+                        </div>
                       )}
-                      disabled={selectionLimitReached}
-                      className={`assistant-soft-pop assistant-hover-lift flex w-full items-start gap-3 rounded-2xl border px-3 py-3 text-left transition-all ${
-                        isSelected
-                          ? 'border-alpine-500/30 bg-alpine-600/10 shadow-sm'
-                          : selectionLimitReached
-                            ? 'cursor-not-allowed border-border/50 bg-surface opacity-50'
-                            : 'border-border/60 bg-surface hover:border-border-strong hover:bg-surface-hover/40'
-                      }`}
-                      style={{ animationDelay: `${160 + Math.min(index, 5) * 25}ms` }}
-                    >
-                      <div className={`mt-0.5 flex h-4 w-4 flex-shrink-0 items-center justify-center rounded border-2 transition-all ${
-                        isSelected ? 'border-alpine-600 bg-alpine-600 text-white' : 'border-border-strong'
-                      }`}>
-                        {isSelected && <Check size={10} />}
-                      </div>
-                      <div className="min-w-0 flex-1">
-                        <div className="text-sm font-medium text-foreground truncate">{availableNote.title || 'Untitled'}</div>
-                        <div className="mt-1 text-[11px] text-muted">{availableNote.note_type || 'note'}</div>
-                      </div>
-                    </button>
-                  )
-                })
+
+                      {projectGroup.folders.map((folderGroup) => renderContextFolderGroup(folderGroup))}
+                    </div>
+                  </div>
+                ))
               )}
             </div>
           </div>

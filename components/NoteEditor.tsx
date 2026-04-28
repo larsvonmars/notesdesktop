@@ -3997,6 +3997,7 @@ export default function NoteEditor({
                   note={note ?? null}
                   noteContent={aiNoteContent}
                   allNotes={allNotes}
+                  projects={projects}
                   selectedText={selectedText || undefined}
                   mindmapData={mindmapData}
                   selectedMindmapNodeId={selectedMindmapNodeId}
