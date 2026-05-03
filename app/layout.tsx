@@ -5,7 +5,8 @@ import { AuthProvider } from '@/lib/auth-context'
 import { ThemeProvider } from '@/lib/theme-context'
 import { WebViewPolyfillsInitializer } from '@/components/WebViewPolyfillsInitializer'
 import ToastProvider from '@/components/ToastProvider'
-import { CookieConsent as CookieConsentBanner, ErrorBoundary } from '@mindviz/ui'
+import CookieConsentBanner from '@/components/CookieConsentBanner'
+import ErrorBoundary from '@/components/ErrorBoundary'
 
 const robotoFlex = Roboto_Flex({
   subsets: ['latin'],
