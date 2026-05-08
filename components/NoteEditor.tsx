@@ -3564,10 +3564,10 @@ export default function NoteEditor({
 
       {/* Clean Editor Area */}
       <div
-        className="flex h-screen flex-col bg-background pt-16 text-foreground lg:pt-0"
+        className="flex h-screen flex-col bg-background pt-16 text-foreground md:pt-0"
         style={!isMobile ? { paddingRight: rightSidebarOffset } : undefined}
       >
-        <div className="flex-1 overflow-hidden px-3 py-2 sm:px-4 sm:py-3">
+        <div className="flex-1 overflow-hidden px-3 py-2 sm:px-4 sm:py-3 md:px-5 md:py-4">
           <div className="h-full w-full">
             <div className="relative flex h-full flex-col overflow-hidden rounded-xl border border-border bg-surface">
               {noteType === 'drawing' ? (

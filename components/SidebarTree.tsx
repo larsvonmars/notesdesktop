@@ -698,7 +698,7 @@ export default function SidebarTree({
           if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onSelectNote(n) }
         }}
         onContextMenu={(e) => handleNoteContextMenu(e, n)}
-        className={`group w-full text-left px-2.5 py-2 rounded-xl transition-all duration-200 flex items-start justify-between ${
+        className={`group w-full text-left px-2.5 py-2.5 rounded-xl transition-all duration-200 flex items-start justify-between ${
           isDragging ? 'opacity-50' : ''
         } ${
           isActive
@@ -763,7 +763,7 @@ export default function SidebarTree({
           onKeyDown={(e) => {
             if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); toggleFolder(folder.id) }
           }}
-          className={`group flex items-center gap-1.5 px-2 py-1.5 rounded-xl transition-all duration-200 ${
+          className={`group flex items-center gap-1.5 px-2 py-2 rounded-xl transition-all duration-200 ${
             isSelected ? 'bg-accent/10 text-accent font-medium shadow-sm' : 'hover:bg-surface-hover/60 text-foreground/70 hover:text-foreground'
           } ${isDropTarget ? 'ring-2 ring-alpine-400/50 bg-alpine-50/60 dark:bg-alpine-900/30' : ''}`}
           style={{
@@ -1020,7 +1020,7 @@ export default function SidebarTree({
   // ---- COLLAPSED VIEW ----
   if (collapsed) {
     return (
-      <aside className="fixed inset-y-0 left-0 z-40 hidden w-14 border-r border-border/40 bg-surface transition-all duration-300 lg:flex lg:flex-col">
+      <aside className="fixed inset-y-0 left-0 z-40 hidden w-14 border-r border-border/40 bg-surface transition-all duration-300 md:flex md:flex-col">
         <div className="flex items-center justify-center px-3 py-4">
           <div className="flex h-8 w-8 items-center justify-center rounded-xl bg-gradient-to-br from-alpine-500 to-alpine-600 text-sm font-bold text-white shadow-sm">
             N
@@ -1032,7 +1032,7 @@ export default function SidebarTree({
               key={p.id}
               onClick={onToggleCollapsed}
               title={p.name}
-              className={`w-9 h-9 rounded-2xl flex items-center justify-center transition-all duration-200 hover:scale-105 flex-shrink-0 shadow-sm ${
+              className={`w-10 h-10 rounded-2xl flex items-center justify-center transition-all duration-200 hover:scale-105 flex-shrink-0 shadow-sm min-h-[40px] min-w-[40px] ${
                 p.id === activeNote?.project_id
                   ? 'ring-2 ring-offset-2 ring-offset-surface shadow-md scale-105'
                   : 'opacity-60 hover:opacity-100 hover:shadow-md'
@@ -1042,15 +1042,15 @@ export default function SidebarTree({
                 ...(p.id === activeNote?.project_id ? { ringColor: p.color ?? '#6B7280' } : {}),
               }}
             >
-              <span className="text-[9px] font-bold text-white uppercase">{p.name.slice(0, 2)}</span>
+              <span className="text-[11px] font-bold text-white uppercase">{p.name.slice(0, 2)}</span>
             </button>
           ))}
           <button
             onClick={onToggleCollapsed}
             title="Unfiled"
-            className="w-9 h-9 rounded-2xl flex items-center justify-center transition-all duration-200 hover:scale-105 flex-shrink-0 bg-surface-hover/70 border border-border/50 opacity-60 hover:opacity-100 hover:shadow-sm"
+            className="w-10 h-10 rounded-2xl flex items-center justify-center transition-all duration-200 hover:scale-105 flex-shrink-0 bg-surface-hover/70 border border-border/50 opacity-60 hover:opacity-100 hover:shadow-sm min-h-[40px] min-w-[40px]"
           >
-            <Home size={13} className="text-muted" />
+            <Home size={16} className="text-muted" />
           </button>
         </nav>
         <div className="px-2 py-3 flex flex-col items-center gap-1">
@@ -1060,7 +1060,7 @@ export default function SidebarTree({
             aria-label="Expand sidebar"
             title="Expand sidebar"
           >
-            <ChevronRight size={15} />
+            <ChevronRight size={18} />
           </button>
         </div>
       </aside>
@@ -1490,7 +1490,7 @@ export default function SidebarTree({
         <div className="px-3 py-2.5 space-y-0.5">
           <button
             onClick={() => onCreateFolder(null)}
-            className="group flex w-full items-center gap-2.5 rounded-xl px-2.5 py-2 text-xs font-medium text-muted/70 transition-all duration-200 hover:bg-surface-hover/60 hover:text-foreground"
+            className="group flex w-full items-center gap-2.5 rounded-xl px-2.5 py-2.5 text-xs font-medium text-muted/70 transition-all duration-200 hover:bg-surface-hover/60 hover:text-foreground"
           >
             <FolderPlus className="h-3.5 w-3.5 shrink-0" />
             <span>New Folder</span>
@@ -1498,7 +1498,7 @@ export default function SidebarTree({
           {onCreateProject && (
             <button
               onClick={() => onCreateProject()}
-              className="group flex w-full items-center gap-2.5 rounded-xl px-2.5 py-2 text-xs font-medium text-muted/70 transition-all duration-200 hover:bg-surface-hover/60 hover:text-foreground"
+              className="group flex w-full items-center gap-2.5 rounded-xl px-2.5 py-2.5 text-xs font-medium text-muted/70 transition-all duration-200 hover:bg-surface-hover/60 hover:text-foreground"
             >
               <Plus className="h-3.5 w-3.5 shrink-0" />
               <span>New Project</span>
@@ -1507,7 +1507,7 @@ export default function SidebarTree({
           {onOpenFileExplorer && (
             <button
               onClick={onOpenFileExplorer}
-              className="group flex w-full items-center gap-2.5 rounded-xl px-2.5 py-2 text-xs font-medium text-muted/70 transition-all duration-200 hover:bg-surface-hover/60 hover:text-foreground"
+              className="group flex w-full items-center gap-2.5 rounded-xl px-2.5 py-2.5 text-xs font-medium text-muted/70 transition-all duration-200 hover:bg-surface-hover/60 hover:text-foreground"
             >
               <FolderOpen className="h-3.5 w-3.5 shrink-0" />
               <span>File Explorer</span>

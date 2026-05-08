@@ -195,15 +195,15 @@ export default function NoteDetailsSidebar({
   // ---- COLLAPSED VIEW ----
   if (collapsed) {
     return (
-      <aside className="fixed inset-y-0 right-0 z-30 hidden w-12 border-l border-border/40 bg-surface  transition-all duration-300 lg:flex lg:flex-col" title={displayName}>
+      <aside className="fixed inset-y-0 right-0 z-30 hidden w-12 border-l border-border/40 bg-surface  transition-all duration-300 md:flex md:flex-col" title={displayName}>
         <div className="flex items-center justify-center px-2 py-4">
           <button
             onClick={onToggleCollapsed}
-            className="rounded-xl p-1.5 text-muted/70 transition-all duration-200 hover:bg-surface-hover/70 hover:text-foreground"
+            className="rounded-xl p-2 text-muted/70 transition-all duration-200 hover:bg-surface-hover/70 hover:text-foreground min-h-[36px] min-w-[36px]"
             aria-label="Expand details"
             title="Expand details"
           >
-            <ChevronLeft size={15} />
+            <ChevronLeft size={18} />
           </button>
         </div>
         <nav className="flex-1 flex flex-col items-center gap-2.5 px-1.5 py-3">

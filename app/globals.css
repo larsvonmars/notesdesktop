@@ -69,6 +69,11 @@
 ::-webkit-scrollbar-thumb { background: var(--border-strong); border-radius: 999px; }
 ::-webkit-scrollbar-thumb:hover { background: var(--muted); }
 
+/* Wider scrollbar on touch devices for comfortable dragging */
+@media (pointer: coarse) {
+  ::-webkit-scrollbar { width: 10px; height: 10px; }
+}
+
 /* Sidebar glass effect enhancement */
 aside[class*="backdrop-blur"] {
   -webkit-backdrop-filter: blur(20px) saturate(1.2);
