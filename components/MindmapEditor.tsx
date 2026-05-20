@@ -26,6 +26,7 @@ import {
 } from 'lucide-react'
 import { useTheme } from '../lib/theme-context'
 import { useIsMobile } from '../lib/useIsMobile'
+import BaseModal from './BaseModal'
 
 // ============================================================================
 // Types & Interfaces
@@ -118,6 +119,7 @@ export interface MindmapEditorHandle {
   resetView: () => void
   openSearch: () => void
   toggleMinimap: () => void
+  exportImage: () => void
 }
 
 interface MindmapEditorProps {
@@ -1499,6 +1501,7 @@ const MindmapEditor = forwardRef<MindmapEditorHandle, MindmapEditorProps>(
     const containerRef = useRef<HTMLDivElement>(null)
     const fitToViewImperativeRef = useRef<(() => void) | null>(null)
     const resetViewImperativeRef = useRef<(() => void) | null>(null)
+    const exportImageImperativeRef = useRef<(() => void) | null>(null)
     const openSearchImperativeRef = useRef<(() => void) | null>(null)
     const toggleMinimapImperativeRef = useRef<(() => void) | null>(null)
 
@@ -1551,6 +1554,17 @@ const MindmapEditor = forwardRef<MindmapEditorHandle, MindmapEditorProps>(
 
     // Context menu state
     const [contextMenu, setContextMenu] = React.useState<{ nodeId: string; x: number; y: number } | null>(null)
+
+    // Export dialog state
+    const [isExportDialogOpen, setIsExportDialogOpen] = React.useState(false)
+    const [exportScale, setExportScale] = React.useState<number>(2)
+    const [exportFormat, setExportFormat] = React.useState<'png' | 'jpeg'>('png')
+    const [exportQuality, setExportQuality] = React.useState(0.92)
+    const [exportBackground, setExportBackground] = React.useState<'canvas' | 'transparent' | 'white' | 'custom'>('canvas')
+    const [exportCustomBg, setExportCustomBg] = React.useState('#ffffff')
+    const [exportFilename, setExportFilename] = React.useState('mindmap')
+    const [isExporting, setIsExporting] = React.useState(false)
+    const exportOffscreenRef = useRef<HTMLCanvasElement | null>(null)
 
     // Inline rename state
     const [inlineEditNodeId, setInlineEditNodeId] = React.useState<string | null>(null)
@@ -1623,6 +1637,7 @@ const MindmapEditor = forwardRef<MindmapEditorHandle, MindmapEditorProps>(
       resetView: () => resetViewImperativeRef.current?.(),
       openSearch: () => openSearchImperativeRef.current?.(),
       toggleMinimap: () => toggleMinimapImperativeRef.current?.(),
+      exportImage: () => exportImageImperativeRef.current?.(),
     }))
 
     useEffect(() => {
@@ -3279,30 +3294,194 @@ const MindmapEditor = forwardRef<MindmapEditorHandle, MindmapEditorProps>(
 
     // ── Export ──
 
-    const exportPNG = useCallback(() => {
-      fitToView()
-      // Slight delay so fitToView re-renders before capture
-      requestAnimationFrame(() => {
-        const canvas = canvasRef.current
-        if (!canvas) return
-        const url = canvas.toDataURL('image/png')
-        const a = document.createElement('a')
-        a.href = url
-        a.download = 'mindmap.png'
-        a.click()
-      })
-    }, [fitToView])
+    const getContentBounds = useCallback(() => {
+      let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity
+      const nodes = mindmapData.nodes
+      let hasNodes = false
+      for (const nodeId of Object.keys(nodes)) {
+        const node = nodes[nodeId]
+        if (!node) continue
+        hasNodes = true
+        minX = Math.min(minX, node.x)
+        minY = Math.min(minY, node.y)
+        maxX = Math.max(maxX, node.x)
+        maxY = Math.max(maxY, node.y)
+      }
+      if (!hasNodes) return { minX: 0, minY: 0, maxX: 800, maxY: 600 }
+      return { minX, minY, maxX, maxY }
+    }, [mindmapData.nodes])
 
-    const exportJSON = useCallback(() => {
-      const data = JSON.stringify(mindmapData, null, 2)
-      const blob = new Blob([data], { type: 'application/json' })
-      const url = URL.createObjectURL(blob)
-      const a = document.createElement('a')
-      a.href = url
-      a.download = 'mindmap.json'
-      a.click()
-      setTimeout(() => URL.revokeObjectURL(url), 1000)
-    }, [mindmapData])
+    const getExportDimensions = useCallback((scale: number) => {
+      const canvas = canvasRef.current
+      const viewW = canvas?.width ?? 800
+      const viewH = canvas?.height ?? 600
+      const maxDim = 8192 // Browser canvas size limit safety margin
+      const rawW = Math.round(viewW * scale)
+      const rawH = Math.round(viewH * scale)
+      if (rawW <= maxDim && rawH <= maxDim) return { width: rawW, height: rawH }
+      const ratio = Math.min(maxDim / rawW, maxDim / rawH)
+      return { width: Math.round(rawW * ratio), height: Math.round(rawH * ratio) }
+    }, [])
+
+    const renderToOffscreenCanvas = useCallback((scale: number) => {
+      const mainCanvas = canvasRef.current
+      if (!mainCanvas) return null
+
+      const { width, height } = getExportDimensions(scale)
+      const offscreen = document.createElement('canvas')
+      offscreen.width = width
+      offscreen.height = height
+
+      const ctx = offscreen.getContext('2d')
+      if (!ctx) return null
+
+      const canvasTheme = getCanvasTheme(isDark)
+      const exportScaleFactor = width / mainCanvas.width
+
+      // Apply the same view transform scaled to export resolution
+      ctx.save()
+      ctx.scale(exportScaleFactor, exportScaleFactor)
+      ctx.translate(offset.x, offset.y)
+      ctx.scale(scale, scale)
+
+      // Background
+      const effBg = exportBackground === 'transparent' ? null
+        : exportBackground === 'white' ? '#ffffff'
+        : exportBackground === 'custom' ? exportCustomBg
+        : canvasTheme.background
+
+      if (effBg) {
+        ctx.fillStyle = effBg
+        ctx.fillRect(-offset.x / scale, -offset.y / scale, mainCanvas.width / scale, mainCanvas.height / scale)
+      }
+
+      const visibleNodes = collectVisibleNodeIds(mindmapData)
+
+      // Draw custom edges
+      ;(mindmapData.customEdges ?? []).forEach((edge) => {
+        if (!visibleNodes.has(edge.fromNodeId) || !visibleNodes.has(edge.toNodeId)) return
+        const fromNode = mindmapData.nodes[edge.fromNodeId]
+        const toNode = mindmapData.nodes[edge.toNodeId]
+        if (!fromNode || !toNode) return
+
+        const fromCenter = { x: fromNode.x, y: fromNode.y }
+        const toCenter = { x: toNode.x, y: toNode.y }
+        const fromMetrics = computeNodeMetrics(ctx, { ...fromNode, x: fromCenter.x, y: fromCenter.y }, fromNode.id === mindmapData.rootId)
+        const toMetrics = computeNodeMetrics(ctx, { ...toNode, x: toCenter.x, y: toCenter.y }, toNode.id === mindmapData.rootId)
+        const fromPoint = getNodeConnectionPoint(fromCenter, fromMetrics, toCenter)
+        const toPoint = getNodeConnectionPoint(toCenter, toMetrics, fromCenter)
+
+        drawEdge(ctx, fromPoint, toPoint, 1, canvasTheme.edgeColor, { title: edge.title, style: edge.style }, false, useCurvedEdges, fromNode.color, toNode.color)
+      })
+
+      // Recursive node drawing
+      const drawNodeOffscreen = (nodeId: string, visibility: number, parentPosition?: Point): void => {
+        const node = mindmapData.nodes[nodeId]
+        if (!node || visibility <= 0) return
+
+        const parentNode = node.parentId ? mindmapData.nodes[node.parentId] : null
+        const origin = parentPosition ?? (parentNode ? { x: parentNode.x, y: parentNode.y } : undefined)
+        const renderPos = calculateRenderPosition(node, visibility, origin)
+
+        if (parentNode && origin) {
+          const parentForMetrics: MindmapNode = { ...parentNode, x: origin.x, y: origin.y }
+          const childForMetrics: MindmapNode = { ...node, x: renderPos.x, y: renderPos.y }
+          const parentIsRoot = parentNode.id === mindmapData.rootId
+          const childIsRoot = node.id === mindmapData.rootId
+          const parentMetrics = computeNodeMetrics(ctx, parentForMetrics, parentIsRoot)
+          const childMetrics = computeNodeMetrics(ctx, childForMetrics, childIsRoot)
+          const fromPoint = getNodeConnectionPoint(origin, parentMetrics, renderPos)
+          const toPoint = getNodeConnectionPoint(renderPos, childMetrics, origin)
+          drawEdge(ctx, fromPoint, toPoint, visibility, canvasTheme.edgeColor, mindmapData.parentEdgeMeta?.[nodeId], false, useCurvedEdges, parentNode.color, node.color)
+        }
+
+        const isRoot = nodeId === mindmapData.rootId
+        const metrics = computeNodeMetrics(ctx, { ...node, x: renderPos.x, y: renderPos.y }, isRoot)
+        drawNodeBody(ctx, node, metrics, isRoot, false, visibility, renderPos.x, renderPos.y, canvasTheme.nodeSelectedBorder, canvasTheme.collapseIndicatorBg, canvasTheme.collapseIndicatorBgHover)
+
+        node.children.forEach((childId) => {
+          drawNodeOffscreen(childId, visibility, renderPos)
+        })
+      }
+
+      drawNodeOffscreen(mindmapData.rootId, 1)
+
+      ctx.restore()
+      return offscreen
+    }, [mindmapData, offset, scale, isDark, useCurvedEdges, exportBackground, exportCustomBg, getExportDimensions])
+
+    const executeExport = useCallback(() => {
+      setIsExporting(true)
+
+      // Defer to next frame so the spinner renders
+      requestAnimationFrame(() => {
+        try {
+          const mainCanvas = canvasRef.current
+          if (!mainCanvas) {
+            setIsExporting(false)
+            return
+          }
+
+          const { width, height } = getExportDimensions(exportScale)
+          const offscreen = renderToOffscreenCanvas(exportScale)
+          if (!offscreen) {
+            setIsExporting(false)
+            return
+          }
+
+          const mimeType = exportFormat === 'jpeg' ? 'image/jpeg' : 'image/png'
+          const quality = exportFormat === 'jpeg' ? exportQuality : undefined
+          const ext = exportFormat === 'jpeg' ? 'jpg' : 'png'
+
+          if (offscreen.toBlob) {
+            offscreen.toBlob((blob) => {
+              if (!blob) { setIsExporting(false); return }
+              const url = URL.createObjectURL(blob)
+              const a = document.createElement('a')
+              a.href = url
+              a.download = `${exportFilename || 'mindmap'}.${ext}`
+              a.click()
+              setTimeout(() => URL.revokeObjectURL(url), 1000)
+              setIsExporting(false)
+            }, mimeType, quality)
+          } else {
+            // Fallback for older browsers
+            const url = offscreen.toDataURL(mimeType, quality)
+            const a = document.createElement('a')
+            a.href = url
+            a.download = `${exportFilename || 'mindmap'}.${ext}`
+            a.click()
+            setIsExporting(false)
+          }
+        } catch {
+          setIsExporting(false)
+        }
+      })
+    }, [exportScale, exportFormat, exportQuality, exportFilename, getExportDimensions, renderToOffscreenCanvas])
+
+    const openExportDialog = useCallback(() => {
+      fitToView()
+      // Default to 2x for crisp exports
+      setExportScale(2)
+      setExportFormat('png')
+      setExportQuality(0.92)
+      setExportBackground('canvas')
+      setExportCustomBg('#ffffff')
+      setExportFilename('mindmap')
+      setIsExporting(false)
+      setIsExportDialogOpen(true)
+    }, [fitToView])
+    exportImageImperativeRef.current = openExportDialog
+
+    const getEstimatedFileSize = useCallback(() => {
+      const { width, height } = getExportDimensions(exportScale)
+      const rawBytes = width * height * 4
+      if (exportFormat === 'jpeg') {
+        const factor = 0.03 + exportQuality * 0.17
+        return rawBytes * factor
+      }
+      return rawBytes * 0.4
+    }, [exportScale, exportFormat, exportQuality, getExportDimensions])
 
     // ── Auto-layout ──
 
@@ -3571,15 +3750,18 @@ const MindmapEditor = forwardRef<MindmapEditorHandle, MindmapEditorProps>(
                 >
                   <LayoutTemplate size={18} />
                 </button>
+              </>
+            )}
 
-                <div className="h-px bg-gray-200 dark:bg-slate-700 my-0.5" />
-
-                {/* Export */}
+            {/* Export — always visible when toolbar is shown */}
+            {showToolbar && (
+              <>
+                {!readOnly && <div className="h-px bg-gray-200 dark:bg-slate-700 my-0.5" />}
                 <button
-                  onClick={exportPNG}
+                  onClick={openExportDialog}
                   className="p-2 rounded-lg hover:bg-gray-100 dark:hover:bg-slate-700 transition-colors"
-                  title="Export as PNG image"
-                  aria-label="Export PNG"
+                  title="Export mindmap as image"
+                  aria-label="Export image"
                 >
                   <Download size={18} />
                 </button>
@@ -4419,6 +4601,199 @@ const MindmapEditor = forwardRef<MindmapEditorHandle, MindmapEditorProps>(
           </div>
         </div>
         )}
+
+        {/* ── Export Dialog ── */}
+        <BaseModal isOpen={isExportDialogOpen} onClose={() => setIsExportDialogOpen(false)} size="lg">
+          <div className="flex flex-col gap-5">
+            <h2 className="text-lg font-semibold text-slate-800 dark:text-slate-100">Export Mindmap</h2>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+              {/* Preview */}
+              <div className="flex flex-col gap-2">
+                <label className="text-xs font-medium text-slate-500 dark:text-slate-400 uppercase tracking-wide">Preview</label>
+                <div className="relative aspect-video rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-100 dark:bg-slate-800 overflow-hidden">
+                  <div className="absolute inset-0 flex items-center justify-center text-slate-400 dark:text-slate-500 text-sm">
+                    {(exportFormat === 'png' ? 'PNG' : 'JPEG')} · {exportScale}× · {getExportDimensions(exportScale).width}×{getExportDimensions(exportScale).height}px
+                  </div>
+                  <div className="absolute bottom-2 left-2 right-2 text-center text-xs text-slate-400">
+                    ~{(() => {
+                      const bytes = getEstimatedFileSize()
+                      if (bytes < 1024) return `${Math.round(bytes)} B`
+                      if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(0)} KB`
+                      return `${(bytes / (1024 * 1024)).toFixed(1)} MB`
+                    })()}
+                  </div>
+                </div>
+              </div>
+
+              {/* Options */}
+              <div className="flex flex-col gap-4">
+                {/* Filename */}
+                <div className="flex flex-col gap-1.5">
+                  <label className="text-xs font-medium text-slate-500 dark:text-slate-400 uppercase tracking-wide">Filename</label>
+                  <div className="flex items-center gap-1">
+                    <input
+                      type="text"
+                      value={exportFilename}
+                      onChange={(e) => setExportFilename(e.target.value.replace(/[^a-zA-Z0-9_\-\s]/g, '').slice(0, 60))}
+                      className="flex-1 px-3 py-2 rounded-lg border border-slate-200 dark:border-slate-600 bg-white dark:bg-slate-800 text-sm text-slate-800 dark:text-slate-200 outline-none focus:ring-2 focus:ring-alpine-500"
+                      placeholder="mindmap"
+                    />
+                    <span className="text-sm text-slate-400 shrink-0">.{exportFormat === 'jpeg' ? 'jpg' : 'png'}</span>
+                  </div>
+                </div>
+
+                {/* Format */}
+                <div className="flex flex-col gap-1.5">
+                  <label className="text-xs font-medium text-slate-500 dark:text-slate-400 uppercase tracking-wide">Format</label>
+                  <div className="flex rounded-lg border border-slate-200 dark:border-slate-600 overflow-hidden">
+                    {(['png', 'jpeg'] as const).map((fmt) => (
+                      <button
+                        key={fmt}
+                        onClick={() => {
+                          setExportFormat(fmt)
+                          if (fmt === 'jpeg' && exportBackground === 'transparent') setExportBackground('white')
+                        }}
+                        className={`flex-1 py-2 text-sm font-medium transition-colors ${
+                          exportFormat === fmt
+                            ? 'bg-alpine-500 text-white'
+                            : 'bg-white dark:bg-slate-800 text-slate-600 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-700'
+                        }`}
+                      >
+                        {fmt === 'png' ? 'PNG' : 'JPEG'}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                {/* Scale */}
+                <div className="flex flex-col gap-1.5">
+                  <label className="text-xs font-medium text-slate-500 dark:text-slate-400 uppercase tracking-wide">Scale</label>
+                  <div className="flex items-center gap-2">
+                    {[1, 2, 3].map((s) => (
+                      <button
+                        key={s}
+                        onClick={() => setExportScale(s)}
+                        className={`flex-1 py-1.5 text-sm font-medium rounded-lg transition-colors ${
+                          exportScale === s
+                            ? 'bg-alpine-500 text-white'
+                            : 'border border-slate-200 dark:border-slate-600 bg-white dark:bg-slate-800 text-slate-600 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-700'
+                        }`}
+                      >
+                        {s}×
+                      </button>
+                    ))}
+                    <div className="flex items-center gap-1">
+                      <input
+                        type="number"
+                        min={0.5}
+                        max={4}
+                        step={0.5}
+                        value={![1,2,3].includes(exportScale) ? exportScale : ''}
+                        placeholder="Custom"
+                        onChange={(e) => {
+                          const v = parseFloat(e.target.value)
+                          if (v >= 0.5 && v <= 4) setExportScale(v)
+                        }}
+                        className="w-16 px-2 py-1.5 rounded-lg border border-slate-200 dark:border-slate-600 bg-white dark:bg-slate-800 text-sm text-center text-slate-800 dark:text-slate-200 outline-none focus:ring-2 focus:ring-alpine-500"
+                      />
+                      <span className="text-xs text-slate-400">×</span>
+                    </div>
+                  </div>
+                </div>
+
+                {/* JPEG Quality */}
+                {exportFormat === 'jpeg' && (
+                  <div className="flex flex-col gap-1.5">
+                    <label className="text-xs font-medium text-slate-500 dark:text-slate-400 uppercase tracking-wide">
+                      Quality: {Math.round(exportQuality * 100)}%
+                    </label>
+                    <input
+                      type="range"
+                      min={0.1}
+                      max={1}
+                      step={0.01}
+                      value={exportQuality}
+                      onChange={(e) => setExportQuality(parseFloat(e.target.value))}
+                      className="w-full accent-alpine-500"
+                    />
+                  </div>
+                )}
+
+                {/* Background */}
+                <div className="flex flex-col gap-1.5">
+                  <label className="text-xs font-medium text-slate-500 dark:text-slate-400 uppercase tracking-wide">Background</label>
+                  <div className="grid grid-cols-2 gap-1.5">
+                    {([
+                      ['canvas', 'Theme'],
+                      ['white', 'White'],
+                      ...(exportFormat === 'png' ? [['transparent', 'Transparent']] as const : []),
+                      ['custom', 'Custom'],
+                    ] as const).map(([key, label]) => (
+                      <button
+                        key={key}
+                        onClick={() => setExportBackground(key)}
+                        className={`py-2 text-sm font-medium rounded-lg transition-colors ${
+                          exportBackground === key
+                            ? 'bg-alpine-500 text-white'
+                            : 'border border-slate-200 dark:border-slate-600 bg-white dark:bg-slate-800 text-slate-600 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-700'
+                        }`}
+                      >
+                        {label}
+                      </button>
+                    ))}
+                  </div>
+                  {exportBackground === 'custom' && (
+                    <div className="flex items-center gap-2">
+                      <input
+                        type="color"
+                        value={exportCustomBg}
+                        onChange={(e) => setExportCustomBg(e.target.value)}
+                        className="w-8 h-8 rounded border border-slate-200 dark:border-slate-600 cursor-pointer"
+                      />
+                      <span className="text-xs text-slate-400">{exportCustomBg}</span>
+                    </div>
+                  )}
+                </div>
+              </div>
+            </div>
+
+            {/* Bottom bar */}
+            <div className="flex items-center justify-between pt-3 border-t border-slate-200 dark:border-slate-700">
+              <div className="text-xs text-slate-400">
+                {getExportDimensions(exportScale).width} × {getExportDimensions(exportScale).height} px
+                {' · '}~{(() => {
+                  const bytes = getEstimatedFileSize()
+                  if (bytes < 1024) return `${Math.round(bytes)} B`
+                  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(0)} KB`
+                  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`
+                })()}
+              </div>
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={() => setIsExportDialogOpen(false)}
+                  className="px-4 py-2 text-sm font-medium rounded-lg border border-slate-200 dark:border-slate-600 text-slate-600 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-700 transition-colors"
+                  disabled={isExporting}
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={executeExport}
+                  disabled={isExporting}
+                  className="px-5 py-2 text-sm font-medium rounded-lg bg-alpine-500 text-white hover:bg-alpine-600 transition-colors disabled:opacity-50 flex items-center gap-2"
+                >
+                  {isExporting && (
+                    <svg className="animate-spin h-4 w-4" viewBox="0 0 24 24">
+                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none" />
+                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+                    </svg>
+                  )}
+                  {isExporting ? 'Exporting…' : 'Export'}
+                </button>
+              </div>
+            </div>
+          </div>
+        </BaseModal>
       </div>
     )
   }
