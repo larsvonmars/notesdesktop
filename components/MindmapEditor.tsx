@@ -1902,13 +1902,28 @@ const MindmapEditor = forwardRef<MindmapEditorHandle, MindmapEditorProps>(
         const visibleNodes = collectVisibleNodeIds(mindmapData)
         const point = { x: worldX, y: worldY }
         const tolerance = Math.max(8, 8 / Math.max(scale, 0.35))
+        const ctx = getCanvasContext(canvasRef.current)
+        if (!ctx) return null
+
+        // Helper to compute boundary-to-boundary connection points
+        const getBoundaryPoints = (fromNode: MindmapNode, toNode: MindmapNode): [Point, Point] => {
+          const fromCenter = { x: fromNode.x, y: fromNode.y }
+          const toCenter = { x: toNode.x, y: toNode.y }
+          const fromMetrics = computeNodeMetrics(ctx, { ...fromNode, x: fromCenter.x, y: fromCenter.y }, fromNode.id === mindmapData.rootId)
+          const toMetrics = computeNodeMetrics(ctx, { ...toNode, x: toCenter.x, y: toCenter.y }, toNode.id === mindmapData.rootId)
+          return [
+            getNodeConnectionPoint(fromCenter, fromMetrics, toCenter),
+            getNodeConnectionPoint(toCenter, toMetrics, fromCenter),
+          ]
+        }
 
         for (const edge of mindmapData.customEdges ?? []) {
           if (!visibleNodes.has(edge.fromNodeId) || !visibleNodes.has(edge.toNodeId)) continue
           const fromNode = mindmapData.nodes[edge.fromNodeId]
           const toNode = mindmapData.nodes[edge.toNodeId]
           if (!fromNode || !toNode) continue
-          if (hitTestConnectionEdge(point, { x: fromNode.x, y: fromNode.y }, { x: toNode.x, y: toNode.y }, tolerance, useCurvedEdges)) {
+          const [fromPoint, toPoint] = getBoundaryPoints(fromNode, toNode)
+          if (hitTestConnectionEdge(point, fromPoint, toPoint, tolerance, useCurvedEdges)) {
             return { edgeId: customEdgeId(edge.id) }
           }
         }
@@ -1918,7 +1933,8 @@ const MindmapEditor = forwardRef<MindmapEditorHandle, MindmapEditorProps>(
           if (!visibleNodes.has(node.id) || !visibleNodes.has(node.parentId)) continue
           const parent = mindmapData.nodes[node.parentId]
           if (!parent) continue
-          if (hitTestConnectionEdge(point, { x: parent.x, y: parent.y }, { x: node.x, y: node.y }, tolerance, useCurvedEdges)) {
+          const [fromPoint, toPoint] = getBoundaryPoints(parent, node)
+          if (hitTestConnectionEdge(point, fromPoint, toPoint, tolerance, useCurvedEdges)) {
             return { edgeId: parentEdgeId(node.id) }
           }
         }
@@ -2008,8 +2024,25 @@ const MindmapEditor = forwardRef<MindmapEditorHandle, MindmapEditorProps>(
           const toNode = mindmapData.nodes[edge.toNodeId]
           if (!fromNode || !toNode) return
 
-          const fromPoint = { x: fromNode.x, y: fromNode.y }
-          const toPoint = { x: toNode.x, y: toNode.y }
+          const fromCenter = { x: fromNode.x, y: fromNode.y }
+          const toCenter = { x: toNode.x, y: toNode.y }
+
+          // Compute metrics for both nodes to find connection points on their boundaries
+          const fromMetrics = computeNodeMetrics(
+            ctx,
+            { ...fromNode, x: fromCenter.x, y: fromCenter.y },
+            fromNode.id === mindmapData.rootId
+          )
+          const toMetrics = computeNodeMetrics(
+            ctx,
+            { ...toNode, x: toCenter.x, y: toCenter.y },
+            toNode.id === mindmapData.rootId
+          )
+
+          // Compute connection points on node boundaries
+          const fromPoint = getNodeConnectionPoint(fromCenter, fromMetrics, toCenter)
+          const toPoint = getNodeConnectionPoint(toCenter, toMetrics, fromCenter)
+
           const selectionId = customEdgeId(edge.id)
           const lineType = edge.style?.lineType ?? EDGE_DEFAULTS.lineType
           if (lineType === 'dashed' || lineType === 'dotted') hasDashAnimation = true
@@ -2063,34 +2096,47 @@ const MindmapEditor = forwardRef<MindmapEditorHandle, MindmapEditorProps>(
             ? parentPosition ?? { x: parentNode.x, y: parentNode.y }
             : null
 
-          if (edgeFrom) {
+          if (edgeFrom && parentNode) {
             const childMeta = mindmapData.parentEdgeMeta?.[nodeId]
             const lineType = childMeta?.style?.lineType ?? EDGE_DEFAULTS.lineType
             if (lineType === 'dashed' || lineType === 'dotted') hasDashAnimation = true
+
+            // Compute metrics for both nodes using their current rendered positions
+            const parentForMetrics: MindmapNode = { ...parentNode, x: edgeFrom.x, y: edgeFrom.y }
+            const childForMetrics: MindmapNode = { ...node, x: renderPos.x, y: renderPos.y }
+            const parentIsRoot = parentNode.id === mindmapData.rootId
+            const childIsRoot = node.id === mindmapData.rootId
+            const parentMetrics = computeNodeMetrics(ctx, parentForMetrics, parentIsRoot)
+            const childMetrics = computeNodeMetrics(ctx, childForMetrics, childIsRoot)
+
+            // Compute connection points on node boundaries
+            const fromPoint = getNodeConnectionPoint(edgeFrom, parentMetrics, renderPos)
+            const toPoint = getNodeConnectionPoint(renderPos, childMetrics, edgeFrom)
+
             drawEdge(
               ctx,
-              edgeFrom,
-              renderPos,
+              fromPoint,
+              toPoint,
               clampedVisibility,
               canvasTheme.edgeColor,
               childMeta,
               selectedEdgeId === parentEdgeId(nodeId),
               useCurvedEdges,
-              parentNode?.color,
+              parentNode.color,
               node.color,
               now,
             )
             if (childMeta?.title?.trim()) {
               edgeTitlesToRender.push({
-                from: edgeFrom,
-                to: renderPos,
+                from: fromPoint,
+                to: toPoint,
                 title: childMeta.title,
                 visibility: clampedVisibility,
               })
             }
             layoutSnapshot.edges.push({
-              from: edgeFrom,
-              to: renderPos,
+              from: fromPoint,
+              to: toPoint,
               visibility: clampedVisibility,
             })
           }
