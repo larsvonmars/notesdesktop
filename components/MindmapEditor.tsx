@@ -1563,6 +1563,8 @@ const MindmapEditor = forwardRef<MindmapEditorHandle, MindmapEditorProps>(
     const animationsRef = useRef<Map<string, { direction: 'collapse' | 'expand'; startTime: number }>>(new Map())
     const animationFrameRef = useRef<number | null>(null)
     const lastRenderTimeRef = useRef<number>(performance.now())
+    const dashIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null)
+    const renderMindmapRef = useRef<((timestamp?: number) => void) | null>(null)
     const suppressClickRef = useRef(false)
     const collapseTargetRef = useRef<string | null>(null)
     const collapsePointerStartRef = useRef<Point | null>(null)
@@ -1596,6 +1598,10 @@ const MindmapEditor = forwardRef<MindmapEditorHandle, MindmapEditorProps>(
           cancelAnimationFrame(animationFrameRef.current)
           animationFrameRef.current = null
         }
+        if (dashIntervalRef.current !== null) {
+          clearInterval(dashIntervalRef.current)
+          dashIntervalRef.current = null
+        }
         dispatch({ type: 'RESET_ALL', payload: normalized })
       },
       clear: () => {
@@ -1605,6 +1611,10 @@ const MindmapEditor = forwardRef<MindmapEditorHandle, MindmapEditorProps>(
         if (animationFrameRef.current !== null) {
           cancelAnimationFrame(animationFrameRef.current)
           animationFrameRef.current = null
+        }
+        if (dashIntervalRef.current !== null) {
+          clearInterval(dashIntervalRef.current)
+          dashIntervalRef.current = null
         }
         dispatch({ type: 'RESET_ALL', payload: reset })
       },
@@ -1639,6 +1649,10 @@ const MindmapEditor = forwardRef<MindmapEditorHandle, MindmapEditorProps>(
       if (animationFrameRef.current !== null) {
         cancelAnimationFrame(animationFrameRef.current)
         animationFrameRef.current = null
+      }
+      if (dashIntervalRef.current !== null) {
+        clearInterval(dashIntervalRef.current)
+        dashIntervalRef.current = null
       }
       dispatch({ type: 'RESET_ALL', payload: nextData })
     }, [initialData])
@@ -2129,16 +2143,38 @@ const MindmapEditor = forwardRef<MindmapEditorHandle, MindmapEditorProps>(
         renderMiniMap(layoutSnapshot)
         lastRenderTimeRef.current = now
 
-        // Schedule next frame if animating (collapse/expand or dash flow)
-        const needsContinuousRender = hasActiveAnimation || hasDashAnimation
-        if (needsContinuousRender) {
+        // Schedule next frame:
+        // - Collapse/expand animations → full-speed RAF (60fps) for smooth 260ms transitions
+        // - Dash-only animation → throttled interval (25fps) to avoid wasteful re-renders
+        if (hasActiveAnimation) {
+          // Clear any dash interval — collapse animation takes over with RAF
+          if (dashIntervalRef.current !== null) {
+            clearInterval(dashIntervalRef.current)
+            dashIntervalRef.current = null
+          }
           animationFrameRef.current = requestAnimationFrame(renderMindmap)
-        } else {
+        } else if (hasDashAnimation) {
+          // Dash-only: use throttled interval at ~25fps
           animationFrameRef.current = null
+          if (dashIntervalRef.current === null) {
+            dashIntervalRef.current = setInterval(() => {
+              renderMindmapRef.current?.()
+            }, 40)
+          }
+        } else {
+          // No animation needed
+          animationFrameRef.current = null
+          if (dashIntervalRef.current !== null) {
+            clearInterval(dashIntervalRef.current)
+            dashIntervalRef.current = null
+          }
         }
       },
       [mindmapData, offset, scale, selectedNodeId, selectedEdgeId, resolveChildrenVisibility, renderMiniMap, isDark, useCurvedEdges]
     )
+
+    // Keep renderMindmapRef in sync so the dash interval never captures stale closures
+    renderMindmapRef.current = renderMindmap
 
     useEffect(() => {
       renderMindmap()
@@ -2165,6 +2201,10 @@ const MindmapEditor = forwardRef<MindmapEditorHandle, MindmapEditorProps>(
         if (animationFrameRef.current !== null) {
           cancelAnimationFrame(animationFrameRef.current)
           animationFrameRef.current = null
+        }
+        if (dashIntervalRef.current !== null) {
+          clearInterval(dashIntervalRef.current)
+          dashIntervalRef.current = null
         }
       }
     }, [])
