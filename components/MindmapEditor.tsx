@@ -601,33 +601,106 @@ function collectVisibleNodeIds(mindmapData: MindmapData): Set<string> {
   return visible
 }
 
-function getQuadraticControlPoint(from: Point, to: Point): Point {
-  const midX = (from.x + to.x) / 2
-  const midY = (from.y + to.y) / 2
+function getCubicControlPoints(from: Point, to: Point): [Point, Point] {
   const dx = to.x - from.x
   const dy = to.y - from.y
   const length = Math.max(1, Math.hypot(dx, dy))
   const nx = -dy / length
   const ny = dx / length
-  const bend = Math.min(80, length * 0.22)
-  return { x: midX + nx * bend, y: midY + ny * bend }
+  const bend = Math.min(70, length * 0.18)
+  const tension = 0.4
+  const midX = (from.x + to.x) / 2
+  const midY = (from.y + to.y) / 2
+  return [
+    { x: from.x + dx * tension + nx * bend, y: from.y + dy * tension + ny * bend },
+    { x: to.x - dx * tension + nx * bend, y: to.y - dy * tension + ny * bend },
+  ]
 }
 
 function getEdgePolyline(from: Point, to: Point, curved: boolean): Point[] {
   if (!curved) return [from, to]
 
-  const control = getQuadraticControlPoint(from, to)
+  const [cp1, cp2] = getCubicControlPoints(from, to)
   const points: Point[] = []
-  const segments = 24
+  const dx = to.x - from.x
+  const dy = to.y - from.y
+  const length = Math.max(1, Math.hypot(dx, dy))
+  const segments = Math.max(16, Math.min(48, Math.round(length / 12)))
   for (let i = 0; i <= segments; i += 1) {
     const t = i / segments
     const inv = 1 - t
+    const inv2 = inv * inv
+    const t2 = t * t
     points.push({
-      x: inv * inv * from.x + 2 * inv * t * control.x + t * t * to.x,
-      y: inv * inv * from.y + 2 * inv * t * control.y + t * t * to.y,
+      x: inv2 * inv * from.x + 3 * inv2 * t * cp1.x + 3 * inv * t2 * cp2.x + t2 * t * to.x,
+      y: inv2 * inv * from.y + 3 * inv2 * t * cp1.y + 3 * inv * t2 * cp2.y + t2 * t * to.y,
     })
   }
   return points
+}
+
+/**
+ * Computes the point on a node's rounded-rect boundary that lies along
+ * the ray from the node center toward a target point.
+ */
+function getNodeConnectionPoint(
+  nodeCenter: Point,
+  nodeMetrics: NodeMetrics,
+  targetDirection: Point
+): Point {
+  const { rect } = nodeMetrics
+  const dx = targetDirection.x - nodeCenter.x
+  const dy = targetDirection.y - nodeCenter.y
+  const dist = Math.hypot(dx, dy)
+  if (dist < 0.001) return { x: nodeCenter.x, y: nodeCenter.y }
+
+  const nx = dx / dist
+  const ny = dy / dist
+  const cornerRadius = Math.min(nodeMetrics.height / 2, 20)
+
+  // Check intersection with each side of the rounded rect
+  const halfW = (rect.right - rect.left) / 2
+  const halfH = (rect.bottom - rect.top) / 2
+
+  // Right edge
+  if (nx > 0) {
+    const t = (halfW - cornerRadius) / Math.max(nx, 0.001)
+    const y = nodeCenter.y + ny * t
+    if (y >= rect.top + cornerRadius && y <= rect.bottom - cornerRadius) {
+      return { x: rect.right, y }
+    }
+  }
+  // Left edge
+  if (nx < 0) {
+    const t = -(halfW - cornerRadius) / Math.min(nx, -0.001)
+    const y = nodeCenter.y + ny * t
+    if (y >= rect.top + cornerRadius && y <= rect.bottom - cornerRadius) {
+      return { x: rect.left, y }
+    }
+  }
+  // Bottom edge
+  if (ny > 0) {
+    const t = (halfH - cornerRadius) / Math.max(ny, 0.001)
+    const x = nodeCenter.x + nx * t
+    if (x >= rect.left + cornerRadius && x <= rect.right - cornerRadius) {
+      return { x, y: rect.bottom }
+    }
+  }
+  // Top edge
+  if (ny < 0) {
+    const t = -(halfH - cornerRadius) / Math.min(ny, -0.001)
+    const x = nodeCenter.x + nx * t
+    if (x >= rect.left + cornerRadius && x <= rect.right - cornerRadius) {
+      return { x, y: rect.top }
+    }
+  }
+
+  // Corner case: ray hits a corner
+  const cornerX = nx > 0 ? rect.right - cornerRadius : rect.left + cornerRadius
+  const cornerY = ny > 0 ? rect.bottom - cornerRadius : rect.top + cornerRadius
+  const cx = cornerX + cornerRadius * nx
+  const cy = cornerY + cornerRadius * ny
+  return { x: cx, y: cy }
 }
 
 function getPolylineMidpoint(polyline: Point[]): Point {
@@ -677,9 +750,11 @@ export function hitTestConnectionEdge(
   curved = false
 ): boolean {
   const polyline = getEdgePolyline(from, to, curved)
+  // Also check against the wider glow/tap area for better hit detection
+  const extendedTolerance = Math.max(tolerance, 8)
   for (let i = 1; i < polyline.length; i += 1) {
     const distance = distanceToSegment(point, polyline[i - 1], polyline[i])
-    if (distance <= tolerance) return true
+    if (distance <= extendedTolerance) return true
   }
   return false
 }
@@ -803,7 +878,15 @@ function computeNodeMetrics(
 }
 
 /**
- * Draws an edge (connection line) between parent and child nodes
+ * Draws an edge (connection line) between nodes with rich visual styling:
+ * - Cubic Bézier curves with tension
+ * - Gradient coloring (parent → child node color)
+ * - Glow/shadow layer for depth
+ * - Tapered width (thicker at parent, thinner at child)
+ * - Animated dash offset (flowing lines)
+ * - Enhanced selection highlight with pulse
+ * - Proportionally scaled arrowheads
+ * - Rounded line caps and joins
  */
 function drawEdge(
   ctx: CanvasRenderingContext2D,
@@ -813,26 +896,89 @@ function drawEdge(
   edgeColor: string,
   meta?: MindmapEdgeMeta,
   isSelected?: boolean,
-  curved = false
+  curved?: boolean,
+  fromColor?: string,
+  toColor?: string,
+  now?: number,
 ): void {
-  const width = Math.max(1, meta?.style?.width ?? EDGE_DEFAULTS.width)
+  const width = Math.max(1.5, meta?.style?.width ?? EDGE_DEFAULTS.width)
   const lineType = meta?.style?.lineType ?? EDGE_DEFAULTS.lineType
   const opacity = Math.max(0.15, Math.min(1, meta?.style?.opacity ?? EDGE_DEFAULTS.opacity))
-  const color = meta?.style?.color?.trim() || edgeColor
+  const userColor = meta?.style?.color?.trim()
   const arrowType = meta?.style?.arrowType ?? EDGE_DEFAULTS.arrowType
+  const effectiveVisibility = Math.max(0.08, visibility * opacity)
+  const effectiveWidth = Math.max(1, width * visibility)
 
-  const polyline = getEdgePolyline(from, to, curved)
+  const polyline = getEdgePolyline(from, to, curved ?? false)
+  if (polyline.length < 2) return
+
+  // Determine gradient colors
+  const startColor = fromColor || userColor || edgeColor
+  const endColor = toColor || userColor || edgeColor
+  const hasGradient = !!(fromColor || toColor || userColor)
 
   ctx.save()
-  ctx.strokeStyle = color
-  ctx.globalAlpha = Math.max(0.12, visibility * opacity)
-  ctx.lineWidth = Math.max(1, width * visibility)
-  if (lineType === 'dashed') {
-    ctx.setLineDash([10, 6])
-  } else if (lineType === 'dotted') {
-    ctx.setLineDash([2, 6])
-  } else {
+  ctx.imageSmoothingEnabled = true
+  ctx.imageSmoothingQuality = 'high'
+  ctx.lineCap = 'round'
+  ctx.lineJoin = 'round'
+
+  // ── Build gradient along the polyline ──
+  let strokeStyle: string | CanvasGradient = startColor
+  if (hasGradient && startColor !== endColor) {
+    const first = polyline[0]
+    const last = polyline[polyline.length - 1]
+    const gradient = ctx.createLinearGradient(first.x, first.y, last.x, last.y)
+    gradient.addColorStop(0, startColor)
+    gradient.addColorStop(1, endColor)
+    strokeStyle = gradient
+  }
+
+  // ── Dash pattern ──
+  const dashPattern = lineType === 'dashed' ? [10, 7] : lineType === 'dotted' ? [3, 8] : []
+
+  // ── Layer 1: Glow / ambient shadow ──
+  if (effectiveVisibility > 0.3) {
+    ctx.globalAlpha = effectiveVisibility * 0.18
+    ctx.lineWidth = effectiveWidth + 5
+    ctx.strokeStyle = startColor
+    ctx.shadowColor = startColor
+    ctx.shadowBlur = Math.min(12, effectiveWidth * 3)
     ctx.setLineDash([])
+    ctx.beginPath()
+    ctx.moveTo(polyline[0].x, polyline[0].y)
+    for (let i = 1; i < polyline.length; i += 1) {
+      ctx.lineTo(polyline[i].x, polyline[i].y)
+    }
+    ctx.stroke()
+    ctx.shadowBlur = 0
+  }
+
+  // ── Layer 2: Tapered middle layer (slightly wider, more transparent) ──
+  if (effectiveWidth >= 2) {
+    ctx.globalAlpha = effectiveVisibility * 0.35
+    ctx.lineWidth = effectiveWidth + 2
+    ctx.strokeStyle = strokeStyle
+    ctx.setLineDash(dashPattern)
+    if (dashPattern.length > 0 && now !== undefined) {
+      ctx.lineDashOffset = -((now * 0.03) % 100)
+    }
+    ctx.beginPath()
+    ctx.moveTo(polyline[0].x, polyline[0].y)
+    const midIdx = Math.floor(polyline.length * 0.6)
+    for (let i = 1; i <= midIdx; i += 1) {
+      ctx.lineTo(polyline[i].x, polyline[i].y)
+    }
+    ctx.stroke()
+  }
+
+  // ── Layer 3: Main edge stroke ──
+  ctx.globalAlpha = effectiveVisibility
+  ctx.lineWidth = effectiveWidth
+  ctx.strokeStyle = strokeStyle
+  ctx.setLineDash(dashPattern)
+  if (dashPattern.length > 0 && now !== undefined) {
+    ctx.lineDashOffset = -((now * 0.03) % 100)
   }
   ctx.beginPath()
   ctx.moveTo(polyline[0].x, polyline[0].y)
@@ -841,7 +987,22 @@ function drawEdge(
   }
   ctx.stroke()
 
-  if (arrowType !== 'none') {
+  // ── Layer 4: Inner highlight stripe (thin bright line in center) ──
+  if (effectiveWidth >= 3 && effectiveVisibility > 0.5) {
+    ctx.globalAlpha = effectiveVisibility * 0.25
+    ctx.lineWidth = Math.max(1, effectiveWidth * 0.35)
+    ctx.strokeStyle = 'rgba(255, 255, 255, 0.5)'
+    ctx.setLineDash([])
+    ctx.beginPath()
+    ctx.moveTo(polyline[0].x, polyline[0].y)
+    for (let i = 1; i < polyline.length; i += 1) {
+      ctx.lineTo(polyline[i].x, polyline[i].y)
+    }
+    ctx.stroke()
+  }
+
+  // ── Arrowhead ──
+  if (arrowType !== 'none' && polyline.length >= 2) {
     const last = polyline[polyline.length - 1]
     const prev = polyline[Math.max(0, polyline.length - 2)]
     const dx = last.x - prev.x
@@ -849,14 +1010,21 @@ function drawEdge(
     const len = Math.max(1, Math.hypot(dx, dy))
     const ux = dx / len
     const uy = dy / len
-    const arrowLength = 14
-    const arrowWidth = 6
+    const arrowSize = Math.max(8, effectiveWidth * 2.2 + 6)
+    const arrowLength = arrowSize
+    const arrowHalfWidth = arrowSize * 0.45
     const baseX = last.x - ux * arrowLength
     const baseY = last.y - uy * arrowLength
-    const leftX = baseX - uy * arrowWidth
-    const leftY = baseY + ux * arrowWidth
-    const rightX = baseX + uy * arrowWidth
-    const rightY = baseY - ux * arrowWidth
+    const leftX = baseX - uy * arrowHalfWidth
+    const leftY = baseY + ux * arrowHalfWidth
+    const rightX = baseX + uy * arrowHalfWidth
+    const rightY = baseY - ux * arrowHalfWidth
+
+    ctx.globalAlpha = effectiveVisibility
+    ctx.lineWidth = Math.max(1.5, effectiveWidth * 0.8)
+    ctx.setLineDash([])
+    ctx.shadowBlur = 0
+    ctx.lineJoin = 'round'
 
     ctx.beginPath()
     ctx.moveTo(last.x, last.y)
@@ -864,19 +1032,25 @@ function drawEdge(
     ctx.lineTo(rightX, rightY)
     ctx.closePath()
     if (arrowType === 'filled') {
-      ctx.fillStyle = color
+      ctx.fillStyle = endColor
       ctx.fill()
     } else {
-      ctx.strokeStyle = color
-      ctx.lineWidth = Math.max(1, width * 0.9)
+      ctx.strokeStyle = endColor
       ctx.stroke()
     }
   }
 
+  // ── Selection highlight with pulsing glow ──
   if (isSelected) {
-    ctx.globalAlpha = 0.95
+    ctx.globalAlpha = 0.9
     ctx.setLineDash([])
-    ctx.lineWidth = Math.max(2, width + 1)
+    ctx.shadowBlur = 0
+    const pulse = now !== undefined ? 1 + Math.sin(now * 0.005) * 0.15 : 1
+    const glowWidth = (effectiveWidth + 5) * pulse
+
+    // Outer glow ring
+    ctx.globalAlpha = 0.35
+    ctx.lineWidth = glowWidth + 4
     ctx.strokeStyle = '#0ea5e9'
     ctx.beginPath()
     ctx.moveTo(polyline[0].x, polyline[0].y)
@@ -884,6 +1058,30 @@ function drawEdge(
       ctx.lineTo(polyline[i].x, polyline[i].y)
     }
     ctx.stroke()
+
+    // Main selection line
+    ctx.globalAlpha = 0.85
+    ctx.lineWidth = glowWidth
+    ctx.strokeStyle = '#38bdf8'
+    ctx.beginPath()
+    ctx.moveTo(polyline[0].x, polyline[0].y)
+    for (let i = 1; i < polyline.length; i += 1) {
+      ctx.lineTo(polyline[i].x, polyline[i].y)
+    }
+    ctx.stroke()
+
+    // Bright inner core
+    ctx.globalAlpha = 0.7
+    ctx.lineWidth = Math.max(1.5, glowWidth * 0.4)
+    ctx.strokeStyle = '#e0f2fe'
+    ctx.beginPath()
+    ctx.moveTo(polyline[0].x, polyline[0].y)
+    for (let i = 1; i < polyline.length; i += 1) {
+      ctx.lineTo(polyline[i].x, polyline[i].y)
+    }
+    ctx.stroke()
+
+    ctx.shadowBlur = 0
   }
 
   ctx.setLineDash([])
@@ -1249,6 +1447,9 @@ function getCanvasTheme(isDark: boolean) {
   return {
     background: isDark ? '#1e293b' : '#f8fafc',
     edgeColor: isDark ? 'rgba(148, 163, 184, 0.3)' : 'rgba(100, 116, 139, 0.35)',
+    edgeGlowBlur: 6,
+    edgeGlowAlpha: 0.15,
+    edgeGlowWidthBoost: 4,
     minimapBg: isDark ? 'rgba(2, 6, 23, 0.85)' : 'rgba(15, 23, 42, 0.7)',
     minimapEdge: isDark ? 'rgba(148, 163, 184, 0.5)' : 'rgba(148, 163, 184, 0.6)',
     nodeSelectedBorder: isDark ? '#e2e8f0' : '#0f172a',
@@ -1786,6 +1987,7 @@ const MindmapEditor = forwardRef<MindmapEditorHandle, MindmapEditorProps>(
         const edgeTitlesToRender: Array<{ from: Point; to: Point; title: string; visibility: number }> = []
 
         // Render custom cross-node edges first so nodes stay on top.
+        let hasDashAnimation = false
         ;(mindmapData.customEdges ?? []).forEach((edge) => {
           if (!visibleNodes.has(edge.fromNodeId) || !visibleNodes.has(edge.toNodeId)) return
           const fromNode = mindmapData.nodes[edge.fromNodeId]
@@ -1795,6 +1997,8 @@ const MindmapEditor = forwardRef<MindmapEditorHandle, MindmapEditorProps>(
           const fromPoint = { x: fromNode.x, y: fromNode.y }
           const toPoint = { x: toNode.x, y: toNode.y }
           const selectionId = customEdgeId(edge.id)
+          const lineType = edge.style?.lineType ?? EDGE_DEFAULTS.lineType
+          if (lineType === 'dashed' || lineType === 'dotted') hasDashAnimation = true
           drawEdge(
             ctx,
             fromPoint,
@@ -1806,7 +2010,10 @@ const MindmapEditor = forwardRef<MindmapEditorHandle, MindmapEditorProps>(
               style: edge.style,
             },
             selectedEdgeId === selectionId,
-            useCurvedEdges
+            useCurvedEdges,
+            fromNode.color,
+            toNode.color,
+            now,
           )
           if (edge.title?.trim()) {
             edgeTitlesToRender.push({
@@ -1844,6 +2051,8 @@ const MindmapEditor = forwardRef<MindmapEditorHandle, MindmapEditorProps>(
 
           if (edgeFrom) {
             const childMeta = mindmapData.parentEdgeMeta?.[nodeId]
+            const lineType = childMeta?.style?.lineType ?? EDGE_DEFAULTS.lineType
+            if (lineType === 'dashed' || lineType === 'dotted') hasDashAnimation = true
             drawEdge(
               ctx,
               edgeFrom,
@@ -1852,7 +2061,10 @@ const MindmapEditor = forwardRef<MindmapEditorHandle, MindmapEditorProps>(
               canvasTheme.edgeColor,
               childMeta,
               selectedEdgeId === parentEdgeId(nodeId),
-              useCurvedEdges
+              useCurvedEdges,
+              parentNode?.color,
+              node.color,
+              now,
             )
             if (childMeta?.title?.trim()) {
               edgeTitlesToRender.push({
@@ -1917,8 +2129,9 @@ const MindmapEditor = forwardRef<MindmapEditorHandle, MindmapEditorProps>(
         renderMiniMap(layoutSnapshot)
         lastRenderTimeRef.current = now
 
-        // Schedule next frame if animating
-        if (hasActiveAnimation) {
+        // Schedule next frame if animating (collapse/expand or dash flow)
+        const needsContinuousRender = hasActiveAnimation || hasDashAnimation
+        if (needsContinuousRender) {
           animationFrameRef.current = requestAnimationFrame(renderMindmap)
         } else {
           animationFrameRef.current = null
