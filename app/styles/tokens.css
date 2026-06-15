@@ -1,0 +1,112 @@
+/* ===== MindViz Notes – Design Tokens ===== */
+
+/* Light theme tokens */
+:root {
+  /* Semantic color tokens */
+  --background:        #f8fafc;
+  --foreground:        #0f172a;
+  --surface:           #ffffff;
+  --surface-hover:     #f1f5f9;
+  --surface-active:    #e2e8f0;
+  --border:            #e2e8f0;
+  --border-strong:     #cbd5e1;
+  --muted:             #64748b;
+  --accent:            #16a34a;
+  --accent-light:      #dcfce7;
+  --accent-foreground: #ffffff;
+  --success:           #10b981;
+  --success-light:     #d1fae5;
+  --warning:           #f59e0b;
+  --warning-light:     #fef3c7;
+  --danger:            #ef4444;
+  --danger-light:      #fee2e2;
+  --sidebar-width:     320px;
+  --sidebar-collapsed: 64px;
+
+  /* Alpine gradient (kept for backward compat) */
+  --alpine-gradient-from: #EFF8FF;
+  --alpine-gradient-to:   #F0FDFA;
+
+  /* Safe area insets */
+  --sat: env(safe-area-inset-top, 0px);
+  --sar: env(safe-area-inset-right, 0px);
+  --sab: env(safe-area-inset-bottom, 0px);
+  --sal: env(safe-area-inset-left, 0px);
+
+  /* Refined shadows */
+  --shadow-xs: 0 1px 2px rgba(0,0,0,0.04);
+  --shadow-sm: 0 1px 3px rgba(0,0,0,0.06), 0 1px 2px rgba(0,0,0,0.04);
+  --shadow-md: 0 4px 6px -1px rgba(0,0,0,0.07), 0 2px 4px -2px rgba(0,0,0,0.05);
+  --shadow-lg: 0 10px 15px -3px rgba(0,0,0,0.08), 0 4px 6px -4px rgba(0,0,0,0.04);
+  --shadow-xl: 0 20px 25px -5px rgba(0,0,0,0.08), 0 8px 10px -6px rgba(0,0,0,0.04);
+
+  /* Editor-specific tokens */
+  --editor-heading-1: #0f172a;
+  --editor-heading-2: #1e293b;
+  --editor-heading-3: #334155;
+  --editor-heading-4: #475569;
+  --editor-heading-5: #64748b;
+  --editor-heading-6: #94a3b8;
+  --editor-rail-green: #16a34a;
+  --editor-rail-sky: #0ea5e9;
+  --editor-rail-amber: #d97706;
+  --editor-rail-violet: #7c3aed;
+  --editor-rail-pink: #db2777;
+  --editor-rail-teal: #0d9488;
+  --editor-rail-green-bright: #22c55e;
+  --editor-rail-sky-bright: #38bdf8;
+  --editor-rail-amber-bright: #f59e0b;
+  --editor-code-bg: #0d1117;
+  --editor-code-text: #c9d1d9;
+  --editor-table-bg: #ffffff;
+  --editor-table-header-bg-from: #0f172a;
+  --editor-table-header-bg-to: #1e293b;
+  --editor-table-header-color: #22c55e;
+  --editor-table-cell-color: #1e293b;
+  --editor-body-color: #334155;
+}
+
+/* Dark theme token overrides */
+:root.dark {
+  --background:        #0c0a09;
+  --foreground:        #e7e5e4;
+  --surface:           #1c1917;
+  --surface-hover:     #292524;
+  --surface-active:    #44403c;
+  --border:            #292524;
+  --border-strong:     #44403c;
+  --muted:             #a8a29e;
+  --accent:            #22c55e;
+  --accent-light:      #052e16;
+  --accent-foreground: #ffffff;
+  --success:           #34d399;
+  --success-light:     #064e3b;
+  --warning:           #fbbf24;
+  --warning-light:     #78350f;
+  --danger:            #f87171;
+  --danger-light:      #7f1d1d;
+
+  --alpine-gradient-from: #0f172a;
+  --alpine-gradient-to:   #1a2235;
+  color-scheme: dark;
+
+  /* Editor tokens — dark */
+  --editor-heading-1: #f1f5f9;
+  --editor-heading-2: #e2e8f0;
+  --editor-heading-3: #cbd5e1;
+  --editor-heading-4: #94a3b8;
+  --editor-heading-5: #64748b;
+  --editor-heading-6: #475569;
+  --editor-rail-green: #22c55e;
+  --editor-rail-sky: #38bdf8;
+  --editor-rail-amber: #fbbf24;
+  --editor-rail-green-bright: #4ade80;
+  --editor-rail-sky-bright: #7dd3fc;
+  --editor-rail-amber-bright: #fcd34d;
+  --editor-code-bg: #161b22;
+  --editor-table-bg: #0c0f18;
+  --editor-table-header-bg-from: #020617;
+  --editor-table-header-bg-to: #0a0f1a;
+  --editor-table-cell-color: #cbd5e1;
+  --editor-body-color: #cbd5e1;
+}

@@ -105,7 +105,7 @@ const FONT_SIZES = [
 
 const Divider = memo(() => (
   <span
-    className="mx-0.5 h-5 w-px shrink-0 bg-gray-200 dark:bg-gray-600"
+    className="mx-0.5 h-5 w-px shrink-0 bg-border"
     aria-hidden="true"
   />
 ))
@@ -138,7 +138,7 @@ const TBtn = memo<TBtnProps>(
         mobile ? 'h-10 w-10' : 'h-8 w-8',
         active
           ? 'border-alpine-300 bg-alpine-50 text-alpine-700 dark:border-alpine-600 dark:bg-alpine-900/50 dark:text-alpine-300'
-          : 'border-transparent text-gray-600 hover:border-gray-300 hover:bg-gray-100 hover:text-gray-900 dark:text-gray-300 dark:hover:border-gray-600 dark:hover:bg-gray-700 dark:hover:text-gray-100',
+          : 'border-transparent text-muted hover:border-border hover:bg-surface-hover hover:text-foreground',
         className,
       ]
         .filter(Boolean)
@@ -205,7 +205,7 @@ const SelectionToolbar = forwardRef<HTMLDivElement, SelectionToolbarProps>(
         ref={ref}
         role="toolbar"
         aria-label="Text formatting"
-        className="fixed z-50 flex flex-col rounded-2xl border border-gray-200 bg-white shadow-lg  dark:border-gray-700 dark:bg-gray-800/95 dark:shadow-black/30"
+        className="fixed z-50 flex flex-col rounded-2xl border border-border bg-surface/95 backdrop-blur-xl shadow-lg"
         style={{ top, left, maxWidth: 'calc(100vw - 32px)' }}
         onMouseDown={(e) => e.preventDefault()}
       >

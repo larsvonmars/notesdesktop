@@ -1,0 +1,38 @@
+/* ===== MindViz Notes – Base Styles ===== */
+
+/* New thin themed scrollbar */
+::-webkit-scrollbar       { width: 6px; height: 6px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: var(--border-strong); border-radius: 999px; }
+::-webkit-scrollbar-thumb:hover { background: var(--muted); }
+
+/* Wider scrollbar on touch devices for comfortable dragging */
+@media (pointer: coarse) {
+  ::-webkit-scrollbar { width: 10px; height: 10px; }
+}
+
+/* Sidebar glass effect enhancement */
+aside[class*="backdrop-blur"] {
+  -webkit-backdrop-filter: blur(20px) saturate(1.2);
+  backdrop-filter: blur(20px) saturate(1.2);
+}
+
+@layer base {
+  body {
+    @apply min-h-screen bg-background text-foreground;
+    font-family: var(--font-roboto-flex), 'Roboto Flex', ui-sans-serif, system-ui, sans-serif;
+    /* Prevent pull-to-refresh and rubber-banding on mobile */
+    overscroll-behavior: none;
+    /* Prevent iOS text-size adjust on rotation */
+    -webkit-text-size-adjust: 100%;
+  }
+
+  /* Subtle frosted-glass card surfaces */
+  .alpine-surface {
+    background: rgb(255 255 255 / 0.8);
+    backdrop-filter: blur(4px);
+  }
+  .dark .alpine-surface {
+    background: rgb(28 25 23 / 0.85);
+  }
+}

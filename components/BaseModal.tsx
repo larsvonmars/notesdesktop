@@ -15,7 +15,7 @@ interface BaseModalProps {
   maxHeight?: string
   /** z-index layer. Default: 50 */
   zIndex?: number
-  /** Use blur on backdrop. Default: false */
+  /** Use blur on backdrop. Default: true (modern default) */
   backdropBlur?: boolean
   /** Close when clicking outside the modal. Default: true */
   closeOnBackdropClick?: boolean
@@ -50,7 +50,7 @@ export default function BaseModal({
   size = 'lg',
   maxHeight = '82vh',
   zIndex = 50,
-  backdropBlur = false,
+  backdropBlur = true,
   closeOnBackdropClick = true,
   closeOnEscape = true,
   asView = false,
@@ -89,6 +89,8 @@ export default function BaseModal({
     )
   }
 
+  const blurClass = backdropBlur ? 'backdrop-blur-sm' : ''
+
   const animationCls =
     animation === 'zoom'
       ? 'animate-in fade-in zoom-in-95 duration-200'
@@ -98,14 +100,24 @@ export default function BaseModal({
 
   return (
     <div
-      className={`fixed inset-0 flex items-center justify-center p-3 sm:p-6 bg-black/60 ${
-        ''
-      } ${animationCls} ${backdropClassName}`}
+      className={[
+        'fixed inset-0 flex items-center justify-center p-3 sm:p-6',
+        'bg-black/40',
+        blurClass,
+        animationCls,
+        backdropClassName,
+      ].join(' ')}
       style={{ zIndex }}
       onClick={handleBackdropClick}
     >
       <div
-        className={`w-full ${SIZE_MAP[size]} bg-white dark:bg-slate-900 rounded-2xl shadow-2xl border border-gray-200 dark:border-slate-700 flex flex-col overflow-hidden ${className}`}
+        className={[
+          'w-full',
+          SIZE_MAP[size],
+          'bg-surface rounded-2xl shadow-xl border border-border',
+          'flex flex-col overflow-hidden',
+          className,
+        ].join(' ')}
         style={{ maxHeight }}
         onClick={(e) => e.stopPropagation()}
       >
@@ -135,12 +147,17 @@ export function ModalHeader({
   gradient = true,
 }: ModalHeaderProps) {
   const gradientCls = gradient
-    ? 'bg-gradient-to-r from-white to-gray-50 dark:from-slate-900 dark:to-slate-800'
+    ? 'bg-gradient-to-b from-surface to-surface-hover/50 dark:from-surface dark:to-surface-hover/30'
     : ''
 
   return (
     <div
-      className={`flex items-center justify-between px-4 sm:px-6 py-3.5 sm:py-4 border-b border-gray-200 dark:border-slate-700 shrink-0 ${gradientCls} ${className}`}
+      className={[
+        'flex items-center justify-between px-5 py-4',
+        'border-b border-border shrink-0',
+        gradientCls,
+        className,
+      ].join(' ')}
     >
       <div className="flex items-center gap-3 min-w-0 flex-1">{children}</div>
       {onClose && (
@@ -163,7 +180,7 @@ interface ModalBodyProps {
 }
 
 export function ModalBody({ children, className = '', noPadding = false }: ModalBodyProps) {
-  const paddingCls = noPadding ? '' : 'px-4 sm:px-6 py-4 sm:py-5'
+  const paddingCls = noPadding ? '' : 'px-5 py-5'
   return (
     <div className={`flex-1 overflow-y-auto ${paddingCls} ${className}`}>{children}</div>
   )
@@ -177,7 +194,11 @@ interface ModalFooterProps {
 export function ModalFooter({ children, className = '' }: ModalFooterProps) {
   return (
     <div
-      className={`border-t border-gray-200 dark:border-slate-700 px-4 sm:px-6 py-3 sm:py-4 shrink-0 ${className}`}
+      className={[
+        'border-t border-border px-5 py-4 shrink-0',
+        'bg-surface-hover/30',
+        className,
+      ].join(' ')}
     >
       {children}
     </div>
@@ -192,7 +213,7 @@ interface ModalTitleProps {
 
 export function ModalTitle({ children, className = '' }: ModalTitleProps) {
   return (
-    <h2 className={`text-lg font-semibold text-gray-900 dark:text-slate-100 ${className}`}>
+    <h2 className={`text-lg font-semibold text-foreground ${className}`}>
       {children}
     </h2>
   )

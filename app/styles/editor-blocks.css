@@ -1,0 +1,327 @@
+/* ===== Editor: Blocks, Highlights, Image Blocks, Persisted Styles ===== */
+
+@layer utilities {
+  /* Block outline styles - shown when block visibility is enabled */
+  .show-block-outlines [contenteditable='true'] > *,
+  .show-block-outlines [contenteditable='true'] p,
+  .show-block-outlines [contenteditable='true'] h1,
+  .show-block-outlines [contenteditable='true'] h2,
+  .show-block-outlines [contenteditable='true'] h3,
+  .show-block-outlines [contenteditable='true'] h4,
+  .show-block-outlines [contenteditable='true'] h5,
+  .show-block-outlines [contenteditable='true'] h6,
+  .show-block-outlines [contenteditable='true'] ul,
+  .show-block-outlines [contenteditable='true'] ol,
+  .show-block-outlines [contenteditable='true'] blockquote,
+  .show-block-outlines [contenteditable='true'] pre,
+  .show-block-outlines [contenteditable='true'] [data-block='true'] {
+    position: relative;
+    border: 1px dashed rgba(147, 51, 234, 0.3) !important;
+    border-radius: 4px !important;
+    padding: 8px !important;
+    margin-top: 4px !important;
+    margin-bottom: 4px !important;
+    transition: all 0.2s ease;
+  }
+
+  .show-block-outlines [contenteditable='true'] > *:hover,
+  .show-block-outlines [contenteditable='true'] p:hover,
+  .show-block-outlines [contenteditable='true'] h1:hover,
+  .show-block-outlines [contenteditable='true'] h2:hover,
+  .show-block-outlines [contenteditable='true'] h3:hover,
+  .show-block-outlines [contenteditable='true'] h4:hover,
+  .show-block-outlines [contenteditable='true'] h5:hover,
+  .show-block-outlines [contenteditable='true'] h6:hover,
+  .show-block-outlines [contenteditable='true'] ul:hover,
+  .show-block-outlines [contenteditable='true'] ol:hover,
+  .show-block-outlines [contenteditable='true'] blockquote:hover,
+  .show-block-outlines [contenteditable='true'] pre:hover,
+  .show-block-outlines [contenteditable='true'] [data-block='true']:hover {
+    background-color: rgba(147, 51, 234, 0.05) !important;
+    border-color: rgba(147, 51, 234, 0.6) !important;
+  }
+
+  /* Block type labels - shown when block visibility is enabled */
+  .show-block-outlines [contenteditable='true'] > *::before,
+  .show-block-outlines [contenteditable='true'] p::before,
+  .show-block-outlines [contenteditable='true'] h1::before,
+  .show-block-outlines [contenteditable='true'] h2::before,
+  .show-block-outlines [contenteditable='true'] h3::before,
+  .show-block-outlines [contenteditable='true'] h4::before,
+  .show-block-outlines [contenteditable='true'] h5::before,
+  .show-block-outlines [contenteditable='true'] h6::before,
+  .show-block-outlines [contenteditable='true'] ul::before,
+  .show-block-outlines [contenteditable='true'] ol::before,
+  .show-block-outlines [contenteditable='true'] blockquote::before,
+  .show-block-outlines [contenteditable='true'] pre::before,
+  .show-block-outlines [contenteditable='true'] [data-block='true']::before {
+    content: attr(data-block-label);
+    position: absolute;
+    top: -10px;
+    left: 4px;
+    font-size: 9px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    background: linear-gradient(135deg, #9333EA 0%, #7C3AED 100%);
+    color: white;
+    padding: 2px 6px;
+    border-radius: 3px;
+    z-index: 10;
+    pointer-events: none;
+    font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+  }
+
+  /* Specific block type labels */
+  .show-block-outlines [contenteditable='true'] p::before {
+    content: 'P';
+  }
+
+  .show-block-outlines [contenteditable='true'] h1::before {
+    content: 'H1';
+    background: linear-gradient(135deg, #EF4444 0%, #DC2626 100%);
+  }
+
+  .show-block-outlines [contenteditable='true'] h2::before {
+    content: 'H2';
+    background: linear-gradient(135deg, #F59E0B 0%, #D97706 100%);
+  }
+
+  .show-block-outlines [contenteditable='true'] h3::before {
+    content: 'H3';
+    background: linear-gradient(135deg, #10B981 0%, #059669 100%);
+  }
+
+  .show-block-outlines [contenteditable='true'] h4::before {
+    content: 'H4';
+    background: linear-gradient(135deg, #06B6D4 0%, #0891B2 100%);
+  }
+
+  .show-block-outlines [contenteditable='true'] h5::before {
+    content: 'H5';
+    background: linear-gradient(135deg, #8B5CF6 0%, #7C3AED 100%);
+  }
+
+  .show-block-outlines [contenteditable='true'] h6::before {
+    content: 'H6';
+    background: linear-gradient(135deg, #EC4899 0%, #DB2777 100%);
+  }
+
+  .show-block-outlines [contenteditable='true'] ul::before {
+    content: 'UL';
+    background: linear-gradient(135deg, #3B82F6 0%, #2563EB 100%);
+  }
+
+  .show-block-outlines [contenteditable='true'] ol::before {
+    content: 'OL';
+    background: linear-gradient(135deg, #06B6D4 0%, #0891B2 100%);
+  }
+
+  .show-block-outlines [contenteditable='true'] blockquote::before {
+    content: 'Quote';
+    background: linear-gradient(135deg, #8B5CF6 0%, #7C3AED 100%);
+  }
+
+  .show-block-outlines [contenteditable='true'] pre::before {
+    content: 'Code';
+    background: linear-gradient(135deg, #64748B 0%, #475569 100%);
+  }
+
+  .show-block-outlines [contenteditable='true'] [data-block='true']::before {
+    content: attr(data-block-type);
+    background: linear-gradient(135deg, #EC4899 0%, #DB2777 100%);
+  }
+
+  /* Adjust spacing for nested elements within blocks */
+  .show-block-outlines [contenteditable='true'] ul > li,
+  .show-block-outlines [contenteditable='true'] ol > li {
+    border: none !important;
+    padding: 0 !important;
+    margin-left: 0 !important;
+  }
+
+  .show-block-outlines [contenteditable='true'] ul > li::before,
+  .show-block-outlines [contenteditable='true'] ol > li::before {
+    display: none !important;
+  }
+
+  /* Image drag-to-reposition ghost & caret */
+  .image-drop-caret {
+    position: absolute;
+    width: 2px;
+    background: #6366f1;
+    border-radius: 1px;
+    pointer-events: none;
+    z-index: 9999;
+    box-shadow: 0 0 0 1px rgba(99, 102, 241, 0.25);
+  }
+
+  .image-drag-ghost {
+    position: fixed;
+    pointer-events: none;
+    z-index: 9999;
+  }
+
+  .image-block-container[data-dragging] {
+    opacity: 0.35;
+  }
+
+  /* Resize dimension tooltip (fixed positioning, outside editor) */
+  .image-resize-tooltip {
+    position: fixed;
+    transform: translateX(-50%);
+    background: rgba(0, 0, 0, 0.72);
+    color: #fff;
+    font-size: 11px;
+    line-height: 1;
+    padding: 3px 7px;
+    border-radius: 4px;
+    white-space: nowrap;
+    pointer-events: none;
+    z-index: 10001;
+    user-select: none;
+  }
+
+  /* Grab cursor on the image body when not in resize/crop mode */
+  .image-block-container:not(.resizing):not(.cropping) .image-block-wrapper {
+    cursor: grab;
+  }
+
+  .image-block-container:not(.resizing):not(.cropping) .image-block-wrapper:active {
+    cursor: grabbing;
+  }
+
+  /* Image block custom UI styles */
+  .image-block-container {
+    position: relative;
+    display: block;
+    max-width: 100%;
+    margin: 1rem 0;
+    user-select: none;
+    cursor: text;
+  }
+
+  .image-block-wrapper {
+    position: relative;
+    display: inline-flex;
+    flex-direction: column;
+    max-width: 100%;
+    user-select: none;
+  }
+
+  .image-block-img {
+    position: relative;
+    z-index: 1;
+    display: block;
+    width: 100%;
+    max-width: 100%;
+    height: auto;
+    pointer-events: none;
+    user-select: none;
+  }
+
+  .image-block-container.resizing .image-block-img {
+    pointer-events: none;
+    user-select: none;
+  }
+
+  .image-delete-btn {
+    position: absolute;
+    z-index: 30;
+    cursor: pointer;
+    user-select: none;
+    pointer-events: auto;
+    transition: opacity 0.2s ease-in-out;
+  }
+
+  .image-block-container.resizing {
+    cursor: inherit;
+  }
+
+  /* Show delete button when hovering over the container */
+  .image-block-container:hover .image-delete-btn {
+    opacity: 1 !important;
+  }
+  
+  /* Ensure proper cursor positioning around image blocks */
+  .image-block-container::before,
+  .image-block-container::after {
+    content: '';
+    display: block;
+    height: 0;
+    width: 0;
+  }
+
+  /* Highlight colors persisted via data-highlight attribute */
+  [contenteditable='true'] span[data-highlight='yellow'] {
+    background-color: #fef08a !important;
+    color: #854d0e !important;
+    padding: 0.06em 0.25em !important;
+    border-radius: 3px !important;
+  }
+
+  [contenteditable='true'] span[data-highlight='green'] {
+    background-color: #bbf7d0 !important;
+    color: #14532d !important;
+    padding: 0.06em 0.25em !important;
+    border-radius: 3px !important;
+  }
+
+  [contenteditable='true'] span[data-highlight='pink'] {
+    background-color: #fce7f3 !important;
+    color: #831843 !important;
+    padding: 0.06em 0.25em !important;
+    border-radius: 3px !important;
+  }
+
+  [contenteditable='true'] span[data-highlight='blue'] {
+    background-color: #bfdbfe !important;
+    color: #1e3a8a !important;
+    padding: 0.06em 0.25em !important;
+    border-radius: 3px !important;
+  }
+
+  /* Text color mappings for persisted data-color attribute */
+  [contenteditable='true'] span[data-color='red'] {
+    color: #dc2626 !important;
+  }
+
+  [contenteditable='true'] span[data-color='green'] {
+    color: #16a34a !important;
+  }
+
+  [contenteditable='true'] span[data-color='blue'] {
+    color: #2563eb !important;
+  }
+
+  [contenteditable='true'] span[data-color='purple'] {
+    color: #7c3aed !important;
+  }
+
+  /* Font size mappings for persisted data-font-size attribute */
+  [contenteditable='true'] span[data-font-size='12'] { font-size: 12px !important; }
+  [contenteditable='true'] span[data-font-size='16'] { font-size: 16px !important; }
+  [contenteditable='true'] span[data-font-size='20'] { font-size: 20px !important; }
+  [contenteditable='true'] span[data-font-size='24'] { font-size: 24px !important; }
+}
+
+/* ─── Mobile-specific overrides ─── */
+@media (max-width: 767px) {
+  /* Always show image delete button on touch devices (no hover) */
+  .image-block-container .image-delete-btn {
+    opacity: 1 !important;
+  }
+
+  /* Prevent horizontal overflow from toolbars */
+  body {
+    overflow-x: hidden;
+  }
+
+  /* Larger checkboxes for touch */
+  [contenteditable='true'] input[type='checkbox'] {
+    width: 20px;
+    height: 20px;
+    margin-right: 8px;
+  }
+}

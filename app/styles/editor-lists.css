@@ -1,0 +1,410 @@
+/* ══════════════════════════════════════════════════════════
+   FUTURISTIC LIST DESIGN
+   Neon-rail hierarchy, glowing markers, terminal-style
+   checklists — matching the table's sci-fi aesthetic.
+   ══════════════════════════════════════════════════════════ */
+
+@layer utilities {
+  /* ─── Base list containers ─── */
+  [contenteditable='true'] ul,
+  [contenteditable='true'] ol {
+    margin: 0.85em 0 !important;
+    padding-left: 1.75em !important;
+    display: block !important;
+    position: relative !important;
+    /* Level 1 neon-green left rail */
+    border-left: 2px solid rgba(22, 163, 74, 0.3) !important;
+    margin-left: 0.15em !important;
+    padding-top: 0.1em !important;
+    padding-bottom: 0.1em !important;
+    box-shadow: -3px 0 12px -4px rgba(22, 163, 74, 0.2) !important;
+    transition: border-left-color 0.25s ease, box-shadow 0.25s ease !important;
+  }
+
+  /* Hover on list container: rail brightens */
+  [contenteditable='true'] ul:hover,
+  [contenteditable='true'] ol:hover {
+    border-left-color: rgba(22, 163, 74, 0.6) !important;
+    box-shadow: -3px 0 18px -4px rgba(22, 163, 74, 0.35) !important;
+  }
+
+  /* ─── UL bullet markers — glowing right-arrow ─── */
+  [contenteditable='true'] ul {
+    list-style-type: none !important;
+  }
+
+  [contenteditable='true'] ul > li::marker {
+    content: '' !important;
+  }
+
+  /* Custom bullet via ::before — green ▸ triangle */
+  [contenteditable='true'] ul > li:not(.checklist-item)::before {
+    content: '▸';
+    position: absolute !important;
+    left: -1.45em !important;
+    top: 0.1em !important;
+    color: var(--editor-rail-green) !important;
+    font-size: 0.8em !important;
+    line-height: 1.6 !important;
+    transition: color 0.2s ease, text-shadow 0.2s ease !important;
+    text-shadow: 0 0 8px rgba(22, 163, 74, 0.5) !important;
+    pointer-events: none !important;
+    user-select: none !important;
+  }
+
+  [contenteditable='true'] ul > li:not(.checklist-item):hover::before {
+    color: var(--editor-rail-green-bright) !important;
+    text-shadow: 0 0 14px rgba(34, 197, 94, 0.8) !important;
+  }
+
+  /* ─── OL — monospace glowing counter ─── */
+  [contenteditable='true'] ol {
+    list-style-type: none !important;
+    counter-reset: futuristic-ol !important;
+  }
+
+  [contenteditable='true'] ol > li {
+    counter-increment: futuristic-ol !important;
+  }
+
+  [contenteditable='true'] ol > li::before {
+    content: counter(futuristic-ol, decimal) '.' !important;
+    position: absolute !important;
+    left: -2em !important;
+    top: 0 !important;
+    min-width: 1.8em !important;
+    text-align: right !important;
+    font-family: 'JetBrains Mono', 'Fira Code', ui-monospace, SFMono-Regular, Menlo, monospace !important;
+    font-size: 0.78em !important;
+    font-weight: 700 !important;
+    line-height: 1.75 !important;
+    color: var(--editor-rail-green) !important;
+    text-shadow: 0 0 8px rgba(22, 163, 74, 0.45) !important;
+    transition: color 0.2s ease, text-shadow 0.2s ease !important;
+    pointer-events: none !important;
+    user-select: none !important;
+  }
+
+  [contenteditable='true'] ol > li:hover::before {
+    color: var(--editor-rail-green-bright) !important;
+    text-shadow: 0 0 14px rgba(34, 197, 94, 0.7) !important;
+  }
+
+  /* ─── Nested list neon-rail colour palette ─── */
+  /* Level 2 → sky blue */
+  [contenteditable='true'] ul ul,
+  [contenteditable='true'] ol ol,
+  [contenteditable='true'] ul ol,
+  [contenteditable='true'] ol ul {
+    border-left: 2px solid rgba(14, 165, 233, 0.35) !important;
+    box-shadow: -3px 0 12px -4px rgba(14, 165, 233, 0.2) !important;
+    margin-top: 0.3em !important;
+    margin-bottom: 0.3em !important;
+    margin-left: 0.2em !important;
+    padding-left: 1.6em !important;
+  }
+
+  [contenteditable='true'] ul ul:hover,
+  [contenteditable='true'] ol ol:hover,
+  [contenteditable='true'] ul ol:hover,
+  [contenteditable='true'] ol ul:hover {
+    border-left-color: rgba(14, 165, 233, 0.65) !important;
+    box-shadow: -3px 0 18px -4px rgba(14, 165, 233, 0.35) !important;
+  }
+
+  /* Level 2 UL bullet → sky diamond */
+  [contenteditable='true'] ul ul > li:not(.checklist-item)::before {
+    content: '◇' !important;
+    color: var(--editor-rail-sky) !important;
+    text-shadow: 0 0 8px rgba(14, 165, 233, 0.5) !important;
+    font-size: 0.7em !important;
+    top: 0.15em !important;
+  }
+
+  [contenteditable='true'] ul ul > li:not(.checklist-item):hover::before {
+    color: var(--editor-rail-sky-bright) !important;
+    text-shadow: 0 0 14px rgba(56, 189, 248, 0.8) !important;
+  }
+
+  /* Level 2 OL counter → sky */
+  [contenteditable='true'] ol ol > li::before {
+    content: counter(futuristic-ol, lower-alpha) '.' !important;
+    color: var(--editor-rail-sky) !important;
+    text-shadow: 0 0 8px rgba(14, 165, 233, 0.45) !important;
+  }
+
+  [contenteditable='true'] ol ol > li:hover::before {
+    color: var(--editor-rail-sky-bright) !important;
+    text-shadow: 0 0 14px rgba(56, 189, 248, 0.7) !important;
+  }
+
+  /* Level 3 → amber */
+  [contenteditable='true'] ul ul ul,
+  [contenteditable='true'] ol ol ol,
+  [contenteditable='true'] ul ul ol,
+  [contenteditable='true'] ol ol ul {
+    border-left: 2px solid rgba(245, 158, 11, 0.35) !important;
+    box-shadow: -3px 0 12px -4px rgba(245, 158, 11, 0.18) !important;
+  }
+
+  [contenteditable='true'] ul ul ul:hover,
+  [contenteditable='true'] ol ol ol:hover {
+    border-left-color: rgba(245, 158, 11, 0.65) !important;
+    box-shadow: -3px 0 18px -4px rgba(245, 158, 11, 0.32) !important;
+  }
+
+  [contenteditable='true'] ul ul ul > li:not(.checklist-item)::before {
+    content: '▪' !important;
+    color: var(--editor-rail-amber) !important;
+    text-shadow: 0 0 8px rgba(245, 158, 11, 0.5) !important;
+    font-size: 0.7em !important;
+  }
+
+  [contenteditable='true'] ul ul ul > li:not(.checklist-item):hover::before {
+    color: var(--editor-rail-amber-bright) !important;
+    text-shadow: 0 0 14px rgba(251, 191, 36, 0.8) !important;
+  }
+
+  [contenteditable='true'] ol ol ol > li::before {
+    content: counter(futuristic-ol, lower-roman) '.' !important;
+    color: var(--editor-rail-amber) !important;
+    text-shadow: 0 0 8px rgba(245, 158, 11, 0.45) !important;
+  }
+
+  /* Level 4 → violet */
+  [contenteditable='true'] ul ul ul ul,
+  [contenteditable='true'] ol ol ol ol {
+    border-left: 2px solid rgba(139, 92, 246, 0.35) !important;
+    box-shadow: -3px 0 12px -4px rgba(139, 92, 246, 0.18) !important;
+  }
+
+  [contenteditable='true'] ul ul ul ul > li:not(.checklist-item)::before {
+    content: '◆' !important;
+    color: var(--editor-rail-violet) !important;
+    text-shadow: 0 0 8px rgba(139, 92, 246, 0.5) !important;
+    font-size: 0.6em !important;
+    top: 0.2em !important;
+  }
+
+  /* Level 5 → pink */
+  [contenteditable='true'] ul ul ul ul ul {
+    border-left: 2px solid rgba(236, 72, 153, 0.35) !important;
+    box-shadow: -3px 0 12px -4px rgba(236, 72, 153, 0.18) !important;
+  }
+
+  [contenteditable='true'] ul ul ul ul ul > li:not(.checklist-item)::before {
+    content: '▹' !important;
+    color: var(--editor-rail-pink) !important;
+    text-shadow: 0 0 8px rgba(236, 72, 153, 0.5) !important;
+  }
+
+  /* Level 6 → teal */
+  [contenteditable='true'] ul ul ul ul ul ul {
+    border-left: 2px solid rgba(20, 184, 166, 0.35) !important;
+    box-shadow: -3px 0 12px -4px rgba(20, 184, 166, 0.18) !important;
+  }
+
+  [contenteditable='true'] ul ul ul ul ul ul > li:not(.checklist-item)::before {
+    content: '◌' !important;
+    color: var(--editor-rail-teal) !important;
+    text-shadow: 0 0 8px rgba(20, 184, 166, 0.5) !important;
+  }
+
+  /* ─── Checklist container ─── */
+  [contenteditable='true'] .checklist-list,
+  [contenteditable='true'] [data-checklist='true'] {
+    list-style: none !important;
+    padding-left: 0.5em !important;
+    margin-left: 0 !important;
+    border-left: 2px solid rgba(22, 163, 74, 0.25) !important;
+    box-shadow: -3px 0 12px -4px rgba(22, 163, 74, 0.15) !important;
+    border-radius: 0 6px 6px 0 !important;
+    padding-top: 0.25em !important;
+    padding-bottom: 0.25em !important;
+    background: linear-gradient(to right, rgba(22, 163, 74, 0.025), transparent 40%) !important;
+    transition: border-left-color 0.25s ease, box-shadow 0.25s ease !important;
+  }
+
+  [contenteditable='true'] .checklist-list:hover,
+  [contenteditable='true'] [data-checklist='true']:hover {
+    border-left-color: rgba(22, 163, 74, 0.55) !important;
+    box-shadow: -3px 0 18px -4px rgba(22, 163, 74, 0.3) !important;
+  }
+
+  /* Checklist progress bar — full-width terminal fill */
+  [contenteditable='true'] .checklist-list[data-checklist-progress]::before {
+    content: attr(data-checklist-progress) ' DONE';
+    display: block !important;
+    font-family: 'JetBrains Mono', 'Fira Code', ui-monospace, SFMono-Regular, Menlo, monospace !important;
+    font-size: 0.65rem !important;
+    font-weight: 700 !important;
+    color: var(--editor-rail-green-bright) !important;
+    letter-spacing: 0.12em !important;
+    text-transform: uppercase !important;
+    text-shadow: 0 0 8px rgba(34, 197, 94, 0.5) !important;
+    margin-bottom: 0.6em !important;
+    margin-left: 0.25em !important;
+    padding: 0.3em 0.75em !important;
+    background:
+      linear-gradient(
+        to right,
+        rgba(34, 197, 94, 0.18) 0%,
+        rgba(34, 197, 94, 0.18) calc(var(--checklist-pct, 0) * 1%),
+        rgba(15, 23, 42, 0.04) calc(var(--checklist-pct, 0) * 1%),
+        rgba(15, 23, 42, 0.04) 100%
+      ) !important;
+    border: 1px solid rgba(34, 197, 94, 0.2) !important;
+    border-radius: 4px !important;
+    box-shadow: inset 0 0 0 1px rgba(34, 197, 94, 0.06),
+                0 0 12px -4px rgba(34, 197, 94, 0.15) !important;
+  }
+
+  /* Set the progress CSS variable from the data attribute */
+  [contenteditable='true'] .checklist-list[data-checklist-percent="0"] { --checklist-pct: 0; }
+  [contenteditable='true'] .checklist-list[data-checklist-percent="10"] { --checklist-pct: 10; }
+  [contenteditable='true'] .checklist-list[data-checklist-percent="20"] { --checklist-pct: 20; }
+  [contenteditable='true'] .checklist-list[data-checklist-percent="25"] { --checklist-pct: 25; }
+  [contenteditable='true'] .checklist-list[data-checklist-percent="30"] { --checklist-pct: 30; }
+  [contenteditable='true'] .checklist-list[data-checklist-percent="33"] { --checklist-pct: 33; }
+  [contenteditable='true'] .checklist-list[data-checklist-percent="40"] { --checklist-pct: 40; }
+  [contenteditable='true'] .checklist-list[data-checklist-percent="50"] { --checklist-pct: 50; }
+  [contenteditable='true'] .checklist-list[data-checklist-percent="60"] { --checklist-pct: 60; }
+  [contenteditable='true'] .checklist-list[data-checklist-percent="67"] { --checklist-pct: 67; }
+  [contenteditable='true'] .checklist-list[data-checklist-percent="70"] { --checklist-pct: 70; }
+  [contenteditable='true'] .checklist-list[data-checklist-percent="75"] { --checklist-pct: 75; }
+  [contenteditable='true'] .checklist-list[data-checklist-percent="80"] { --checklist-pct: 80; }
+  [contenteditable='true'] .checklist-list[data-checklist-percent="90"] { --checklist-pct: 90; }
+  [contenteditable='true'] .checklist-list[data-checklist-percent="100"] { --checklist-pct: 100; }
+
+  /* ─── List item base ─── */
+  [contenteditable='true'] li {
+    margin: 0.3em 0 !important;
+    display: list-item !important;
+    position: relative !important;
+    border-radius: 5px !important;
+    padding: 0.18em 0.5em 0.18em 0.3em !important;
+    transition: background 0.15s ease, opacity 0.2s ease !important;
+  }
+
+  /* Item hover — neon scanline sweep */
+  [contenteditable='true'] li:hover {
+    background: linear-gradient(
+      to right,
+      rgba(22, 163, 74, 0.07) 0%,
+      rgba(14, 165, 233, 0.04) 40%,
+      transparent 100%
+    ) !important;
+  }
+
+  /* Ordered and unordered list item markers (native fallback) */
+  [contenteditable='true'] ul li {
+    list-style-type: none !important;
+  }
+
+  [contenteditable='true'] ol li {
+    list-style-type: none !important;
+  }
+
+  /* ─── Checklist item ─── */
+  [contenteditable='true'] li.checklist-item {
+    list-style: none !important;
+    display: flex !important;
+    align-items: flex-start !important;
+    gap: 0.4rem !important;
+    padding: 0.25em 0.6em !important;
+    border-radius: 5px !important;
+    transition: background 0.2s ease, opacity 0.25s ease !important;
+    border: 1px solid transparent !important;
+  }
+
+  [contenteditable='true'] li.checklist-item:hover {
+    background: linear-gradient(
+      to right,
+      rgba(22, 163, 74, 0.08),
+      rgba(14, 165, 233, 0.04),
+      transparent
+    ) !important;
+    border-color: rgba(22, 163, 74, 0.18) !important;
+  }
+
+  /* Checkbox — neon green accent */
+  [contenteditable='true'] li.checklist-item .checklist-checkbox {
+    @apply mt-1 shrink-0;
+    width: 1.05rem !important;
+    height: 1.05rem !important;
+    accent-color: var(--editor-rail-green-bright) !important;
+    border-radius: 0.25rem !important;
+    cursor: pointer !important;
+    transition: transform 0.15s ease, filter 0.15s ease !important;
+    filter: drop-shadow(0 0 0px rgba(34, 197, 94, 0)) !important;
+  }
+
+  [contenteditable='true'] li.checklist-item .checklist-checkbox:hover {
+    transform: scale(1.2) !important;
+    filter: drop-shadow(0 0 4px rgba(34, 197, 94, 0.6)) !important;
+  }
+
+  [contenteditable='true'] li.checklist-item .checklist-checkbox:active {
+    transform: scale(0.92) !important;
+  }
+
+  /* Checked item — glowing green strike */
+  [contenteditable='true'] li.checklist-item:has(input[type='checkbox']:checked) {
+    opacity: 0.5 !important;
+  }
+
+  [contenteditable='true'] li.checklist-item:has(input[type='checkbox']:checked)::after {
+    content: '' !important;
+    position: absolute !important;
+    left: 2.1rem !important;
+    right: 0.6rem !important;
+    top: 50% !important;
+    height: 1.5px !important;
+    background: linear-gradient(to right, var(--editor-rail-green-bright), var(--editor-rail-sky), transparent) !important;
+    border-radius: 2px !important;
+    box-shadow: 0 0 6px rgba(34, 197, 94, 0.4) !important;
+    pointer-events: none !important;
+  }
+
+  /* ─── Drag-to-reorder handle ─── */
+  [contenteditable='true'] .list-drag-handle {
+    display: none !important;
+    cursor: grab !important;
+    opacity: 0 !important;
+    transition: opacity 0.15s ease, color 0.15s ease !important;
+    color: rgba(22, 163, 74, 0.4) !important;
+    padding: 0.15rem !important;
+    margin-right: 0.3rem !important;
+    flex-shrink: 0 !important;
+    user-select: none !important;
+    border-radius: 3px !important;
+    align-self: center !important;
+  }
+
+  [contenteditable='true'] li:hover > .list-drag-handle {
+    display: inline-flex !important;
+    opacity: 0.55 !important;
+  }
+
+  [contenteditable='true'] li:hover > .list-drag-handle:hover {
+    opacity: 1 !important;
+    color: var(--editor-rail-green-bright) !important;
+    background-color: rgba(22, 163, 74, 0.1) !important;
+    box-shadow: 0 0 8px rgba(22, 163, 74, 0.2) !important;
+  }
+
+  /* Drag active state — neon outline */
+  [contenteditable='true'] .list-item-dragging {
+    opacity: 0.35 !important;
+    background: rgba(22, 163, 74, 0.04) !important;
+    outline: 1.5px dashed rgba(34, 197, 94, 0.45) !important;
+    outline-offset: -1px !important;
+    box-shadow: 0 0 0 3px rgba(34, 197, 94, 0.08) !important;
+  }
+
+  /* Drop target indicator — neon green beam */
+  [contenteditable='true'] .list-item-drop-target {
+    border-top: 2px solid var(--editor-rail-green-bright) !important;
+    box-shadow: 0 -2px 12px rgba(34, 197, 94, 0.35) !important;
+  }
+}

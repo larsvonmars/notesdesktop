@@ -1,0 +1,254 @@
+/* ===== Editor Core Styles ===== */
+
+@layer utilities {
+  /* Placeholder styling */
+  [data-placeholder]:empty:before {
+    content: attr(data-placeholder);
+    @apply text-gray-400 pointer-events-none block;
+  }
+
+  /* ContentEditable focus styling */
+  [contenteditable='true']:focus {
+    @apply outline-none;
+  }
+
+  /* Checkbox styling in contenteditable */
+  [contenteditable='true'] input[type='checkbox'] {
+    @apply mr-2 cursor-pointer;
+  }
+
+  /* ─── Block-level spacing inside editor ─── */
+  /* Paragraphs & divs: tight spacing to avoid large gaps on paste */
+  [contenteditable='true'] p {
+    margin: 0.25em 0 !important;
+  }
+
+  [contenteditable='true'] > div:not([data-block]):not([data-block-type]) {
+    margin: 0.15em 0 !important;
+  }
+
+  /* First and last direct children shouldn't add outer spacing */
+  [contenteditable='true'] > :first-child {
+    margin-top: 0 !important;
+  }
+
+  [contenteditable='true'] > :last-child {
+    margin-bottom: 0 !important;
+  }
+
+  /* Pre / code blocks */
+  [contenteditable='true'] pre {
+    position: relative !important;
+    margin: 1.25em 0 !important;
+    padding: 1em 1.25em !important;
+    background: var(--editor-code-bg) !important;
+    color: var(--editor-code-text) !important;
+    border-radius: 10px !important;
+    overflow-x: auto !important;
+    font-family: 'JetBrains Mono', 'Fira Code', 'Cascadia Code', ui-monospace, SFMono-Regular, Menlo, monospace !important;
+    font-size: 0.875rem !important;
+    line-height: 1.7 !important;
+    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.14), inset 0 0 0 1px rgba(255, 255, 255, 0.06) !important;
+    transition: box-shadow 0.25s ease, transform 0.2s ease !important;
+  }
+
+  /* Heading styles */
+
+  /* H1 — Grand title with gradient-fade underline */
+  [contenteditable='true'] h1 {
+    font-size: 2.2rem !important;
+    font-weight: 800 !important;
+    color: var(--editor-heading-1) !important;
+    margin-top: 1.4em !important;
+    margin-bottom: 0.35em !important;
+    line-height: 1.15 !important;
+    scroll-margin-top: 2rem !important;
+    display: block !important;
+    letter-spacing: -0.03em !important;
+    padding-bottom: 0.4em !important;
+    border-bottom: 2px solid transparent !important;
+    border-image: linear-gradient(90deg, var(--editor-rail-green) 0%, var(--editor-rail-sky) 45%, transparent 100%) 1 !important;
+    transition: color 0.2s ease, text-shadow 0.2s ease !important;
+    cursor: text;
+  }
+
+  /* H2 — Section header with left accent bar */
+  [contenteditable='true'] h2 {
+    font-size: 1.65rem !important;
+    font-weight: 700 !important;
+    color: var(--editor-heading-2) !important;
+    margin-top: 1.4em !important;
+    margin-bottom: 0.3em !important;
+    line-height: 1.25 !important;
+    scroll-margin-top: 2rem !important;
+    display: block !important;
+    letter-spacing: -0.02em !important;
+    padding-left: 0.75em !important;
+    border-left: 3px solid var(--editor-rail-green) !important;
+    transition: color 0.2s ease, border-left-color 0.2s ease, padding-left 0.2s ease !important;
+    cursor: text;
+  }
+
+  /* H3 — Sub-section with thin sky-blue left bar */
+  [contenteditable='true'] h3 {
+    font-size: 1.3rem !important;
+    font-weight: 700 !important;
+    color: var(--editor-heading-3) !important;
+    margin-top: 1.2em !important;
+    margin-bottom: 0.3em !important;
+    line-height: 1.35 !important;
+    scroll-margin-top: 2rem !important;
+    display: block !important;
+    letter-spacing: -0.01em !important;
+    padding-left: 0.65em !important;
+    border-left: 2px solid var(--editor-rail-sky) !important;
+    transition: color 0.2s ease, border-left-color 0.2s ease, padding-left 0.2s ease !important;
+    cursor: text;
+  }
+
+  /* H4 — Uppercase label style */
+  [contenteditable='true'] h4 {
+    font-size: 0.875rem !important;
+    font-weight: 700 !important;
+    color: var(--editor-heading-4) !important;
+    margin-top: 1.1em !important;
+    margin-bottom: 0.25em !important;
+    line-height: 1.4 !important;
+    scroll-margin-top: 2rem !important;
+    display: block !important;
+    text-transform: uppercase !important;
+    letter-spacing: 0.08em !important;
+    transition: color 0.2s ease, letter-spacing 0.2s ease !important;
+    cursor: text;
+  }
+
+  /* H5 — Smaller label */
+  [contenteditable='true'] h5 {
+    font-size: 0.78rem !important;
+    font-weight: 600 !important;
+    color: var(--editor-heading-5) !important;
+    margin-top: 1em !important;
+    margin-bottom: 0.2em !important;
+    line-height: 1.5 !important;
+    scroll-margin-top: 2rem !important;
+    display: block !important;
+    text-transform: uppercase !important;
+    letter-spacing: 0.1em !important;
+    transition: color 0.2s ease, letter-spacing 0.2s ease !important;
+    cursor: text;
+  }
+
+  /* H6 — Micro label */
+  [contenteditable='true'] h6 {
+    font-size: 0.72rem !important;
+    font-weight: 500 !important;
+    color: var(--editor-heading-6) !important;
+    margin-top: 1em !important;
+    margin-bottom: 0.2em !important;
+    line-height: 1.5 !important;
+    scroll-margin-top: 2rem !important;
+    display: block !important;
+    text-transform: uppercase !important;
+    letter-spacing: 0.12em !important;
+    transition: color 0.2s ease, letter-spacing 0.2s ease !important;
+    cursor: text;
+  }
+
+  /* Blockquote styling */
+  [contenteditable='true'] blockquote {
+    position: relative !important;
+    border-left: 4px solid var(--editor-rail-green) !important;
+    padding: 0.65em 1.1em 0.65em 1.3em !important;
+    margin: 1em 0 !important;
+    color: var(--muted) !important;
+    font-style: italic !important;
+    background: linear-gradient(to right, rgba(22, 163, 74, 0.06), rgba(14, 165, 233, 0.02), transparent) !important;
+    border-radius: 0 8px 8px 0 !important;
+    display: block !important;
+    transition: border-left-color 0.25s ease, background 0.25s ease, color 0.25s ease, box-shadow 0.25s ease !important;
+  }
+
+  [contenteditable='true'] blockquote::before {
+    content: '\201C';
+    position: absolute;
+    top: -0.05em;
+    left: 0.45em;
+    font-size: 2.8em;
+    line-height: 1;
+    color: rgba(22, 163, 74, 0.18);
+    font-style: normal;
+    font-weight: 900;
+    pointer-events: none;
+    user-select: none;
+  }
+
+  /* Inline code styling */
+  [contenteditable='true'] :not(pre) > code {
+    background: rgba(16, 185, 129, 0.08) !important;
+    color: #0f766e !important;
+    border: 1px solid rgba(16, 185, 129, 0.22) !important;
+    border-radius: 5px !important;
+    font-family: 'JetBrains Mono', 'Fira Code', ui-monospace, SFMono-Regular, Menlo, monospace !important;
+    font-size: 0.85em !important;
+    padding: 0.1em 0.42em !important;
+    font-style: normal !important;
+    transition: background 0.2s ease, border-color 0.2s ease, color 0.2s ease !important;
+    cursor: text;
+  }
+
+  /* Link styling - Enhanced */
+  [contenteditable='true'] a {
+    @apply text-alpine-600 cursor-pointer relative;
+    text-decoration: underline;
+    text-decoration-color: rgba(37, 112, 235, 0.4);
+    text-decoration-thickness: 2px;
+    text-underline-offset: 2px;
+    transition: all 0.2s ease;
+  }
+
+  [contenteditable='true'] a:hover {
+    @apply text-alpine-800;
+    text-decoration-color: rgba(30, 74, 175, 0.6);
+    text-decoration-thickness: 2px;
+  }
+
+  [contenteditable='true'] a:active {
+    @apply text-alpine-900;
+  }
+
+  /* Link icon indicator (optional visual enhancement) */
+  [contenteditable='true'] a::after {
+    content: '↗';
+    display: inline-block;
+    font-size: 0.75em;
+    margin-left: 0.2em;
+    opacity: 0;
+    transform: translate(-2px, 2px);
+    transition: all 0.2s ease;
+  }
+
+  [contenteditable='true'] a:hover::after {
+    opacity: 0.5;
+    transform: translate(0, -2px);
+  }
+
+  /* Horizontal rule styling */
+  [contenteditable='true'] hr {
+    border: none !important;
+    height: 1px !important;
+    background: linear-gradient(to right, transparent, #cbd5e1 25%, #94a3b8 50%, #cbd5e1 75%, transparent) !important;
+    margin: 2em 0 !important;
+    display: block !important;
+    width: 100% !important;
+    transition: background 0.3s ease !important;
+  }
+
+  /* Mark/highlight styling */
+  [contenteditable='true'] mark {
+    background-color: #fef08a !important;
+    color: #713f12 !important;
+    padding: 0.08em 0.25em !important;
+    border-radius: 3px !important;
+    transition: background-color 0.2s ease, box-shadow 0.2s ease !important;
+  }
+}

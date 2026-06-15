@@ -29,6 +29,7 @@ import {
   FolderInput,
   FolderOpen,
   Hash,
+  Clock,
   type LucideIcon,
 } from 'lucide-react'
 import type { Note } from './NoteEditor'
@@ -156,7 +157,7 @@ export default function SidebarTree({
     projectId: string; currentColor: string
   } | null>(null)
 
-  // Move-to picker modal (searchable, full list)
+  // Move-to picker modal state (searchable, full list)
   const [showMovePicker, setShowMovePicker] = useState<{
     type: 'note-to-folder' | 'note-to-project' | 'folder-to-project'
     id: string
@@ -164,6 +165,10 @@ export default function SidebarTree({
   } | null>(null)
   const [movePickerSearch, setMovePickerSearch] = useState('')
   const movePickerSearchRef = useRef<HTMLInputElement>(null)
+
+  // New-note dropdown state
+  const [newMenuOpen, setNewMenuOpen] = useState(false)
+  const newMenuRef = useRef<HTMLDivElement>(null)
 
   // Auto-expand to the selected folder's path
   useEffect(() => {
@@ -249,6 +254,18 @@ export default function SidebarTree({
       setTimeout(() => movePickerSearchRef.current?.focus(), 50)
     }
   }, [showMovePicker])
+
+  // Close new-note dropdown on outside click
+  useEffect(() => {
+    if (!newMenuOpen) return
+    const handler = (e: MouseEvent) => {
+      if (!newMenuRef.current?.contains(e.target as Node)) {
+        setNewMenuOpen(false)
+      }
+    }
+    document.addEventListener('mousedown', handler)
+    return () => document.removeEventListener('mousedown', handler)
+  }, [newMenuOpen])
 
   // ---- DERIVED STATE ----
 
@@ -343,6 +360,13 @@ export default function SidebarTree({
     }
     return result
   }, [projectTree])
+
+  // Recent notes: 5 most recently updated, shown when not filtering
+  const recentNotes = useMemo(() => {
+    return [...allNotes]
+      .sort((a, b) => new Date(b.updated_at).getTime() - new Date(a.updated_at).getTime())
+      .slice(0, 5)
+  }, [allNotes])
 
   // Client-side check: is folderId a descendant of potentialAncestorId?
   const isFolderDescendant = useCallback((folderId: string, potentialAncestorId: string): boolean => {
@@ -673,7 +697,7 @@ export default function SidebarTree({
 
   // ---- NOTE TYPE ICON ----
 
-  const NoteIcon = ({ noteType, size = 12 }: { noteType?: NoteType; size?: number }) => {
+  const NoteIcon = ({ noteType, size = 14 }: { noteType?: NoteType; size?: number }) => {
     const presentation = getNoteTypePresentation(noteType)
     const Icon = NOTE_TYPE_ICON_MAP[presentation.iconKey]
     return <Icon size={size} className={`${presentation.iconClassName} flex-shrink-0`} />
@@ -683,7 +707,8 @@ export default function SidebarTree({
   const renderNoteItem = (n: Note, indent: number = 0) => {
     if (!matchesSearch(n.title || 'Untitled')) return null
     const isActive = selectedNoteId === n.id
-    const accentColor = activeProject?.color ?? '#6B7280'
+    const noteProject = projects.find(p => p.id === n.project_id)
+    const accentColor = noteProject?.color ?? '#6B7280'
     const isDragging = dragPayload?.type === 'note' && dragPayload.id === n.id
     return (
       <div
@@ -698,31 +723,35 @@ export default function SidebarTree({
           if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onSelectNote(n) }
         }}
         onContextMenu={(e) => handleNoteContextMenu(e, n)}
-        className={`group w-full text-left px-2.5 py-2.5 rounded-xl transition-all duration-200 flex items-start justify-between ${
+        className={`group relative w-full text-left rounded-xl transition-all duration-200 flex items-center gap-2.5 min-h-[44px] px-3 py-2 ${
           isDragging ? 'opacity-50' : ''
         } ${
           isActive
-            ? 'bg-alpine-50 dark:bg-alpine-900/30 text-alpine-800 dark:text-alpine-200 font-medium shadow-sm'
-            : 'hover:bg-surface-hover/60 text-foreground/70 hover:text-foreground'
+            ? 'bg-accent/8 text-accent font-medium'
+            : 'hover:bg-surface-hover/50 text-foreground/80 hover:text-foreground'
         }`}
         style={{
           paddingLeft: `${indent}px`,
-          ...(isActive ? { borderLeft: `3px solid ${accentColor}`, paddingLeft: `${Math.max(indent - 3, 5)}px` } : {}),
+          ...(isActive
+            ? {
+                borderLeft: `3px solid ${accentColor}`,
+                paddingLeft: `${Math.max(indent - 3, 9)}px`,
+                borderRadius: '0 10px 10px 0',
+              }
+            : {}),
         }}
         title={n.title || 'Untitled'}
       >
-        <div className="flex-1 min-w-0">
-          <div className="flex items-center gap-1.5">
-            <NoteIcon noteType={n.note_type} />
-            <span className="text-xs truncate">{n.title || 'Untitled'}</span>
-          </div>
+        <div className="flex-shrink-0 w-6 h-6 rounded-lg flex items-center justify-center bg-surface-hover/70">
+          <NoteIcon noteType={n.note_type} size={14} />
         </div>
+        <span className="text-sm truncate flex-1">{n.title || 'Untitled'}</span>
         <button
           onClick={(e) => { e.stopPropagation(); handleNoteContextMenu(e, n) }}
-          className="hidden group-hover:flex p-0.5 hover:bg-surface-hover rounded transition-colors flex-shrink-0"
+          className="flex p-1.5 hover:bg-surface rounded-lg transition-colors flex-shrink-0 text-muted/60 hover:text-foreground opacity-70 hover:opacity-100"
           title="Note options"
         >
-          <MoreVertical size={11} />
+          <MoreVertical size={14} />
         </button>
       </div>
     )
@@ -736,11 +765,12 @@ export default function SidebarTree({
     const folderNotes = getNotesForFolder(folder.id)
     const totalCount = countNotesRecursive(folder)
     const isOnActivePath = activeFolderAncestors.has(folder.id)
-    const accentColor = activeProject?.color ?? '#6B7280'
+    const folderProject = projects.find(p => p.id === folder.project_id)
+    const accentColor = folderProject?.color ?? '#6B7280'
     const isRenaming = inlineRename?.type === 'folder' && inlineRename.id === folder.id
     const isDragging = dragPayload?.type === 'folder' && dragPayload.id === folder.id
     const isDropTarget = isDropHighlighted({ kind: 'folder', id: folder.id })
-    const indent = level * 16 + 8
+    const indent = level * 16 + 10
 
     return (
       <div key={folder.id} className={isDragging ? 'opacity-40' : ''}>
@@ -763,19 +793,29 @@ export default function SidebarTree({
           onKeyDown={(e) => {
             if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); toggleFolder(folder.id) }
           }}
-          className={`group flex items-center gap-1.5 px-2 py-2 rounded-xl transition-all duration-200 ${
-            isSelected ? 'bg-accent/10 text-accent font-medium shadow-sm' : 'hover:bg-surface-hover/60 text-foreground/70 hover:text-foreground'
-          } ${isDropTarget ? 'ring-2 ring-alpine-400/50 bg-alpine-50/60 dark:bg-alpine-900/30' : ''}`}
+          className={`group relative flex items-center gap-2 rounded-xl transition-all duration-200 min-h-[44px] px-3 py-2 ${
+            isSelected
+              ? 'bg-accent/8 text-accent font-medium'
+              : 'hover:bg-surface-hover/50 text-foreground/80 hover:text-foreground'
+          } ${isDropTarget ? 'ring-2 ring-accent/40 bg-accent/8' : ''}`}
           style={{
             paddingLeft: `${indent}px`,
-            ...(isOnActivePath ? { borderLeft: `2px solid ${accentColor}`, paddingLeft: `${indent - 2}px` } : {}),
+            ...(isSelected || isOnActivePath
+              ? {
+                  borderLeft: `3px solid ${accentColor}`,
+                  paddingLeft: `${Math.max(indent - 3, 9)}px`,
+                  borderRadius: '0 10px 10px 0',
+                }
+              : {}),
           }}
         >
           <ChevronRight
-            size={12}
-            className={`flex-shrink-0 transition-transform duration-200 ${isExpanded ? 'rotate-90' : ''} ${hasChildren || folderNotes.length > 0 ? 'text-muted' : 'text-transparent'}`}
+            size={14}
+            className={`flex-shrink-0 transition-transform duration-200 ${
+              isExpanded ? 'rotate-90 text-accent' : hasChildren || folderNotes.length > 0 ? 'text-muted/60' : 'text-transparent'
+            }`}
           />
-          <FolderTreeIcon size={12} className={`flex-shrink-0 ${isOnActivePath ? 'text-alpine-500' : isExpanded ? 'text-alpine-500' : 'text-muted'}`} />
+          <FolderTreeIcon size={16} className={`flex-shrink-0 ${isExpanded ? 'text-accent' : isOnActivePath ? 'text-accent/70' : 'text-muted/70'}`} />
 
           {isRenaming ? (
             <input
@@ -790,40 +830,40 @@ export default function SidebarTree({
                 e.stopPropagation()
               }}
               onClick={(e) => e.stopPropagation()}
-              className="flex-1 text-xs bg-surface-hover/80 border border-alpine-400/50 rounded px-1 py-0.5 focus:outline-none focus:ring-1 focus:ring-alpine-500 min-w-0"
+              className="flex-1 text-sm bg-surface-hover/80 border border-accent/40 rounded-lg px-2 py-1 focus:outline-none focus:ring-1 focus:ring-accent min-w-0"
             />
           ) : (
-            <span className={`text-xs truncate flex-1 ${isOnActivePath ? 'font-medium' : ''}`}>{folder.name}</span>
+            <span className={`text-sm truncate flex-1 ${isOnActivePath ? 'font-medium' : ''}`}>{folder.name}</span>
           )}
 
           {totalCount > 0 && !isRenaming && (
-            <span className="text-[10px] bg-surface-hover text-muted px-1 py-0.5 rounded-full font-semibold flex-shrink-0">
+            <span className="text-[11px] text-muted/60 font-medium flex-shrink-0 tabular-nums">
               {totalCount}
             </span>
           )}
-          {/* Hover actions */}
+          {/* Hover / focus actions */}
           {!isRenaming && (
-            <div className="hidden group-hover:flex items-center gap-0.5 flex-shrink-0">
+            <div className="hidden group-hover:flex group-focus-within:flex items-center gap-0.5 flex-shrink-0 bg-surface-hover/90 backdrop-blur-sm rounded-lg px-1 py-1 -mr-1">
               <button
                 onClick={(e) => { e.stopPropagation(); onNewNote(undefined, folder.id, folder.project_id) }}
-                className="p-0.5 hover:bg-surface-hover rounded transition-colors"
+                className="p-1.5 hover:bg-surface rounded-md transition-colors text-muted hover:text-foreground"
                 title="New note"
               >
-                <Plus size={12} />
+                <Plus size={14} />
               </button>
               <button
                 onClick={(e) => { e.stopPropagation(); onCreateFolder(folder.id, folder.project_id) }}
-                className="p-0.5 hover:bg-surface-hover rounded transition-colors"
+                className="p-1.5 hover:bg-surface rounded-md transition-colors text-muted hover:text-foreground"
                 title="New subfolder"
               >
-                <FolderPlus size={11} />
+                <FolderPlus size={14} />
               </button>
               <button
                 onClick={(e) => { e.stopPropagation(); handleFolderContextMenu(e, folder.id, folder.name, folder.project_id) }}
-                className="p-0.5 hover:bg-surface-hover rounded transition-colors"
+                className="p-1.5 hover:bg-surface rounded-md transition-colors text-muted hover:text-foreground"
                 title="More options"
               >
-                <MoreVertical size={11} />
+                <MoreVertical size={14} />
               </button>
             </div>
           )}
@@ -831,7 +871,7 @@ export default function SidebarTree({
 
         {/* Expanded content */}
         {isExpanded && (
-          <div className="space-y-0.5 mt-0.5">
+          <div className="space-y-0.5">
             {/* Child folders first */}
             {hasChildren && (
               <div className="space-y-0.5">
@@ -842,11 +882,11 @@ export default function SidebarTree({
             {/* Notes in this folder */}
             {folderNotes.length > 0 ? (
               <div className="space-y-0.5">
-                {folderNotes.map(n => renderNoteItem(n, (level + 1) * 16 + 4))}
+                {folderNotes.map(n => renderNoteItem(n, (level + 1) * 16 + 18))}
               </div>
             ) : !hasChildren ? (
-              <div className="text-[10px] text-muted italic py-0.5" style={{ paddingLeft: `${(level + 1) * 16 + 12}px` }}>
-                Empty
+              <div className="text-xs text-muted/50 italic py-2 px-3" style={{ paddingLeft: `${(level + 1) * 16 + 28}px` }}>
+                Empty folder
               </div>
             ) : null}
           </div>
@@ -863,6 +903,7 @@ export default function SidebarTree({
     const isExpanded = expandedProjects.has(projectKey)
     const totalItems = node.folders.length + node.notes.length
     const isActiveProject = node.project?.id === activeNote?.project_id
+    const isSelectedProject = selectedProjectId === node.project?.id && !selectedFolderId && !selectedNoteId
     const totalNoteCount = node.notes.length + node.folders.reduce((acc, f) => acc + countNotesRecursive(f), 0)
     const isRenaming = inlineRename?.type === 'project' && node.project && inlineRename.id === node.project.id
     const dropTargetHere: DropTarget = { kind: 'project-root', projectId: node.project?.id ?? null }
@@ -873,8 +914,7 @@ export default function SidebarTree({
     return (
       <div
         key={projectKey}
-        className="mb-0.5"
-        style={isActiveProject && node.project ? { borderLeft: `3px solid ${projectColor}`, marginLeft: '2px', paddingLeft: '2px', borderRadius: '0 4px 4px 0' } : {}}
+        className="mb-1"
       >
         {/* Project Header */}
         <div
@@ -894,21 +934,32 @@ export default function SidebarTree({
           onKeyDown={(e) => {
             if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); toggleProject(projectKey) }
           }}
-          className={`group flex items-center gap-2 px-3 py-2 rounded-xl transition-all duration-200 hover:bg-surface-hover/60 ${
-            isActiveProject ? 'bg-accent/8 shadow-sm' : selectedProjectId === node.project?.id ? 'bg-accent/10' : ''
-          } ${isDropHere ? 'ring-2 ring-alpine-400/50 bg-alpine-50/60 dark:bg-alpine-900/30' : ''}`}
+          className={`group relative flex items-center gap-2.5 mx-1 px-3 py-2.5 rounded-2xl transition-all duration-200 min-h-[48px] ${
+            isActiveProject || isSelectedProject
+              ? 'bg-accent/8 font-semibold'
+              : 'hover:bg-surface-hover/50'
+          } ${isDropHere ? 'ring-2 ring-accent/40 bg-accent/8' : ''}`}
+          style={(isActiveProject || isSelectedProject) ? {
+            borderLeft: `3px solid ${projectColor}`,
+            paddingLeft: '9px',
+            borderRadius: '0 14px 14px 0',
+          } : {}}
         >
           <ChevronRight
-            size={12}
-            className={`flex-shrink-0 transition-transform duration-200 text-muted ${isExpanded ? 'rotate-90' : ''}`}
+            size={16}
+            className={`flex-shrink-0 transition-transform duration-200 ${
+              isExpanded ? 'rotate-90 text-accent' : 'text-muted/60'
+            }`}
           />
           {node.project ? (
             <div
-              className={`w-3 h-3 rounded-full flex-shrink-0 shadow-sm ${isActiveProject ? 'ring-2 ring-offset-1 ring-offset-surface' : ''}`}
-              style={{ backgroundColor: projectColor, ...(isActiveProject ? { ringColor: projectColor } : {}) }}
+              className="w-3 h-3 rounded-full flex-shrink-0 shadow-sm"
+              style={{ backgroundColor: projectColor }}
             />
           ) : (
-            <Home size={12} className="text-muted flex-shrink-0" />
+            <div className="w-8 h-8 rounded-xl flex items-center justify-center bg-surface-hover/80 flex-shrink-0">
+              <Home size={16} className="text-muted" />
+            </div>
           )}
 
           {isRenaming ? (
@@ -924,144 +975,141 @@ export default function SidebarTree({
                 e.stopPropagation()
               }}
               onClick={(e) => e.stopPropagation()}
-              className="flex-1 text-xs font-semibold bg-surface-hover/80 border border-alpine-400/50 rounded px-1 py-0.5 focus:outline-none focus:ring-1 focus:ring-alpine-500 min-w-0"
+              className="flex-1 text-sm font-semibold bg-surface-hover/80 border border-accent/40 rounded-lg px-2 py-1 focus:outline-none focus:ring-1 focus:ring-accent min-w-0"
             />
           ) : (
-            <span className={`truncate flex-1 text-foreground ${isActiveProject ? 'text-sm font-bold' : 'text-xs font-semibold'}`}>{projectName}</span>
+            <span className="truncate flex-1 text-sm text-foreground/90">{projectName}</span>
           )}
 
           {totalNoteCount > 0 && !isRenaming && (
-            <span className="text-[10px] text-muted flex-shrink-0">{totalNoteCount}</span>
+            <span className="text-[11px] text-muted/60 font-medium flex-shrink-0 tabular-nums">
+              {totalNoteCount}
+            </span>
           )}
-          {/* Hover actions */}
-          {!isRenaming && (
-            <div className="hidden group-hover:flex items-center gap-0.5 flex-shrink-0">
-              {node.project && (
-                <>
-                  {onOpenProjectDashboard && (
-                    <button
-                      onClick={(e) => { e.stopPropagation(); onOpenProjectDashboard(node.project!.id) }}
-                      className="p-0.5 hover:bg-surface-hover rounded transition-colors"
-                      title={`Open ${projectName} dashboard`}
-                    >
-                      <LayoutDashboard size={12} />
-                    </button>
-                  )}
-                  <button
-                    onClick={(e) => { e.stopPropagation(); onCreateFolder(null, node.project?.id) }}
-                    className="p-0.5 hover:bg-surface-hover rounded transition-colors"
-                    title="New folder"
-                  >
-                    <FolderPlus size={12} />
-                  </button>
-                  <button
-                    onClick={(e) => { e.stopPropagation(); onNewNote(undefined, null, node.project?.id) }}
-                    className="p-0.5 hover:bg-surface-hover rounded transition-colors"
-                    title={`New note in ${projectName}`}
-                  >
-                    <Plus size={12} />
-                  </button>
-                  <button
-                    onClick={(e) => { e.stopPropagation(); handleProjectContextMenu(e, node.project!) }}
-                    className="p-0.5 hover:bg-surface-hover rounded transition-colors"
-                    title="Project options"
-                  >
-                    <MoreVertical size={11} />
-                  </button>
-                </>
+          {/* Always-visible + hover actions */}
+          {!isRenaming && node.project && (
+            <div className="flex items-center gap-0.5 flex-shrink-0 -mr-1">
+              {onOpenProjectDashboard && (
+                <button
+                  onClick={(e) => { e.stopPropagation(); onOpenProjectDashboard(node.project!.id) }}
+                  className="p-1.5 hover:bg-surface rounded-lg transition-colors text-muted/70 hover:text-foreground opacity-0 group-hover:opacity-100 group-focus-within:opacity-100"
+                  title={`Open ${projectName} dashboard`}
+                >
+                  <LayoutDashboard size={15} />
+                </button>
               )}
-              {!node.project && (
-                <>
-                  <button
-                    onClick={(e) => { e.stopPropagation(); onCreateFolder(null) }}
-                    className="p-0.5 hover:bg-surface-hover rounded transition-colors"
-                    title="New folder"
-                  >
-                    <FolderPlus size={12} />
-                  </button>
-                  <button
-                    onClick={(e) => { e.stopPropagation(); onNewNote(undefined, null, null) }}
-                    className="p-0.5 hover:bg-surface-hover rounded transition-colors"
-                    title="New note"
-                  >
-                    <Plus size={12} />
-                  </button>
-                </>
-              )}
+              <button
+                onClick={(e) => { e.stopPropagation(); handleProjectContextMenu(e, node.project!) }}
+                className="p-1.5 hover:bg-surface rounded-lg transition-colors text-muted/60 hover:text-foreground"
+                title="Project options"
+              >
+                <MoreVertical size={15} />
+              </button>
             </div>
           )}
         </div>
 
         {/* Project Content (expanded) */}
         {isExpanded && (
-          <div className="space-y-0.5 mt-0.5 ml-1">
+          <div className="space-y-0.5 mt-1 ml-3 pl-2 border-l border-border/30">
             {/* Folders */}
-            {node.folders.map(folder => renderFolder(folder, 1))}
+            {node.folders.map(folder => renderFolder(folder, 0))}
 
             {/* Root-level notes in this project */}
             {node.notes.length > 0 && (
-              <div className="space-y-0.5 pl-2">
-                {node.notes.map(n => renderNoteItem(n, 20))}
+              <div className="space-y-0.5">
+                {node.notes.map(n => renderNoteItem(n, 18))}
               </div>
             )}
 
             {node.folders.length === 0 && node.notes.length === 0 && (
-              <div className="text-[10px] text-muted italic py-1 pl-6">
-                No items
+              <div className="text-xs text-muted/50 italic py-2 pl-4">
+                Empty — create a note or folder
               </div>
             )}
           </div>
         )}
-        <div className="mx-2 mt-1.5 mb-0.5" />
       </div>
     )
   }
 
+
   // ---- COLLAPSED VIEW ----
   if (collapsed) {
     return (
-      <aside className="fixed inset-y-0 left-0 z-40 hidden w-14 border-r border-border/40 bg-surface transition-all duration-300 md:flex md:flex-col">
-        <div className="flex items-center justify-center px-3 py-4">
-          <div className="flex h-8 w-8 items-center justify-center rounded-xl bg-gradient-to-br from-alpine-500 to-alpine-600 text-sm font-bold text-white shadow-sm">
+      <aside className="fixed inset-y-0 left-0 z-40 hidden w-16 border-r border-border/30 bg-surface/95 backdrop-blur-xl transition-all duration-300 md:flex md:flex-col">
+        {/* Top: logo + expand */}
+        <div className="flex flex-col items-center gap-2 px-2 pt-3 pb-2">
+          <div className="flex h-10 w-10 items-center justify-center rounded-2xl bg-gradient-to-br from-accent to-emerald-500 text-sm font-bold text-white shadow-md shadow-accent/20">
             N
           </div>
-        </div>
-        <nav className="flex-1 flex flex-col items-center gap-2.5 px-2 py-4 overflow-y-auto scrollbar-hide">
-          {projects.map(p => (
-            <button
-              key={p.id}
-              onClick={onToggleCollapsed}
-              title={p.name}
-              className={`w-10 h-10 rounded-2xl flex items-center justify-center transition-all duration-200 hover:scale-105 flex-shrink-0 shadow-sm min-h-[40px] min-w-[40px] ${
-                p.id === activeNote?.project_id
-                  ? 'ring-2 ring-offset-2 ring-offset-surface shadow-md scale-105'
-                  : 'opacity-60 hover:opacity-100 hover:shadow-md'
-              }`}
-              style={{
-                backgroundColor: p.color ?? '#6B7280',
-                ...(p.id === activeNote?.project_id ? { ringColor: p.color ?? '#6B7280' } : {}),
-              }}
-            >
-              <span className="text-[11px] font-bold text-white uppercase">{p.name.slice(0, 2)}</span>
-            </button>
-          ))}
           <button
             onClick={onToggleCollapsed}
-            title="Unfiled"
-            className="w-10 h-10 rounded-2xl flex items-center justify-center transition-all duration-200 hover:scale-105 flex-shrink-0 bg-surface-hover/70 border border-border/50 opacity-60 hover:opacity-100 hover:shadow-sm min-h-[40px] min-w-[40px]"
-          >
-            <Home size={16} className="text-muted" />
-          </button>
-        </nav>
-        <div className="px-2 py-3 flex flex-col items-center gap-1">
-          <button
-            onClick={onToggleCollapsed}
-            className="rounded-xl p-2 text-muted/70 transition-all duration-200 hover:bg-surface-hover/70 hover:text-foreground hover:shadow-sm"
+            className="rounded-xl p-1.5 text-muted/60 transition-all duration-200 hover:bg-surface-hover hover:text-foreground"
             aria-label="Expand sidebar"
             title="Expand sidebar"
           >
             <ChevronRight size={18} />
           </button>
+        </div>
+
+        <div className="mx-3 border-t border-border/40" />
+
+        {/* Middle: project pills */}
+        <nav className="flex-1 flex flex-col items-center gap-2 px-1.5 py-3 overflow-y-auto scrollbar-hide">
+          {projects.map(p => {
+            const isActive = p.id === activeNote?.project_id
+            const color = p.color ?? '#6B7280'
+            return (
+              <button
+                key={p.id}
+                onClick={() => {
+                  onToggleCollapsed()
+                  onSelectFolder(null)
+                  if (onOpenProjectDashboard) onOpenProjectDashboard(p.id)
+                }}
+                title={p.name}
+                className="relative w-10 h-10 rounded-2xl flex items-center justify-center transition-all duration-200 hover:scale-110 flex-shrink-0 min-h-[40px] min-w-[40px] shadow-sm"
+                style={{ backgroundColor: color }}
+              >
+                {isActive && (
+                  <span className="absolute -left-1.5 top-1/2 -translate-y-1/2 w-[3px] h-6 rounded-full" style={{ backgroundColor: color }} />
+                )}
+                <span className="text-[10px] font-bold text-white uppercase leading-none">{p.name.slice(0, 2)}</span>
+              </button>
+            )
+          })}
+
+          {/* Unfiled button */}
+          <button
+            onClick={() => { onToggleCollapsed(); onSelectFolder(null) }}
+            title="Unfiled"
+            className="relative w-10 h-10 rounded-2xl flex items-center justify-center transition-all duration-200 hover:scale-110 flex-shrink-0 bg-surface-hover border border-border/40 text-muted hover:text-foreground hover:border-border hover:shadow-sm min-h-[40px] min-w-[40px]"
+          >
+            <Home size={16} />
+          </button>
+        </nav>
+
+        {/* Bottom actions */}
+        <div className="px-2 py-3 flex flex-col items-center gap-2 border-t border-border/40">
+          <button
+            onClick={() => { onToggleCollapsed(); onNewNote() }}
+            className="w-10 h-10 rounded-2xl flex items-center justify-center bg-accent text-accent-foreground shadow-md shadow-accent/25 hover:shadow-lg hover:shadow-accent/30 hover:scale-105 transition-all duration-200"
+            title="New note"
+            aria-label="New note"
+          >
+            <Plus size={18} />
+          </button>
+          {onOpenFileExplorer && (
+            <button
+              onClick={onOpenFileExplorer}
+              className="w-10 h-10 rounded-2xl flex items-center justify-center text-muted/60 hover:bg-surface-hover hover:text-foreground transition-all duration-200"
+              title="File Explorer"
+              aria-label="File Explorer"
+            >
+              <FolderOpen size={18} />
+            </button>
+          )}
         </div>
       </aside>
     )
@@ -1070,67 +1118,70 @@ export default function SidebarTree({
   // ---- EXPANDED VIEW ----
   return (
     <>
-      <aside className="fixed inset-y-0 left-0 z-40 hidden w-[280px] border-r border-border/40 bg-surface transition-all duration-300 lg:flex lg:flex-col">
-        {/* Header */}
-        <div className="flex items-center justify-between px-4 py-3.5">
-          <div className="flex items-center gap-2.5 overflow-hidden">
-            <img src="/icon-192.png" alt="MindViz Notes" className="h-7 w-7 rounded-xl flex-shrink-0 shadow-sm" />
-            <span className="truncate text-[13px] font-bold text-foreground tracking-tight">MindViz Notes</span>
+      <aside className="flex flex-col w-full h-full">
+        {/* Branding header */}
+        <div className="flex items-center justify-between px-4 pt-4 pb-2 shrink-0">
+          <div className="flex items-center gap-3 overflow-hidden">
+            <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-gradient-to-br from-accent to-emerald-500 text-sm font-bold text-white shadow-sm shadow-accent/20 flex-shrink-0">
+              N
+            </div>
+            <span className="truncate text-base font-bold text-foreground tracking-tight">MindViz</span>
           </div>
           <div className="flex items-center gap-0.5">
             <button
               onClick={expandAll}
-              className="rounded-lg p-1 text-muted/50 transition-all duration-200 hover:bg-surface-hover/70 hover:text-foreground"
+              className="rounded-lg p-1.5 text-muted/50 transition-all duration-200 hover:bg-surface-hover hover:text-foreground"
               aria-label="Expand all"
               title="Expand all"
             >
-              <ChevronsUpDown size={13} />
+              <ChevronsUpDown size={15} />
             </button>
             <button
               onClick={onToggleCollapsed}
-              className="rounded-xl p-1.5 text-muted/70 transition-all duration-200 hover:bg-surface-hover/70 hover:text-foreground"
+              className="rounded-lg p-1.5 text-muted/60 transition-all duration-200 hover:bg-surface-hover hover:text-foreground"
               aria-label="Collapse sidebar"
               title="Collapse sidebar"
             >
-              <ChevronLeft size={15} />
+              <ChevronLeft size={18} />
             </button>
           </div>
         </div>
 
-        {/* Search */}
-        <div className="px-3 pt-1 pb-2 space-y-2">
+        {/* Search row */}
+        <div className="px-3 pt-1 pb-2 shrink-0">
           <div className="flex items-center gap-1.5">
             <div className="relative flex-1">
-              <Search size={13} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-muted/60" />
+              <Search size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-muted/50" />
               <input
                 ref={searchInputRef}
                 type="text"
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
                 placeholder="Search notes, folders, projects..."
-                className="w-full pl-8 pr-7 py-2 text-xs border-0 rounded-xl bg-surface-hover/50 focus:outline-none focus:ring-2 focus:ring-alpine-500/25 focus:bg-surface-hover/80 text-foreground placeholder:text-muted/60 transition-all duration-200"
+                className="w-full pl-9 pr-8 py-2.5 text-sm border border-border/60 rounded-xl bg-surface-hover/40 focus:outline-none focus:ring-2 focus:ring-accent/20 focus:border-accent/40 focus:bg-surface-hover/70 text-foreground placeholder:text-muted/50 transition-all duration-200"
               />
               {searchQuery && (
                 <button
                   onClick={() => setSearchQuery('')}
-                  className="absolute right-2 top-1/2 -translate-y-1/2 text-muted hover:text-foreground"
+                  className="absolute right-2.5 top-1/2 -translate-y-1/2 text-muted hover:text-foreground p-0.5 rounded-md hover:bg-surface-hover transition-colors"
+                  aria-label="Clear search"
                 >
-                  <X size={12} />
+                  <X size={14} />
                 </button>
               )}
             </div>
             <button
               onClick={() => setShowFilterPanel(v => !v)}
               title="Toggle filters"
-              className={`relative flex-shrink-0 rounded-xl p-2 transition-all duration-200 ${
+              className={`relative flex-shrink-0 rounded-xl p-2.5 transition-all duration-200 ${
                 showFilterPanel || activeFilterCount > 0
-                  ? 'bg-alpine-100 dark:bg-alpine-900/40 text-alpine-600 dark:text-alpine-300 shadow-sm'
-                  : 'text-muted/60 hover:bg-surface-hover/70 hover:text-foreground'
+                  ? 'bg-accent/10 text-accent shadow-sm'
+                  : 'text-muted/50 hover:bg-surface-hover hover:text-foreground'
               }`}
             >
-              <SlidersHorizontal size={14} />
+              <SlidersHorizontal size={16} />
               {activeFilterCount > 0 && (
-                <span className="absolute -top-1 -right-1 min-w-[14px] h-[14px] px-0.5 bg-alpine-600 text-white text-[9px] font-bold rounded-full flex items-center justify-center">
+                <span className="absolute -top-1 -right-1 min-w-[16px] h-[16px] px-0.5 bg-accent text-accent-foreground text-[10px] font-bold rounded-full flex items-center justify-center">
                   {activeFilterCount}
                 </span>
               )}
@@ -1139,10 +1190,10 @@ export default function SidebarTree({
 
           {/* Filter panel */}
           {showFilterPanel && (
-            <div className="space-y-2">
+            <div className="mt-2 p-2.5 rounded-xl bg-surface-hover/40 border border-border/40 space-y-2.5">
               <div>
-                <div className="text-[9px] font-semibold uppercase text-muted mb-1 tracking-wide">Type</div>
-                <div className="flex flex-wrap gap-1">
+                <div className="text-[10px] font-semibold uppercase text-muted mb-1.5 tracking-wide">Type</div>
+                <div className="flex flex-wrap gap-1.5">
                   {allNoteTypePresentations.map(tp => {
                     const Icon = NOTE_TYPE_ICON_MAP[tp.iconKey]
                     const active = filterNoteTypes.has(tp.id)
@@ -1151,13 +1202,13 @@ export default function SidebarTree({
                         key={tp.id}
                         onClick={() => toggleNoteTypeFilter(tp.id)}
                         title={tp.label}
-                        className={`flex items-center gap-1 px-2 py-1 rounded-lg text-[10px] font-medium border transition-all duration-200 ${
+                        className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-[11px] font-medium border transition-all duration-200 ${
                           active
-                            ? 'border-alpine-500/50 bg-alpine-50 dark:bg-alpine-900/30 text-alpine-700 dark:text-alpine-300 shadow-sm'
-                            : 'border-border/50 bg-surface-hover/40 text-muted/80 hover:border-alpine-400/50 hover:text-foreground'
+                            ? 'border-accent/40 bg-accent/10 text-accent shadow-sm'
+                            : 'border-border/50 bg-surface-hover/30 text-muted/70 hover:border-accent/30 hover:text-foreground'
                         }`}
                       >
-                        <Icon size={10} className={active ? '' : 'opacity-70'} />
+                        <Icon size={12} className={active ? '' : 'opacity-70'} />
                         {tp.label}
                       </button>
                     )
@@ -1167,17 +1218,17 @@ export default function SidebarTree({
 
               {projects.length > 0 && (
                 <div>
-                  <div className="text-[9px] font-semibold uppercase text-muted mb-1 tracking-wide">Project</div>
-                  <div className="flex flex-wrap gap-1">
+                  <div className="text-[10px] font-semibold uppercase text-muted mb-1.5 tracking-wide">Project</div>
+                  <div className="flex flex-wrap gap-1.5">
                     <button
                       onClick={() => toggleProjectFilter('__UNFILED__')}
-                      className={`flex items-center gap-1 px-2 py-1 rounded-lg text-[10px] font-medium border transition-all duration-200 ${
+                      className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-[11px] font-medium border transition-all duration-200 ${
                         filterProjectIds.has('__UNFILED__')
-                          ? 'border-alpine-500/50 bg-alpine-50 dark:bg-alpine-900/30 text-alpine-700 dark:text-alpine-300 shadow-sm'
-                          : 'border-border/50 bg-surface-hover/40 text-muted/80 hover:border-alpine-400/50 hover:text-foreground'
+                          ? 'border-accent/40 bg-accent/10 text-accent shadow-sm'
+                          : 'border-border/50 bg-surface-hover/30 text-muted/70 hover:border-accent/30 hover:text-foreground'
                       }`}
                     >
-                      <Home size={9} />
+                      <Home size={11} />
                       Unfiled
                     </button>
                     {projects.map(p => {
@@ -1187,14 +1238,14 @@ export default function SidebarTree({
                           key={p.id}
                           onClick={() => toggleProjectFilter(p.id)}
                           title={p.name}
-                          className={`flex items-center gap-1 px-2 py-1 rounded-lg text-[10px] font-medium border transition-all duration-200 ${
+                          className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-[11px] font-medium border transition-all duration-200 ${
                             active
-                              ? 'border-alpine-500/50 bg-alpine-50 dark:bg-alpine-900/30 text-alpine-700 dark:text-alpine-300 shadow-sm'
-                              : 'border-border/50 bg-surface-hover/40 text-muted/80 hover:border-alpine-400/50 hover:text-foreground'
+                              ? 'border-accent/40 bg-accent/10 text-accent shadow-sm'
+                              : 'border-border/50 bg-surface-hover/30 text-muted/70 hover:border-accent/30 hover:text-foreground'
                           }`}
                         >
                           <span className="w-2 h-2 rounded-full flex-shrink-0" style={{ backgroundColor: p.color ?? '#6B7280' }} />
-                          <span className="truncate max-w-[80px]">{p.name}</span>
+                          <span className="truncate max-w-[90px]">{p.name}</span>
                         </button>
                       )
                     })}
@@ -1205,25 +1256,94 @@ export default function SidebarTree({
               {activeFilterCount > 0 && (
                 <button
                   onClick={clearAllFilters}
-                  className="text-[10px] text-muted hover:text-danger flex items-center gap-1 transition-colors"
+                  className="text-[11px] text-muted hover:text-danger flex items-center gap-1 transition-colors"
                 >
-                  <X size={10} /> Clear all filters
+                  <X size={11} /> Clear all filters
                 </button>
               )}
             </div>
           )}
         </div>
 
+        {/* New button row */}
+        <div className="px-3 pb-2 shrink-0">
+          <div className="relative" ref={newMenuRef}>
+            <div className="flex items-stretch rounded-xl overflow-hidden shadow-sm shadow-accent/10 border border-accent/20">
+              <button
+                onClick={() => { setNewMenuOpen(false); onNewNote() }}
+                className="flex-1 flex items-center justify-center gap-2 px-3 py-2.5 bg-accent text-accent-foreground text-sm font-semibold hover:bg-accent/90 transition-colors"
+              >
+                <Plus size={16} />
+                New
+              </button>
+              <div className="w-px bg-accent/30" />
+              <button
+                onClick={() => setNewMenuOpen(v => !v)}
+                className="px-2 bg-accent text-accent-foreground hover:bg-accent/90 transition-colors flex items-center justify-center"
+                aria-label="More new options"
+                aria-expanded={newMenuOpen}
+              >
+                <ChevronDown size={16} className={`transition-transform duration-200 ${newMenuOpen ? 'rotate-180' : ''}`} />
+              </button>
+            </div>
+
+            {newMenuOpen && (
+              <div className="absolute left-0 right-0 top-full mt-1.5 z-50 bg-surface rounded-xl shadow-xl border border-border/50 py-1.5">
+                <div className="px-2.5 py-1.5 text-[10px] font-semibold uppercase tracking-wide text-muted">Note type</div>
+                {allNoteTypePresentations.map(tp => {
+                  const Icon = NOTE_TYPE_ICON_MAP[tp.iconKey]
+                  return (
+                    <button
+                      key={tp.id}
+                      onClick={() => { setNewMenuOpen(false); onNewNote(tp.id) }}
+                      className="w-full px-2.5 py-2 text-left text-sm text-foreground/80 hover:bg-surface-hover flex items-center gap-2.5 transition-colors"
+                    >
+                      <div className={`w-7 h-7 rounded-lg flex items-center justify-center flex-shrink-0 ${tp.iconBgClassName}`}>
+                        <Icon size={14} />
+                      </div>
+                      <div>
+                        <div className="font-medium">{tp.pickerLabel}</div>
+                        <div className="text-[11px] text-muted/70 leading-tight">{tp.description}</div>
+                      </div>
+                    </button>
+                  )
+                })}
+                <div className="border-t border-border/40 my-1.5" />
+                <button
+                  onClick={() => { setNewMenuOpen(false); onCreateFolder(null) }}
+                  className="w-full px-2.5 py-2 text-left text-sm text-foreground/80 hover:bg-surface-hover flex items-center gap-2.5 transition-colors"
+                >
+                  <div className="w-7 h-7 rounded-lg flex items-center justify-center bg-surface-hover/80 text-muted flex-shrink-0">
+                    <FolderPlus size={14} />
+                  </div>
+                  <span className="font-medium">New folder</span>
+                </button>
+                {onCreateProject && (
+                  <button
+                    onClick={() => { setNewMenuOpen(false); onCreateProject() }}
+                    className="w-full px-2.5 py-2 text-left text-sm text-foreground/80 hover:bg-surface-hover flex items-center gap-2.5 transition-colors"
+                  >
+                    <div className="w-7 h-7 rounded-lg flex items-center justify-center bg-surface-hover/80 text-muted flex-shrink-0">
+                      <Plus size={14} />
+                    </div>
+                    <span className="font-medium">New project</span>
+                  </button>
+                )}
+              </div>
+            )}
+          </div>
+        </div>
+
         {/* Breadcrumb context strip */}
         {activeNote && breadcrumb.length > 0 && (
           <div
-            className="mx-3 my-1.5 px-3 py-2 rounded-xl bg-surface-hover/30 flex items-center gap-1 min-w-0 overflow-hidden"
+            className="mx-3 mb-2 px-3 py-2 rounded-xl bg-surface-hover/30 flex items-center gap-1 min-w-0 overflow-hidden shrink-0"
             style={{ borderLeftColor: activeProject?.color ?? '#6B7280', borderLeftWidth: '3px' }}
           >
-            <div className="flex items-center gap-1 text-[10px] text-muted truncate flex-1 min-w-0">
+            <div className="flex items-center gap-1 text-[11px] text-muted truncate flex-1 min-w-0">
               {breadcrumb.map((part, i) => (
                 <span key={i} className="flex items-center gap-1 min-w-0">
-                  {i > 0 && <ChevronRight size={9} className="flex-shrink-0 text-muted/50" />}
+                  {i > 0 && <ChevronRight size={10} className="flex-shrink-0 text-muted/50" />}
                   <span
                     className={`truncate ${i === 0 ? 'font-semibold' : ''}`}
                     style={i === 0 && activeProject?.color ? { color: activeProject.color } : {}}
@@ -1236,29 +1356,29 @@ export default function SidebarTree({
           </div>
         )}
 
-        {/* Tree Content OR Flat Search Results */}
-        <div className="flex-1 overflow-y-auto px-2 py-2">
+        {/* Scrollable content: Recent Notes, Tree, or Search Results */}
+        <div className="flex-1 overflow-y-auto px-2 py-2 min-h-0">
           {isFilterActive ? (
             <>
               <div className="flex items-center justify-between mb-2 px-1">
-                <span className="text-[10px] font-semibold uppercase tracking-wide text-muted">
+                <span className="text-[11px] font-semibold uppercase tracking-wide text-muted">
                   {totalResultCount} result{totalResultCount !== 1 ? 's' : ''}
                 </span>
-                <button onClick={clearAllFilters} className="text-[10px] text-muted hover:text-foreground flex items-center gap-0.5 transition-colors">
-                  <X size={9} /> Clear
+                <button onClick={clearAllFilters} className="text-[11px] text-muted hover:text-foreground flex items-center gap-0.5 transition-colors">
+                  <X size={10} /> Clear
                 </button>
               </div>
               {totalResultCount === 0 ? (
-                <div className="text-xs text-muted italic text-center py-8">No results match your search.</div>
+                <div className="text-sm text-muted italic text-center py-8">No results match your search.</div>
               ) : (
-                <div className="space-y-1">
+                <div className="space-y-2">
                   {/* ---- PROJECT RESULTS ---- */}
                   {filteredProjects.length > 0 && (
                     <div>
-                      <div className="px-1 mb-1 flex items-center gap-1.5">
-                        <Hash size={10} className="text-muted/60" />
-                        <span className="text-[9px] font-bold uppercase tracking-widest text-muted/70">Projects</span>
-                        <span className="text-[9px] text-muted/50">{filteredProjects.length}</span>
+                      <div className="px-1 mb-1.5 flex items-center gap-1.5">
+                        <Hash size={12} className="text-muted/60" />
+                        <span className="text-[10px] font-bold uppercase tracking-widest text-muted/70">Projects</span>
+                        <span className="text-[10px] text-muted/50">{filteredProjects.length}</span>
                       </div>
                       <div className="space-y-0.5">
                         {filteredProjects.map(project => {
@@ -1281,28 +1401,28 @@ export default function SidebarTree({
                               }}
                               onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); if (onOpenProjectDashboard) onOpenProjectDashboard(project.id) } }}
                               onContextMenu={(e) => handleProjectContextMenu(e, project)}
-                              className={`group w-full text-left px-2.5 py-2.5 rounded-xl transition-all duration-200 flex items-start gap-2.5 ${
+                              className={`group w-full text-left px-3 py-2.5 rounded-xl transition-all duration-200 flex items-center gap-3 min-h-[52px] ${
                                 isActive
-                                  ? 'bg-alpine-50 dark:bg-alpine-900/30 shadow-sm'
-                                  : 'hover:bg-surface-hover/60'
+                                  ? 'bg-accent/8 shadow-sm'
+                                  : 'hover:bg-surface-hover/40'
                               }`}
-                              style={isActive ? { borderLeft: `3px solid ${project.color ?? '#6B7280'}`, paddingLeft: '7px' } : {}}
+                              style={isActive ? { borderLeft: `3px solid ${project.color ?? '#6B7280'}`, paddingLeft: '9px', borderRadius: '0 10px 10px 0' } : {}}
                             >
-                              <div className="mt-0.5 flex-shrink-0 w-7 h-7 rounded-xl flex items-center justify-center shadow-sm" style={{ backgroundColor: project.color ?? '#6B7280' }}>
-                                <span className="text-[9px] font-bold text-white uppercase">{project.name.slice(0, 2)}</span>
+                              <div className="flex-shrink-0 w-9 h-9 rounded-xl flex items-center justify-center shadow-sm" style={{ backgroundColor: project.color ?? '#6B7280' }}>
+                                <span className="text-[10px] font-bold text-white uppercase">{project.name.slice(0, 2)}</span>
                               </div>
                               <div className="flex-1 min-w-0">
-                                <div className={`text-xs truncate font-semibold ${
-                                  isActive ? 'text-alpine-800 dark:text-alpine-200' : 'text-foreground'
+                                <div className={`text-sm truncate font-semibold ${
+                                  isActive ? 'text-accent' : 'text-foreground'
                                 }`}>
                                   {project.name}
                                 </div>
                                 <div className="flex items-center gap-2 mt-0.5">
                                   {project.description && (
-                                    <span className="text-[10px] text-muted truncate">{project.description}</span>
+                                    <span className="text-[11px] text-muted truncate">{project.description}</span>
                                   )}
                                   {!project.description && (
-                                    <span className="text-[10px] text-muted/60">
+                                    <span className="text-[11px] text-muted/60">
                                       {folderCount} folder{folderCount !== 1 ? 's' : ''} · {noteCount} note{noteCount !== 1 ? 's' : ''}
                                     </span>
                                   )}
@@ -1310,9 +1430,9 @@ export default function SidebarTree({
                               </div>
                               <button
                                 onClick={(e) => { e.stopPropagation(); handleProjectContextMenu(e, project) }}
-                                className="hidden group-hover:flex p-0.5 hover:bg-surface-hover rounded transition-colors flex-shrink-0 mt-0.5"
+                                className="flex p-1.5 hover:bg-surface-hover rounded-lg transition-colors flex-shrink-0 text-muted/60 hover:text-foreground"
                               >
-                                <MoreVertical size={11} />
+                                <MoreVertical size={14} />
                               </button>
                             </div>
                           )
@@ -1324,10 +1444,10 @@ export default function SidebarTree({
                   {/* ---- FOLDER RESULTS ---- */}
                   {filteredFolders.length > 0 && (
                     <div>
-                      <div className="px-1 mb-1 flex items-center gap-1.5">
-                        <FolderOpen size={10} className="text-muted/60" />
-                        <span className="text-[9px] font-bold uppercase tracking-widest text-muted/70">Folders</span>
-                        <span className="text-[9px] text-muted/50">{filteredFolders.length}</span>
+                      <div className="px-1 mb-1.5 flex items-center gap-1.5">
+                        <FolderOpen size={12} className="text-muted/60" />
+                        <span className="text-[10px] font-bold uppercase tracking-widest text-muted/70">Folders</span>
+                        <span className="text-[10px] text-muted/50">{filteredFolders.length}</span>
                       </div>
                       <div className="space-y-0.5">
                         {filteredFolders.map(({ folder, depth, projectName, projectColor }) => {
@@ -1339,14 +1459,12 @@ export default function SidebarTree({
                               tabIndex={0}
                               key={folder.id}
                               onClick={() => {
-                                // Expand the parent project
                                 const projKey = folder.project_id ?? '__UNFILED__'
                                 setExpandedProjects(prev => {
                                   const next = new Set(prev)
                                   next.add(projKey)
                                   return next
                                 })
-                                // Expand all ancestor folders
                                 const findPath = (ns: FolderNode[], t: string): string[] | null => {
                                   for (const n of ns) {
                                     if (n.id === t) return [n.id]
@@ -1367,40 +1485,40 @@ export default function SidebarTree({
                               }}
                               onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onSelectFolder(folder.id) } }}
                               onContextMenu={(e) => handleFolderContextMenu(e, folder.id, folder.name, folder.project_id)}
-                              className={`group w-full text-left px-2.5 py-2.5 rounded-xl transition-all duration-200 flex items-start gap-2.5 ${
+                              className={`group w-full text-left px-3 py-2.5 rounded-xl transition-all duration-200 flex items-start gap-3 min-h-[52px] ${
                                 isActive
-                                  ? 'bg-alpine-50 dark:bg-alpine-900/30 shadow-sm'
-                                  : 'hover:bg-surface-hover/60'
+                                  ? 'bg-accent/8 shadow-sm'
+                                  : 'hover:bg-surface-hover/40'
                               }`}
-                              style={isActive ? { borderLeft: `3px solid ${projectColor}`, paddingLeft: '7px' } : {}}
+                              style={isActive ? { borderLeft: `3px solid ${projectColor}`, paddingLeft: '9px', borderRadius: '0 10px 10px 0' } : {}}
                             >
-                              <div className="mt-0.5 flex-shrink-0 w-7 h-7 rounded-xl flex items-center justify-center bg-surface-hover/80">
-                                <FolderTreeIcon size={12} className="text-alpine-500" />
+                              <div className="mt-0.5 flex-shrink-0 w-9 h-9 rounded-xl flex items-center justify-center bg-surface-hover/80">
+                                <FolderTreeIcon size={16} className="text-accent" />
                               </div>
                               <div className="flex-1 min-w-0">
-                                <div className={`text-xs truncate font-medium ${
-                                  isActive ? 'text-alpine-800 dark:text-alpine-200' : 'text-foreground'
+                                <div className={`text-sm truncate font-medium ${
+                                  isActive ? 'text-accent' : 'text-foreground'
                                 }`}>
                                   {folder.name}
                                 </div>
                                 <div className="flex items-center gap-1 mt-0.5 min-w-0">
-                                  <span className="text-[10px] font-semibold truncate flex-shrink-0" style={{ color: projectColor }}>
+                                  <span className="text-[11px] font-semibold truncate flex-shrink-0" style={{ color: projectColor }}>
                                     {projectName}
                                   </span>
                                   {depth > 0 && (
                                     <>
-                                      <ChevronRight size={8} className="text-muted/50 flex-shrink-0" />
-                                      <span className="text-[10px] text-muted/50">nested</span>
+                                      <ChevronRight size={9} className="text-muted/50 flex-shrink-0" />
+                                      <span className="text-[11px] text-muted/50">nested</span>
                                     </>
                                   )}
-                                  <span className="text-[10px] text-muted/50 ml-auto flex-shrink-0">{noteCount} note{noteCount !== 1 ? 's' : ''}</span>
+                                  <span className="text-[11px] text-muted/50 ml-auto flex-shrink-0">{noteCount} note{noteCount !== 1 ? 's' : ''}</span>
                                 </div>
                               </div>
                               <button
                                 onClick={(e) => { e.stopPropagation(); handleFolderContextMenu(e, folder.id, folder.name, folder.project_id) }}
-                                className="hidden group-hover:flex p-0.5 hover:bg-surface-hover rounded transition-colors flex-shrink-0 mt-0.5"
+                                className="flex p-1.5 hover:bg-surface-hover rounded-lg transition-colors flex-shrink-0 mt-0.5 text-muted/60 hover:text-foreground"
                               >
-                                <MoreVertical size={11} />
+                                <MoreVertical size={14} />
                               </button>
                             </div>
                           )
@@ -1412,13 +1530,11 @@ export default function SidebarTree({
                   {/* ---- NOTE RESULTS ---- */}
                   {filteredNotes.length > 0 && (
                     <div>
-                      {(filteredFolders.length > 0 || filteredProjects.length > 0) && (
-                        <div className="px-1 mb-1 flex items-center gap-1.5">
-                          <FileText size={10} className="text-muted/60" />
-                          <span className="text-[9px] font-bold uppercase tracking-widest text-muted/70">Notes</span>
-                          <span className="text-[9px] text-muted/50">{filteredNotes.length}</span>
-                        </div>
-                      )}
+                      <div className="px-1 mb-1.5 flex items-center gap-1.5">
+                        <FileText size={12} className="text-muted/60" />
+                        <span className="text-[10px] font-bold uppercase tracking-widest text-muted/70">Notes</span>
+                        <span className="text-[10px] text-muted/50">{filteredNotes.length}</span>
+                      </div>
                       <div className="space-y-0.5">
                         {filteredNotes.map(note => {
                           const { projectName, projectColor, folderPath } = getNoteLocationMeta(note)
@@ -1436,39 +1552,39 @@ export default function SidebarTree({
                               onClick={() => onSelectNote(note)}
                               onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onSelectNote(note) } }}
                               onContextMenu={(e) => handleNoteContextMenu(e, note)}
-                              className={`group w-full text-left px-2.5 py-2.5 rounded-xl transition-all duration-200 flex items-start gap-2.5 ${
+                              className={`group w-full text-left px-3 py-2.5 rounded-xl transition-all duration-200 flex items-start gap-3 min-h-[52px] ${
                                 isActive
-                                  ? 'bg-alpine-50 dark:bg-alpine-900/30 shadow-sm'
-                                  : 'hover:bg-surface-hover/60'
+                                  ? 'bg-accent/8 shadow-sm'
+                                  : 'hover:bg-surface-hover/40'
                               }`}
-                              style={isActive ? { borderLeft: `3px solid ${projectColor}`, paddingLeft: '7px' } : {}}
+                              style={isActive ? { borderLeft: `3px solid ${projectColor}`, paddingLeft: '9px', borderRadius: '0 10px 10px 0' } : {}}
                             >
-                              <div className={`mt-0.5 flex-shrink-0 w-7 h-7 rounded-xl flex items-center justify-center ${presentation.iconBgClassName}`}>
-                                <Icon size={12} />
+                              <div className={`mt-0.5 flex-shrink-0 w-9 h-9 rounded-xl flex items-center justify-center ${presentation.iconBgClassName}`}>
+                                <Icon size={16} />
                               </div>
                               <div className="flex-1 min-w-0">
-                                <div className={`text-xs truncate font-medium ${
-                                  isActive ? 'text-alpine-800 dark:text-alpine-200' : 'text-foreground'
+                                <div className={`text-sm truncate font-medium ${
+                                  isActive ? 'text-accent' : 'text-foreground'
                                 }`}>
                                   {note.title || 'Untitled'}
                                 </div>
                                 <div className="flex items-center gap-1 mt-0.5 min-w-0">
-                                  <span className="text-[10px] font-semibold truncate flex-shrink-0" style={{ color: projectColor }}>
+                                  <span className="text-[11px] font-semibold truncate flex-shrink-0" style={{ color: projectColor }}>
                                     {projectName}
                                   </span>
                                   {folderPath && (
                                     <>
-                                      <ChevronRight size={8} className="text-muted/50 flex-shrink-0" />
-                                      <span className="text-[10px] text-muted truncate">{folderPath}</span>
+                                      <ChevronRight size={9} className="text-muted/50 flex-shrink-0" />
+                                      <span className="text-[11px] text-muted truncate">{folderPath}</span>
                                     </>
                                   )}
                                 </div>
                               </div>
                               <button
                                 onClick={(e) => { e.stopPropagation(); handleNoteContextMenu(e, note) }}
-                                className="hidden group-hover:flex p-0.5 hover:bg-surface-hover rounded transition-colors flex-shrink-0 mt-0.5"
+                                className="flex p-1.5 hover:bg-surface-hover rounded-lg transition-colors flex-shrink-0 mt-0.5 text-muted/60 hover:text-foreground"
                               >
-                                <MoreVertical size={11} />
+                                <MoreVertical size={14} />
                               </button>
                             </div>
                           )
@@ -1480,40 +1596,73 @@ export default function SidebarTree({
               )}
             </>
           ) : (
-            <div className="space-y-0.5">
-              {projectTree.map(node => renderProject(node))}
+            <div className="space-y-3">
+              {/* Recent Notes */}
+              {recentNotes.length > 0 && (
+                <div>
+                  <div className="flex items-center gap-1.5 px-1 mb-1.5">
+                    <Clock size={13} className="text-muted/60" />
+                    <span className="text-[10px] font-bold uppercase tracking-widest text-muted/70">Recent</span>
+                  </div>
+                  <div className="space-y-0.5">
+                    {recentNotes.map(note => {
+                      const noteProject = projects.find(p => p.id === note.project_id)
+                      const isActive = selectedNoteId === note.id
+                      return (
+                        <div
+                          role="button"
+                          tabIndex={0}
+                          key={`recent-${note.id}`}
+                          onClick={() => onSelectNote(note)}
+                          onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onSelectNote(note) } }}
+                          className={`group w-full text-left px-3 py-2 rounded-xl transition-all duration-200 flex items-center gap-2.5 min-h-[44px] ${
+                            isActive
+                              ? 'bg-accent/8 font-medium'
+                              : 'hover:bg-surface-hover/50 text-foreground/80 hover:text-foreground'
+                          }`}
+                          style={isActive ? {
+                            borderLeft: `3px solid ${noteProject?.color ?? '#6B7280'}`,
+                            paddingLeft: '9px',
+                            borderRadius: '0 10px 10px 0',
+                          } : {}}
+                          title={note.title || 'Untitled'}
+                        >
+                          <div className="flex-shrink-0 w-6 h-6 rounded-lg flex items-center justify-center bg-surface-hover/70">
+                            <NoteIcon noteType={note.note_type} size={14} />
+                          </div>
+                          <span className="text-sm truncate flex-1">{note.title || 'Untitled'}</span>
+                          <span
+                            className="w-2 h-2 rounded-full flex-shrink-0"
+                            style={{ backgroundColor: noteProject?.color ?? '#6B7280' }}
+                            title={noteProject?.name ?? 'Unfiled'}
+                          />
+                        </div>
+                      )
+                    })}
+                  </div>
+                </div>
+              )}
+
+              {/* Project tree */}
+              <div className="space-y-0.5">
+                {projectTree.map(node => renderProject(node))}
+              </div>
             </div>
           )}
         </div>
 
-        {/* Footer with New Folder / New Project buttons */}
-        <div className="px-3 py-2.5 space-y-0.5">
-          <button
-            onClick={() => onCreateFolder(null)}
-            className="group flex w-full items-center gap-2.5 rounded-xl px-2.5 py-2.5 text-xs font-medium text-muted/70 transition-all duration-200 hover:bg-surface-hover/60 hover:text-foreground"
-          >
-            <FolderPlus className="h-3.5 w-3.5 shrink-0" />
-            <span>New Folder</span>
-          </button>
-          {onCreateProject && (
-            <button
-              onClick={() => onCreateProject()}
-              className="group flex w-full items-center gap-2.5 rounded-xl px-2.5 py-2.5 text-xs font-medium text-muted/70 transition-all duration-200 hover:bg-surface-hover/60 hover:text-foreground"
-            >
-              <Plus className="h-3.5 w-3.5 shrink-0" />
-              <span>New Project</span>
-            </button>
-          )}
-          {onOpenFileExplorer && (
+        {/* Footer utility bar */}
+        {onOpenFileExplorer && (
+          <div className="px-3 py-2.5 border-t border-border/30 shrink-0">
             <button
               onClick={onOpenFileExplorer}
-              className="group flex w-full items-center gap-2.5 rounded-xl px-2.5 py-2.5 text-xs font-medium text-muted/70 transition-all duration-200 hover:bg-surface-hover/60 hover:text-foreground"
+              className="group flex w-full items-center gap-2.5 rounded-xl px-2.5 py-2.5 text-sm font-medium text-muted/70 transition-all duration-200 hover:bg-surface-hover/60 hover:text-foreground"
             >
-              <FolderOpen className="h-3.5 w-3.5 shrink-0" />
+              <FolderOpen className="h-4 w-4 shrink-0" />
               <span>File Explorer</span>
             </button>
-          )}
-        </div>
+          </div>
+        )}
       </aside>
 
       {/* ========== CONTEXT MENU ========== */}
@@ -1728,7 +1877,7 @@ export default function SidebarTree({
                   value={movePickerSearch}
                   onChange={(e) => setMovePickerSearch(e.target.value)}
                   placeholder="Search..."
-                  className="w-full pl-8 pr-3 py-2 text-xs border border-border rounded-lg focus:outline-none focus:ring-2 focus:ring-alpine-500/30 bg-surface text-foreground"
+                  className="w-full pl-8 pr-3 py-2 text-xs border border-border rounded-lg focus:outline-none focus:ring-2 focus:ring-accent/30 bg-surface text-foreground"
                 />
               </div>
             </div>
@@ -1907,7 +2056,7 @@ export default function SidebarTree({
                   }}
                   className={`w-8 h-8 rounded-full transition-all hover:scale-110 ${
                     showColorPicker.currentColor === color
-                      ? 'ring-2 ring-offset-2 ring-alpine-500 ring-offset-surface'
+                      ? 'ring-2 ring-offset-2 ring-accent ring-offset-surface'
                       : ''
                   }`}
                   style={{ backgroundColor: color }}

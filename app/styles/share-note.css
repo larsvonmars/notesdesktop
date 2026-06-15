@@ -1,0 +1,781 @@
+/* ══════════════════════════════════════════════════════
+   Share Note Public View — .share-note-content
+   Mirrors the editor's futuristic theme for read-only
+   published notes so they look identical to the editor.
+   ══════════════════════════════════════════════════════ */
+
+/* ─── Base typography ─── */
+.share-note-content {
+  color: #334155;
+  font-size: 1rem;
+  line-height: 1.75;
+}
+
+.share-note-content strong {
+  color: #0f172a;
+  font-weight: 700;
+}
+
+.share-note-content img {
+  border-radius: 1rem;
+  box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -2px rgba(0, 0, 0, 0.1);
+  max-width: 100%;
+  height: auto;
+}
+
+/* ─── Paragraphs ─── */
+.share-note-content p {
+  margin: 0.25em 0;
+  color: #334155;
+  line-height: 1.75;
+}
+
+/* ─── Headings — match editor gradient/bar styles ─── */
+
+/* H1 — Grand title with gradient-fade underline */
+.share-note-content h1 {
+  font-size: 2.2rem;
+  font-weight: 800;
+  color: #0f172a;
+  margin-top: 1.4em;
+  margin-bottom: 0.35em;
+  line-height: 1.15;
+  scroll-margin-top: 2rem;
+  letter-spacing: -0.03em;
+  padding-bottom: 0.4em;
+  border-bottom: 2px solid transparent;
+  border-image: linear-gradient(90deg, #16a34a 0%, #0ea5e9 45%, transparent 100%) 1;
+  transition: color 0.2s ease, text-shadow 0.2s ease;
+}
+
+/* H2 — Section header with left accent bar */
+.share-note-content h2 {
+  font-size: 1.65rem;
+  font-weight: 700;
+  color: #1e293b;
+  margin-top: 1.4em;
+  margin-bottom: 0.3em;
+  line-height: 1.25;
+  scroll-margin-top: 2rem;
+  letter-spacing: -0.02em;
+  padding-left: 0.75em;
+  border-left: 3px solid #16a34a;
+  transition: color 0.2s ease, border-left-color 0.2s ease;
+}
+
+/* H3 — Sub-section with thin sky-blue left bar */
+.share-note-content h3 {
+  font-size: 1.3rem;
+  font-weight: 700;
+  color: #334155;
+  margin-top: 1.2em;
+  margin-bottom: 0.3em;
+  line-height: 1.35;
+  scroll-margin-top: 2rem;
+  letter-spacing: -0.01em;
+  padding-left: 0.65em;
+  border-left: 2px solid #0ea5e9;
+  transition: color 0.2s ease, border-left-color 0.2s ease;
+}
+
+/* H4 — Uppercase label style */
+.share-note-content h4 {
+  font-size: 0.875rem;
+  font-weight: 700;
+  color: #475569;
+  margin-top: 1.1em;
+  margin-bottom: 0.25em;
+  line-height: 1.4;
+  scroll-margin-top: 2rem;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+
+/* H5 — Smaller label */
+.share-note-content h5 {
+  font-size: 0.78rem;
+  font-weight: 600;
+  color: #64748b;
+  margin-top: 1em;
+  margin-bottom: 0.2em;
+  line-height: 1.5;
+  scroll-margin-top: 2rem;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+}
+
+/* H6 — Micro label */
+.share-note-content h6 {
+  font-size: 0.72rem;
+  font-weight: 500;
+  color: #94a3b8;
+  margin-top: 1em;
+  margin-bottom: 0.2em;
+  line-height: 1.5;
+  scroll-margin-top: 2rem;
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
+}
+
+/* ─── Lists — Neon-rail hierarchy ─── */
+
+.share-note-content ul,
+.share-note-content ol {
+  margin: 0.85em 0;
+  padding-left: 1.75em;
+  position: relative;
+  border-left: 2px solid rgba(22, 163, 74, 0.3);
+  margin-left: 0.15em;
+  padding-top: 0.1em;
+  padding-bottom: 0.1em;
+  box-shadow: -3px 0 12px -4px rgba(22, 163, 74, 0.2);
+}
+
+.share-note-content ul {
+  list-style-type: none;
+}
+
+.share-note-content ul > li {
+  position: relative;
+  list-style-type: none;
+}
+
+.share-note-content ul > li:not(:has(input[type='checkbox']))::before {
+  content: '▸';
+  position: absolute;
+  left: -1.45em;
+  top: 0.1em;
+  color: #16a34a;
+  font-size: 0.8em;
+  line-height: 1.6;
+  text-shadow: 0 0 8px rgba(22, 163, 74, 0.5);
+  pointer-events: none;
+  user-select: none;
+}
+
+.share-note-content ol {
+  list-style-type: none;
+  counter-reset: share-ol;
+}
+
+.share-note-content ol > li {
+  counter-increment: share-ol;
+  position: relative;
+  list-style-type: none;
+}
+
+.share-note-content ol > li::before {
+  content: counter(share-ol, decimal) '.';
+  position: absolute;
+  left: -2em;
+  top: 0;
+  min-width: 1.8em;
+  text-align: right;
+  font-family: 'JetBrains Mono', 'Fira Code', ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 0.78em;
+  font-weight: 700;
+  line-height: 1.75;
+  color: #16a34a;
+  text-shadow: 0 0 8px rgba(22, 163, 74, 0.45);
+  pointer-events: none;
+  user-select: none;
+}
+
+/* Level 2 → sky blue */
+.share-note-content ul ul,
+.share-note-content ol ol,
+.share-note-content ul ol,
+.share-note-content ol ul {
+  border-left: 2px solid rgba(14, 165, 233, 0.35);
+  box-shadow: -3px 0 12px -4px rgba(14, 165, 233, 0.2);
+  margin-top: 0.3em;
+  margin-bottom: 0.3em;
+  margin-left: 0.2em;
+  padding-left: 1.6em;
+}
+
+.share-note-content ul ul > li:not(:has(input[type='checkbox']))::before {
+  content: '◇';
+  color: #0ea5e9;
+  text-shadow: 0 0 8px rgba(14, 165, 233, 0.5);
+  font-size: 0.7em;
+  top: 0.15em;
+}
+
+.share-note-content ol ol > li::before {
+  content: counter(share-ol, lower-alpha) '.';
+  color: #0ea5e9;
+  text-shadow: 0 0 8px rgba(14, 165, 233, 0.45);
+}
+
+/* Level 3 → amber */
+.share-note-content ul ul ul,
+.share-note-content ol ol ol,
+.share-note-content ul ul ol,
+.share-note-content ol ol ul {
+  border-left: 2px solid rgba(245, 158, 11, 0.35);
+  box-shadow: -3px 0 12px -4px rgba(245, 158, 11, 0.18);
+}
+
+.share-note-content ul ul ul > li:not(:has(input[type='checkbox']))::before {
+  content: '▪';
+  color: #d97706;
+  text-shadow: 0 0 8px rgba(245, 158, 11, 0.5);
+  font-size: 0.7em;
+}
+
+.share-note-content ol ol ol > li::before {
+  content: counter(share-ol, lower-roman) '.';
+  color: #d97706;
+  text-shadow: 0 0 8px rgba(245, 158, 11, 0.45);
+}
+
+/* Level 4 → violet */
+.share-note-content ul ul ul ul,
+.share-note-content ol ol ol ol {
+  border-left: 2px solid rgba(139, 92, 246, 0.35);
+  box-shadow: -3px 0 12px -4px rgba(139, 92, 246, 0.18);
+}
+
+.share-note-content ul ul ul ul > li:not(:has(input[type='checkbox']))::before {
+  content: '◆';
+  color: #7c3aed;
+  text-shadow: 0 0 8px rgba(139, 92, 246, 0.5);
+  font-size: 0.6em;
+  top: 0.2em;
+}
+
+/* Level 5 → pink */
+.share-note-content ul ul ul ul ul {
+  border-left: 2px solid rgba(236, 72, 153, 0.35);
+  box-shadow: -3px 0 12px -4px rgba(236, 72, 153, 0.18);
+}
+
+.share-note-content ul ul ul ul ul > li:not(:has(input[type='checkbox']))::before {
+  content: '▹';
+  color: #db2777;
+  text-shadow: 0 0 8px rgba(236, 72, 153, 0.5);
+}
+
+/* Level 6 → teal */
+.share-note-content ul ul ul ul ul ul {
+  border-left: 2px solid rgba(20, 184, 166, 0.35);
+  box-shadow: -3px 0 12px -4px rgba(20, 184, 166, 0.18);
+}
+
+.share-note-content ul ul ul ul ul ul > li:not(:has(input[type='checkbox']))::before {
+  content: '◌';
+  color: #0d9488;
+  text-shadow: 0 0 8px rgba(20, 184, 166, 0.5);
+}
+
+/* List item base */
+.share-note-content li {
+  margin: 0.3em 0;
+  position: relative;
+  border-radius: 5px;
+  padding: 0.18em 0.5em 0.18em 0.3em;
+  color: #334155;
+}
+
+/* ─── Checklist ─── */
+.share-note-content [data-checklist='true'] {
+  list-style: none !important;
+  padding-left: 0.5em !important;
+  margin-left: 0 !important;
+  border-left: 2px solid rgba(22, 163, 74, 0.25) !important;
+  box-shadow: -3px 0 12px -4px rgba(22, 163, 74, 0.15) !important;
+  border-radius: 0 6px 6px 0 !important;
+  padding-top: 0.25em !important;
+  padding-bottom: 0.25em !important;
+  background: linear-gradient(to right, rgba(22, 163, 74, 0.025), transparent 40%) !important;
+}
+
+.share-note-content [data-checklist='true'] > li {
+  padding-left: 0 !important;
+  display: flex;
+  align-items: flex-start;
+  gap: 0.5rem;
+}
+
+/* Remove prose ::before / ::marker bullets on checklist items */
+.share-note-content [data-checklist='true'] > li::before,
+.share-note-content [data-checklist='true'] > li::marker {
+  content: none !important;
+  display: none !important;
+}
+
+/* Disabled checkbox appearance — neon green accent */
+.share-note-content input[type='checkbox'] {
+  accent-color: #22c55e;
+  width: 1.05rem;
+  height: 1.05rem;
+  flex-shrink: 0;
+  margin-top: 0.2em;
+  cursor: not-allowed;
+  border-radius: 0.25rem;
+  filter: drop-shadow(0 0 0px rgba(34, 197, 94, 0));
+}
+
+/* Strikethrough for completed checklist items — neon green strike */
+.share-note-content [data-checklist='true'] li:has(input[type='checkbox']:checked) {
+  opacity: 0.5;
+  position: relative;
+}
+
+.share-note-content [data-checklist='true'] li:has(input[type='checkbox']:checked)::after {
+  content: '';
+  position: absolute;
+  left: 2.1rem;
+  right: 0.6rem;
+  top: 50%;
+  height: 1.5px;
+  background: linear-gradient(to right, #22c55e, #0ea5e9, transparent);
+  border-radius: 2px;
+  box-shadow: 0 0 6px rgba(34, 197, 94, 0.4);
+  pointer-events: none;
+}
+
+/* ─── Blockquote — decorative quote mark ─── */
+.share-note-content blockquote {
+  position: relative;
+  border-left: 4px solid #16a34a;
+  padding: 0.65em 1.1em 0.65em 1.3em;
+  margin: 1em 0;
+  color: #64748b;
+  font-style: italic;
+  background: linear-gradient(to right, rgba(22, 163, 74, 0.06), rgba(14, 165, 233, 0.02), transparent);
+  border-radius: 0 8px 8px 0;
+}
+
+.share-note-content blockquote::before {
+  content: '\201C';
+  position: absolute;
+  top: -0.05em;
+  left: 0.45em;
+  font-size: 2.8em;
+  line-height: 1;
+  color: rgba(22, 163, 74, 0.18);
+  font-style: normal;
+  font-weight: 900;
+  pointer-events: none;
+  user-select: none;
+}
+
+/* ─── Pre / Code blocks ─── */
+.share-note-content pre {
+  position: relative;
+  margin: 1.25em 0;
+  padding: 1em 1.25em;
+  background: #0d1117;
+  color: #c9d1d9;
+  border-radius: 10px;
+  overflow-x: auto;
+  font-family: 'JetBrains Mono', 'Fira Code', 'Cascadia Code', ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 0.875rem;
+  line-height: 1.7;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.14), inset 0 0 0 1px rgba(255, 255, 255, 0.06);
+}
+
+/* Inline code styling */
+.share-note-content :not(pre) > code {
+  background: rgba(16, 185, 129, 0.08);
+  color: #0f766e;
+  border: 1px solid rgba(16, 185, 129, 0.22);
+  border-radius: 5px;
+  font-family: 'JetBrains Mono', 'Fira Code', ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 0.85em;
+  padding: 0.1em 0.42em;
+  font-style: normal;
+}
+
+/* ─── Links ─── */
+.share-note-content a {
+  color: #2563eb;
+  text-decoration: underline;
+  text-decoration-color: rgba(37, 112, 235, 0.4);
+  text-decoration-thickness: 2px;
+  text-underline-offset: 2px;
+  transition: all 0.2s ease;
+}
+
+.share-note-content a:hover {
+  color: #1e40af;
+  text-decoration-color: rgba(30, 74, 175, 0.6);
+}
+
+/* ─── Horizontal rule ─── */
+.share-note-content hr {
+  border: none;
+  height: 1px;
+  background: linear-gradient(to right, transparent, #cbd5e1 25%, #94a3b8 50%, #cbd5e1 75%, transparent);
+  margin: 2em 0;
+}
+
+/* ─── Mark / highlight ─── */
+.share-note-content mark {
+  background-color: #fef08a;
+  color: #713f12;
+  padding: 0.08em 0.25em;
+  border-radius: 3px;
+}
+
+/* ─── Tables — Futuristic glow ─── */
+.share-note-content table {
+  width: 100%;
+  border-collapse: separate;
+  border-spacing: 0;
+  margin: 1.25em 0;
+  border-radius: 10px;
+  overflow: hidden;
+  border: 1px solid rgba(22, 163, 74, 0.2);
+  background: #fefffe;
+  box-shadow:
+    0 0 0 1px rgba(14, 165, 233, 0.05),
+    0 4px 24px rgba(0, 0, 0, 0.06),
+    0 0 60px -20px rgba(22, 163, 74, 0.1);
+}
+
+.share-note-content table th {
+  background: linear-gradient(135deg, #f0fdf4 0%, #f0f9ff 100%);
+  color: #16a34a;
+  font-family: 'JetBrains Mono', 'Fira Code', ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 0.72rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.14em;
+  padding: 0.8em 1em;
+  border-bottom: 2px solid rgba(22, 163, 74, 0.3);
+  border-right: 1px solid rgba(22, 163, 74, 0.1);
+  text-align: left;
+  position: relative;
+}
+
+.share-note-content table th::before {
+  content: '';
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  height: 1px;
+  background: linear-gradient(to right, transparent, rgba(22, 163, 74, 0.4), rgba(14, 165, 233, 0.3), transparent);
+}
+
+.share-note-content table td {
+  padding: 0.7em 1em;
+  color: #334155;
+  border-right: 1px solid rgba(22, 163, 74, 0.06);
+  border-bottom: 1px solid rgba(22, 163, 74, 0.04);
+  font-size: 0.9375rem;
+}
+
+.share-note-content table th:last-child,
+.share-note-content table td:last-child {
+  border-right: none;
+}
+
+.share-note-content table tbody tr:nth-child(even) td {
+  background: rgba(22, 163, 74, 0.02);
+}
+
+/* ─── Highlight colors — data-highlight attribute ─── */
+.share-note-content span[data-highlight='yellow'] {
+  background-color: #fef08a;
+  color: #854d0e;
+  padding: 0.06em 0.25em;
+  border-radius: 3px;
+}
+
+.share-note-content span[data-highlight='green'] {
+  background-color: #bbf7d0;
+  color: #14532d;
+  padding: 0.06em 0.25em;
+  border-radius: 3px;
+}
+
+.share-note-content span[data-highlight='pink'] {
+  background-color: #fce7f3;
+  color: #831843;
+  padding: 0.06em 0.25em;
+  border-radius: 3px;
+}
+
+.share-note-content span[data-highlight='blue'] {
+  background-color: #bfdbfe;
+  color: #1e3a8a;
+  padding: 0.06em 0.25em;
+  border-radius: 3px;
+}
+
+.share-note-content span[data-highlight='purple'] {
+  background-color: #e9d5ff;
+  color: #581c87;
+  padding: 0.06em 0.25em;
+  border-radius: 3px;
+}
+
+/* Text color mappings — data-color attribute */
+.share-note-content span[data-color='red'] { color: #dc2626; }
+.share-note-content span[data-color='green'] { color: #16a34a; }
+.share-note-content span[data-color='blue'] { color: #2563eb; }
+.share-note-content span[data-color='purple'] { color: #7c3aed; }
+.share-note-content span[data-color='orange'] { color: #ea580c; }
+
+/* Font size mappings — data-font-size attribute */
+.share-note-content span[data-font-size='12'] { font-size: 12px; }
+.share-note-content span[data-font-size='16'] { font-size: 16px; }
+.share-note-content span[data-font-size='20'] { font-size: 20px; }
+.share-note-content span[data-font-size='24'] { font-size: 24px; }
+
+/* File blocks: prevent prose from restyling their internals */
+.share-note-content .file-block-container,
+.share-note-content .file-block-container * {
+  max-width: none;
+}
+
+/* Note-link chips: render as non-interactive, display-only */
+.share-note-content [data-block-type='note-link'] {
+  pointer-events: none !important;
+  cursor: default !important;
+}
+
+/* First and last direct children shouldn't add outer spacing */
+.share-note-content > :first-child {
+  margin-top: 0;
+}
+
+.share-note-content > :last-child {
+  margin-bottom: 0;
+}
+
+
+/* ══════════════════════════════════════════════════════
+   Share Note Dark Mode — .share-note-content
+   Mirrors dark [contenteditable='true'] styles exactly
+   ══════════════════════════════════════════════════════ */
+
+:is(.dark) .share-note-content {
+  color: #cbd5e1;
+}
+
+:is(.dark) .share-note-content strong {
+  color: #f1f5f9;
+}
+
+:is(.dark) .share-note-content p {
+  color: #cbd5e1;
+}
+
+:is(.dark) .share-note-content li {
+  color: #cbd5e1;
+}
+
+/* Dark headings */
+:is(.dark) .share-note-content h1 {
+  color: #f1f5f9;
+  border-image: linear-gradient(90deg, #22c55e 0%, #38bdf8 45%, transparent 100%) 1;
+}
+
+:is(.dark) .share-note-content h2 {
+  color: #e2e8f0;
+  border-left-color: #22c55e;
+}
+
+:is(.dark) .share-note-content h3 {
+  color: #cbd5e1;
+  border-left-color: #38bdf8;
+}
+
+:is(.dark) .share-note-content h4 {
+  color: #94a3b8;
+}
+
+:is(.dark) .share-note-content h5 {
+  color: #64748b;
+}
+
+:is(.dark) .share-note-content h6 {
+  color: #475569;
+}
+
+/* Dark blockquote */
+:is(.dark) .share-note-content blockquote {
+  border-left-color: #22c55e;
+  background: linear-gradient(to right, rgba(34, 197, 94, 0.08), rgba(56, 189, 248, 0.03), transparent);
+  color: #94a3b8;
+}
+
+:is(.dark) .share-note-content blockquote::before {
+  color: rgba(34, 197, 94, 0.15);
+}
+
+/* Dark code */
+:is(.dark) .share-note-content :not(pre) > code {
+  background: rgba(16, 185, 129, 0.12);
+  color: #6ee7b7;
+  border-color: rgba(16, 185, 129, 0.25);
+}
+
+:is(.dark) .share-note-content pre {
+  background: #161b22;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.3), inset 0 0 0 1px rgba(255, 255, 255, 0.04);
+}
+
+/* Dark links */
+:is(.dark) .share-note-content a {
+  color: #60AFFA;
+  text-decoration-color: rgba(96, 175, 250, 0.4);
+}
+
+:is(.dark) .share-note-content a:hover {
+  color: #93CCFD;
+  text-decoration-color: rgba(147, 204, 253, 0.6);
+}
+
+/* Dark hr */
+:is(.dark) .share-note-content hr {
+  background: linear-gradient(to right, transparent, #334155 25%, #475569 50%, #334155 75%, transparent);
+}
+
+/* Dark mark */
+:is(.dark) .share-note-content mark {
+  background-color: rgba(161, 98, 7, 0.4);
+  color: #fde68a;
+}
+
+/* Dark lists — neon rails */
+:is(.dark) .share-note-content ul,
+:is(.dark) .share-note-content ol {
+  border-left-color: rgba(34, 197, 94, 0.25);
+  box-shadow: -3px 0 14px -4px rgba(34, 197, 94, 0.22);
+}
+
+:is(.dark) .share-note-content ul > li:not(:has(input[type='checkbox']))::before {
+  color: #22c55e;
+  text-shadow: 0 0 10px rgba(34, 197, 94, 0.7);
+}
+
+:is(.dark) .share-note-content ol > li::before {
+  color: #22c55e;
+  text-shadow: 0 0 10px rgba(34, 197, 94, 0.6);
+}
+
+/* Level 2 dark — sky blue */
+:is(.dark) .share-note-content ul ul,
+:is(.dark) .share-note-content ol ol,
+:is(.dark) .share-note-content ul ol,
+:is(.dark) .share-note-content ol ul {
+  border-left-color: rgba(14, 165, 233, 0.3);
+  box-shadow: -3px 0 14px -4px rgba(14, 165, 233, 0.22);
+}
+
+:is(.dark) .share-note-content ul ul > li:not(:has(input[type='checkbox']))::before {
+  color: #38bdf8;
+  text-shadow: 0 0 10px rgba(56, 189, 248, 0.7);
+}
+
+:is(.dark) .share-note-content ol ol > li::before {
+  color: #38bdf8;
+  text-shadow: 0 0 10px rgba(56, 189, 248, 0.6);
+}
+
+/* Level 3 dark — amber */
+:is(.dark) .share-note-content ul ul ul,
+:is(.dark) .share-note-content ol ol ol {
+  border-left-color: rgba(245, 158, 11, 0.3);
+  box-shadow: -3px 0 14px -4px rgba(245, 158, 11, 0.2);
+}
+
+:is(.dark) .share-note-content ul ul ul > li:not(:has(input[type='checkbox']))::before {
+  color: #fbbf24;
+  text-shadow: 0 0 10px rgba(251, 191, 36, 0.7);
+}
+
+/* Dark checklist */
+:is(.dark) .share-note-content [data-checklist='true'] {
+  border-left-color: rgba(34, 197, 94, 0.22) !important;
+  background: linear-gradient(to right, rgba(34, 197, 94, 0.04), transparent 40%) !important;
+}
+
+:is(.dark) .share-note-content input[type='checkbox'] {
+  accent-color: #2dd4bf;
+}
+
+:is(.dark) .share-note-content [data-checklist='true'] li:has(input[type='checkbox']:checked) {
+  color: #64748b;
+}
+
+:is(.dark) .share-note-content [data-checklist='true'] li:has(input[type='checkbox']:checked)::after {
+  background: linear-gradient(to right, #22c55e, #0ea5e9, transparent);
+  box-shadow: 0 0 8px rgba(34, 197, 94, 0.5);
+}
+
+/* Dark table — futuristic glow */
+:is(.dark) .share-note-content table {
+  background: #0c0f18;
+  border-color: rgba(34, 197, 94, 0.3);
+  box-shadow:
+    0 0 0 1px rgba(56, 189, 248, 0.07),
+    0 4px 32px rgba(0, 0, 0, 0.35),
+    0 0 80px -20px rgba(34, 197, 94, 0.18);
+}
+
+:is(.dark) .share-note-content table th {
+  background: linear-gradient(135deg, #020617 0%, #0a0f1a 100%);
+  color: #22c55e;
+  border-right-color: rgba(34, 197, 94, 0.18);
+  border-bottom-color: rgba(34, 197, 94, 0.45);
+  text-shadow: 0 0 14px rgba(34, 197, 94, 0.6);
+}
+
+:is(.dark) .share-note-content table th::before {
+  background: linear-gradient(to right, transparent, rgba(34, 197, 94, 0.7), rgba(56, 189, 248, 0.5), transparent);
+}
+
+:is(.dark) .share-note-content table td {
+  color: #cbd5e1;
+  border-right-color: rgba(34, 197, 94, 0.08);
+  border-bottom-color: rgba(34, 197, 94, 0.05);
+}
+
+:is(.dark) .share-note-content table tbody tr:nth-child(even) td {
+  background: rgba(34, 197, 94, 0.03);
+}
+
+/* Dark highlight colors */
+:is(.dark) .share-note-content span[data-highlight="yellow"],
+:is(.dark) .share-note-content span[style*="background-color: #fef08a"] {
+  background-color: rgba(161, 98, 7, 0.35) !important;
+  color: #fde68a !important;
+}
+
+:is(.dark) .share-note-content span[data-highlight="green"],
+:is(.dark) .share-note-content span[style*="background-color: #bbf7d0"] {
+  background-color: rgba(20, 83, 45, 0.4) !important;
+  color: #86efac !important;
+}
+
+:is(.dark) .share-note-content span[data-highlight="blue"],
+:is(.dark) .share-note-content span[style*="background-color: #bfdbfe"] {
+  background-color: rgba(30, 58, 138, 0.4) !important;
+  color: #93c5fd !important;
+}
+
+:is(.dark) .share-note-content span[data-highlight="pink"],
+:is(.dark) .share-note-content span[style*="background-color: #fbcfe8"] {
+  background-color: rgba(131, 24, 67, 0.4) !important;
+  color: #f9a8d4 !important;
+}
+
+:is(.dark) .share-note-content span[data-highlight="purple"],
+:is(.dark) .share-note-content span[style*="background-color: #e9d5ff"] {
+  background-color: rgba(88, 28, 135, 0.4) !important;
+  color: #e9d5ff !important;
+}
+
+/* Dark text colors */
+:is(.dark) .share-note-content span[data-color="red"] { color: #f87171 !important; }
+:is(.dark) .share-note-content span[data-color="blue"] { color: #60a5fa !important; }
+:is(.dark) .share-note-content span[data-color="green"] { color: #4ade80 !important; }
+:is(.dark) .share-note-content span[data-color="purple"] { color: #c084fc !important; }
+:is(.dark) .share-note-content span[data-color="orange"] { color: #fb923c !important; }

@@ -1,0 +1,382 @@
+/* ── 12. ContentEditable editor — dark mode ── */
+.dark [contenteditable='true'] h1 {
+  color: #f1f5f9 !important;
+  border-image: linear-gradient(90deg, #22c55e 0%, #38bdf8 45%, transparent 100%) 1 !important;
+}
+
+.dark [contenteditable='true'] h2 {
+  color: #e2e8f0 !important;
+  border-left-color: #22c55e !important;
+}
+
+.dark [contenteditable='true'] h3 {
+  color: #cbd5e1 !important;
+  border-left-color: #38bdf8 !important;
+}
+
+.dark [contenteditable='true'] h4 {
+  color: #94a3b8 !important;
+}
+
+.dark [contenteditable='true'] h5 {
+  color: #64748b !important;
+}
+
+.dark [contenteditable='true'] h6 {
+  color: #475569 !important;
+}
+
+.dark [contenteditable='true'] blockquote {
+  border-left-color: #22c55e !important;
+  background: linear-gradient(to right, rgba(34, 197, 94, 0.08), rgba(56, 189, 248, 0.03), transparent) !important;
+  color: #94a3b8 !important;
+}
+
+.dark [contenteditable='true'] blockquote::before {
+  color: rgba(34, 197, 94, 0.15) !important;
+}
+
+.dark [contenteditable='true'] :not(pre) > code {
+  background: rgba(16, 185, 129, 0.12) !important;
+  color: #6ee7b7 !important;
+  border-color: rgba(16, 185, 129, 0.25) !important;
+}
+
+.dark [contenteditable='true'] pre {
+  background: #161b22 !important;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.3), inset 0 0 0 1px rgba(255, 255, 255, 0.04) !important;
+}
+
+.dark [contenteditable='true'] a {
+  color: #60AFFA;
+  text-decoration-color: rgba(96, 175, 250, 0.4);
+}
+
+.dark [contenteditable='true'] a:hover {
+  color: #93CCFD;
+  text-decoration-color: rgba(147, 204, 253, 0.6);
+}
+
+.dark [contenteditable='true'] hr {
+  background: linear-gradient(to right, transparent, #334155 25%, #475569 50%, #334155 75%, transparent) !important;
+}
+
+.dark [contenteditable='true'] mark {
+  background-color: rgba(161, 98, 7, 0.4) !important;
+  color: #fde68a !important;
+}
+
+/* Dark editor list guides */
+
+/* Level 1 rail darkened */
+.dark [contenteditable='true'] ul,
+.dark [contenteditable='true'] ol {
+  border-left-color: rgba(34, 197, 94, 0.25) !important;
+  box-shadow: -3px 0 14px -4px rgba(34, 197, 94, 0.22) !important;
+}
+
+.dark [contenteditable='true'] ul:hover,
+.dark [contenteditable='true'] ol:hover {
+  border-left-color: rgba(34, 197, 94, 0.55) !important;
+  box-shadow: -3px 0 22px -4px rgba(34, 197, 94, 0.4) !important;
+}
+
+/* Custom bullet markers — brighter in dark */
+.dark [contenteditable='true'] ul > li:not(.checklist-item)::before {
+  color: #22c55e !important;
+  text-shadow: 0 0 10px rgba(34, 197, 94, 0.7) !important;
+}
+
+.dark [contenteditable='true'] ul > li:not(.checklist-item):hover::before {
+  color: #4ade80 !important;
+  text-shadow: 0 0 18px rgba(74, 222, 128, 0.9) !important;
+}
+
+/* OL counters */
+.dark [contenteditable='true'] ol > li::before {
+  color: #22c55e !important;
+  text-shadow: 0 0 10px rgba(34, 197, 94, 0.6) !important;
+}
+
+.dark [contenteditable='true'] ol > li:hover::before {
+  color: #4ade80 !important;
+  text-shadow: 0 0 18px rgba(74, 222, 128, 0.85) !important;
+}
+
+/* Level 2 — sky blue */
+.dark [contenteditable='true'] ul ul,
+.dark [contenteditable='true'] ol ol,
+.dark [contenteditable='true'] ul ol,
+.dark [contenteditable='true'] ol ul {
+  border-left-color: rgba(14, 165, 233, 0.3) !important;
+  box-shadow: -3px 0 14px -4px rgba(14, 165, 233, 0.22) !important;
+}
+
+.dark [contenteditable='true'] ul ul > li:not(.checklist-item)::before {
+  color: #38bdf8 !important;
+  text-shadow: 0 0 10px rgba(56, 189, 248, 0.7) !important;
+}
+
+.dark [contenteditable='true'] ol ol > li::before {
+  color: #38bdf8 !important;
+  text-shadow: 0 0 10px rgba(56, 189, 248, 0.6) !important;
+}
+
+/* Level 3 — amber */
+.dark [contenteditable='true'] ul ul ul,
+.dark [contenteditable='true'] ol ol ol {
+  border-left-color: rgba(245, 158, 11, 0.3) !important;
+  box-shadow: -3px 0 14px -4px rgba(245, 158, 11, 0.2) !important;
+}
+
+.dark [contenteditable='true'] ul ul ul > li:not(.checklist-item)::before {
+  color: #fbbf24 !important;
+  text-shadow: 0 0 10px rgba(251, 191, 36, 0.7) !important;
+}
+
+/* Item hover — dark scanline */
+.dark [contenteditable='true'] li:hover {
+  background: linear-gradient(
+    to right,
+    rgba(34, 197, 94, 0.07) 0%,
+    rgba(56, 189, 248, 0.04) 40%,
+    transparent 100%
+  ) !important;
+}
+
+/* Checklist container */
+.dark [contenteditable='true'] .checklist-list,
+.dark [contenteditable='true'] [data-checklist='true'] {
+  border-left-color: rgba(34, 197, 94, 0.22) !important;
+  background: linear-gradient(to right, rgba(34, 197, 94, 0.04), transparent 40%) !important;
+}
+
+/* Checklist hover */
+.dark [contenteditable='true'] li.checklist-item:hover {
+  background: linear-gradient(
+    to right,
+    rgba(34, 197, 94, 0.1),
+    rgba(56, 189, 248, 0.05),
+    transparent
+  ) !important;
+  border-color: rgba(34, 197, 94, 0.25) !important;
+}
+
+.dark [data-placeholder]:empty:before {
+  color: #475569;
+}
+
+/* Dark mode highlight colors */
+.dark [contenteditable='true'] span[data-highlight='yellow'] {
+  background-color: rgba(161, 98, 7, 0.35) !important;
+  color: #fde68a !important;
+}
+
+.dark [contenteditable='true'] span[data-highlight='green'] {
+  background-color: rgba(20, 83, 45, 0.4) !important;
+  color: #86efac !important;
+}
+
+.dark [contenteditable='true'] span[data-highlight='pink'] {
+  background-color: rgba(131, 24, 67, 0.35) !important;
+  color: #f9a8d4 !important;
+}
+
+.dark [contenteditable='true'] span[data-highlight='blue'] {
+  background-color: rgba(30, 58, 138, 0.4) !important;
+  color: #93c5fd !important;
+}
+
+/* Dark checklist progress bar — terminal neon fill */
+.dark [contenteditable='true'] .checklist-list[data-checklist-progress]::before {
+  color: #22c55e !important;
+  text-shadow: 0 0 10px rgba(34, 197, 94, 0.7) !important;
+  border-color: rgba(34, 197, 94, 0.25) !important;
+  box-shadow: inset 0 0 0 1px rgba(34, 197, 94, 0.1),
+              0 0 16px -4px rgba(34, 197, 94, 0.25) !important;
+  background:
+    linear-gradient(
+      to right,
+      rgba(34, 197, 94, 0.25) 0%,
+      rgba(34, 197, 94, 0.25) calc(var(--checklist-pct, 0) * 1%),
+      rgba(2, 6, 23, 0.4) calc(var(--checklist-pct, 0) * 1%),
+      rgba(2, 6, 23, 0.4) 100%
+    ) !important;
+}
+
+/* Dark checkbox checked strikethrough — neon green fade */
+.dark [contenteditable='true'] li.checklist-item:has(input[type='checkbox']:checked)::after {
+  background: linear-gradient(to right, #22c55e, #0ea5e9, transparent) !important;
+  box-shadow: 0 0 8px rgba(34, 197, 94, 0.5) !important;
+}
+
+/* Dark drag handle */
+.dark [contenteditable='true'] .list-drag-handle {
+  color: rgba(34, 197, 94, 0.4) !important;
+}
+
+.dark [contenteditable='true'] li:hover > .list-drag-handle:hover {
+  color: #22c55e !important;
+  background-color: rgba(34, 197, 94, 0.1) !important;
+  box-shadow: 0 0 10px rgba(34, 197, 94, 0.25) !important;
+}
+
+/* Dark dragging and drop target */
+.dark [contenteditable='true'] .list-item-dragging {
+  outline-color: rgba(34, 197, 94, 0.5) !important;
+  background: rgba(34, 197, 94, 0.05) !important;
+}
+
+.dark [contenteditable='true'] .list-item-drop-target {
+  border-top-color: #22c55e !important;
+  box-shadow: 0 -2px 16px rgba(34, 197, 94, 0.45) !important;
+}
+
+/* ── Dark hover effects for content types ── */
+
+.dark [contenteditable='true'] h1:hover {
+  color: #f8fafc !important;
+  text-shadow: 0 2px 24px rgba(34, 197, 94, 0.25), 0 1px 6px rgba(56, 189, 248, 0.15) !important;
+}
+
+.dark [contenteditable='true'] h2:hover {
+  color: #f1f5f9 !important;
+  border-left-color: #38bdf8 !important;
+  padding-left: 1em !important;
+}
+
+.dark [contenteditable='true'] h3:hover {
+  color: #e2e8f0 !important;
+  border-left-color: #22c55e !important;
+  padding-left: 0.9em !important;
+}
+
+.dark [contenteditable='true'] h4:hover {
+  color: #cbd5e1 !important;
+  letter-spacing: 0.13em !important;
+}
+
+.dark [contenteditable='true'] h5:hover {
+  color: #94a3b8 !important;
+  letter-spacing: 0.15em !important;
+}
+
+.dark [contenteditable='true'] h6:hover {
+  color: #64748b !important;
+  letter-spacing: 0.17em !important;
+}
+
+.dark [contenteditable='true'] blockquote:hover {
+  border-left-color: #38bdf8 !important;
+  background: linear-gradient(to right, rgba(56, 189, 248, 0.1), rgba(34, 197, 94, 0.04), transparent) !important;
+  color: #94a3b8 !important;
+  box-shadow: 4px 0 24px -8px rgba(56, 189, 248, 0.2) !important;
+}
+
+.dark [contenteditable='true'] pre:hover {
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.45), inset 0 0 0 1px rgba(255, 255, 255, 0.1) !important;
+  transform: translateY(-1px) !important;
+}
+
+.dark [contenteditable='true'] :not(pre) > code:hover {
+  background: rgba(16, 185, 129, 0.2) !important;
+  border-color: rgba(16, 185, 129, 0.5) !important;
+  color: #6ee7b7 !important;
+}
+
+.dark [contenteditable='true'] mark:hover {
+  background-color: rgba(202, 138, 4, 0.5) !important;
+  box-shadow: 0 0 0 2px rgba(202, 138, 4, 0.3) !important;
+}
+
+.dark [contenteditable='true'] span[data-highlight='yellow']:hover {
+  background-color: rgba(161, 98, 7, 0.55) !important;
+  box-shadow: 0 0 0 2px rgba(161, 98, 7, 0.3) !important;
+}
+
+.dark [contenteditable='true'] span[data-highlight='green']:hover {
+  background-color: rgba(20, 83, 45, 0.65) !important;
+  box-shadow: 0 0 0 2px rgba(34, 197, 94, 0.3) !important;
+}
+
+.dark [contenteditable='true'] span[data-highlight='pink']:hover {
+  background-color: rgba(131, 24, 67, 0.55) !important;
+  box-shadow: 0 0 0 2px rgba(249, 168, 212, 0.3) !important;
+}
+
+.dark [contenteditable='true'] span[data-highlight='blue']:hover {
+  background-color: rgba(30, 58, 138, 0.6) !important;
+  box-shadow: 0 0 0 2px rgba(147, 197, 253, 0.3) !important;
+}
+
+.dark [contenteditable='true'] hr:hover {
+  background: linear-gradient(to right, transparent, #475569 15%, #22c55e 50%, #475569 85%, transparent) !important;
+}
+
+.dark [contenteditable='true'] p:hover {
+  background: linear-gradient(to right, rgba(34, 197, 94, 0.04), transparent 40%) !important;
+}
+
+/* Dark border-l-4 for blockquotes */
+.dark .border-l-4.border-gray-200 { border-left-color: #475569; }
+
+/* ── Dark mode futuristic table overrides ── */
+
+.dark [contenteditable='true'] table {
+  background: #0c0f18 !important;
+  border-color: rgba(34, 197, 94, 0.3) !important;
+  box-shadow:
+    0 0 0 1px rgba(56, 189, 248, 0.07),
+    0 4px 32px rgba(0, 0, 0, 0.35),
+    0 0 80px -20px rgba(34, 197, 94, 0.18) !important;
+}
+
+.dark [contenteditable='true'] table th {
+  background: linear-gradient(135deg, #020617 0%, #0a0f1a 100%) !important;
+  color: #22c55e !important;
+  border-right-color: rgba(34, 197, 94, 0.18) !important;
+  border-bottom-color: rgba(34, 197, 94, 0.45) !important;
+  text-shadow: 0 0 14px rgba(34, 197, 94, 0.6) !important;
+}
+
+.dark [contenteditable='true'] table th::before {
+  background: linear-gradient(to right, transparent, rgba(34, 197, 94, 0.7), rgba(56, 189, 248, 0.5), transparent) !important;
+}
+
+.dark [contenteditable='true'] table td {
+  color: #cbd5e1 !important;
+  border-right-color: rgba(34, 197, 94, 0.08) !important;
+  border-bottom-color: rgba(34, 197, 94, 0.05) !important;
+}
+
+.dark [contenteditable='true'] table tbody tr:nth-child(even) td {
+  background: rgba(34, 197, 94, 0.03) !important;
+}
+
+.dark [contenteditable='true'] table tbody tr:hover td {
+  background: rgba(56, 189, 248, 0.08) !important;
+}
+
+.dark [contenteditable='true'] table th:hover {
+  background: linear-gradient(135deg, #0f172a 0%, #1e293b 100%) !important;
+  color: #38bdf8 !important;
+  text-shadow: 0 0 16px rgba(56, 189, 248, 0.65) !important;
+}
+
+.dark .hide-table-outlines [contenteditable='true'] table,
+.dark .hide-table-outlines [contenteditable='true'] table th,
+.dark .hide-table-outlines [contenteditable='true'] table td {
+  background: transparent !important;
+  border: none !important;
+  box-shadow: none !important;
+  text-shadow: none !important;
+}
+
+.dark [contenteditable='true'] table[data-no-outline='true'],
+.dark [contenteditable='true'] table[data-no-outline='true'] th,
+.dark [contenteditable='true'] table[data-no-outline='true'] td {
+  background: transparent !important;
+  border: none !important;
+  box-shadow: none !important;
+  text-shadow: none !important;
+}

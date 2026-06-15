@@ -1,0 +1,103 @@
+/* ─────────────────────────────────────────────────────
+   HOVER EFFECTS  –  all content types in the editor
+   ───────────────────────────────────────────────────── */
+
+@layer utilities {
+  /* H1 hover: warm glow + slight lift effect via text-shadow */
+  [contenteditable='true'] h1:hover {
+    color: #0a0f1e !important;
+    text-shadow: 0 2px 24px rgba(22, 163, 74, 0.18), 0 1px 4px rgba(14, 165, 233, 0.1) !important;
+  }
+
+  /* H2 hover: thicker left bar + pushed-in padding */
+  [contenteditable='true'] h2:hover {
+    color: #0f172a !important;
+    border-left-color: var(--editor-rail-sky) !important;
+    padding-left: 1em !important;
+  }
+
+  /* H3 hover: brighter bar + nudged padding */
+  [contenteditable='true'] h3:hover {
+    color: #1e293b !important;
+    border-left-color: var(--editor-rail-green) !important;
+    padding-left: 0.9em !important;
+  }
+
+  /* H4 hover: tighter tracking loosens — more airy */
+  [contenteditable='true'] h4:hover {
+    color: #334155 !important;
+    letter-spacing: 0.13em !important;
+  }
+
+  /* H5 hover */
+  [contenteditable='true'] h5:hover {
+    color: #475569 !important;
+    letter-spacing: 0.15em !important;
+  }
+
+  /* H6 hover */
+  [contenteditable='true'] h6:hover {
+    color: #64748b !important;
+    letter-spacing: 0.17em !important;
+  }
+
+  /* Blockquote hover: deeper accent + elevated shadow */
+  [contenteditable='true'] blockquote:hover {
+    border-left-color: var(--editor-rail-sky) !important;
+    background: linear-gradient(to right, rgba(14, 165, 233, 0.09), rgba(22, 163, 74, 0.03), transparent) !important;
+    color: #475569 !important;
+    box-shadow: 4px 0 24px -8px rgba(14, 165, 233, 0.18) !important;
+  }
+
+  /* Pre / code block hover: lift + brighter inner ring */
+  [contenteditable='true'] pre:hover {
+    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.22), inset 0 0 0 1px rgba(255, 255, 255, 0.13) !important;
+    transform: translateY(-1px) !important;
+  }
+
+  /* Inline code hover: saturated teal badge */
+  [contenteditable='true'] :not(pre) > code:hover {
+    background: rgba(16, 185, 129, 0.16) !important;
+    border-color: rgba(16, 185, 129, 0.45) !important;
+    color: #065f46 !important;
+  }
+
+  /* Mark hover: deeper amber background + soft glow */
+  [contenteditable='true'] mark:hover {
+    background-color: #fde047 !important;
+    box-shadow: 0 0 0 2px rgba(253, 224, 71, 0.45) !important;
+  }
+
+  /* Highlight span hovers: intensified color */
+  [contenteditable='true'] span[data-highlight='yellow']:hover {
+    background-color: #fde047 !important;
+    box-shadow: 0 0 0 2px rgba(253, 224, 71, 0.4) !important;
+  }
+
+  [contenteditable='true'] span[data-highlight='green']:hover {
+    background-color: #86efac !important;
+    box-shadow: 0 0 0 2px rgba(134, 239, 172, 0.4) !important;
+  }
+
+  [contenteditable='true'] span[data-highlight='pink']:hover {
+    background-color: #f9a8d4 !important;
+    box-shadow: 0 0 0 2px rgba(249, 168, 212, 0.45) !important;
+  }
+
+  [contenteditable='true'] span[data-highlight='blue']:hover {
+    background-color: #93c5fd !important;
+    box-shadow: 0 0 0 2px rgba(147, 197, 253, 0.45) !important;
+  }
+
+  /* HR hover: brighter, wider gradient */
+  [contenteditable='true'] hr:hover {
+    background: linear-gradient(to right, transparent, #94a3b8 15%, var(--editor-rail-green) 50%, #94a3b8 85%, transparent) !important;
+    opacity: 1 !important;
+  }
+
+  /* Paragraph hover: very subtle warm left edge hint */
+  [contenteditable='true'] p:hover {
+    background: linear-gradient(to right, rgba(22, 163, 74, 0.03), transparent 40%) !important;
+    border-radius: 4px !important;
+  }
+}

@@ -1,0 +1,48 @@
+/* ─── Mobile-first responsive utilities ─── */
+@layer utilities {
+  /* Minimum touch-target helper – 44×44 per Apple HIG / Material 48dp */
+  .touch-target {
+    min-width: 44px;
+    min-height: 44px;
+  }
+
+  /* Safe-area padding helpers */
+  .safe-top    { padding-top:    var(--sat); }
+  .safe-right  { padding-right:  var(--sar); }
+  .safe-bottom { padding-bottom: var(--sab); }
+  .safe-left   { padding-left:   var(--sal); }
+  .safe-x      { padding-left: var(--sal); padding-right: var(--sar); }
+  .safe-y      { padding-top: var(--sat); padding-bottom: var(--sab); }
+  .safe-all    { padding: var(--sat) var(--sar) var(--sab) var(--sal); }
+
+  /* Hide scrollbar but keep functionality */
+  .scrollbar-hide {
+    -ms-overflow-style: none;
+    scrollbar-width: none;
+  }
+  
+  .scrollbar-hide::-webkit-scrollbar {
+    display: none;
+  }
+
+  /* Smooth horizontal scrolling for toolbars */
+  .toolbar-scroll {
+    overflow-x: auto;
+    overflow-y: hidden;
+    scroll-behavior: smooth;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  /* Screen reader only - visually hidden but accessible */
+  .sr-only {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    padding: 0;
+    margin: -1px;
+    overflow: hidden;
+    clip: rect(0, 0, 0, 0);
+    white-space: nowrap;
+    border-width: 0;
+  }
+}

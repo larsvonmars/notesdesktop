@@ -1,0 +1,155 @@
+/* ─────────────────────────────────────────
+   FUTURISTIC TABLE DESIGN
+   Data-terminal aesthetic: glowing borders,
+   dark headers, scanline row effects.
+   ───────────────────────────────────────── */
+
+@layer utilities {
+  [contenteditable='true'] table {
+    border-collapse: separate !important;
+    border-spacing: 0 !important;
+    min-width: 100% !important;
+    table-layout: fixed !important;
+    margin: 1.75em 0 !important;
+    border-radius: 12px !important;
+    overflow: hidden !important;
+    /* Outer glow: green primary, sky hint */
+    border: 1.5px solid rgba(22, 163, 74, 0.35) !important;
+    box-shadow:
+      0 0 0 1px rgba(14, 165, 233, 0.08),
+      0 4px 32px rgba(0, 0, 0, 0.08),
+      0 0 60px -15px rgba(22, 163, 74, 0.12) !important;
+    background: var(--editor-table-bg) !important;
+    font-size: 0.9rem !important;
+  }
+
+  /* Header cells — data-terminal dark header */
+  [contenteditable='true'] table th {
+    background: linear-gradient(135deg, var(--editor-table-header-bg-from) 0%, var(--editor-table-header-bg-to) 100%) !important;
+    color: var(--editor-table-header-color) !important;
+    font-weight: 700 !important;
+    font-size: 0.72rem !important;
+    text-transform: uppercase !important;
+    letter-spacing: 0.1em !important;
+    padding: 0.7rem 1rem !important;
+    vertical-align: middle !important;
+    border-right: 1px solid rgba(34, 197, 94, 0.2) !important;
+    border-bottom: 2px solid rgba(34, 197, 94, 0.4) !important;
+    font-family: 'JetBrains Mono', 'Fira Code', ui-monospace, SFMono-Regular, Menlo, monospace !important;
+    text-shadow: 0 0 12px rgba(34, 197, 94, 0.45) !important;
+    transition: background 0.2s ease, color 0.2s ease, text-shadow 0.2s ease !important;
+    position: relative !important;
+    white-space: nowrap !important;
+    overflow: hidden !important;
+  }
+
+  /* Header shimmer line at top */
+  [contenteditable='true'] table th::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    height: 1px;
+    background: linear-gradient(to right, transparent, rgba(34, 197, 94, 0.6), rgba(14, 165, 233, 0.4), transparent);
+    pointer-events: none;
+  }
+
+  /* Last column header: no right border */
+  [contenteditable='true'] table th:last-child {
+    border-right: none !important;
+  }
+
+  /* Data cells */
+  [contenteditable='true'] table td {
+    padding: 0.55rem 1rem !important;
+    vertical-align: top !important;
+    border-right: 1px solid rgba(22, 163, 74, 0.1) !important;
+    border-bottom: 1px solid rgba(22, 163, 74, 0.07) !important;
+    color: var(--editor-table-cell-color) !important;
+    transition: background 0.15s ease !important;
+    line-height: 1.55 !important;
+  }
+
+  [contenteditable='true'] table td:last-child {
+    border-right: none !important;
+  }
+
+  /* Last row: no bottom border (table handles outer) */
+  [contenteditable='true'] table tr:last-child td,
+  [contenteditable='true'] table tr:last-child th {
+    border-bottom: none !important;
+  }
+
+  /* Alternating rows — scanline ghost */
+  [contenteditable='true'] table tbody tr:nth-child(even) td {
+    background: rgba(22, 163, 74, 0.025) !important;
+  }
+
+  /* Row hover — sky blue scanline sweep */
+  [contenteditable='true'] table tbody tr:hover td {
+    background: rgba(14, 165, 233, 0.07) !important;
+  }
+
+  /* Header cell hover */
+  [contenteditable='true'] table th:hover {
+    background: linear-gradient(135deg, #1e293b 0%, #334155 100%) !important;
+    color: var(--editor-rail-sky-bright) !important;
+    text-shadow: 0 0 14px rgba(56, 189, 248, 0.55) !important;
+  }
+
+  /* ── Table outline visibility toggles (preserve existing behaviour) ── */
+
+  .hide-table-outlines [contenteditable='true'] table,
+  .hide-table-outlines [contenteditable='true'] table th,
+  .hide-table-outlines [contenteditable='true'] table td {
+    border: none !important;
+    box-shadow: none !important;
+  }
+
+  .hide-table-outlines [contenteditable='true'] table {
+    border-collapse: collapse !important;
+    background: transparent !important;
+  }
+
+  .hide-table-outlines [contenteditable='true'] table th {
+    background: transparent !important;
+    color: inherit !important;
+    text-shadow: none !important;
+    text-transform: none !important;
+    letter-spacing: normal !important;
+    font-size: inherit !important;
+    font-family: inherit !important;
+  }
+
+  .hide-table-outlines [contenteditable='true'] table th::before {
+    display: none !important;
+  }
+
+  /* Per-table data-no-outline attribute */
+  [contenteditable='true'] table[data-no-outline='true'],
+  [contenteditable='true'] table[data-no-outline='true'] th,
+  [contenteditable='true'] table[data-no-outline='true'] td {
+    border: none !important;
+    box-shadow: none !important;
+  }
+
+  [contenteditable='true'] table[data-no-outline='true'] {
+    border-collapse: collapse !important;
+    background: transparent !important;
+  }
+
+  [contenteditable='true'] table[data-no-outline='true'] th {
+    background: transparent !important;
+    color: inherit !important;
+    text-shadow: none !important;
+    text-transform: none !important;
+    letter-spacing: normal !important;
+    font-size: inherit !important;
+    font-family: inherit !important;
+  }
+
+  [contenteditable='true'] table[data-no-outline='true'] th::before {
+    display: none !important;
+  }
+}

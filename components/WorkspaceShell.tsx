@@ -1038,7 +1038,7 @@ function WorkspaceContent() {
     }
   }
 
-  const sidebarOffset = sidebarCollapsed ? '64px' : '280px'
+  const sidebarOffset = sidebarCollapsed ? '64px' : '320px'
 
   // Set CSS variable for fixed-position elements (e.g. bottom bar in NoteEditor)
   useEffect(() => {
@@ -1052,7 +1052,7 @@ function WorkspaceContent() {
       <div className="flex items-center justify-center min-h-screen">
         <div className="text-center">
           <Loader2 className="w-12 h-12 text-alpine-600 animate-spin mx-auto mb-4" />
-          <div className="text-lg text-gray-700 font-medium">Loading your workspace...</div>
+          <div className="text-lg text-foreground/70 font-medium">Loading your workspace...</div>
         </div>
       </div>
     )
@@ -1067,7 +1067,7 @@ function WorkspaceContent() {
       <div className="flex items-center justify-center min-h-screen">
         <div className="text-center">
           <Loader2 className="w-12 h-12 text-alpine-600 animate-spin mx-auto mb-4" />
-          <div className="text-lg text-gray-700 font-medium">Loading your workspace...</div>
+          <div className="text-lg text-foreground/70 font-medium">Loading your workspace...</div>
         </div>
       </div>
     )
@@ -1134,19 +1134,19 @@ function WorkspaceContent() {
             <div className="absolute inset-0 bg-alpine-100 rounded-full blur-3xl opacity-40"></div>
             <FileEdit className={`relative text-alpine-500 mx-auto ${isMobile ? 'w-16 h-16' : 'w-24 h-24'}`} strokeWidth={1.5} />
           </div>
-          <h1 className={`font-bold text-gray-900 mb-3 ${isMobile ? 'text-2xl' : 'text-3xl'}`}>Welcome to MindViz Notes</h1>
-          <p className={`text-gray-600 mb-8 ${isMobile ? 'text-base' : 'text-lg'}`}>
+          <h1 className={`font-bold text-foreground mb-3 ${isMobile ? 'text-2xl' : 'text-3xl'}`}>Welcome to MindViz Notes</h1>
+          <p className={`text-muted mb-8 ${isMobile ? 'text-base' : 'text-lg'}`}>
             Capture ideas, build mind maps, and organize your thoughts
           </p>
           <div className="space-y-3">
             <button
               onClick={() => handleNewNote()}
-              className="w-full inline-flex items-center justify-center gap-3 px-6 py-3 bg-alpine-600 text-white font-medium rounded-lg hover:bg-alpine-700 transition-all duration-150 shadow-sm hover:shadow active:scale-95 touch-target"
+              className="w-full inline-flex items-center justify-center gap-3 px-6 py-3 bg-accent text-accent-foreground font-medium rounded-xl hover:opacity-90 transition-all duration-200 shadow-sm hover:shadow-md active:scale-95 touch-target"
             >
               <Sparkles size={20} />
               Start Writing
             </button>
-            <p className="text-sm text-gray-500">Click the menu button (top-left) to browse your notes</p>
+            <p className="text-sm text-muted/70">Click the menu button (top-left) to browse your notes</p>
           </div>
         </div>
       </div>
@@ -1170,43 +1170,45 @@ function WorkspaceContent() {
     >
       {/* Unified Sidebar — always visible on desktop, regardless of activeView */}
       {!isMobile && (
-        <SidebarTree
-          projects={projects}
-          folderTree={folderTree}
-          allNotes={allNotes}
-          selectedNoteId={selectedNote?.id}
-          selectedFolderId={selectedFolderId}
-          selectedProjectId={selectedProjectId}
-          onSelectNote={(note) => {
-            handleSelectNote(note)
-            if (activeView !== 'notes') setActiveView('notes')
-          }}
-          onSelectFolder={handleSelectFolder}
-          onNewNote={(noteType, folderId, projectId) => {
-            if (activeView !== 'notes') setActiveView('notes')
-            handleNewNote(noteType as any, folderId, projectId)
-          }}
-          onCreateFolder={handleCreateFolder}
-          onRenameFolder={handleRenameFolder}
-          onDeleteFolder={handleDeleteFolder}
-          onMoveFolder={handleMoveFolder}
-          onMoveFolderToProject={handleMoveFolderToProject}
-          onDuplicateNote={handleDuplicateNote}
-          onDeleteNote={handleSidebarDeleteNote}
-          onMoveNote={handleMoveNote}
-          onRenameProject={handleRenameProject}
-          onDeleteProject={handleDeleteProject}
-          onUpdateProjectColor={handleUpdateProjectColor}
-          onCreateProject={handleCreateProject}
-          onMoveNoteToProject={handleMoveNoteToProject}
-          onOpenProjectDashboard={(projectId) => {
-            setSelectedProjectId(projectId)
-            setActiveView('projects')
-          }}
-          onOpenFileExplorer={() => setShowFileExplorerModal(true)}
-          collapsed={sidebarCollapsed}
-          onToggleCollapsed={() => setSidebarCollapsed(prev => !prev)}
-        />
+        <aside className={`fixed inset-y-0 left-0 z-40 border-r border-border/30 bg-surface/95 backdrop-blur-xl flex flex-col transition-all duration-300 ${sidebarCollapsed ? 'w-16' : 'w-[320px]'}`}>
+          <SidebarTree
+            projects={projects}
+            folderTree={folderTree}
+            allNotes={allNotes}
+            selectedNoteId={selectedNote?.id}
+            selectedFolderId={selectedFolderId}
+            selectedProjectId={selectedProjectId}
+            onSelectNote={(note) => {
+              handleSelectNote(note)
+              if (activeView !== 'notes') setActiveView('notes')
+            }}
+            onSelectFolder={handleSelectFolder}
+            onNewNote={(noteType, folderId, projectId) => {
+              if (activeView !== 'notes') setActiveView('notes')
+              handleNewNote(noteType as any, folderId, projectId)
+            }}
+            onCreateFolder={handleCreateFolder}
+            onRenameFolder={handleRenameFolder}
+            onDeleteFolder={handleDeleteFolder}
+            onMoveFolder={handleMoveFolder}
+            onMoveFolderToProject={handleMoveFolderToProject}
+            onDuplicateNote={handleDuplicateNote}
+            onDeleteNote={handleSidebarDeleteNote}
+            onMoveNote={handleMoveNote}
+            onRenameProject={handleRenameProject}
+            onDeleteProject={handleDeleteProject}
+            onUpdateProjectColor={handleUpdateProjectColor}
+            onCreateProject={handleCreateProject}
+            onMoveNoteToProject={handleMoveNoteToProject}
+            onOpenProjectDashboard={(projectId) => {
+              setSelectedProjectId(projectId)
+              setActiveView('projects')
+            }}
+            onOpenFileExplorer={() => setShowFileExplorerModal(true)}
+            collapsed={sidebarCollapsed}
+            onToggleCollapsed={() => setSidebarCollapsed(prev => !prev)}
+          />
+        </aside>
       )}
 
       {/* Mobile header */}
@@ -1246,7 +1248,7 @@ function WorkspaceContent() {
             }}
           />
           <aside
-            className="safe-top fixed inset-y-0 left-0 z-50 w-[280px] border-r border-border bg-surface flex flex-col"
+            className="safe-top fixed inset-y-0 left-0 z-50 w-[320px] border-r border-border bg-surface flex flex-col"
             onTouchStart={(event) => {
               if (event.touches.length !== 1) return
               const touch = event.touches[0]
@@ -1258,7 +1260,7 @@ function WorkspaceContent() {
               endCloseSwipe(touch.clientX, touch.clientY)
             }}
           >
-            <div className="flex items-center justify-between border-b border-border px-3 py-3">
+            <div className="flex items-center justify-between border-b border-border px-4 py-3">
               <div className="flex items-center gap-3">
                 <img src="/icon-192.png" alt="MindViz Notes" className="h-8 w-8 rounded-lg" />
                 <span className="text-sm font-semibold text-foreground">MindViz Notes</span>
@@ -1294,7 +1296,7 @@ function WorkspaceContent() {
             </div>
 
             {/* Mobile project/folder/note tree */}
-            <div className="flex-1 overflow-y-auto px-2 py-2">
+            <div className="flex-1 overflow-y-auto">
               <SidebarTree
                 projects={projects}
                 folderTree={folderTree}
@@ -1336,7 +1338,7 @@ function WorkspaceContent() {
                   setWorkspaceNavOpen(false)
                 }}
                 collapsed={false}
-                onToggleCollapsed={() => {}}
+                onToggleCollapsed={() => setWorkspaceNavOpen(false)}
               />
             </div>
 
@@ -1355,7 +1357,7 @@ function WorkspaceContent() {
 
       {/* Main content area */}
       <main
-        className="flex-1 w-full h-screen overflow-hidden"
+        className="flex-1 w-full h-screen overflow-hidden bg-background"
         style={
           isMobile
             ? { paddingTop: 'calc(56px + var(--sat))' }
@@ -1388,7 +1390,7 @@ function WorkspaceContent() {
             {/* Right files panel (desktop only) */}
             {!isMobile && showFilesPanel && (
               <div
-                className="flex-shrink-0 border-l border-gray-200 dark:border-slate-700 flex flex-col overflow-hidden"
+                className="flex-shrink-0 border-l border-border flex flex-col overflow-hidden bg-surface"
                 style={{ width: '360px' }}
               >
                 <FileExplorerModal
@@ -1463,21 +1465,21 @@ function WorkspaceContent() {
           }}
         >
           <div
-            className={`bg-white p-6 ${
+            className={`bg-surface p-6 ${
               isMobile
                 ? 'fixed inset-0 overflow-y-auto safe-top safe-bottom'
-                : 'w-full max-w-3xl rounded-2xl border border-gray-200 shadow-2xl'
+                : 'w-full max-w-3xl rounded-2xl border border-border shadow-xl'
             }`}
             onClick={(event) => event.stopPropagation()}
           >
             <div className="flex items-start justify-between gap-4">
               <div>
-                <h3 className="text-lg font-semibold text-gray-900">Choose a note type</h3>
-                <p className="mt-1 text-sm text-gray-600">Pick how you want to start so we can set up the right editor.</p>
+                <h3 className="text-lg font-semibold text-foreground">Choose a note type</h3>
+                <p className="mt-1 text-sm text-muted">Pick how you want to start so we can set up the right editor.</p>
               </div>
               <button
                 onClick={handleCancelNoteTypePrompt}
-                className="rounded-full p-2 text-gray-500 transition hover:bg-gray-100 hover:text-gray-900"
+                className="rounded-full p-2 text-muted transition hover:bg-surface-hover hover:text-foreground"
                 aria-label="Close note type picker"
               >
                 <X size={18} />
@@ -1488,14 +1490,14 @@ function WorkspaceContent() {
                 <button
                   key={type}
                   onClick={() => handleSelectNoteType(type)}
-                  className="flex h-full flex-col gap-4 rounded-xl border border-gray-200 bg-white p-4 text-left transition hover:border-alpine-300 hover:shadow active:scale-[0.98] touch-target"
+                  className="flex h-full flex-col gap-4 rounded-xl border border-border bg-surface p-4 text-left transition hover:border-accent/50 hover:shadow-md active:scale-[0.98] touch-target"
                 >
                   <span className={`inline-flex h-10 w-10 items-center justify-center rounded-full ${iconBg}`}>
                     <Icon size={18} />
                   </span>
                   <div>
-                    <div className="text-sm font-semibold text-gray-900">{label}</div>
-                    <p className="mt-1 text-xs text-gray-500">{description}</p>
+                    <div className="text-sm font-semibold text-foreground">{label}</div>
+                    <p className="mt-1 text-xs text-muted">{description}</p>
                   </div>
                 </button>
               ))}
@@ -1503,7 +1505,7 @@ function WorkspaceContent() {
             <div className="mt-6 flex justify-end">
               <button
                 onClick={handleCancelNoteTypePrompt}
-                className="rounded-lg border border-gray-300 px-4 py-2 text-sm font-medium text-gray-600 transition hover:bg-gray-50"
+                className="rounded-xl border border-border px-4 py-2 text-sm font-medium text-muted transition hover:bg-surface-hover hover:text-foreground"
               >
                 Cancel
               </button>
@@ -1523,21 +1525,21 @@ function WorkspaceContent() {
           }}
         >
           <div
-            className={`bg-white p-6 ${
+            className={`bg-surface p-6 ${
               isMobile
                 ? 'fixed inset-0 overflow-y-auto safe-top safe-bottom'
-                : 'w-full max-w-2xl rounded-2xl border border-gray-200 shadow-2xl'
+                : 'w-full max-w-2xl rounded-2xl border border-border shadow-xl'
             }`}
             onClick={(event) => event.stopPropagation()}
           >
             <div className="flex items-start justify-between gap-4">
               <div>
-                <h3 className="text-lg font-semibold text-gray-900">Choose a template</h3>
-                <p className="mt-1 text-sm text-gray-600">Pick a starting structure for your mind map.</p>
+                <h3 className="text-lg font-semibold text-foreground">Choose a template</h3>
+                <p className="mt-1 text-sm text-muted">Pick a starting structure for your mind map.</p>
               </div>
               <button
                 onClick={handleCancelMindmapTemplatePicker}
-                className="rounded-full p-2 text-gray-500 transition hover:bg-gray-100 hover:text-gray-900"
+                className="rounded-full p-2 text-muted transition hover:bg-surface-hover hover:text-foreground"
                 aria-label="Close template picker"
               >
                 <X size={18} />
@@ -1556,14 +1558,14 @@ function WorkspaceContent() {
                   <button
                     key={template.id}
                     onClick={() => handleSelectMindmapTemplate(template.id)}
-                    className="flex h-full flex-col gap-3 rounded-xl border border-gray-200 bg-white p-4 text-left transition hover:border-alpine-300 hover:shadow active:scale-[0.98] touch-target"
+                    className="flex h-full flex-col gap-3 rounded-xl border border-border bg-surface p-4 text-left transition hover:border-accent/50 hover:shadow-md active:scale-[0.98] touch-target"
                   >
-                    <span className="inline-flex h-10 w-10 items-center justify-center rounded-full bg-alpine-50 text-alpine-600">
+                    <span className="inline-flex h-10 w-10 items-center justify-center rounded-full bg-accent-light text-accent">
                       {iconMap[template.iconKey]}
                     </span>
                     <div>
-                      <div className="text-sm font-semibold text-gray-900">{template.label}</div>
-                      <p className="mt-1 text-xs text-gray-500">{template.description}</p>
+                      <div className="text-sm font-semibold text-foreground">{template.label}</div>
+                      <p className="mt-1 text-xs text-muted">{template.description}</p>
                     </div>
                   </button>
                 )
@@ -1572,7 +1574,7 @@ function WorkspaceContent() {
             <div className="mt-6 flex justify-between">
               <button
                 onClick={handleCancelMindmapTemplatePicker}
-                className="rounded-lg border border-gray-300 px-4 py-2 text-sm font-medium text-gray-600 transition hover:bg-gray-50 inline-flex items-center gap-2"
+                className="rounded-xl border border-border px-4 py-2 text-sm font-medium text-muted transition hover:bg-surface-hover hover:text-foreground inline-flex items-center gap-2"
               >
                 <ChevronLeft size={16} />
                 Back
@@ -1584,17 +1586,17 @@ function WorkspaceContent() {
 
       {/* Create Folder Modal (in-app) */}
       {showCreateFolderModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50">
-          <div className="bg-white rounded-xl shadow-2xl border border-gray-200 max-w-md w-full p-5">
-            <h3 className="text-lg font-semibold text-gray-900 mb-2">New Folder</h3>
-            <p className="text-sm text-gray-600 mb-4">Enter a name for the new folder.</p>
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40 backdrop-blur-sm">
+          <div className="bg-surface rounded-2xl shadow-xl border border-border max-w-md w-full p-5">
+            <h3 className="text-lg font-semibold text-foreground mb-2">New Folder</h3>
+            <p className="text-sm text-muted mb-4">Enter a name for the new folder.</p>
             <input
               ref={createFolderInputRef}
               type="text"
               value={newFolderName}
               onChange={(e) => setNewFolderName(e.target.value)}
               placeholder="Folder name"
-              className="w-full px-3 py-2 border border-gray-200 rounded mb-4 focus:outline-none focus:ring-2 focus:ring-alpine-500"
+              className="w-full px-3.5 py-2.5 border border-border bg-surface text-foreground placeholder:text-muted rounded-xl mb-4 focus:outline-none focus:ring-2 focus:ring-accent/30 focus:border-accent"
               onKeyDown={(e) => {
                 if (e.key === 'Enter') confirmCreateFolder()
                 if (e.key === 'Escape') cancelCreateFolder()
@@ -1603,13 +1605,13 @@ function WorkspaceContent() {
             <div className="flex justify-end gap-2">
               <button
                 onClick={cancelCreateFolder}
-                className="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded hover:bg-gray-50"
+                className="px-4 py-2 text-sm font-medium text-muted bg-surface border border-border rounded-xl hover:bg-surface-hover"
               >
                 Cancel
               </button>
               <button
                 onClick={confirmCreateFolder}
-                className="px-4 py-2 text-sm font-medium text-white bg-alpine-600 rounded hover:bg-alpine-700"
+                className="px-4 py-2 text-sm font-medium text-accent-foreground bg-accent rounded-xl hover:opacity-90"
               >
                 Create
               </button>
@@ -1629,7 +1631,7 @@ export default function WorkspaceShell() {
         <div className="flex items-center justify-center min-h-screen">
           <div className="text-center">
             <Loader2 className="w-12 h-12 text-alpine-600 animate-spin mx-auto mb-4" />
-            <div className="text-lg text-gray-700 font-medium">Loading your workspace...</div>
+            <div className="text-lg text-foreground/70 font-medium">Loading your workspace...</div>
           </div>
         </div>
       }>

@@ -1,0 +1,141 @@
+/* ══════════════════════════════════════════════════════
+   File Block Animations & Styles
+   ══════════════════════════════════════════════════════ */
+
+@keyframes file-block-enter {
+  from {
+    opacity: 0;
+    transform: translateY(10px) scale(0.995);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+@keyframes file-block-action-enter {
+  from {
+    opacity: 0;
+    transform: translateY(4px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.file-block-container .file-block-card {
+  animation: file-block-enter 240ms cubic-bezier(0.2, 0.8, 0.2, 1) both;
+  transform-origin: 50% 16px;
+}
+
+.file-block-container .file-block-surface-button {
+  transition: background-color 180ms ease, transform 180ms ease;
+}
+
+.file-block-container .file-block-icon-wrap {
+  transition: transform 220ms ease, box-shadow 220ms ease;
+}
+
+.file-block-container .file-block-path-pill {
+  transition: background-color 180ms ease, color 180ms ease;
+}
+
+.file-block-container .file-block-actions-row {
+  transition: background-color 180ms ease;
+}
+
+.file-block-container .file-block-action {
+  opacity: 0.92;
+  transform: translateY(2px);
+  transition: transform 180ms ease, box-shadow 180ms ease, opacity 180ms ease, border-color 180ms ease;
+}
+
+.file-block-container .file-block-card:hover .file-block-action,
+.file-block-container .file-block-card:focus-within .file-block-action {
+  opacity: 1;
+  transform: translateY(0);
+  animation: file-block-action-enter 180ms ease both;
+}
+
+.file-block-container .file-block-card:hover .file-block-action:nth-child(1),
+.file-block-container .file-block-card:focus-within .file-block-action:nth-child(1) {
+  animation-delay: 10ms;
+}
+
+.file-block-container .file-block-card:hover .file-block-action:nth-child(2),
+.file-block-container .file-block-card:focus-within .file-block-action:nth-child(2) {
+  animation-delay: 35ms;
+}
+
+.file-block-container .file-block-card:hover .file-block-action:nth-child(3),
+.file-block-container .file-block-card:focus-within .file-block-action:nth-child(3) {
+  animation-delay: 60ms;
+}
+
+.file-block-container .file-block-card:hover .file-block-action:nth-child(4),
+.file-block-container .file-block-card:focus-within .file-block-action:nth-child(4) {
+  animation-delay: 85ms;
+}
+
+.file-block-container .file-block-card:hover {
+  transform: translateY(-1px);
+}
+
+.file-block-container .file-block-card:hover .file-block-icon-wrap,
+.file-block-container .file-block-card:focus-within .file-block-icon-wrap {
+  transform: scale(1.03);
+  box-shadow: 0 8px 18px -12px rgba(15, 23, 42, 0.55);
+}
+
+.file-block-container .file-block-card:hover .file-block-path-pill,
+.file-block-container .file-block-card:focus-within .file-block-path-pill {
+  background-color: #e2e8f0;
+  color: #334155;
+}
+
+.file-block-container .file-block-card:hover .file-block-actions-row,
+.file-block-container .file-block-card:focus-within .file-block-actions-row {
+  background-color: rgba(241, 245, 249, 0.95);
+}
+
+.file-block-container .file-block-action:hover,
+.file-block-container .file-block-action:focus-visible {
+  transform: translateY(-1px);
+  box-shadow: 0 8px 16px -12px rgba(15, 23, 42, 0.75);
+}
+
+.file-block-container .file-block-surface-button:active,
+.file-block-container .file-block-action:active {
+  transform: translateY(0);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .file-block-container .file-block-card,
+  .file-block-container .file-block-surface-button,
+  .file-block-container .file-block-icon-wrap,
+  .file-block-container .file-block-path-pill,
+  .file-block-container .file-block-actions-row,
+  .file-block-container .file-block-action {
+    animation: none !important;
+    transition: none !important;
+    transform: none !important;
+  }
+}
+
+/* Dark mode overrides for file blocks */
+:is(.dark, [data-theme="dark"]) .file-block-container .file-block-card:hover .file-block-path-pill,
+:is(.dark, [data-theme="dark"]) .file-block-container .file-block-card:focus-within .file-block-path-pill {
+  background-color: #334155;
+  color: #e2e8f0;
+}
+
+:is(.dark, [data-theme="dark"]) .file-block-container .file-block-card:hover .file-block-actions-row,
+:is(.dark, [data-theme="dark"]) .file-block-container .file-block-card:focus-within .file-block-actions-row {
+  background-color: rgba(30, 41, 59, 0.95);
+}
+
+:is(.dark, [data-theme="dark"]) .file-block-container .file-block-card:hover .file-block-icon-wrap,
+:is(.dark, [data-theme="dark"]) .file-block-container .file-block-card:focus-within .file-block-icon-wrap {
+  box-shadow: 0 8px 18px -12px rgba(0, 0, 0, 0.6);
+}

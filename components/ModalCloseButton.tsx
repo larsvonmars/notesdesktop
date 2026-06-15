@@ -18,7 +18,14 @@ export default function ModalCloseButton({
   return (
     <button
       onClick={onClick}
-      className={`inline-flex h-10 w-10 items-center justify-center rounded-lg text-gray-500 dark:text-slate-300 hover:text-gray-900 dark:hover:text-slate-100 hover:bg-gray-100 dark:hover:bg-slate-700 transition-colors ${className}`}
+      className={[
+        'inline-flex h-9 w-9 items-center justify-center rounded-full',
+        'text-muted hover:text-foreground',
+        'hover:bg-surface-hover active:bg-surface-active',
+        'transition-all duration-200',
+        'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/50',
+        className,
+      ].join(' ')}
       aria-label={ariaLabel}
       type="button"
     >
