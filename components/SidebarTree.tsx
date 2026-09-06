@@ -32,6 +32,7 @@ import {
   Inbox,
   PanelLeftClose,
   Archive,
+  Layers,
   type LucideIcon,
 } from 'lucide-react'
 import type { Note } from './NoteEditor'
@@ -1050,10 +1051,10 @@ export default function SidebarTree({
   const renderRecentList = () => {
     if (recentNotes.length === 0) return null
     return (
-      <section className="mb-0.5">
+      <section>
         <div className="flex items-center gap-1.5 px-2 pb-1 pt-2">
-          <Clock size={11} className="text-muted/50" />
-          <span className="text-[11px] font-medium text-muted/70">Recent</span>
+          <Clock size={11} className="text-muted/40" />
+          <span className="text-[11px] font-medium uppercase tracking-wider text-muted/50">Recent</span>
         </div>
         <div className="space-y-0.5">
           {recentNotes.map(note => {
@@ -1660,8 +1661,14 @@ export default function SidebarTree({
               {renderRecentList()}
 
               {hasAnyContent ? (
-                <div className="space-y-0.5">
-                  {projectTree.map(node => renderProject(node))}
+                <div className={`${recentNotes.length > 0 ? 'mt-3 border-t border-border/40' : ''} pt-2`}>
+                  <div className="flex items-center gap-1.5 px-2 pb-1">
+                    <Layers size={11} className="text-muted/40" />
+                    <span className="text-[11px] font-medium uppercase tracking-wider text-muted/50">Projects</span>
+                  </div>
+                  <div className="space-y-0.5">
+                    {projectTree.map(node => renderProject(node))}
+                  </div>
                 </div>
               ) : (
                 <div className="mx-1 mt-2 rounded-lg border border-dashed border-border/80 px-3 py-5 text-center">
