@@ -1,1488 +1,83 @@
 'use client'
 
 import React, { useRef, useEffect, useCallback, forwardRef, useImperativeHandle, useMemo, useReducer } from 'react'
-import {
-  Plus,
-  Minus,
-  ZoomIn,
-  ZoomOut,
-  Maximize2,
-  Trash2,
-  Edit2,
-  Check,
-  X,
-  RotateCcw,
-  Search,
-  Download,
-  LayoutTemplate,
-  MapIcon,
-  Type,
-  ChevronRight,
-  FoldVertical,
-  UnfoldVertical,
-  Info,
-  Link2,
-  ArrowRight,
-} from 'lucide-react'
 import { useTheme } from '../lib/theme-context'
 import { useIsMobile } from '../lib/useIsMobile'
-import BaseModal from './BaseModal'
 
-// ============================================================================
-// Types & Interfaces
-// ============================================================================
+import {
+  calculateRenderPosition,
+  collectVisibleNodeIds,
+  COLLAPSE_ANIMATION_DURATION,
+  computeNodeMetrics,
+  createDefaultMindmap,
+  createEmptyLayoutSnapshot,
+  createInitialState,
+  customEdgeId,
+  DEFAULT_ATTACHMENT_INPUT,
+  DEFAULT_COLORS,
+  drawEdge,
+  drawEdgeTitle,
+  drawNodeBody,
+  EDGE_DEFAULTS,
+  editorReducer,
+  getCanvasContext,
+  getCanvasTheme,
+  getDevicePixelRatio,
+  getLinkedTextNoteIdFromAttachments,
+  getNodeConnectionPoint,
+  getTextNoteIdFromAttachment,
+  hitTestConnectionEdge,
+  htmlToPlainText,
+  isCustomEdgeSelection,
+  isParentEdgeSelection,
+  layoutMindmap,
+  mergeEdgeStyle,
+  MIN_NODE_WIDTH,
+  NODE_HEIGHT,
+  normalizeMindmapData,
+  parentEdgeId,
+  updateSnapshotBounds,
+  withLinkedTextNoteAttachment,
+  type AttachmentInput,
+  type EdgeHit,
+  type LayoutSnapshot,
+  type MindmapAttachment,
+  type MindmapArrowType,
+  type MindmapData,
+  type MindmapEdgeMeta,
+  type MindmapEditorHandle,
+  type MindmapEditorProps,
+  type MindmapLayoutDirection,
+  type MindmapLineType,
+  type MindmapNode,
+  type NodeDetailDraft,
+  type NodeHit,
+  type Point,
+} from '../lib/mindmap'
+
+import MindmapContextMenu from './mindmap/MindmapContextMenu'
+import MindmapEdgePanel from './mindmap/MindmapEdgePanel'
+import MindmapExportDialog from './mindmap/MindmapExportDialog'
+import MindmapInfoOverlay from './mindmap/MindmapInfoOverlay'
+import MindmapMinimap from './mindmap/MindmapMinimap'
+import MindmapNodeDetailPanel from './mindmap/MindmapNodeDetailPanel'
+import MindmapSearchDropdown from './mindmap/MindmapSearchDropdown'
+import MindmapToolbar from './mindmap/MindmapToolbar'
+
+// Public re-exports — existing consumers import these from this file.
+export { hitTestConnectionEdge, normalizeMindmapData }
+export type {
+  MindmapArrowType,
+  MindmapAttachment,
+  MindmapData,
+  MindmapEdge,
+  MindmapEdgeMeta,
+  MindmapEdgeStyle,
+  MindmapEditorHandle,
+  MindmapLineType,
+  MindmapNode,
+} from '../lib/mindmap'
 
-export interface MindmapNode {
-  id: string
-  text: string
-  x: number
-  y: number
-  parentId: string | null
-  children: string[]
-  collapsed: boolean
-  color: string
-  description: string
-  attachments: MindmapAttachment[]
-}
-
-export interface MindmapData {
-  nodes: { [key: string]: MindmapNode }
-  rootId: string
-  customEdges?: MindmapEdge[]
-  parentEdgeMeta?: Record<string, MindmapEdgeMeta>
-}
-
-export type MindmapLineType = 'solid' | 'dashed' | 'dotted'
-export type MindmapArrowType = 'none' | 'standard' | 'filled'
-
-export interface MindmapEdgeStyle {
-  color?: string
-  width?: number
-  lineType?: MindmapLineType
-  opacity?: number
-  arrowType?: MindmapArrowType
-}
-
-export interface MindmapEdgeMeta {
-  title?: string
-  style?: MindmapEdgeStyle
-}
-
-export interface MindmapEdge extends MindmapEdgeMeta {
-  id: string
-  fromNodeId: string
-  toNodeId: string
-}
-
-export interface MindmapAttachment {
-  id: string
-  label: string
-  url: string
-  type: 'image' | 'link'
-}
-
-interface LayoutSnapshotNode {
-  id: string
-  x: number
-  y: number
-  color: string
-  visibility: number
-  isRoot: boolean
-  isSelected: boolean
-}
-
-interface LayoutSnapshotEdge {
-  from: { x: number; y: number }
-  to: { x: number; y: number }
-  visibility: number
-}
-
-interface LayoutBounds {
-  minX: number
-  minY: number
-  maxX: number
-  maxY: number
-}
-
-interface LayoutSnapshot {
-  nodes: LayoutSnapshotNode[]
-  edges: LayoutSnapshotEdge[]
-  bounds: LayoutBounds
-}
-
-export interface MindmapEditorHandle {
-  getData: () => MindmapData
-  setData: (data: MindmapData) => void
-  clear: () => void
-  getSelectedNodeId: () => string | null
-  fitToView: () => void
-  resetView: () => void
-  openSearch: () => void
-  toggleMinimap: () => void
-  exportImage: () => void
-}
-
-interface MindmapEditorProps {
-  initialData?: MindmapData
-  onChange?: (data: MindmapData) => void
-  onSelectedNodeChange?: (nodeId: string | null, node: MindmapNode | null) => void
-  textNotes?: MindmapTextNote[]
-  onCreateTextNote?: (input: { title: string; description: string }) => Promise<MindmapTextNote>
-  onOpenTextNote?: (noteId: string) => void
-  readOnly?: boolean
-  allowViewerControls?: boolean
-  allowViewerSearch?: boolean
-  defaultShowMinimap?: boolean
-}
-
-interface MindmapTextNote {
-  id: string
-  title: string
-  content: string
-}
-
-interface NodeDetailDraft {
-  text: string
-  description: string
-  attachments: MindmapAttachment[]
-  color: string
-}
-
-interface AttachmentInput {
-  label: string
-  url: string
-  type: 'image' | 'link'
-}
-
-interface Point {
-  x: number
-  y: number
-}
-
-interface NodeMetrics {
-  width: number
-  height: number
-  rect: {
-    left: number
-    right: number
-    top: number
-    bottom: number
-  }
-  collapseBounds: {
-    left: number
-    right: number
-    top: number
-    bottom: number
-  } | null
-}
-
-// ============================================================================
-// State Management - Reducer
-// ============================================================================
-
-interface EditorState {
-  mindmapData: MindmapData
-  scale: number
-  offset: Point
-  selectedNodeId: string | null
-  selectedEdgeId: string | null
-  connectionMode: boolean
-  connectionStartNodeId: string | null
-  detailNodeId: string | null
-  detailDraft: NodeDetailDraft | null
-  newAttachmentInput: AttachmentInput
-  draggingNodeId: string | null
-  dragStart: Point | null
-  isPanning: boolean
-  panStart: Point | null
-  isHoveringEmptySpace: boolean
-}
-
-type EditorAction =
-  | { type: 'SET_MINDMAP_DATA'; payload: MindmapData }
-  | { type: 'UPDATE_NODE'; payload: { nodeId: string; updates: Partial<MindmapNode> } }
-  | { type: 'UPDATE_NODES'; payload: { [nodeId: string]: Partial<MindmapNode> } }
-  | { type: 'ADD_NODE'; payload: { parentId: string; node: MindmapNode } }
-  | { type: 'DELETE_NODE'; payload: { nodeId: string; parentId: string } }
-  | { type: 'SET_SCALE'; payload: number }
-  | { type: 'SET_OFFSET'; payload: Point }
-  | { type: 'SET_SELECTED_NODE_ID'; payload: string | null }
-  | { type: 'SET_SELECTED_EDGE_ID'; payload: string | null }
-  | { type: 'SET_CONNECTION_MODE'; payload: boolean }
-  | { type: 'SET_CONNECTION_START_NODE_ID'; payload: string | null }
-  | { type: 'UPSERT_CUSTOM_EDGE'; payload: MindmapEdge }
-  | { type: 'UPDATE_CUSTOM_EDGE'; payload: { edgeId: string; updates: Partial<MindmapEdgeMeta> } }
-  | { type: 'DELETE_CUSTOM_EDGE'; payload: { edgeId: string } }
-  | { type: 'UPDATE_PARENT_EDGE_META'; payload: { childId: string; updates: Partial<MindmapEdgeMeta> } }
-  | { type: 'SET_DETAIL_NODE_ID'; payload: string | null }
-  | { type: 'SET_DETAIL_DRAFT'; payload: NodeDetailDraft | null }
-  | { type: 'UPDATE_DETAIL_DRAFT'; payload: Partial<NodeDetailDraft> }
-  | { type: 'SET_NEW_ATTACHMENT_INPUT'; payload: AttachmentInput }
-  | { type: 'START_DRAGGING'; payload: { nodeId: string; start: Point } }
-  | { type: 'STOP_DRAGGING' }
-  | { type: 'START_PANNING'; payload: Point }
-  | { type: 'STOP_PANNING' }
-  | { type: 'SET_HOVERING_EMPTY_SPACE'; payload: boolean }
-  | { type: 'RESET_VIEW' }
-  | { type: 'RESET_ALL'; payload: MindmapData }
-  | { type: 'OPEN_DETAIL'; payload: { nodeId: string; draft: NodeDetailDraft } }
-  | { type: 'CLOSE_DETAIL' }
-
-const DEFAULT_ATTACHMENT_INPUT: AttachmentInput = { label: '', url: '', type: 'image' }
-
-function editorReducer(state: EditorState, action: EditorAction): EditorState {
-  switch (action.type) {
-    case 'SET_MINDMAP_DATA':
-      return { ...state, mindmapData: action.payload }
-
-    case 'UPDATE_NODE': {
-      const { nodeId, updates } = action.payload
-      const node = state.mindmapData.nodes[nodeId]
-      if (!node) return state
-      return {
-        ...state,
-        mindmapData: {
-          ...state.mindmapData,
-          nodes: {
-            ...state.mindmapData.nodes,
-            [nodeId]: { ...node, ...updates },
-          },
-        },
-      }
-    }
-
-    case 'UPDATE_NODES': {
-      const newNodes = { ...state.mindmapData.nodes }
-      for (const [nodeId, updates] of Object.entries(action.payload)) {
-        if (newNodes[nodeId]) {
-          newNodes[nodeId] = { ...newNodes[nodeId], ...updates }
-        }
-      }
-      return {
-        ...state,
-        mindmapData: { ...state.mindmapData, nodes: newNodes },
-      }
-    }
-
-    case 'ADD_NODE': {
-      const { parentId, node } = action.payload
-      const parent = state.mindmapData.nodes[parentId]
-      if (!parent) return state
-      return {
-        ...state,
-        mindmapData: {
-          ...state.mindmapData,
-          nodes: {
-            ...state.mindmapData.nodes,
-            [parentId]: {
-              ...parent,
-              children: [...parent.children, node.id],
-              collapsed: false,
-            },
-            [node.id]: node,
-          },
-        },
-      }
-    }
-
-    case 'DELETE_NODE': {
-      const { nodeId, parentId } = action.payload
-      const parent = state.mindmapData.nodes[parentId]
-      if (!parent) return state
-      
-      // Collect all nodes to delete (including descendants)
-      const nodesToRemove = new Set<string>()
-      const collectNodes = (id: string) => {
-        nodesToRemove.add(id)
-        const node = state.mindmapData.nodes[id]
-        if (node) node.children.forEach(collectNodes)
-      }
-      collectNodes(nodeId)
-
-      const newNodes = { ...state.mindmapData.nodes }
-      nodesToRemove.forEach(id => delete newNodes[id])
-      newNodes[parentId] = {
-        ...parent,
-        children: parent.children.filter(id => id !== nodeId),
-      }
-
-      const nextCustomEdges = (state.mindmapData.customEdges ?? []).filter(
-        (edge) => !nodesToRemove.has(edge.fromNodeId) && !nodesToRemove.has(edge.toNodeId)
-      )
-
-      const nextParentEdgeMeta: Record<string, MindmapEdgeMeta> = {}
-      Object.entries(state.mindmapData.parentEdgeMeta ?? {}).forEach(([childId, meta]) => {
-        if (!nodesToRemove.has(childId)) {
-          nextParentEdgeMeta[childId] = meta
-        }
-      })
-
-      const nextSelectedEdgeId =
-        state.selectedEdgeId &&
-        (state.selectedEdgeId.startsWith('custom:')
-          ? nextCustomEdges.some((edge) => `custom:${edge.id}` === state.selectedEdgeId)
-          : state.selectedEdgeId.startsWith('parent:')
-            ? Boolean(nextParentEdgeMeta[state.selectedEdgeId.slice(7)] || newNodes[state.selectedEdgeId.slice(7)])
-            : false)
-          ? state.selectedEdgeId
-          : null
-
-      return {
-        ...state,
-        mindmapData: {
-          ...state.mindmapData,
-          nodes: newNodes,
-          customEdges: nextCustomEdges,
-          parentEdgeMeta: nextParentEdgeMeta,
-        },
-        selectedNodeId: null,
-        selectedEdgeId: nextSelectedEdgeId,
-      }
-    }
-
-    case 'SET_SCALE':
-      return { ...state, scale: action.payload }
-
-    case 'SET_OFFSET':
-      return { ...state, offset: action.payload }
-
-    case 'SET_SELECTED_NODE_ID':
-      return {
-        ...state,
-        selectedNodeId: action.payload,
-        selectedEdgeId: action.payload ? null : state.selectedEdgeId,
-      }
-
-    case 'SET_SELECTED_EDGE_ID':
-      return {
-        ...state,
-        selectedEdgeId: action.payload,
-        selectedNodeId: action.payload ? null : state.selectedNodeId,
-      }
-
-    case 'SET_CONNECTION_MODE':
-      return {
-        ...state,
-        connectionMode: action.payload,
-        connectionStartNodeId: action.payload ? state.connectionStartNodeId : null,
-      }
-
-    case 'SET_CONNECTION_START_NODE_ID':
-      return { ...state, connectionStartNodeId: action.payload }
-
-    case 'UPSERT_CUSTOM_EDGE': {
-      const nextEdges = [...(state.mindmapData.customEdges ?? [])]
-      const existingIndex = nextEdges.findIndex((edge) => edge.id === action.payload.id)
-      if (existingIndex >= 0) {
-        nextEdges[existingIndex] = { ...nextEdges[existingIndex], ...action.payload }
-      } else {
-        nextEdges.push(action.payload)
-      }
-      return {
-        ...state,
-        mindmapData: {
-          ...state.mindmapData,
-          customEdges: nextEdges,
-        },
-      }
-    }
-
-    case 'UPDATE_CUSTOM_EDGE': {
-      const nextEdges = (state.mindmapData.customEdges ?? []).map((edge) => {
-        if (edge.id !== action.payload.edgeId) return edge
-        return {
-          ...edge,
-          ...action.payload.updates,
-          style: {
-            ...edge.style,
-            ...(action.payload.updates.style ?? {}),
-          },
-        }
-      })
-      return {
-        ...state,
-        mindmapData: {
-          ...state.mindmapData,
-          customEdges: nextEdges,
-        },
-      }
-    }
-
-    case 'DELETE_CUSTOM_EDGE': {
-      const nextEdges = (state.mindmapData.customEdges ?? []).filter((edge) => edge.id !== action.payload.edgeId)
-      return {
-        ...state,
-        mindmapData: {
-          ...state.mindmapData,
-          customEdges: nextEdges,
-        },
-        selectedEdgeId: state.selectedEdgeId === `custom:${action.payload.edgeId}` ? null : state.selectedEdgeId,
-      }
-    }
-
-    case 'UPDATE_PARENT_EDGE_META': {
-      const currentMeta = state.mindmapData.parentEdgeMeta?.[action.payload.childId] ?? {}
-      const nextMeta: MindmapEdgeMeta = {
-        ...currentMeta,
-        ...action.payload.updates,
-        style: {
-          ...currentMeta.style,
-          ...(action.payload.updates.style ?? {}),
-        },
-      }
-
-      return {
-        ...state,
-        mindmapData: {
-          ...state.mindmapData,
-          parentEdgeMeta: {
-            ...(state.mindmapData.parentEdgeMeta ?? {}),
-            [action.payload.childId]: nextMeta,
-          },
-        },
-      }
-    }
-
-    case 'SET_DETAIL_NODE_ID':
-      return { ...state, detailNodeId: action.payload }
-
-    case 'SET_DETAIL_DRAFT':
-      return { ...state, detailDraft: action.payload }
-
-    case 'UPDATE_DETAIL_DRAFT':
-      if (!state.detailDraft) return state
-      return { ...state, detailDraft: { ...state.detailDraft, ...action.payload } }
-
-    case 'SET_NEW_ATTACHMENT_INPUT':
-      return { ...state, newAttachmentInput: action.payload }
-
-    case 'START_DRAGGING':
-      return {
-        ...state,
-        draggingNodeId: action.payload.nodeId,
-        dragStart: action.payload.start,
-      }
-
-    case 'STOP_DRAGGING':
-      return { ...state, draggingNodeId: null, dragStart: null }
-
-    case 'START_PANNING':
-      return { ...state, isPanning: true, panStart: action.payload }
-
-    case 'STOP_PANNING':
-      return { ...state, isPanning: false, panStart: null }
-
-    case 'SET_HOVERING_EMPTY_SPACE':
-      // Fires on every pointer-move while hovering; returning a fresh state
-      // object here would re-render the whole canvas component for no visual
-      // change. Bail out when the value is unchanged.
-      if (state.isHoveringEmptySpace === action.payload) return state
-      return { ...state, isHoveringEmptySpace: action.payload }
-
-    case 'RESET_VIEW':
-      return { ...state, scale: 1, offset: { x: 0, y: 0 } }
-
-    case 'RESET_ALL':
-      return {
-        ...state,
-        mindmapData: action.payload,
-        selectedNodeId: action.payload.rootId,
-        selectedEdgeId: null,
-        connectionMode: false,
-        connectionStartNodeId: null,
-        scale: 1,
-        offset: { x: 0, y: 0 },
-        detailNodeId: null,
-        detailDraft: null,
-        newAttachmentInput: DEFAULT_ATTACHMENT_INPUT,
-      }
-
-    case 'OPEN_DETAIL':
-      return {
-        ...state,
-        detailNodeId: action.payload.nodeId,
-        detailDraft: action.payload.draft,
-        newAttachmentInput: DEFAULT_ATTACHMENT_INPUT,
-      }
-
-    case 'CLOSE_DETAIL':
-      return {
-        ...state,
-        detailNodeId: null,
-        detailDraft: null,
-        newAttachmentInput: DEFAULT_ATTACHMENT_INPUT,
-      }
-
-    default:
-      return state
-  }
-}
-
-function createInitialState(initialData?: MindmapData): EditorState {
-  const mindmapData = normalizeMindmapData(initialData)
-  return {
-    mindmapData,
-    scale: 1,
-    offset: { x: 0, y: 0 },
-    selectedNodeId: null,
-    selectedEdgeId: null,
-    connectionMode: false,
-    connectionStartNodeId: null,
-    detailNodeId: null,
-    detailDraft: null,
-    newAttachmentInput: DEFAULT_ATTACHMENT_INPUT,
-    draggingNodeId: null,
-    dragStart: null,
-    isPanning: false,
-    panStart: null,
-    isHoveringEmptySpace: false,
-  }
-}
-
-// ============================================================================
-// Constants
-// ============================================================================
-
-const DEFAULT_COLORS = [
-  '#3B82F6', // blue
-  '#10B981', // green
-  '#F59E0B', // amber
-  '#EF4444', // red
-  '#8B5CF6', // purple
-  '#EC4899', // pink
-  '#06B6D4', // cyan
-  '#F97316', // orange
-]
-
-const NODE_PADDING = 16
-const NODE_HEIGHT = 44
-const MIN_NODE_WIDTH = 120
-const COLLAPSE_INDICATOR_SIZE = 36
-const COLLAPSE_ANIMATION_DURATION = 260
-const NOTE_ATTACHMENT_PREFIX = 'note://'
-const EDGE_DEFAULTS: Required<MindmapEdgeStyle> = {
-  color: '',
-  width: 2,
-  lineType: 'solid',
-  opacity: 1,
-  arrowType: 'none',
-}
-
-function parentEdgeId(childId: string): string {
-  return `parent:${childId}`
-}
-
-function customEdgeId(edgeId: string): string {
-  return `custom:${edgeId}`
-}
-
-function isParentEdgeSelection(edgeId: string | null): boolean {
-  return Boolean(edgeId?.startsWith('parent:'))
-}
-
-function isCustomEdgeSelection(edgeId: string | null): boolean {
-  return Boolean(edgeId?.startsWith('custom:'))
-}
-
-function mergeEdgeStyle(style?: MindmapEdgeStyle): Required<MindmapEdgeStyle> {
-  return {
-    color: style?.color ?? EDGE_DEFAULTS.color,
-    width: style?.width ?? EDGE_DEFAULTS.width,
-    lineType: style?.lineType ?? EDGE_DEFAULTS.lineType,
-    opacity: style?.opacity ?? EDGE_DEFAULTS.opacity,
-    arrowType: style?.arrowType ?? EDGE_DEFAULTS.arrowType,
-  }
-}
-
-function collectVisibleNodeIds(mindmapData: MindmapData): Set<string> {
-  const visible = new Set<string>()
-  const walk = (nodeId: string) => {
-    const node = mindmapData.nodes[nodeId]
-    if (!node) return
-    visible.add(nodeId)
-    if (node.collapsed) return
-    node.children.forEach((childId) => walk(childId))
-  }
-  walk(mindmapData.rootId)
-  return visible
-}
-
-function getCubicControlPoints(from: Point, to: Point): [Point, Point] {
-  const dx = to.x - from.x
-  const dy = to.y - from.y
-  const length = Math.max(1, Math.hypot(dx, dy))
-  const nx = -dy / length
-  const ny = dx / length
-  const bend = Math.min(70, length * 0.18)
-  const tension = 0.4
-  const midX = (from.x + to.x) / 2
-  const midY = (from.y + to.y) / 2
-  return [
-    { x: from.x + dx * tension + nx * bend, y: from.y + dy * tension + ny * bend },
-    { x: to.x - dx * tension + nx * bend, y: to.y - dy * tension + ny * bend },
-  ]
-}
-
-function getEdgePolyline(from: Point, to: Point, curved: boolean): Point[] {
-  if (!curved) return [from, to]
-
-  const [cp1, cp2] = getCubicControlPoints(from, to)
-  const points: Point[] = []
-  const dx = to.x - from.x
-  const dy = to.y - from.y
-  const length = Math.max(1, Math.hypot(dx, dy))
-  const segments = Math.max(16, Math.min(48, Math.round(length / 12)))
-  for (let i = 0; i <= segments; i += 1) {
-    const t = i / segments
-    const inv = 1 - t
-    const inv2 = inv * inv
-    const t2 = t * t
-    points.push({
-      x: inv2 * inv * from.x + 3 * inv2 * t * cp1.x + 3 * inv * t2 * cp2.x + t2 * t * to.x,
-      y: inv2 * inv * from.y + 3 * inv2 * t * cp1.y + 3 * inv * t2 * cp2.y + t2 * t * to.y,
-    })
-  }
-  return points
-}
-
-/**
- * Computes the point on a node's rounded-rect boundary that lies along
- * the ray from the node center toward a target point.
- */
-function getNodeConnectionPoint(
-  nodeCenter: Point,
-  nodeMetrics: NodeMetrics,
-  targetDirection: Point
-): Point {
-  const { rect } = nodeMetrics
-  const dx = targetDirection.x - nodeCenter.x
-  const dy = targetDirection.y - nodeCenter.y
-  const dist = Math.hypot(dx, dy)
-  if (dist < 0.001) return { x: nodeCenter.x, y: nodeCenter.y }
-
-  const nx = dx / dist
-  const ny = dy / dist
-  const cornerRadius = Math.min(nodeMetrics.height / 2, 20)
-
-  // Check intersection with each side of the rounded rect
-  const halfW = (rect.right - rect.left) / 2
-  const halfH = (rect.bottom - rect.top) / 2
-
-  // Right edge
-  if (nx > 0) {
-    const t = (halfW - cornerRadius) / Math.max(nx, 0.001)
-    const y = nodeCenter.y + ny * t
-    if (y >= rect.top + cornerRadius && y <= rect.bottom - cornerRadius) {
-      return { x: rect.right, y }
-    }
-  }
-  // Left edge
-  if (nx < 0) {
-    const t = -(halfW - cornerRadius) / Math.min(nx, -0.001)
-    const y = nodeCenter.y + ny * t
-    if (y >= rect.top + cornerRadius && y <= rect.bottom - cornerRadius) {
-      return { x: rect.left, y }
-    }
-  }
-  // Bottom edge
-  if (ny > 0) {
-    const t = (halfH - cornerRadius) / Math.max(ny, 0.001)
-    const x = nodeCenter.x + nx * t
-    if (x >= rect.left + cornerRadius && x <= rect.right - cornerRadius) {
-      return { x, y: rect.bottom }
-    }
-  }
-  // Top edge
-  if (ny < 0) {
-    const t = -(halfH - cornerRadius) / Math.min(ny, -0.001)
-    const x = nodeCenter.x + nx * t
-    if (x >= rect.left + cornerRadius && x <= rect.right - cornerRadius) {
-      return { x, y: rect.top }
-    }
-  }
-
-  // Corner case: ray hits a corner
-  const cornerX = nx > 0 ? rect.right - cornerRadius : rect.left + cornerRadius
-  const cornerY = ny > 0 ? rect.bottom - cornerRadius : rect.top + cornerRadius
-  const cx = cornerX + cornerRadius * nx
-  const cy = cornerY + cornerRadius * ny
-  return { x: cx, y: cy }
-}
-
-function getPolylineMidpoint(polyline: Point[]): Point {
-  if (polyline.length === 0) return { x: 0, y: 0 }
-  if (polyline.length === 1) return polyline[0]
-
-  let totalLength = 0
-  for (let i = 1; i < polyline.length; i += 1) {
-    totalLength += Math.hypot(polyline[i].x - polyline[i - 1].x, polyline[i].y - polyline[i - 1].y)
-  }
-
-  if (totalLength === 0) {
-    return {
-      x: (polyline[0].x + polyline[polyline.length - 1].x) / 2,
-      y: (polyline[0].y + polyline[polyline.length - 1].y) / 2,
-    }
-  }
-
-  const target = totalLength / 2
-  let traversed = 0
-
-  for (let i = 1; i < polyline.length; i += 1) {
-    const start = polyline[i - 1]
-    const end = polyline[i]
-    const segmentLength = Math.hypot(end.x - start.x, end.y - start.y)
-
-    if (traversed + segmentLength >= target) {
-      const remain = target - traversed
-      const t = segmentLength === 0 ? 0 : remain / segmentLength
-      return {
-        x: start.x + (end.x - start.x) * t,
-        y: start.y + (end.y - start.y) * t,
-      }
-    }
-
-    traversed += segmentLength
-  }
-
-  return polyline[polyline.length - 1]
-}
-
-export function hitTestConnectionEdge(
-  point: Point,
-  from: Point,
-  to: Point,
-  tolerance: number,
-  curved = false
-): boolean {
-  const polyline = getEdgePolyline(from, to, curved)
-  // Also check against the wider glow/tap area for better hit detection
-  const extendedTolerance = Math.max(tolerance, 8)
-  for (let i = 1; i < polyline.length; i += 1) {
-    const distance = distanceToSegment(point, polyline[i - 1], polyline[i])
-    if (distance <= extendedTolerance) return true
-  }
-  return false
-}
-
-function htmlToPlainText(html: string): string {
-  if (!html) return ''
-  return html
-    .replace(/<br\s*\/?\s*>/gi, '\n')
-    .replace(/<\/p>/gi, '\n\n')
-    .replace(/<\/li>/gi, '\n')
-    .replace(/<[^>]*>/g, '')
-    .replace(/&nbsp;/g, ' ')
-    .replace(/&amp;/g, '&')
-    .replace(/&lt;/g, '<')
-    .replace(/&gt;/g, '>')
-    .replace(/&quot;/g, '"')
-    .replace(/&#39;/g, "'")
-    .replace(/\n{3,}/g, '\n\n')
-    .trim()
-}
-
-function getLinkedTextNoteIdFromAttachments(attachments: MindmapAttachment[]): string | null {
-  const linkedAttachment = attachments.find((attachment) => attachment.url.startsWith(NOTE_ATTACHMENT_PREFIX))
-  if (!linkedAttachment) return null
-  const noteId = linkedAttachment.url.slice(NOTE_ATTACHMENT_PREFIX.length).trim()
-  return noteId || null
-}
-
-function getTextNoteIdFromAttachment(attachment: MindmapAttachment): string | null {
-  if (!attachment.url.startsWith(NOTE_ATTACHMENT_PREFIX)) return null
-  const noteId = attachment.url.slice(NOTE_ATTACHMENT_PREFIX.length).trim()
-  return noteId || null
-}
-
-function withLinkedTextNoteAttachment(
-  attachments: MindmapAttachment[],
-  linkedNote: Pick<MindmapTextNote, 'id' | 'title'>
-): MindmapAttachment[] {
-  const withoutExistingLinkedNote = attachments.filter(
-    (attachment) => !attachment.url.startsWith(NOTE_ATTACHMENT_PREFIX)
-  )
-
-  const linkedAttachment: MindmapAttachment = {
-    id: `linked-note-${linkedNote.id}`,
-    label: `Linked note: ${linkedNote.title || 'Untitled'}`,
-    url: `${NOTE_ATTACHMENT_PREFIX}${linkedNote.id}`,
-    type: 'link',
-  }
-
-  return [linkedAttachment, ...withoutExistingLinkedNote]
-}
-
-// ============================================================================
-// Hit Testing Types
-// ============================================================================
-
-type NodeHitArea = 'body' | 'collapse'
-
-interface NodeHit {
-  nodeId: string
-  area: NodeHitArea
-}
-
-interface EdgeHit {
-  edgeId: string
-}
-
-// ============================================================================
-// Canvas Rendering Utilities
-// ============================================================================
-
-interface RenderContext {
-  ctx: CanvasRenderingContext2D
-  mindmapData: MindmapData
-  selectedNodeId: string | null
-  now: number
-  resolveVisibility: (nodeId: string, now: number) => { value: number; animating: boolean }
-}
-
-/**
- * Computes the metrics (dimensions, bounding rect, collapse button bounds) for a node
- */
-function computeNodeMetrics(
-  ctx: CanvasRenderingContext2D,
-  node: MindmapNode,
-  isRoot: boolean
-): NodeMetrics {
-  ctx.save()
-  ctx.setTransform(1, 0, 0, 1, 0, 0)
-  ctx.font = isRoot ? 'bold 16px sans-serif' : '14px sans-serif'
-  const label = node.text || ''
-  const textWidth = ctx.measureText(label).width
-  ctx.restore()
-
-  const width = Math.max(textWidth + NODE_PADDING * 2, MIN_NODE_WIDTH)
-  const height = NODE_HEIGHT
-  const halfWidth = width / 2
-  const halfHeight = height / 2
-
-  const rect = {
-    left: node.x - halfWidth,
-    right: node.x + halfWidth,
-    top: node.y - halfHeight,
-    bottom: node.y + halfHeight,
-  }
-
-  // Position the collapse indicator centred on the right edge of the node
-  // so it protrudes outward and never overlaps the node text.
-  const halfIndicator = COLLAPSE_INDICATOR_SIZE / 2
-  const nodeCenterY = node.y
-  const collapseBounds = node.children.length > 0
-    ? {
-        left: rect.right - halfIndicator,
-        right: rect.right + halfIndicator,
-        top: nodeCenterY - halfIndicator,
-        bottom: nodeCenterY + halfIndicator,
-      }
-    : null
-
-  return { width, height, rect, collapseBounds }
-}
-
-/**
- * Draws an edge (connection line) between nodes with rich visual styling:
- * - Cubic Bézier curves with tension
- * - Gradient coloring (parent → child node color)
- * - Glow/shadow layer for depth
- * - Tapered width (thicker at parent, thinner at child)
- * - Animated dash offset (flowing lines)
- * - Enhanced selection highlight with pulse
- * - Proportionally scaled arrowheads
- * - Rounded line caps and joins
- */
-function drawEdge(
-  ctx: CanvasRenderingContext2D,
-  from: Point,
-  to: Point,
-  visibility: number,
-  edgeColor: string,
-  meta?: MindmapEdgeMeta,
-  isSelected?: boolean,
-  curved?: boolean,
-  fromColor?: string,
-  toColor?: string,
-  now?: number,
-): void {
-  const width = Math.max(1.5, meta?.style?.width ?? EDGE_DEFAULTS.width)
-  const lineType = meta?.style?.lineType ?? EDGE_DEFAULTS.lineType
-  const opacity = Math.max(0.15, Math.min(1, meta?.style?.opacity ?? EDGE_DEFAULTS.opacity))
-  const userColor = meta?.style?.color?.trim()
-  const arrowType = meta?.style?.arrowType ?? EDGE_DEFAULTS.arrowType
-  const effectiveVisibility = Math.max(0.08, visibility * opacity)
-  const effectiveWidth = Math.max(1, width * visibility)
-
-  const polyline = getEdgePolyline(from, to, curved ?? false)
-  if (polyline.length < 2) return
-
-  // Determine gradient colors
-  const startColor = fromColor || userColor || edgeColor
-  const endColor = toColor || userColor || edgeColor
-  const hasGradient = !!(fromColor || toColor || userColor)
-
-  ctx.save()
-  ctx.imageSmoothingEnabled = true
-  ctx.imageSmoothingQuality = 'high'
-  ctx.lineCap = 'round'
-  ctx.lineJoin = 'round'
-
-  // ── Build gradient along the polyline ──
-  let strokeStyle: string | CanvasGradient = startColor
-  if (hasGradient && startColor !== endColor) {
-    const first = polyline[0]
-    const last = polyline[polyline.length - 1]
-    const gradient = ctx.createLinearGradient(first.x, first.y, last.x, last.y)
-    gradient.addColorStop(0, startColor)
-    gradient.addColorStop(1, endColor)
-    strokeStyle = gradient
-  }
-
-  // ── Dash pattern ──
-  const dashPattern = lineType === 'dashed' ? [10, 7] : lineType === 'dotted' ? [3, 8] : []
-
-  // ── Layer 1: Glow / ambient shadow ──
-  if (effectiveVisibility > 0.3) {
-    ctx.globalAlpha = effectiveVisibility * 0.18
-    ctx.lineWidth = effectiveWidth + 5
-    ctx.strokeStyle = startColor
-    ctx.shadowColor = startColor
-    ctx.shadowBlur = Math.min(12, effectiveWidth * 3)
-    ctx.setLineDash([])
-    ctx.beginPath()
-    ctx.moveTo(polyline[0].x, polyline[0].y)
-    for (let i = 1; i < polyline.length; i += 1) {
-      ctx.lineTo(polyline[i].x, polyline[i].y)
-    }
-    ctx.stroke()
-    ctx.shadowBlur = 0
-  }
-
-  // ── Layer 2: Tapered middle layer (slightly wider, more transparent) ──
-  if (effectiveWidth >= 2) {
-    ctx.globalAlpha = effectiveVisibility * 0.35
-    ctx.lineWidth = effectiveWidth + 2
-    ctx.strokeStyle = strokeStyle
-    ctx.setLineDash(dashPattern)
-    if (dashPattern.length > 0 && now !== undefined) {
-      ctx.lineDashOffset = -((now * 0.03) % 100)
-    }
-    ctx.beginPath()
-    ctx.moveTo(polyline[0].x, polyline[0].y)
-    const midIdx = Math.floor(polyline.length * 0.6)
-    for (let i = 1; i <= midIdx; i += 1) {
-      ctx.lineTo(polyline[i].x, polyline[i].y)
-    }
-    ctx.stroke()
-  }
-
-  // ── Layer 3: Main edge stroke ──
-  ctx.globalAlpha = effectiveVisibility
-  ctx.lineWidth = effectiveWidth
-  ctx.strokeStyle = strokeStyle
-  ctx.setLineDash(dashPattern)
-  if (dashPattern.length > 0 && now !== undefined) {
-    ctx.lineDashOffset = -((now * 0.03) % 100)
-  }
-  ctx.beginPath()
-  ctx.moveTo(polyline[0].x, polyline[0].y)
-  for (let i = 1; i < polyline.length; i += 1) {
-    ctx.lineTo(polyline[i].x, polyline[i].y)
-  }
-  ctx.stroke()
-
-  // ── Layer 4: Inner highlight stripe (thin bright line in center) ──
-  if (effectiveWidth >= 3 && effectiveVisibility > 0.5) {
-    ctx.globalAlpha = effectiveVisibility * 0.25
-    ctx.lineWidth = Math.max(1, effectiveWidth * 0.35)
-    ctx.strokeStyle = 'rgba(255, 255, 255, 0.5)'
-    ctx.setLineDash([])
-    ctx.beginPath()
-    ctx.moveTo(polyline[0].x, polyline[0].y)
-    for (let i = 1; i < polyline.length; i += 1) {
-      ctx.lineTo(polyline[i].x, polyline[i].y)
-    }
-    ctx.stroke()
-  }
-
-  // ── Arrowhead ──
-  if (arrowType !== 'none' && polyline.length >= 2) {
-    const last = polyline[polyline.length - 1]
-    const prev = polyline[Math.max(0, polyline.length - 2)]
-    const dx = last.x - prev.x
-    const dy = last.y - prev.y
-    const len = Math.max(1, Math.hypot(dx, dy))
-    const ux = dx / len
-    const uy = dy / len
-    const arrowSize = Math.max(8, effectiveWidth * 2.2 + 6)
-    const arrowLength = arrowSize
-    const arrowHalfWidth = arrowSize * 0.45
-    const baseX = last.x - ux * arrowLength
-    const baseY = last.y - uy * arrowLength
-    const leftX = baseX - uy * arrowHalfWidth
-    const leftY = baseY + ux * arrowHalfWidth
-    const rightX = baseX + uy * arrowHalfWidth
-    const rightY = baseY - ux * arrowHalfWidth
-
-    ctx.globalAlpha = effectiveVisibility
-    ctx.lineWidth = Math.max(1.5, effectiveWidth * 0.8)
-    ctx.setLineDash([])
-    ctx.shadowBlur = 0
-    ctx.lineJoin = 'round'
-
-    ctx.beginPath()
-    ctx.moveTo(last.x, last.y)
-    ctx.lineTo(leftX, leftY)
-    ctx.lineTo(rightX, rightY)
-    ctx.closePath()
-    if (arrowType === 'filled') {
-      ctx.fillStyle = endColor
-      ctx.fill()
-    } else {
-      ctx.strokeStyle = endColor
-      ctx.stroke()
-    }
-  }
-
-  // ── Selection highlight with pulsing glow ──
-  if (isSelected) {
-    ctx.globalAlpha = 0.9
-    ctx.setLineDash([])
-    ctx.shadowBlur = 0
-    const pulse = now !== undefined ? 1 + Math.sin(now * 0.005) * 0.15 : 1
-    const glowWidth = (effectiveWidth + 5) * pulse
-
-    // Outer glow ring
-    ctx.globalAlpha = 0.35
-    ctx.lineWidth = glowWidth + 4
-    ctx.strokeStyle = '#0ea5e9'
-    ctx.beginPath()
-    ctx.moveTo(polyline[0].x, polyline[0].y)
-    for (let i = 1; i < polyline.length; i += 1) {
-      ctx.lineTo(polyline[i].x, polyline[i].y)
-    }
-    ctx.stroke()
-
-    // Main selection line
-    ctx.globalAlpha = 0.85
-    ctx.lineWidth = glowWidth
-    ctx.strokeStyle = '#38bdf8'
-    ctx.beginPath()
-    ctx.moveTo(polyline[0].x, polyline[0].y)
-    for (let i = 1; i < polyline.length; i += 1) {
-      ctx.lineTo(polyline[i].x, polyline[i].y)
-    }
-    ctx.stroke()
-
-    // Bright inner core
-    ctx.globalAlpha = 0.7
-    ctx.lineWidth = Math.max(1.5, glowWidth * 0.4)
-    ctx.strokeStyle = '#e0f2fe'
-    ctx.beginPath()
-    ctx.moveTo(polyline[0].x, polyline[0].y)
-    for (let i = 1; i < polyline.length; i += 1) {
-      ctx.lineTo(polyline[i].x, polyline[i].y)
-    }
-    ctx.stroke()
-
-    ctx.shadowBlur = 0
-  }
-
-  ctx.setLineDash([])
-  ctx.restore()
-}
-
-function drawEdgeTitle(
-  ctx: CanvasRenderingContext2D,
-  from: Point,
-  to: Point,
-  title: string,
-  isDark: boolean,
-  visibility: number,
-  curved = false
-): void {
-  const trimmed = title.trim()
-  if (!trimmed) return
-
-  const polyline = getEdgePolyline(from, to, curved)
-  const midpoint = getPolylineMidpoint(polyline)
-  const midX = midpoint.x
-  const midY = midpoint.y
-
-  ctx.save()
-  ctx.globalAlpha = Math.max(0.75, Math.min(1, visibility))
-  ctx.font = '12px sans-serif'
-  ctx.textAlign = 'center'
-  ctx.textBaseline = 'middle'
-  const textWidth = ctx.measureText(trimmed).width
-  const width = textWidth + 14
-  const height = 22
-  const x = midX - width / 2
-  const y = midY - height / 2
-
-  ctx.fillStyle = isDark ? 'rgba(15, 23, 42, 0.85)' : 'rgba(255, 255, 255, 0.95)'
-  ctx.strokeStyle = isDark ? 'rgba(148, 163, 184, 0.35)' : 'rgba(100, 116, 139, 0.35)'
-  ctx.lineWidth = 1
-  ctx.beginPath()
-  ctx.roundRect(x, y, width, height, 10)
-  ctx.fill()
-  ctx.stroke()
-
-  ctx.fillStyle = isDark ? '#e2e8f0' : '#0f172a'
-  ctx.fillText(trimmed, midX, midY)
-  ctx.restore()
-}
-
-function distanceToSegment(point: Point, from: Point, to: Point): number {
-  const dx = to.x - from.x
-  const dy = to.y - from.y
-  if (dx === 0 && dy === 0) {
-    return Math.hypot(point.x - from.x, point.y - from.y)
-  }
-  const t = Math.max(0, Math.min(1, ((point.x - from.x) * dx + (point.y - from.y) * dy) / (dx * dx + dy * dy)))
-  const projX = from.x + t * dx
-  const projY = from.y + t * dy
-  return Math.hypot(point.x - projX, point.y - projY)
-}
-
-/**
- * Draws the collapse/expand indicator button on a node
- */
-function drawCollapseIndicator(
-  ctx: CanvasRenderingContext2D,
-  collapseBounds: NonNullable<NodeMetrics['collapseBounds']>,
-  nodeColor: string,
-  isCollapsed: boolean,
-  isSelected: boolean,
-  indicatorBg: string,
-  indicatorBgHover: string
-): void {
-  const centerX = (collapseBounds.left + collapseBounds.right) / 2
-  const centerY = (collapseBounds.top + collapseBounds.bottom) / 2
-  const indicatorRadius = COLLAPSE_INDICATOR_SIZE / 2
-
-  // Background circle
-  ctx.fillStyle = isSelected ? indicatorBg : indicatorBgHover
-  ctx.beginPath()
-  ctx.arc(centerX, centerY, indicatorRadius, 0, Math.PI * 2)
-  ctx.fill()
-
-  // Border
-  ctx.strokeStyle = nodeColor
-  ctx.lineWidth = 2
-  ctx.stroke()
-
-  // Plus/Minus icon
-  ctx.beginPath()
-  ctx.moveTo(centerX - indicatorRadius + 5, centerY)
-  ctx.lineTo(centerX + indicatorRadius - 5, centerY)
-  if (isCollapsed) {
-    ctx.moveTo(centerX, centerY - indicatorRadius + 5)
-    ctx.lineTo(centerX, centerY + indicatorRadius - 5)
-  }
-  ctx.stroke()
-}
-
-/**
- * Draws a single node (rounded rectangle with text)
- */
-function drawNodeBody(
-  ctx: CanvasRenderingContext2D,
-  node: MindmapNode,
-  metrics: NodeMetrics,
-  isRoot: boolean,
-  isSelected: boolean,
-  visibility: number,
-  renderX: number,
-  renderY: number,
-  selectedBorderColor: string,
-  indicatorBg: string,
-  indicatorBgHover: string
-): void {
-  ctx.save()
-  ctx.globalAlpha = Math.max(visibility, 0.1)
-  ctx.fillStyle = node.color
-  ctx.strokeStyle = isSelected ? selectedBorderColor : node.color
-  ctx.lineWidth = isSelected ? 3 : 2
-
-  // Node background
-  ctx.beginPath()
-  ctx.roundRect(
-    metrics.rect.left,
-    metrics.rect.top,
-    metrics.rect.right - metrics.rect.left,
-    metrics.rect.bottom - metrics.rect.top,
-    Math.min(metrics.height / 2, 20)
-  )
-  ctx.fill()
-  if (isSelected) ctx.stroke()
-
-  // Node text
-  ctx.fillStyle = '#fff'
-  ctx.textAlign = 'center'
-  ctx.textBaseline = 'middle'
-  ctx.font = isRoot ? 'bold 16px sans-serif' : '14px sans-serif'
-  ctx.fillText(node.text, renderX, renderY)
-
-  // Collapse indicator
-  if (metrics.collapseBounds) {
-    drawCollapseIndicator(ctx, metrics.collapseBounds, node.color, node.collapsed, isSelected, indicatorBg, indicatorBgHover)
-  }
-
-  ctx.restore()
-}
-
-/**
- * Calculates the interpolated render position based on visibility (for animations)
- */
-function calculateRenderPosition(
-  node: MindmapNode,
-  visibility: number,
-  parentPosition?: Point
-): Point {
-  if (!parentPosition) {
-    return { x: node.x, y: node.y }
-  }
-  return {
-    x: parentPosition.x + (node.x - parentPosition.x) * visibility,
-    y: parentPosition.y + (node.y - parentPosition.y) * visibility,
-  }
-}
-
-/**
- * Creates an empty layout snapshot for collecting render data
- */
-function createEmptyLayoutSnapshot(): LayoutSnapshot {
-  return {
-    nodes: [],
-    edges: [],
-    bounds: { minX: Infinity, minY: Infinity, maxX: -Infinity, maxY: -Infinity },
-  }
-}
-
-/**
- * Updates the layout snapshot bounds with node metrics
- */
-function updateSnapshotBounds(snapshot: LayoutSnapshot, metrics: NodeMetrics): void {
-  snapshot.bounds.minX = Math.min(snapshot.bounds.minX, metrics.rect.left)
-  snapshot.bounds.minY = Math.min(snapshot.bounds.minY, metrics.rect.top)
-  snapshot.bounds.maxX = Math.max(snapshot.bounds.maxX, metrics.rect.right)
-  snapshot.bounds.maxY = Math.max(snapshot.bounds.maxY, metrics.rect.bottom)
-}
-
-// ============================================================================
-// Data Normalization
-// ============================================================================
-
-// ============================================================================
-// Data Normalization
-// ============================================================================
-
-const createDefaultMindmap = (): MindmapData => {
-  const rootId = 'root'
-  return {
-    rootId,
-    customEdges: [],
-    parentEdgeMeta: {},
-    nodes: {
-      [rootId]: {
-        id: rootId,
-        text: 'Central Idea',
-        x: 400,
-        y: 300,
-        parentId: null,
-        children: [],
-        collapsed: false,
-        color: DEFAULT_COLORS[0],
-        description: '',
-        attachments: [],
-      },
-    },
-  }
-}
-
-export const normalizeMindmapData = (input?: MindmapData | null): MindmapData => {
-  if (!input || !input.rootId || !input.nodes || !input.nodes[input.rootId]) {
-    return createDefaultMindmap()
-  }
-
-  const normalizedNodes: Record<string, MindmapNode> = {}
-
-  Object.entries(input.nodes).forEach(([nodeId, raw]) => {
-    const id = raw?.id || nodeId
-    const text = typeof raw?.text === 'string' && raw.text.trim() ? raw.text : 'New Node'
-    const x = Number.isFinite(raw?.x) ? Number(raw?.x) : 0
-    const y = Number.isFinite(raw?.y) ? Number(raw?.y) : 0
-    const parentId = typeof raw?.parentId === 'string' ? raw.parentId : null
-    const children = Array.isArray(raw?.children)
-      ? raw.children.filter((child) => typeof child === 'string')
-      : []
-    const collapsed = Boolean(raw?.collapsed)
-    const color = typeof raw?.color === 'string' && raw.color.trim() ? raw.color : DEFAULT_COLORS[0]
-    const description = typeof raw?.description === 'string' ? raw.description : ''
-
-    const attachments: MindmapAttachment[] = Array.isArray(raw?.attachments)
-      ? raw.attachments
-          .map((item) => {
-            const id = typeof item?.id === 'string' ? item.id : undefined
-            const label = typeof item?.label === 'string' ? item.label : undefined
-            const url = typeof item?.url === 'string' ? item.url : undefined
-            const type = item?.type === 'image' || item?.type === 'link' ? item.type : undefined
-            if (!id || !url) return null
-            return {
-              id,
-              label: label ?? 'Attachment',
-              url,
-              type: type ?? 'image',
-            }
-          })
-          .filter((item): item is MindmapAttachment => Boolean(item))
-      : []
-
-    normalizedNodes[id] = {
-      id,
-      text,
-      x,
-      y,
-      parentId,
-      children,
-      collapsed,
-      color,
-      description,
-      attachments,
-    }
-  })
-
-  const rootNode = normalizedNodes[input.rootId]
-  if (!rootNode) {
-    return createDefaultMindmap()
-  }
-
-  rootNode.parentId = null
-
-  Object.values(normalizedNodes).forEach((node) => {
-    node.children = node.children.filter((childId) => normalizedNodes[childId] && normalizedNodes[childId].id !== node.id)
-    node.children.forEach((childId) => {
-      const child = normalizedNodes[childId]
-      if (child) child.parentId = node.id
-    })
-  })
-
-  const rawCustomEdges: Array<MindmapEdge | null> = Array.isArray(input.customEdges)
-    ? input.customEdges
-        .map((edge) => {
-          if (!edge || typeof edge !== 'object') return null
-          const id = typeof edge.id === 'string' && edge.id.trim() ? edge.id : `edge-${Date.now()}-${Math.random()}`
-          const fromNodeId = typeof edge.fromNodeId === 'string' ? edge.fromNodeId : ''
-          const toNodeId = typeof edge.toNodeId === 'string' ? edge.toNodeId : ''
-          if (!normalizedNodes[fromNodeId] || !normalizedNodes[toNodeId] || fromNodeId === toNodeId) return null
-          return {
-            id,
-            fromNodeId,
-            toNodeId,
-            title: typeof edge.title === 'string' ? edge.title : '',
-            style: {
-              color: typeof edge.style?.color === 'string' ? edge.style.color : undefined,
-              width: Number.isFinite(edge.style?.width) ? Math.max(1, Math.min(8, Number(edge.style?.width))) : undefined,
-              lineType:
-                edge.style?.lineType === 'solid' || edge.style?.lineType === 'dashed' || edge.style?.lineType === 'dotted'
-                  ? edge.style.lineType
-                  : undefined,
-              opacity: Number.isFinite(edge.style?.opacity)
-                ? Math.max(0.1, Math.min(1, Number(edge.style?.opacity)))
-                : undefined,
-              arrowType:
-                edge.style?.arrowType === 'none' || edge.style?.arrowType === 'standard' || edge.style?.arrowType === 'filled'
-                  ? edge.style.arrowType
-                  : undefined,
-            },
-          }
-        })
-    : []
-
-  const normalizedCustomEdges: MindmapEdge[] = rawCustomEdges.filter(
-    (edge): edge is MindmapEdge => edge !== null
-  )
-
-  const dedupedEdgeKeys = new Set<string>()
-  const dedupedCustomEdges = normalizedCustomEdges.filter((edge) => {
-    const key = `${edge.fromNodeId}->${edge.toNodeId}`
-    if (dedupedEdgeKeys.has(key)) return false
-    dedupedEdgeKeys.add(key)
-    return true
-  })
-
-  const normalizedParentEdgeMeta: Record<string, MindmapEdgeMeta> = {}
-  if (input.parentEdgeMeta && typeof input.parentEdgeMeta === 'object') {
-    Object.entries(input.parentEdgeMeta).forEach(([childId, meta]) => {
-      if (!normalizedNodes[childId] || !normalizedNodes[childId].parentId) return
-      normalizedParentEdgeMeta[childId] = {
-        title: typeof meta?.title === 'string' ? meta.title : '',
-        style: {
-          color: typeof meta?.style?.color === 'string' ? meta.style.color : undefined,
-          width: Number.isFinite(meta?.style?.width) ? Math.max(1, Math.min(8, Number(meta?.style?.width))) : undefined,
-          lineType:
-            meta?.style?.lineType === 'solid' || meta?.style?.lineType === 'dashed' || meta?.style?.lineType === 'dotted'
-              ? meta.style.lineType
-              : undefined,
-          opacity: Number.isFinite(meta?.style?.opacity) ? Math.max(0.1, Math.min(1, Number(meta?.style?.opacity))) : undefined,
-          arrowType:
-            meta?.style?.arrowType === 'none' || meta?.style?.arrowType === 'standard' || meta?.style?.arrowType === 'filled'
-              ? meta.style.arrowType
-              : undefined,
-        },
-      }
-    })
-  }
-
-  return {
-    rootId: rootNode.id,
-    nodes: normalizedNodes,
-    customEdges: dedupedCustomEdges,
-    parentEdgeMeta: normalizedParentEdgeMeta,
-  }
-}
-
-// ============================================================================
-// Canvas Theme Utilities
-// ============================================================================
-
-function getCanvasTheme(isDark: boolean) {
-  return {
-    background: isDark ? '#1e293b' : '#f8fafc',
-    edgeColor: isDark ? 'rgba(148, 163, 184, 0.3)' : 'rgba(100, 116, 139, 0.35)',
-    edgeGlowBlur: 6,
-    edgeGlowAlpha: 0.15,
-    edgeGlowWidthBoost: 4,
-    minimapBg: isDark ? 'rgba(2, 6, 23, 0.85)' : 'rgba(15, 23, 42, 0.7)',
-    minimapEdge: isDark ? 'rgba(148, 163, 184, 0.5)' : 'rgba(148, 163, 184, 0.6)',
-    nodeSelectedBorder: isDark ? '#e2e8f0' : '#0f172a',
-    nodeTextColor: '#fff',
-    collapseIndicatorBg: isDark ? 'rgba(30, 41, 59, 0.98)' : 'rgba(255, 255, 255, 0.98)',
-    collapseIndicatorBgHover: isDark ? 'rgba(30, 41, 59, 0.93)' : 'rgba(255, 255, 255, 0.93)',
-  }
-}
-
-// ============================================================================
-// Device Pixel Ratio Utility
-// ============================================================================
-
-function getDevicePixelRatio(): number {
-  return typeof window !== 'undefined' && typeof window.devicePixelRatio === 'number'
-    ? window.devicePixelRatio
-    : 1
-}
-
-// ============================================================================
-// Canvas Context Utility
-// ============================================================================
-
-function getCanvasContext(canvas: HTMLCanvasElement | null): CanvasRenderingContext2D | null {
-  if (!canvas) return null
-  return canvas.getContext('2d')
-}
 
 // ============================================================================
 // Main Component
@@ -1550,6 +145,12 @@ const MindmapEditor = forwardRef<MindmapEditorHandle, MindmapEditorProps>(
       defaultShowMinimap ?? !isMobile
     )
     const [useCurvedEdges, setUseCurvedEdges] = React.useState(false)
+
+    // Auto-layout state
+    const [layoutDirection, setLayoutDirection] = React.useState<MindmapLayoutDirection>('lr')
+    const [preserveManualPositions, setPreserveManualPositions] = React.useState(false)
+    const [isLayoutMenuOpen, setIsLayoutMenuOpen] = React.useState(false)
+    const manuallyPositionedRef = useRef<Set<string>>(new Set())
 
     // Info panel visibility
     const [showInfo, setShowInfo] = React.useState(true)
@@ -2687,6 +1288,9 @@ const MindmapEditor = forwardRef<MindmapEditorHandle, MindmapEditorProps>(
       prevPinchDistRef.current = null
       clearLongPress()
       if (draggingNodeId || isPanning) suppressClickRef.current = true
+      if (draggingNodeId) {
+        manuallyPositionedRef.current.add(draggingNodeId)
+      }
       dispatch({ type: 'STOP_DRAGGING' })
       dispatch({ type: 'STOP_PANNING' })
       if (e.button === 2) rightButtonPanningRef.current = false
@@ -3229,6 +1833,43 @@ const MindmapEditor = forwardRef<MindmapEditorHandle, MindmapEditorProps>(
       dispatch({ type: 'SET_SELECTED_EDGE_ID', payload: null })
     }, [selectedEdge])
 
+    const toggleConnectionMode = useCallback(() => {
+      const nextMode = !connectionMode
+      dispatch({ type: 'SET_CONNECTION_MODE', payload: nextMode })
+      if (!nextMode) {
+        dispatch({ type: 'SET_CONNECTION_START_NODE_ID', payload: null })
+      }
+    }, [connectionMode])
+
+    const startConnectionFromNode = useCallback((nodeId: string) => {
+      dispatch({ type: 'SET_CONNECTION_MODE', payload: true })
+      dispatch({ type: 'SET_CONNECTION_START_NODE_ID', payload: nodeId })
+      dispatch({ type: 'SET_SELECTED_NODE_ID', payload: nodeId })
+      setContextMenu(null)
+    }, [])
+
+    const setNodeColor = useCallback((nodeId: string, color: string) => {
+      dispatch({ type: 'UPDATE_NODE', payload: { nodeId, updates: { color } } })
+      setContextMenu(null)
+    }, [])
+
+    const updateDraft = useCallback((updates: Partial<NodeDetailDraft>) => {
+      dispatch({ type: 'UPDATE_DETAIL_DRAFT', payload: updates })
+    }, [])
+
+    const setAttachmentInput = useCallback((input: AttachmentInput) => {
+      dispatch({ type: 'SET_NEW_ATTACHMENT_INPUT', payload: input })
+    }, [])
+
+    const openLinkedNote = useCallback(
+      (noteId: string) => {
+        if (!onOpenTextNote) return
+        onOpenTextNote(noteId)
+        closeNodeDetail()
+      },
+      [onOpenTextNote, closeNodeDetail]
+    )
+
     const startSheetDrag = useCallback((event: React.PointerEvent<HTMLElement>) => {
       if (!useSharedDetailBottomSheet) return
       sheetPointerIdRef.current = event.pointerId
@@ -3502,35 +2143,13 @@ const MindmapEditor = forwardRef<MindmapEditorHandle, MindmapEditorProps>(
 
     const autoLayout = useCallback(() => {
       if (readOnly) return
-      const nodes = mindmapData.nodes
-      const rootId = mindmapData.rootId
-      const canvas = canvasRef.current
-      const centerX = canvas ? canvas.width / (2 * scale) - offset.x / scale : 400
-      const centerY = canvas ? canvas.height / (2 * scale) - offset.y / scale : 300
-      const BASE_RADIUS = 200
-
-      const updates: { [nodeId: string]: Partial<MindmapNode> } = {}
-
-      const layoutNode = (nodeId: string, angle: number, spread: number, radius: number) => {
-        const node = nodes[nodeId]
-        if (!node) return
-        const x = nodeId === rootId ? centerX : centerX + Math.cos(angle) * radius
-        const y = nodeId === rootId ? centerY : centerY + Math.sin(angle) * radius
-        updates[nodeId] = { x, y }
-
-        const children = node.children.filter((id) => nodes[id])
-        if (children.length === 0) return
-
-        const childSpread = spread / children.length
-        const startAngle = angle - spread / 2 + childSpread / 2
-        children.forEach((childId, i) => {
-          layoutNode(childId, startAngle + i * childSpread, childSpread * 0.9, radius + BASE_RADIUS)
-        })
-      }
-
-      layoutNode(rootId, -Math.PI / 2, Math.PI * 2, 0)
+      const updates = layoutMindmap(mindmapData, {
+        direction: layoutDirection,
+        preserveRoot: true,
+        preserve: preserveManualPositions ? Array.from(manuallyPositionedRef.current) : undefined,
+      })
       dispatch({ type: 'UPDATE_NODES', payload: updates })
-    }, [readOnly, mindmapData, scale, offset])
+    }, [readOnly, mindmapData, layoutDirection, preserveManualPositions])
 
     const breadcrumbPath = useMemo((): MindmapNode[] => {
       const path: MindmapNode[] = []
@@ -3640,790 +2259,137 @@ const MindmapEditor = forwardRef<MindmapEditorHandle, MindmapEditorProps>(
 
         {/* Toolbar */}
         {showToolbar && (
-          <div className="absolute top-3 left-3 z-10 flex flex-col gap-1 bg-white dark:bg-slate-800 rounded-xl shadow-lg p-1.5 border border-gray-200 dark:border-slate-700">
-            {!readOnly && (
-              <>
-                {/* Node actions */}
-                <button
-                  onClick={addChildNode}
-                  disabled={!selectedNodeId}
-                  className="p-2 rounded-lg hover:bg-gray-100 dark:hover:bg-slate-700 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
-                  title="Add child node"
-                  aria-label="Add child node"
-                >
-                  <Plus size={18} />
-                </button>
-                <button
-                  onClick={deleteNode}
-                  disabled={!selectedNodeId || selectedNodeId === mindmapData.rootId}
-                  className="p-2 rounded-lg hover:bg-gray-100 dark:hover:bg-slate-700 disabled:opacity-40 disabled:cursor-not-allowed transition-colors text-red-500 dark:text-red-400"
-                  title="Delete selected node"
-                  aria-label="Delete node"
-                >
-                  <Trash2 size={18} />
-                </button>
-                <button
-                  onClick={() => toggleCollapse()}
-                  disabled={!selectedNodeId || (mindmapData.nodes[selectedNodeId]?.children.length ?? 0) === 0}
-                  className="p-2 rounded-lg hover:bg-gray-100 dark:hover:bg-slate-700 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
-                  title="Collapse / expand node (Space)"
-                  aria-label="Toggle collapse"
-                >
-                  {selectedNodeId && mindmapData.nodes[selectedNodeId]?.collapsed ? <Plus size={18} /> : <Minus size={18} />}
-                </button>
-                <button
-                  onClick={() => {
-                    const nextMode = !connectionMode
-                    dispatch({ type: 'SET_CONNECTION_MODE', payload: nextMode })
-                    if (!nextMode) {
-                      dispatch({ type: 'SET_CONNECTION_START_NODE_ID', payload: null })
-                    }
-                  }}
-                  className={`p-2 rounded-lg transition-colors ${
-                    connectionMode
-                      ? 'bg-alpine-50 text-alpine-600 dark:bg-alpine-900/30 dark:text-alpine-300'
-                      : 'hover:bg-gray-100 dark:hover:bg-slate-700'
-                  }`}
-                  title="Connect mode: click source node then target node"
-                  aria-label="Toggle connect mode"
-                >
-                  <Link2 size={18} />
-                </button>
-
-                <div className="h-px bg-gray-200 dark:bg-slate-700 my-0.5" />
-              </>
-            )}
-
-            {/* View controls */}
-            <button
-              onClick={zoomIn}
-              className="p-2 rounded-lg hover:bg-gray-100 dark:hover:bg-slate-700 transition-colors"
-              title="Zoom in"
-              aria-label="Zoom in"
-            >
-              <ZoomIn size={18} />
-            </button>
-            <button
-              onClick={zoomOut}
-              className="p-2 rounded-lg hover:bg-gray-100 dark:hover:bg-slate-700 transition-colors"
-              title="Zoom out"
-              aria-label="Zoom out"
-            >
-              <ZoomOut size={18} />
-            </button>
-            <button
-              onClick={resetView}
-              className="p-2 rounded-lg hover:bg-gray-100 dark:hover:bg-slate-700 transition-colors"
-              title="Reset view (1:1)"
-              aria-label="Reset view"
-            >
-              <RotateCcw size={18} />
-            </button>
-            <button
-              onClick={fitToView}
-              className="p-2 rounded-lg hover:bg-gray-100 dark:hover:bg-slate-700 transition-colors"
-              title="Fit all nodes in view"
-              aria-label="Fit to view"
-            >
-              <Maximize2 size={18} />
-            </button>
-            <button
-              onClick={() => setUseCurvedEdges((current) => !current)}
-              className={`p-2 rounded-lg transition-colors ${
-                useCurvedEdges
-                  ? 'bg-alpine-50 text-alpine-600 dark:bg-alpine-900/30 dark:text-alpine-300'
-                  : 'hover:bg-gray-100 dark:hover:bg-slate-700'
-              }`}
-              title="Toggle curved connections"
-              aria-label="Toggle curved connections"
-            >
-              <ChevronRight size={18} className={useCurvedEdges ? 'rotate-90' : ''} />
-            </button>
-
-            {(canSearch || !readOnly) && <div className="h-px bg-gray-200 dark:bg-slate-700 my-0.5" />}
-
-            {/* Search */}
-            {canSearch && (
-              <button
-                onClick={() => setIsSearchOpen((v) => !v)}
-                className={`p-2 rounded-lg hover:bg-gray-100 dark:hover:bg-slate-700 transition-colors ${isSearchOpen ? 'bg-alpine-50 dark:bg-alpine-900/30 text-alpine-600' : ''}`}
-                title="Search nodes"
-                aria-label="Search nodes"
-              >
-                <Search size={18} />
-              </button>
-            )}
-
-            {!readOnly && (
-              <>
-                {/* Auto-layout */}
-                <button
-                  onClick={autoLayout}
-                  className="p-2 rounded-lg hover:bg-gray-100 dark:hover:bg-slate-700 transition-colors"
-                  title="Auto-arrange nodes (radial layout)"
-                  aria-label="Auto layout"
-                >
-                  <LayoutTemplate size={18} />
-                </button>
-              </>
-            )}
-
-            {/* Export — always visible when toolbar is shown */}
-            {showToolbar && (
-              <>
-                {!readOnly && <div className="h-px bg-gray-200 dark:bg-slate-700 my-0.5" />}
-                <button
-                  onClick={openExportDialog}
-                  className="p-2 rounded-lg hover:bg-gray-100 dark:hover:bg-slate-700 transition-colors"
-                  title="Export mindmap as image"
-                  aria-label="Export image"
-                >
-                  <Download size={18} />
-                </button>
-              </>
-            )}
-
-            {canToggleMinimap && (
-              <button
-                onClick={() => setShowMinimap((v) => !v)}
-                className={`p-2 rounded-lg hover:bg-gray-100 dark:hover:bg-slate-700 transition-colors ${showMinimap ? 'text-alpine-600' : 'opacity-50'}`}
-                title="Toggle minimap"
-                aria-label="Toggle minimap"
-              >
-                <MapIcon size={18} />
-              </button>
-            )}
-          </div>
+          <MindmapToolbar
+            readOnly={readOnly}
+            selectedNodeId={selectedNodeId}
+            mindmapData={mindmapData}
+            connectionMode={connectionMode}
+            useCurvedEdges={useCurvedEdges}
+            isSearchOpen={isSearchOpen}
+            isLayoutMenuOpen={isLayoutMenuOpen}
+            canSearch={canSearch}
+            canToggleMinimap={canToggleMinimap}
+            showMinimap={showMinimap}
+            layoutDirection={layoutDirection}
+            onAddChild={addChildNode}
+            onDelete={deleteNode}
+            onToggleCollapse={() => toggleCollapse()}
+            onToggleConnectionMode={toggleConnectionMode}
+            onZoomIn={zoomIn}
+            onZoomOut={zoomOut}
+            onResetView={resetView}
+            onFitToView={fitToView}
+            onToggleCurvedEdges={() => setUseCurvedEdges((current) => !current)}
+            onToggleSearch={() => setIsSearchOpen((v) => !v)}
+            onAutoLayout={autoLayout}
+            onToggleLayoutMenu={() => setIsLayoutMenuOpen((v) => !v)}
+            onExport={openExportDialog}
+            onToggleMinimap={() => setShowMinimap((v) => !v)}
+          />
         )}
 
         {/* Search dropdown */}
         {isSearchOpen && canSearch && (
-          <div className="absolute top-3 left-16 z-20 w-64 bg-white dark:bg-slate-800 rounded-xl shadow-lg border border-gray-200 dark:border-slate-700 overflow-hidden">
-            <div className="flex items-center gap-2 px-3 py-2 border-b border-gray-100 dark:border-slate-700">
-              <Search size={14} className="text-slate-400 shrink-0" />
-              <input
-                type="text"
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                placeholder="Find node…"
-                autoFocus
-                className="flex-1 text-sm bg-transparent outline-none text-slate-800 dark:text-slate-200 placeholder:text-slate-400"
-              />
-              {searchQuery && (
-                <button onClick={() => setSearchQuery('')} className="text-slate-400 hover:text-slate-600 dark:hover:text-slate-300">
-                  <X size={14} />
+          <MindmapSearchDropdown
+            query={searchQuery}
+            results={searchResults}
+            onQueryChange={setSearchQuery}
+            onClear={() => setSearchQuery('')}
+            onSelect={handleSearchSelect}
+          />
+        )}
+
+        {/* Layout options dropdown */}
+        {isLayoutMenuOpen && !readOnly && (
+          <div className="absolute top-3 left-16 z-20 w-64 bg-white dark:bg-slate-800 rounded-xl shadow-lg border border-gray-200 dark:border-slate-700 p-3 space-y-3">
+            <span className="text-xs font-medium uppercase tracking-wide text-slate-400 dark:text-slate-500">Layout direction</span>
+            <div className="grid grid-cols-2 gap-1.5">
+              {(['lr', 'radial'] as const).map((direction) => (
+                <button
+                  key={direction}
+                  type="button"
+                  onClick={() => setLayoutDirection(direction)}
+                  className={`rounded-lg px-2 py-1.5 text-xs font-medium transition-colors ${
+                    layoutDirection === direction
+                      ? 'bg-alpine-500 text-white'
+                      : 'border border-slate-200 dark:border-slate-600 text-slate-600 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-700'
+                  }`}
+                >
+                  {direction === 'lr' ? 'Left-to-right' : 'Radial'}
                 </button>
-              )}
+              ))}
             </div>
-            {searchResults.length > 0 ? (
-              <ul className="max-h-56 overflow-y-auto divide-y divide-gray-100 dark:divide-slate-700">
-                {searchResults.map((node) => (
-                  <li key={node.id}>
-                    <button
-                      type="button"
-                      onClick={() => handleSearchSelect(node.id)}
-                      className="w-full text-left px-3 py-2 text-sm hover:bg-gray-50 dark:hover:bg-slate-700 transition-colors flex items-center gap-2"
-                    >
-                      <span
-                        className="inline-block h-2.5 w-2.5 rounded-full shrink-0"
-                        style={{ backgroundColor: node.color }}
-                      />
-                      <span className="truncate text-slate-700 dark:text-slate-200">{node.text}</span>
-                    </button>
-                  </li>
-                ))}
-              </ul>
-            ) : searchQuery.trim() ? (
-              <p className="px-3 py-3 text-xs text-slate-400 text-center">No nodes match&nbsp;"{searchQuery}"</p>
-            ) : (
-              <p className="px-3 py-3 text-xs text-slate-400 text-center">Type to search nodes</p>
-            )}
+            <label className="flex items-center gap-2 text-xs text-slate-600 dark:text-slate-300 cursor-pointer">
+              <input
+                type="checkbox"
+                checked={preserveManualPositions}
+                onChange={(event) => setPreserveManualPositions(event.target.checked)}
+                className="h-3.5 w-3.5 accent-alpine-500"
+              />
+              Preserve manually placed nodes
+            </label>
+            <button
+              type="button"
+              onClick={() => {
+                autoLayout()
+                setIsLayoutMenuOpen(false)
+              }}
+              className="w-full rounded-lg bg-alpine-600 px-3 py-2 text-xs font-semibold text-white hover:bg-alpine-700 transition-colors"
+            >
+              Apply layout
+            </button>
           </div>
         )}
 
         {/* Node detail view */}
         {selectedEdge && !detailNodeId && (
-          <div className="absolute right-3 top-3 z-20 w-[320px] max-w-[calc(100%-1.5rem)] rounded-2xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900/95 shadow-xl ">
-            <div className="flex items-center justify-between border-b border-slate-200 dark:border-slate-700 px-4 py-3">
-              <div>
-                <p className="text-xs uppercase tracking-wide text-slate-400 dark:text-slate-500">
-                  {selectedEdge.type === 'custom' ? 'Custom connection' : 'Parent connection'}
-                </p>
-                <p className="mt-0.5 flex items-center gap-1.5 text-sm font-semibold text-slate-800 dark:text-slate-100">
-                  <span className="truncate max-w-[115px]">{selectedEdge.fromNode.text}</span>
-                  <ArrowRight size={14} className="text-slate-400" />
-                  <span className="truncate max-w-[115px]">{selectedEdge.toNode.text}</span>
-                </p>
-              </div>
-              <button
-                type="button"
-                onClick={() => dispatch({ type: 'SET_SELECTED_EDGE_ID', payload: null })}
-                className="flex h-8 w-8 items-center justify-center rounded-full border border-slate-200 dark:border-slate-700 text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800"
-                aria-label="Close connection panel"
-              >
-                <X size={14} />
-              </button>
-            </div>
-
-            <div className="space-y-4 px-4 py-4">
-              <div className="space-y-1.5">
-                <label className="text-xs font-medium text-slate-600 dark:text-slate-300">Title</label>
-                {readOnly ? (
-                  <div className="rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/70 px-3 py-2 text-sm text-slate-700 dark:text-slate-200">
-                    {selectedEdge.title.trim() || 'No title'}
-                  </div>
-                ) : (
-                  <input
-                    type="text"
-                    value={selectedEdge.title}
-                    onChange={(event) => updateSelectedEdgeMeta({ title: event.target.value.slice(0, 80) })}
-                    className="w-full rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 px-3 py-2 text-sm text-slate-800 dark:text-slate-100 focus:border-alpine-500 focus:outline-none focus:ring-2 focus:ring-alpine-200"
-                    placeholder="Relationship title"
-                  />
-                )}
-              </div>
-
-              {readOnly ? (
-                <div className="grid grid-cols-2 gap-2 text-xs">
-                  <div className="rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/70 px-3 py-2 text-slate-700 dark:text-slate-200">
-                    <div className="text-slate-500 dark:text-slate-400">Line type</div>
-                    <div className="mt-0.5 font-medium capitalize">{selectedEdge.style.lineType}</div>
-                  </div>
-                  <div className="rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/70 px-3 py-2 text-slate-700 dark:text-slate-200">
-                    <div className="text-slate-500 dark:text-slate-400">Arrow</div>
-                    <div className="mt-0.5 font-medium capitalize">{selectedEdge.style.arrowType}</div>
-                  </div>
-                  <div className="rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/70 px-3 py-2 text-slate-700 dark:text-slate-200">
-                    <div className="text-slate-500 dark:text-slate-400">Width</div>
-                    <div className="mt-0.5 font-medium">{selectedEdge.style.width.toFixed(1)}</div>
-                  </div>
-                  <div className="rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/70 px-3 py-2 text-slate-700 dark:text-slate-200">
-                    <div className="text-slate-500 dark:text-slate-400">Opacity</div>
-                    <div className="mt-0.5 font-medium">{Math.round(selectedEdge.style.opacity * 100)}%</div>
-                  </div>
-                  <div className="col-span-2 rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/70 px-3 py-2 text-slate-700 dark:text-slate-200">
-                    <div className="text-slate-500 dark:text-slate-400">Color</div>
-                    <div className="mt-1 flex items-center gap-2">
-                      <span
-                        className="inline-block h-4 w-4 rounded-full border border-slate-300 dark:border-slate-600"
-                        style={{ backgroundColor: selectedEdge.style.color || '#64748b' }}
-                      />
-                      <span className="font-medium">{selectedEdge.style.color || 'Theme default'}</span>
-                    </div>
-                  </div>
-                </div>
-              ) : (
-                <>
-                  <div className="space-y-1.5">
-                    <label className="text-xs font-medium text-slate-600 dark:text-slate-300">Color</label>
-                    <div className="flex flex-wrap gap-1.5">
-                      {DEFAULT_COLORS.map((color) => {
-                        const active = selectedEdge.style.color === color
-                        return (
-                          <button
-                            key={color}
-                            type="button"
-                            onClick={() => updateSelectedEdgeMeta({ style: { color } })}
-                            className={`h-7 w-7 rounded-full border-2 ${active ? 'border-slate-900 dark:border-white' : 'border-transparent'}`}
-                            style={{ backgroundColor: color }}
-                            aria-label={`Set connection color ${color}`}
-                          />
-                        )
-                      })}
-                      <button
-                        type="button"
-                        onClick={() => updateSelectedEdgeMeta({ style: { color: '' } })}
-                        className="h-7 rounded-full border border-slate-300 dark:border-slate-600 px-2 text-xs text-slate-600 dark:text-slate-300"
-                      >
-                        Theme
-                      </button>
-                    </div>
-                  </div>
-
-                  <div className="grid grid-cols-2 gap-3">
-                    <label className="space-y-1.5">
-                      <span className="text-xs font-medium text-slate-600 dark:text-slate-300">Line type</span>
-                      <select
-                        value={selectedEdge.style.lineType}
-                        onChange={(event) =>
-                          updateSelectedEdgeMeta({ style: { lineType: event.target.value as MindmapLineType } })
-                        }
-                        className="w-full rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 px-2.5 py-2 text-sm text-slate-800 dark:text-slate-100"
-                      >
-                        <option value="solid">Solid</option>
-                        <option value="dashed">Dashed</option>
-                        <option value="dotted">Dotted</option>
-                      </select>
-                    </label>
-                    <label className="space-y-1.5">
-                      <span className="text-xs font-medium text-slate-600 dark:text-slate-300">Arrow</span>
-                      <select
-                        value={selectedEdge.style.arrowType}
-                        onChange={(event) =>
-                          updateSelectedEdgeMeta({ style: { arrowType: event.target.value as MindmapArrowType } })
-                        }
-                        className="w-full rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 px-2.5 py-2 text-sm text-slate-800 dark:text-slate-100"
-                      >
-                        <option value="none">None</option>
-                        <option value="standard">Open</option>
-                        <option value="filled">Filled</option>
-                      </select>
-                    </label>
-                  </div>
-
-                  <div className="space-y-3">
-                    <label className="block space-y-1">
-                      <span className="text-xs font-medium text-slate-600 dark:text-slate-300">Width: {selectedEdge.style.width.toFixed(1)}</span>
-                      <input
-                        type="range"
-                        min={1}
-                        max={8}
-                        step={0.5}
-                        value={selectedEdge.style.width}
-                        onChange={(event) => updateSelectedEdgeMeta({ style: { width: Number(event.target.value) } })}
-                        className="w-full"
-                      />
-                    </label>
-                    <label className="block space-y-1">
-                      <span className="text-xs font-medium text-slate-600 dark:text-slate-300">Opacity: {Math.round(selectedEdge.style.opacity * 100)}%</span>
-                      <input
-                        type="range"
-                        min={0.1}
-                        max={1}
-                        step={0.05}
-                        value={selectedEdge.style.opacity}
-                        onChange={(event) => updateSelectedEdgeMeta({ style: { opacity: Number(event.target.value) } })}
-                        className="w-full"
-                      />
-                    </label>
-                  </div>
-                </>
-              )}
-            </div>
-
-            {!readOnly && (
-              <div className="flex items-center justify-between border-t border-slate-200 dark:border-slate-700 px-4 py-3">
-                <button
-                  type="button"
-                  onClick={() => updateSelectedEdgeMeta({ title: '', style: {} })}
-                  className="text-xs font-medium text-slate-500 hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-200"
-                >
-                  Reset style
-                </button>
-                {selectedEdge.type === 'custom' && (
-                  <button
-                    type="button"
-                    onClick={deleteSelectedCustomEdge}
-                    className="inline-flex items-center gap-1 rounded-lg border border-red-200 bg-red-50 px-3 py-1.5 text-xs font-semibold text-red-600 hover:bg-red-100 dark:border-red-900/40 dark:bg-red-900/20 dark:text-red-300"
-                  >
-                    <Trash2 size={13} />
-                    Delete connection
-                  </button>
-                )}
-              </div>
-            )}
-          </div>
+          <MindmapEdgePanel
+            edge={selectedEdge}
+            readOnly={readOnly}
+            onClose={() => dispatch({ type: 'SET_SELECTED_EDGE_ID', payload: null })}
+            onUpdateMeta={updateSelectedEdgeMeta}
+            onResetStyle={() => updateSelectedEdgeMeta({ title: '', style: {} })}
+            onDelete={deleteSelectedCustomEdge}
+          />
         )}
 
         {detailNodeId && detailDraft && detailNode && (
-          <div
-            className={`absolute inset-0 z-20 p-3 ${
-              useSharedDetailLayout
-                ? useSharedDetailBottomSheet
-                  ? 'flex items-end justify-center bg-slate-900/30'
-                  : 'pointer-events-none flex items-stretch justify-end'
-                : 'flex items-end sm:items-center justify-center bg-slate-900/50 '
-            }`}
-            onClick={() => {
-              if (useSharedDetailBottomSheet && !isSheetDragging) {
-                closeNodeDetail()
-              }
-            }}
-          >
-            <div
-              className={`bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 overflow-hidden shadow-2xl pointer-events-auto ${
-                useSharedDetailLayout
-                  ? useSharedDetailBottomSheet
-                    ? 'w-full max-w-2xl max-h-[78vh] rounded-2xl'
-                    : 'h-full w-full max-w-md rounded-2xl'
-                  : 'w-full max-w-2xl rounded-2xl'
-              }`}
-              role="dialog"
-              aria-modal={!useSharedDetailLayout}
-              onClick={(event) => event.stopPropagation()}
-              onPointerMove={moveSheetDrag}
-              onPointerUp={endSheetDrag}
-              onPointerCancel={endSheetDrag}
-              style={
-                useSharedDetailBottomSheet
-                  ? {
-                      transform: `translateY(${sheetDragOffset}px)`,
-                      transition: isSheetDragging ? 'none' : 'transform 220ms ease-out',
-                    }
-                  : undefined
-              }
-            >
-              {useSharedDetailBottomSheet && (
-                <div className="flex justify-center pt-2">
-                  <button
-                    type="button"
-                    aria-label="Drag down to close"
-                    className="h-5 w-16 cursor-grab touch-none rounded-full bg-slate-300/80 active:cursor-grabbing dark:bg-slate-600/80"
-                    onPointerDown={startSheetDrag}
-                  />
-                </div>
-              )}
-              <div className="flex items-start justify-between gap-4 px-5 py-3 border-b border-slate-200 dark:border-slate-700">
-                <div>
-                  <div className="flex items-center gap-2 text-slate-600 dark:text-slate-400 text-sm font-medium">
-                    {readOnly ? <Info size={18} /> : <Edit2 size={18} />}
-                    {readOnly ? 'Node Overview' : 'Node Details'}
-                  </div>
-                  <h3 className="text-lg font-semibold text-slate-800 dark:text-slate-100 mt-1 leading-tight break-words">
-                    {detailNode.text}
-                  </h3>
-                  <div className="mt-2 flex flex-wrap gap-2 text-xs text-slate-500 dark:text-slate-400">
-                    <span className="inline-flex items-center gap-1 rounded-full bg-slate-100 dark:bg-slate-800 px-3 py-1">
-                      Children: {detailNode.children.length}
-                    </span>
-                    <span className="inline-flex items-center gap-1 rounded-full bg-slate-100 dark:bg-slate-800 px-3 py-1">
-                      Attachments: {detailDraft.attachments.length}
-                    </span>
-                  </div>
-                </div>
-                <button
-                  onClick={closeNodeDetail}
-                  className="flex h-9 w-9 items-center justify-center rounded-full border border-slate-200 dark:border-slate-700 text-slate-500 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
-                  aria-label="Close node detail"
-                >
-                  <X size={16} />
-                </button>
-              </div>
-
-              <div
-                className={`px-5 py-4 space-y-5 overflow-y-auto ${
-                  useSharedDetailLayout
-                    ? useSharedDetailBottomSheet
-                      ? 'max-h-[58vh]'
-                      : 'h-[calc(100%-132px)]'
-                    : 'max-h-[70vh]'
-                }`}
-              >
-                <div className="space-y-2">
-                  <label className="text-sm font-medium text-slate-700 dark:text-slate-300" htmlFor="mindmap-node-title">
-                    Title
-                  </label>
-                  {readOnly ? (
-                    <div className="w-full rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/60 text-slate-800 dark:text-slate-100 px-3 py-2 text-sm">
-                      {detailDraft.text || 'Untitled Node'}
-                    </div>
-                  ) : (
-                    <input
-                      id="mindmap-node-title"
-                      type="text"
-                      value={detailDraft.text}
-                      onChange={(e) =>
-                        dispatch({ type: 'UPDATE_DETAIL_DRAFT', payload: { text: e.target.value } })
-                      }
-                      className="w-full rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-800 dark:text-slate-100 px-3 py-2 text-sm shadow-sm focus:border-alpine-500 focus:outline-none focus:ring-2 focus:ring-alpine-200"
-                      placeholder="Node title"
-                    />
-                  )}
-                </div>
-
-                <div className="space-y-2">
-                  <label className="text-sm font-medium text-slate-700 dark:text-slate-300" htmlFor="mindmap-node-description">
-                    Description
-                  </label>
-                  {readOnly ? (
-                    <div className="w-full rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/60 text-slate-700 dark:text-slate-200 px-3 py-2 text-sm whitespace-pre-wrap min-h-[120px]">
-                      {detailDraft.description?.trim() ? detailDraft.description : 'No description provided.'}
-                    </div>
-                  ) : (
-                    <textarea
-                      id="mindmap-node-description"
-                      value={detailDraft.description}
-                      onChange={(e) =>
-                        dispatch({ type: 'UPDATE_DETAIL_DRAFT', payload: { description: e.target.value } })
-                      }
-                      rows={5}
-                      className="w-full rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-800 dark:text-slate-100 px-3 py-2 text-sm shadow-sm focus:border-alpine-500 focus:outline-none focus:ring-2 focus:ring-alpine-200"
-                      placeholder="Add more context, notes, or action items"
-                    />
-                  )}
-                </div>
-
-                {!readOnly && (
-                <div className="space-y-3 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50/70 dark:bg-slate-800/50 p-3">
-                  <div className="flex items-center justify-between gap-2">
-                    <span className="text-sm font-medium text-slate-700 dark:text-slate-300">Linked text note</span>
-                    <span className="text-xs text-slate-500 dark:text-slate-400">Use note content as description</span>
-                  </div>
-
-                  <div className="grid gap-2 sm:grid-cols-[minmax(0,1fr)_auto]">
-                    <select
-                      value={linkedTextNoteId}
-                      onChange={(event) => setLinkedTextNoteId(event.target.value)}
-                      className="rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-800 dark:text-slate-100 px-3 py-2 text-sm shadow-sm focus:border-alpine-500 focus:outline-none focus:ring-2 focus:ring-alpine-200"
-                    >
-                      <option value="">Select a text note…</option>
-                      {availableTextNotes.map((note) => (
-                        <option key={note.id} value={note.id}>
-                          {note.title || 'Untitled'}
-                        </option>
-                      ))}
-                    </select>
-                    <button
-                      type="button"
-                      onClick={() => applyLinkedTextNoteToDescription(linkedTextNoteId)}
-                      disabled={!linkedTextNoteId}
-                      className="inline-flex items-center justify-center gap-2 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 px-4 py-2 text-sm font-medium text-slate-700 dark:text-slate-300 transition-colors hover:bg-slate-100 dark:hover:bg-slate-700 disabled:cursor-not-allowed disabled:opacity-40"
-                    >
-                      <Check size={16} />
-                      Link note
-                    </button>
-                  </div>
-
-                  <div className="flex items-center justify-end">
-                    <button
-                      type="button"
-                      onClick={() => {
-                        if (!linkedTextNoteId || !onOpenTextNote) return
-                        onOpenTextNote(linkedTextNoteId)
-                        closeNodeDetail()
-                      }}
-                      disabled={!linkedTextNoteId || !onOpenTextNote}
-                      className="inline-flex items-center justify-center gap-2 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 px-3 py-1.5 text-xs font-medium text-slate-700 dark:text-slate-300 transition-colors hover:bg-slate-100 dark:hover:bg-slate-700 disabled:cursor-not-allowed disabled:opacity-40"
-                    >
-                      <Edit2 size={14} />
-                      Open linked note
-                    </button>
-                  </div>
-
-                  <div className="flex items-center justify-between gap-2">
-                    <span className="text-xs text-slate-500 dark:text-slate-400">Need a new note for this node?</span>
-                    <button
-                      type="button"
-                      onClick={() => void createAndLinkTextNoteFromDraft()}
-                      disabled={!onCreateTextNote || isCreatingTextNote}
-                      className="inline-flex items-center justify-center gap-2 rounded-lg bg-alpine-600 px-3 py-1.5 text-xs font-semibold text-white shadow-sm transition-colors hover:bg-alpine-700 disabled:cursor-not-allowed disabled:opacity-40"
-                    >
-                      {isCreatingTextNote ? (
-                        <>
-                          <RotateCcw size={14} className="animate-spin" />
-                          Creating…
-                        </>
-                      ) : (
-                        <>
-                          <Plus size={14} />
-                          Create text note
-                        </>
-                      )}
-                    </button>
-                  </div>
-
-                  {textNoteActionError && (
-                    <p className="text-xs text-red-600 dark:text-red-400">{textNoteActionError}</p>
-                  )}
-                </div>
-                )}
-
-                {!readOnly && (
-                <div className="space-y-3">
-                  <span className="text-sm font-medium text-slate-700 dark:text-slate-300">Accent color</span>
-                  <div className="flex flex-wrap gap-2">
-                    {DEFAULT_COLORS.map((color) => {
-                      const isActive = detailDraft.color === color
-                      return (
-                        <button
-                          key={color}
-                          type="button"
-                          onClick={() =>
-                            dispatch({ type: 'UPDATE_DETAIL_DRAFT', payload: { color } })
-                          }
-                          className={`h-9 w-9 rounded-full border-2 transition-transform focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-alpine-400 ${
-                            isActive ? 'border-slate-900 dark:border-white scale-105' : 'border-transparent'
-                          }`}
-                          style={{ backgroundColor: color }}
-                          aria-label={`Set node color ${color}`}
-                        />
-                      )
-                    })}
-                  </div>
-                </div>
-                )}
-
-                <div className="space-y-3">
-                  <div className="flex items-center justify-between">
-                    <span className="text-sm font-medium text-slate-700 dark:text-slate-300">Attachments</span>
-                    <span className="text-xs text-slate-400">Image URLs or external links</span>
-                  </div>
-
-                  {detailDraft.attachments.length === 0 ? (
-                    <p className="text-sm text-slate-500 dark:text-slate-400">
-                      No attachments yet. Add an image or link below.
-                    </p>
-                  ) : (
-                    <div className="grid gap-3">
-                      {detailDraft.attachments.map((attachment) => (
-                        <div
-                          key={attachment.id}
-                          className="flex items-center gap-3 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50/60 dark:bg-slate-800/60 p-3"
-                        >
-                          {attachment.type === 'image' ? (
-                            <div className="h-14 w-14 overflow-hidden rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 shrink-0">
-                              <img
-                                src={attachment.url}
-                                alt={attachment.label}
-                                className="h-full w-full object-cover"
-                              />
-                            </div>
-                          ) : (
-                            <div className="flex h-14 w-14 items-center justify-center rounded-lg border border-dashed border-slate-300 dark:border-slate-600 text-slate-400 shrink-0">
-                              ↗
-                            </div>
-                          )}
-                          <div className="flex-1 min-w-0">
-                            <div className="flex items-center justify-between gap-3">
-                              <p className="text-sm font-medium text-slate-700 dark:text-slate-300 truncate">{attachment.label}</p>
-                              <span className="text-xs uppercase tracking-wide text-slate-400 shrink-0">{attachment.type}</span>
-                            </div>
-                            {getTextNoteIdFromAttachment(attachment) ? (
-                              <button
-                                type="button"
-                                onClick={() => {
-                                  const noteId = getTextNoteIdFromAttachment(attachment)
-                                  if (!noteId || !onOpenTextNote) return
-                                  onOpenTextNote(noteId)
-                                  closeNodeDetail()
-                                }}
-                                disabled={!onOpenTextNote}
-                                className="text-xs text-alpine-600 hover:underline break-all disabled:cursor-not-allowed disabled:opacity-40"
-                              >
-                                Open linked text note
-                              </button>
-                            ) : (
-                              <a
-                                href={attachment.url}
-                                target="_blank"
-                                rel="noreferrer"
-                                className="text-xs text-alpine-600 hover:underline break-all"
-                              >
-                                {attachment.url}
-                              </a>
-                            )}
-                          </div>
-                          {!readOnly && (
-                            <button
-                              onClick={() => removeAttachmentFromDraft(attachment.id)}
-                              className="flex h-9 w-9 items-center justify-center rounded-full border border-slate-200 dark:border-slate-700 text-slate-500 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-700 transition-colors shrink-0"
-                              aria-label="Remove attachment"
-                            >
-                              <Trash2 size={16} />
-                            </button>
-                          )}
-                        </div>
-                      ))}
-                    </div>
-                  )}
-
-                  {!readOnly && (
-                    <>
-                      {/* Add attachment form — stacked vertically for mobile friendliness */}
-                      <div className="flex flex-col gap-2">
-                        <input
-                          type="text"
-                          value={newAttachmentInput.label}
-                          onChange={(e) =>
-                            dispatch({ type: 'SET_NEW_ATTACHMENT_INPUT', payload: { ...newAttachmentInput, label: e.target.value } })
-                          }
-                          placeholder="Label (optional)"
-                          className="rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-800 dark:text-slate-100 px-3 py-2 text-sm shadow-sm focus:border-alpine-500 focus:outline-none focus:ring-2 focus:ring-alpine-200"
-                        />
-                        <input
-                          type="url"
-                          value={newAttachmentInput.url}
-                          onChange={(e) =>
-                            dispatch({ type: 'SET_NEW_ATTACHMENT_INPUT', payload: { ...newAttachmentInput, url: e.target.value } })
-                          }
-                          placeholder="https://example.com/image.png"
-                          className="rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-800 dark:text-slate-100 px-3 py-2 text-sm shadow-sm focus:border-alpine-500 focus:outline-none focus:ring-2 focus:ring-alpine-200"
-                        />
-                        <div className="flex gap-2">
-                          <select
-                            value={newAttachmentInput.type}
-                            onChange={(e) =>
-                              dispatch({
-                                type: 'SET_NEW_ATTACHMENT_INPUT',
-                                payload: { ...newAttachmentInput, type: e.target.value === 'link' ? 'link' : 'image' },
-                              })
-                            }
-                            className="flex-1 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-800 dark:text-slate-100 px-3 py-2 text-sm shadow-sm focus:border-alpine-500 focus:outline-none focus:ring-2 focus:ring-alpine-200"
-                          >
-                            <option value="image">Image</option>
-                            <option value="link">Link</option>
-                          </select>
-                          <button
-                            onClick={addAttachmentToDraft}
-                            disabled={!newAttachmentInput.url.trim()}
-                            className="inline-flex items-center justify-center gap-2 rounded-lg bg-alpine-600 px-4 py-2 text-sm font-medium text-white shadow-sm transition-colors hover:bg-alpine-700 disabled:cursor-not-allowed disabled:opacity-40"
-                          >
-                            <Plus size={16} />
-                            Add
-                          </button>
-                        </div>
-                      </div>
-                    </>
-                  )}
-                </div>
-              </div>
-
-              <div className="flex items-center justify-end gap-3 border-t border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/50 px-5 py-3">
-                <button
-                  onClick={closeNodeDetail}
-                  className="inline-flex items-center gap-2 rounded-lg border border-slate-200 dark:border-slate-700 px-4 py-2 text-sm font-medium text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-700 transition-colors"
-                >
-                  <X size={16} />
-                  Close
-                </button>
-                {!readOnly && (
-                  <button
-                    onClick={saveNodeDetail}
-                    className="inline-flex items-center gap-2 rounded-lg bg-alpine-600 px-4 py-2 text-sm font-semibold text-white shadow-sm hover:bg-alpine-700 transition-colors"
-                  >
-                    <Check size={16} />
-                    Save changes
-                  </button>
-                )}
-              </div>
-            </div>
-          </div>
+          <MindmapNodeDetailPanel
+            node={detailNode}
+            draft={detailDraft}
+            readOnly={readOnly}
+            useSharedDetailLayout={useSharedDetailLayout}
+            useSharedDetailBottomSheet={useSharedDetailBottomSheet}
+            isSheetDragging={isSheetDragging}
+            sheetDragOffset={sheetDragOffset}
+            linkedTextNoteId={linkedTextNoteId}
+            availableTextNotes={availableTextNotes}
+            isCreatingTextNote={isCreatingTextNote}
+            textNoteActionError={textNoteActionError}
+            newAttachmentInput={newAttachmentInput}
+            onClose={closeNodeDetail}
+            onUpdateDraft={updateDraft}
+            onSetAttachmentInput={setAttachmentInput}
+            onLinkedTextNoteChange={setLinkedTextNoteId}
+            onAddAttachment={addAttachmentToDraft}
+            onRemoveAttachment={removeAttachmentFromDraft}
+            onSave={saveNodeDetail}
+            onApplyLinkedNote={applyLinkedTextNoteToDescription}
+            onOpenLinkedNote={openLinkedNote}
+            onCreateLinkedNote={() => void createAndLinkTextNoteFromDraft()}
+            onStartSheetDrag={startSheetDrag}
+            onMoveSheetDrag={moveSheetDrag}
+            onEndSheetDrag={endSheetDrag}
+          />
         )}
 
         {showMinimap && (
-          <div className="absolute bottom-4 left-4 z-10">
-            <div className="relative rounded-2xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900/80 p-3 shadow-lg ">
-              <button
-                type="button"
-                onClick={() => setShowMinimap(false)}
-                className="absolute -top-2 -right-2 flex h-5 w-5 items-center justify-center rounded-full border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-400 hover:text-slate-700 dark:hover:text-slate-300 shadow-sm transition-colors"
-                aria-label="Close minimap"
-              >
-                <X size={11} />
-              </button>
-              <canvas
-                ref={miniMapCanvasRef}
-                onClick={handleMiniMapClick}
-                className="block h-32 w-48 cursor-pointer rounded-lg bg-slate-900/30"
-              />
-              <div className="mt-2 flex items-center gap-2 text-xs text-slate-500 dark:text-slate-400">
-                <span className="font-medium text-slate-600 dark:text-slate-300">Mini-map</span>
-                <span className="flex-1 truncate text-right">
-                  {selectedNodeId ? mindmapData.nodes[selectedNodeId]?.text : 'No selection'}
-                </span>
-              </div>
-            </div>
-          </div>
+          <MindmapMinimap
+            canvasRef={miniMapCanvasRef}
+            selectedText={selectedNodeId ? mindmapData.nodes[selectedNodeId]?.text ?? null : null}
+            onClick={handleMiniMapClick}
+            onClose={() => setShowMinimap(false)}
+          />
         )}
 
         {/* Inline rename overlay */}
@@ -4481,334 +2447,54 @@ const MindmapEditor = forwardRef<MindmapEditorHandle, MindmapEditorProps>(
           const isRoot = contextMenu.nodeId === mindmapData.rootId
           const hasChildren = ctxNode.children.length > 0
           return (
-            <div
-              className="absolute z-50 min-w-[180px] rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 shadow-2xl py-1 text-sm text-slate-700 dark:text-slate-200 overflow-hidden"
-              style={{ left: contextMenu.x, top: contextMenu.y }}
-              onClick={(e) => e.stopPropagation()}
-            >
-              <button
-                type="button"
-                className="flex w-full items-center gap-3 px-3 py-2 hover:bg-slate-100 dark:hover:bg-slate-700 transition-colors"
-                onClick={() => { addChildNode(); setContextMenu(null) }}
-              >
-                <Plus size={15} className="text-slate-400" />
-                <span className="flex-1 text-left">Add child</span>
-                <kbd className="text-xs text-slate-400">+</kbd>
-              </button>
-              <button
-                type="button"
-                className="flex w-full items-center gap-3 px-3 py-2 hover:bg-slate-100 dark:hover:bg-slate-700 transition-colors"
-                onClick={() => { startInlineEdit(contextMenu.nodeId); setContextMenu(null) }}
-              >
-                <Type size={15} className="text-slate-400" />
-                <span className="flex-1 text-left">Rename</span>
-                <kbd className="text-xs text-slate-400">F2</kbd>
-              </button>
-              <button
-                type="button"
-                className="flex w-full items-center gap-3 px-3 py-2 hover:bg-slate-100 dark:hover:bg-slate-700 transition-colors"
-                onClick={() => { openNodeDetail(contextMenu.nodeId); setContextMenu(null) }}
-              >
-                <Info size={15} className="text-slate-400" />
-                <span className="flex-1 text-left">Edit details</span>
-                <kbd className="text-xs text-slate-400">Enter</kbd>
-              </button>
-              <button
-                type="button"
-                className="flex w-full items-center gap-3 px-3 py-2 hover:bg-slate-100 dark:hover:bg-slate-700 transition-colors"
-                onClick={() => {
-                  dispatch({ type: 'SET_CONNECTION_MODE', payload: true })
-                  dispatch({ type: 'SET_CONNECTION_START_NODE_ID', payload: contextMenu.nodeId })
-                  dispatch({ type: 'SET_SELECTED_NODE_ID', payload: contextMenu.nodeId })
-                  setContextMenu(null)
-                }}
-              >
-                <Link2 size={15} className="text-slate-400" />
-                <span className="flex-1 text-left">Start connection here</span>
-              </button>
-              {hasChildren && (
-                <button
-                  type="button"
-                  className="flex w-full items-center gap-3 px-3 py-2 hover:bg-slate-100 dark:hover:bg-slate-700 transition-colors"
-                  onClick={() => { toggleCollapse(contextMenu.nodeId); setContextMenu(null) }}
-                >
-                  {ctxNode.collapsed
-                    ? <UnfoldVertical size={15} className="text-slate-400" />
-                    : <FoldVertical size={15} className="text-slate-400" />
-                  }
-                  <span className="flex-1 text-left">{ctxNode.collapsed ? 'Expand' : 'Collapse'}</span>
-                  <kbd className="text-xs text-slate-400">Space</kbd>
-                </button>
-              )}
-              <div className="h-px bg-slate-200 dark:bg-slate-700 my-1" />
-              <div className="px-3 py-1.5">
-                <span className="text-xs font-medium text-slate-400 dark:text-slate-500">Color</span>
-                <div className="flex gap-1.5 mt-1.5">
-                  {DEFAULT_COLORS.map((color) => (
-                    <button
-                      key={color}
-                      type="button"
-                      className={`h-5 w-5 rounded-full border-2 transition-transform hover:scale-110 ${
-                        ctxNode.color === color ? 'border-slate-900 dark:border-white scale-110' : 'border-transparent'
-                      }`}
-                      style={{ backgroundColor: color }}
-                      onClick={() => {
-                        dispatch({ type: 'UPDATE_NODE', payload: { nodeId: contextMenu.nodeId, updates: { color } } })
-                        setContextMenu(null)
-                      }}
-                    />
-                  ))}
-                </div>
-              </div>
-              {!isRoot && (
-                <>
-                  <div className="h-px bg-slate-200 dark:bg-slate-700 my-1" />
-                  <button
-                    type="button"
-                    className="flex w-full items-center gap-3 px-3 py-2 hover:bg-red-50 dark:hover:bg-red-900/20 text-red-600 dark:text-red-400 transition-colors"
-                    onClick={() => { deleteNode(); setContextMenu(null) }}
-                  >
-                    <Trash2 size={15} />
-                    <span className="flex-1 text-left">Delete</span>
-                    <kbd className="text-xs text-red-400">Del</kbd>
-                  </button>
-                </>
-              )}
-            </div>
+            <MindmapContextMenu
+              node={ctxNode}
+              isRoot={isRoot}
+              hasChildren={hasChildren}
+              x={contextMenu.x}
+              y={contextMenu.y}
+              onAddChild={() => { addChildNode(); setContextMenu(null) }}
+              onRename={() => { startInlineEdit(contextMenu.nodeId); setContextMenu(null) }}
+              onEditDetails={() => { openNodeDetail(contextMenu.nodeId); setContextMenu(null) }}
+              onStartConnection={() => startConnectionFromNode(contextMenu.nodeId)}
+              onToggleCollapse={() => { toggleCollapse(contextMenu.nodeId); setContextMenu(null) }}
+              onSetColor={(color) => setNodeColor(contextMenu.nodeId, color)}
+              onDelete={() => { deleteNode(); setContextMenu(null) }}
+            />
           )
         })()}
 
         {/* Info overlay */}
         {showInfo && (
-        <div className="absolute bottom-4 right-4 bg-white dark:bg-slate-900/90  rounded-lg shadow-lg p-3 border border-gray-200 dark:border-slate-700 text-sm">
-          <div className="text-gray-600 dark:text-slate-400">
-            <div className="flex items-center justify-between gap-3">
-              <div className="font-medium text-slate-700 dark:text-slate-200">Zoom: {Math.round(scale * 100)}%</div>
-              <button
-                type="button"
-                onClick={() => setShowInfo(false)}
-                className="flex h-5 w-5 items-center justify-center rounded text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-slate-700 dark:hover:text-slate-300 transition-colors"
-                aria-label="Close info panel"
-              >
-                <X size={13} />
-              </button>
-            </div>
-            {selectedNodeId && (
-              <div className="mt-1 text-alpine-600 dark:text-alpine-400 font-medium truncate max-w-[160px]">
-                {mindmapData.nodes[selectedNodeId]?.text}
-              </div>
-            )}
-            {!isMobile && (
-              <div className="mt-2 pt-2 border-t border-gray-200 dark:border-slate-700 text-xs text-gray-500 dark:text-slate-500 space-y-0.5">
-                <div>Drag canvas to pan · Scroll to zoom</div>
-                <div>← Parent · → Child · ↑↓ Siblings · Tab: Cycle</div>
-                <div>F2: Rename · Enter: Details · +: Add child</div>
-                <div>Del: Delete · Space: Collapse · Home: Root · Link: Connect mode</div>
-                <div>Curve toggle: toolbar arrow button</div>
-              </div>
-            )}
-            {isMobile && (
-              <div className="mt-2 pt-2 border-t border-gray-200 dark:border-slate-700 text-xs text-gray-500 dark:text-slate-500 space-y-0.5">
-                <div>Tap: select · Long-press: edit</div>
-                <div>2 fingers: pan & pinch zoom</div>
-              </div>
-            )}
-          </div>
-        </div>
+          <MindmapInfoOverlay
+            scale={scale}
+            selectedText={selectedNodeId ? mindmapData.nodes[selectedNodeId]?.text ?? null : null}
+            isMobile={isMobile}
+            onClose={() => setShowInfo(false)}
+          />
         )}
 
         {/* ── Export Dialog ── */}
-        <BaseModal isOpen={isExportDialogOpen} onClose={() => setIsExportDialogOpen(false)} size="lg">
-          <div className="flex flex-col gap-5">
-            <h2 className="text-lg font-semibold text-slate-800 dark:text-slate-100">Export Mindmap</h2>
-
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
-              {/* Preview */}
-              <div className="flex flex-col gap-2">
-                <label className="text-xs font-medium text-slate-500 dark:text-slate-400 uppercase tracking-wide">Preview</label>
-                <div className="relative aspect-video rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-100 dark:bg-slate-800 overflow-hidden">
-                  <div className="absolute inset-0 flex items-center justify-center text-slate-400 dark:text-slate-500 text-sm">
-                    {(exportFormat === 'png' ? 'PNG' : 'JPEG')} · {exportScale}× · {getExportDimensions(exportScale).width}×{getExportDimensions(exportScale).height}px
-                  </div>
-                  <div className="absolute bottom-2 left-2 right-2 text-center text-xs text-slate-400">
-                    ~{(() => {
-                      const bytes = getEstimatedFileSize()
-                      if (bytes < 1024) return `${Math.round(bytes)} B`
-                      if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(0)} KB`
-                      return `${(bytes / (1024 * 1024)).toFixed(1)} MB`
-                    })()}
-                  </div>
-                </div>
-              </div>
-
-              {/* Options */}
-              <div className="flex flex-col gap-4">
-                {/* Filename */}
-                <div className="flex flex-col gap-1.5">
-                  <label className="text-xs font-medium text-slate-500 dark:text-slate-400 uppercase tracking-wide">Filename</label>
-                  <div className="flex items-center gap-1">
-                    <input
-                      type="text"
-                      value={exportFilename}
-                      onChange={(e) => setExportFilename(e.target.value.replace(/[^a-zA-Z0-9_\-\s]/g, '').slice(0, 60))}
-                      className="flex-1 px-3 py-2 rounded-lg border border-slate-200 dark:border-slate-600 bg-white dark:bg-slate-800 text-sm text-slate-800 dark:text-slate-200 outline-none focus:ring-2 focus:ring-alpine-500"
-                      placeholder="mindmap"
-                    />
-                    <span className="text-sm text-slate-400 shrink-0">.{exportFormat === 'jpeg' ? 'jpg' : 'png'}</span>
-                  </div>
-                </div>
-
-                {/* Format */}
-                <div className="flex flex-col gap-1.5">
-                  <label className="text-xs font-medium text-slate-500 dark:text-slate-400 uppercase tracking-wide">Format</label>
-                  <div className="flex rounded-lg border border-slate-200 dark:border-slate-600 overflow-hidden">
-                    {(['png', 'jpeg'] as const).map((fmt) => (
-                      <button
-                        key={fmt}
-                        onClick={() => {
-                          setExportFormat(fmt)
-                          if (fmt === 'jpeg' && exportBackground === 'transparent') setExportBackground('white')
-                        }}
-                        className={`flex-1 py-2 text-sm font-medium transition-colors ${
-                          exportFormat === fmt
-                            ? 'bg-alpine-500 text-white'
-                            : 'bg-white dark:bg-slate-800 text-slate-600 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-700'
-                        }`}
-                      >
-                        {fmt === 'png' ? 'PNG' : 'JPEG'}
-                      </button>
-                    ))}
-                  </div>
-                </div>
-
-                {/* Scale */}
-                <div className="flex flex-col gap-1.5">
-                  <label className="text-xs font-medium text-slate-500 dark:text-slate-400 uppercase tracking-wide">Scale</label>
-                  <div className="flex items-center gap-2">
-                    {[1, 2, 3].map((s) => (
-                      <button
-                        key={s}
-                        onClick={() => setExportScale(s)}
-                        className={`flex-1 py-1.5 text-sm font-medium rounded-lg transition-colors ${
-                          exportScale === s
-                            ? 'bg-alpine-500 text-white'
-                            : 'border border-slate-200 dark:border-slate-600 bg-white dark:bg-slate-800 text-slate-600 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-700'
-                        }`}
-                      >
-                        {s}×
-                      </button>
-                    ))}
-                    <div className="flex items-center gap-1">
-                      <input
-                        type="number"
-                        min={0.5}
-                        max={4}
-                        step={0.5}
-                        value={![1,2,3].includes(exportScale) ? exportScale : ''}
-                        placeholder="Custom"
-                        onChange={(e) => {
-                          const v = parseFloat(e.target.value)
-                          if (v >= 0.5 && v <= 4) setExportScale(v)
-                        }}
-                        className="w-16 px-2 py-1.5 rounded-lg border border-slate-200 dark:border-slate-600 bg-white dark:bg-slate-800 text-sm text-center text-slate-800 dark:text-slate-200 outline-none focus:ring-2 focus:ring-alpine-500"
-                      />
-                      <span className="text-xs text-slate-400">×</span>
-                    </div>
-                  </div>
-                </div>
-
-                {/* JPEG Quality */}
-                {exportFormat === 'jpeg' && (
-                  <div className="flex flex-col gap-1.5">
-                    <label className="text-xs font-medium text-slate-500 dark:text-slate-400 uppercase tracking-wide">
-                      Quality: {Math.round(exportQuality * 100)}%
-                    </label>
-                    <input
-                      type="range"
-                      min={0.1}
-                      max={1}
-                      step={0.01}
-                      value={exportQuality}
-                      onChange={(e) => setExportQuality(parseFloat(e.target.value))}
-                      className="w-full accent-alpine-500"
-                    />
-                  </div>
-                )}
-
-                {/* Background */}
-                <div className="flex flex-col gap-1.5">
-                  <label className="text-xs font-medium text-slate-500 dark:text-slate-400 uppercase tracking-wide">Background</label>
-                  <div className="grid grid-cols-2 gap-1.5">
-                    {([
-                      ['canvas', 'Theme'],
-                      ['white', 'White'],
-                      ...(exportFormat === 'png' ? [['transparent', 'Transparent']] as const : []),
-                      ['custom', 'Custom'],
-                    ] as const).map(([key, label]) => (
-                      <button
-                        key={key}
-                        onClick={() => setExportBackground(key)}
-                        className={`py-2 text-sm font-medium rounded-lg transition-colors ${
-                          exportBackground === key
-                            ? 'bg-alpine-500 text-white'
-                            : 'border border-slate-200 dark:border-slate-600 bg-white dark:bg-slate-800 text-slate-600 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-700'
-                        }`}
-                      >
-                        {label}
-                      </button>
-                    ))}
-                  </div>
-                  {exportBackground === 'custom' && (
-                    <div className="flex items-center gap-2">
-                      <input
-                        type="color"
-                        value={exportCustomBg}
-                        onChange={(e) => setExportCustomBg(e.target.value)}
-                        className="w-8 h-8 rounded border border-slate-200 dark:border-slate-600 cursor-pointer"
-                      />
-                      <span className="text-xs text-slate-400">{exportCustomBg}</span>
-                    </div>
-                  )}
-                </div>
-              </div>
-            </div>
-
-            {/* Bottom bar */}
-            <div className="flex items-center justify-between pt-3 border-t border-slate-200 dark:border-slate-700">
-              <div className="text-xs text-slate-400">
-                {getExportDimensions(exportScale).width} × {getExportDimensions(exportScale).height} px
-                {' · '}~{(() => {
-                  const bytes = getEstimatedFileSize()
-                  if (bytes < 1024) return `${Math.round(bytes)} B`
-                  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(0)} KB`
-                  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`
-                })()}
-              </div>
-              <div className="flex items-center gap-2">
-                <button
-                  onClick={() => setIsExportDialogOpen(false)}
-                  className="px-4 py-2 text-sm font-medium rounded-lg border border-slate-200 dark:border-slate-600 text-slate-600 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-700 transition-colors"
-                  disabled={isExporting}
-                >
-                  Cancel
-                </button>
-                <button
-                  onClick={executeExport}
-                  disabled={isExporting}
-                  className="px-5 py-2 text-sm font-medium rounded-lg bg-alpine-500 text-white hover:bg-alpine-600 transition-colors disabled:opacity-50 flex items-center gap-2"
-                >
-                  {isExporting && (
-                    <svg className="animate-spin h-4 w-4" viewBox="0 0 24 24">
-                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none" />
-                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
-                    </svg>
-                  )}
-                  {isExporting ? 'Exporting…' : 'Export'}
-                </button>
-              </div>
-            </div>
-          </div>
-        </BaseModal>
+        <MindmapExportDialog
+          open={isExportDialogOpen}
+          filename={exportFilename}
+          format={exportFormat}
+          scale={exportScale}
+          quality={exportQuality}
+          background={exportBackground}
+          customBg={exportCustomBg}
+          isExporting={isExporting}
+          getDimensions={getExportDimensions}
+          getEstimatedSize={getEstimatedFileSize}
+          onClose={() => setIsExportDialogOpen(false)}
+          onFilenameChange={setExportFilename}
+          onFormatChange={setExportFormat}
+          onScaleChange={setExportScale}
+          onQualityChange={setExportQuality}
+          onBackgroundChange={setExportBackground}
+          onCustomBgChange={setExportCustomBg}
+          onExport={executeExport}
+        />
       </div>
     )
   }
