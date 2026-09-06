@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useRef, useEffect, useCallback } from 'react'
+import { useState, useRef, useEffect, useCallback, memo } from 'react'
 import {
   ChevronRight,
   ChevronLeft,
@@ -114,7 +114,7 @@ const NOTE_TYPE_ICON_MAP: Record<NoteTypeIconKey, LucideIcon> = {
   'file-pen-line': FilePenLine,
 }
 
-export default function NoteDetailsSidebar({
+function NoteDetailsSidebar({
   noteId,
   isNewNote,
   noteType,
@@ -837,3 +837,5 @@ export default function NoteDetailsSidebar({
   </>
   )
 }
+
+export default memo(NoteDetailsSidebar)

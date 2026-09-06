@@ -535,6 +535,7 @@ export default function NoteEditor({
   const [headings, setHeadings] = useState<Array<{ id: string; level: number; text: string }>>([])
   const [activeFormats, setActiveFormats] = useState<Set<string>>(new Set())
   const editorRef = useRef<RichTextEditorHandle | null>(null)
+  const contentRef = useRef('')
   const drawingEditorRef = useRef<DrawingEditorHandle | null>(null)
   const mindmapEditorRef = useRef<MindmapEditorHandle | null>(null)
   const bulletJournalRef = useRef<BulletJournalEditorHandle | null>(null)
@@ -555,6 +556,12 @@ export default function NoteEditor({
   const [floatingToolbar, setFloatingToolbar] = useState({ visible: false, top: 0, left: 0 })
   const deferredContent = useDeferredValue(content)
   const plainContent = useMemo(() => stripHtml(deferredContent), [deferredContent])
+
+  // Keep the ref in sync with state (covers direct setContent calls, e.g. the
+  // non-rich note-loading branches, where we don't set the ref explicitly).
+  useEffect(() => {
+    contentRef.current = content
+  }, [content])
   const [lastSaveTime, setLastSaveTime] = useState<Date | null>(null)
   const [wordGoal, setWordGoal] = useState<number | null>(null)
   const [showWordGoalInput, setShowWordGoalInput] = useState(false)
@@ -865,6 +872,7 @@ export default function NoteEditor({
         setBulletJournalData(null)
         setDataSheetData(null)
       } else {
+        contentRef.current = note.content || ''
         setContent(note.content || '')
         setDrawingData(null)
         setMindmapData(null)
@@ -888,6 +896,7 @@ export default function NoteEditor({
       }
     } else {
       setTitle('')
+      contentRef.current = ''
       setContent('')
       setDrawingData(initialNoteType === 'drawing' ? { pages: [{ strokes: [], background: 'none' }], width: 800, height: 600, currentPage: 0 } : null)
       setMindmapData(initialNoteType === 'mindmap'
@@ -1029,7 +1038,18 @@ export default function NoteEditor({
     // Single-pass: getActiveFormats resolves the selection element once and
     // checks every format in one DOM walk — more reliable and efficient than
     // calling queryCommandState N times.
-    setActiveFormats(editorRef.current.getActiveFormats())
+    const next = editorRef.current.getActiveFormats()
+    // Bail out with the same reference when nothing changed, so the memoized
+    // SelectionToolbar doesn't re-render on every keystroke.
+    setActiveFormats((previous) => {
+      if (
+        previous.size === next.size &&
+        Array.from(previous).every((format) => next.has(format))
+      ) {
+        return previous
+      }
+      return next
+    })
   }, [])
 
   const scheduleActiveFormatsUpdate = useCallback(() => {
@@ -1129,6 +1149,7 @@ export default function NoteEditor({
 
   const handleContentChange = useCallback(
     (html: string) => {
+      contentRef.current = html
       setContent(html)
       scheduleHeadingsUpdate()
       scheduleActiveFormatsUpdate()
@@ -2045,12 +2066,14 @@ export default function NoteEditor({
           note_type: 'pdf-annotation',
         }, isAuto)
       } else {
-        let contentToSave = content
+        let contentToSave = contentRef.current
         if (containsLegacyImageSources(contentToSave)) {
           const migration = await migrateLegacyImagesInHtml(contentToSave)
           if (migration.migratedCount > 0) {
             contentToSave = migration.html
+            contentRef.current = contentToSave
             setContent(contentToSave)
+            editorRef.current?.setHTML(contentToSave)
           }
         }
 
@@ -2115,7 +2138,7 @@ export default function NoteEditor({
         setIsSaving(false)
       }
     }
-  }, [content, drawingData, mindmapData, onSave, title, noteType, hasChanges, isSaving, isDeleting, toast, migrateLegacyImagesInHtml, note?.id, reconcileOrphanedImageAttachments])
+  }, [drawingData, mindmapData, onSave, title, noteType, hasChanges, isSaving, isDeleting, toast, migrateLegacyImagesInHtml, note?.id, reconcileOrphanedImageAttachments])
 
   // Autosave: debounce saves after a short period of inactivity.
   useEffect(() => {
@@ -2161,7 +2184,7 @@ export default function NoteEditor({
   // Keep ref in sync now that handleSave is declared
   handleSaveRef.current = handleSave
 
-  const handleDelete = async () => {
+  const handleDelete = useCallback(async () => {
     if (!note || !onDelete) return
 
     if (!confirm('Are you sure you want to delete this note?')) return
@@ -2174,7 +2197,7 @@ export default function NoteEditor({
     } finally {
       setIsDeleting(false)
     }
-  }
+  }, [note, onDelete])
 
   const handleCancel = () => {
     if (hasChanges) {
@@ -2185,7 +2208,7 @@ export default function NoteEditor({
     onCancel?.()
   }
 
-  const handleSetWordGoal = (goal: number | null) => {
+  const handleSetWordGoal = useCallback((goal: number | null) => {
     setWordGoal(goal)
     if (note?.id) {
       if (goal === null) {
@@ -2195,7 +2218,7 @@ export default function NoteEditor({
       }
     }
     setShowWordGoalInput(false)
-  }
+  }, [note?.id])
 
   useEffect(() => {
     const handler = (event: KeyboardEvent) => {
@@ -2371,21 +2394,13 @@ export default function NoteEditor({
     return map
   }, [folders])
 
-  const connectionData = useMemo(() => {
-    if (!note?.id) {
-      return {
-        backlinks: [] as Array<{ id: string; title: string; folderPath?: string; relationCount: number }>,
-        connectionsCount: 0,
-        outgoingLinks: [] as Array<{ id: string; title: string; folderPath?: string }>,
-      }
-    }
+  // Backlinks depend only on the note identity and the set of other notes —
+  // NOT on the current note's content. Previously this was recomputed (and
+  // every other note's HTML re-parsed) on each keystroke.
+  const backlinks = useMemo(() => {
+    if (!note?.id) return []
 
-    const currentLinks = noteType === 'rich-text'
-      ? extractNoteLinkIdsFromHtml(content)
-      : extractNoteLinkIdsFromHtml(note.content || '')
-    const outgoingIds = new Set(currentLinks.filter((id) => id !== note.id))
-
-    const backlinks = notesForConnections
+    return notesForConnections
       .filter((candidate) => candidate.id !== note.id && candidate.note_type === 'rich-text')
       .map((candidate) => {
         const links = extractNoteLinkIdsFromHtml(candidate.content)
@@ -2401,25 +2416,45 @@ export default function NoteEditor({
       })
       .filter((item): item is { id: string; title: string; folderPath: string | undefined; relationCount: number } => !!item)
       .sort((a, b) => b.relationCount - a.relationCount || a.title.localeCompare(b.title))
+  }, [note?.id, notesForConnections, folderPathMap])
 
-    const allConnectionIds = new Set<string>(outgoingIds)
-    backlinks.forEach((item) => allConnectionIds.add(item.id))
+  // Outgoing link IDs from the current note — derived from the *deferred*
+  // content so it doesn't re-parse on every keystroke (only when idle).
+  const outgoingLinkIds = useMemo(() => {
+    if (!note?.id) return new Set<string>()
 
-    // Build outgoingLinks array
-    const outgoingLinks = notesForConnections
-      .filter((candidate) => outgoingIds.has(candidate.id))
+    const sourceHtml = noteType === 'rich-text' ? deferredContent : (note.content || '')
+    return new Set(extractNoteLinkIdsFromHtml(sourceHtml).filter((id) => id !== note.id))
+  }, [note?.id, noteType, note?.content, deferredContent])
+
+  const outgoingLinks = useMemo(() => {
+    return notesForConnections
+      .filter((candidate) => outgoingLinkIds.has(candidate.id))
       .map((candidate) => ({
         id: candidate.id,
         title: candidate.title || 'Untitled note',
         folderPath: candidate.folder_id ? folderPathMap.get(candidate.folder_id) : 'All Notes',
       }))
+  }, [notesForConnections, outgoingLinkIds, folderPathMap])
+
+  const connectionData = useMemo(() => {
+    if (!note?.id) {
+      return {
+        backlinks: [] as Array<{ id: string; title: string; folderPath?: string; relationCount: number }>,
+        connectionsCount: 0,
+        outgoingLinks: [] as Array<{ id: string; title: string; folderPath?: string }>,
+      }
+    }
+
+    const allConnectionIds = new Set<string>(outgoingLinkIds)
+    backlinks.forEach((item) => allConnectionIds.add(item.id))
 
     return {
       backlinks,
       connectionsCount: allConnectionIds.size,
       outgoingLinks,
     }
-  }, [note?.id, note?.content, noteType, content, notesForConnections, folderPathMap])
+  }, [note?.id, backlinks, outgoingLinkIds, outgoingLinks])
 
   // Get folder path for display
   const folderPath = useMemo(() => {
@@ -2506,8 +2541,8 @@ export default function NoteEditor({
     if (noteType === 'pdf-annotation') {
       return JSON.stringify(pdfAnnotationData || {}, null, 2)
     }
-    return content
-  }, [noteType, drawingData, mindmapData, bulletJournalData, dataSheetData, pdfAnnotationData, content])
+    return contentRef.current
+  }, [noteType, drawingData, mindmapData, bulletJournalData, dataSheetData, pdfAnnotationData])
 
   const serializeCurrentNoteContent = useCallback(() => {
     if (noteType === 'drawing') {
@@ -2584,7 +2619,7 @@ export default function NoteEditor({
     const fileBase = sanitizePathSegment(title || note?.title || '', 'untitled-note')
 
     if (noteType === 'rich-text') {
-      const markdown = editorRef.current?.getMarkdown() || htmlToMarkdown(content)
+      const markdown = editorRef.current?.getMarkdown() || htmlToMarkdown(contentRef.current)
       downloadTextFile(`${fileBase}.md`, markdown, 'text/markdown;charset=utf-8')
       toast.push({ title: 'Markdown exported' })
       return
@@ -2594,7 +2629,7 @@ export default function NoteEditor({
     const markdown = `# ${title || note?.title || 'Untitled note'}\n\nType: ${noteType}\n\n\`\`\`json\n${structured}\n\`\`\`\n`
     downloadTextFile(`${fileBase}.md`, markdown, 'text/markdown;charset=utf-8')
     toast.push({ title: 'Markdown exported' })
-  }, [title, note?.title, noteType, content, getStructuredExportContent, downloadTextFile, toast])
+  }, [title, note?.title, noteType, getStructuredExportContent, downloadTextFile, toast])
 
   const handleExportDocx = useCallback(async () => {
     const fileBase = sanitizePathSegment(title || note?.title || '', 'untitled-note')
@@ -2608,7 +2643,7 @@ export default function NoteEditor({
     try {
       toast.push({ title: 'Generating DOCX…' })
 
-      let bodyHtml = editorRef.current?.getHTML() || content
+      let bodyHtml = editorRef.current?.getHTML() || contentRef.current
 
       // Convert checklist checkboxes to visual representation for Word
       bodyHtml = bodyHtml
@@ -2700,13 +2735,13 @@ export default function NoteEditor({
       console.error('Export docx error:', error)
       toast.push({ title: 'Failed to export DOCX' })
     }
-  }, [title, note?.title, noteType, content, downloadBlobFile, toast])
+  }, [title, note?.title, noteType, downloadBlobFile, toast])
 
   const handleExportHtml = useCallback(() => {
     const fileBase = sanitizePathSegment(title || note?.title || '', 'untitled-note')
     const docTitle = escapeHtml(title || note?.title || 'Untitled note')
     const bodyHtml = noteType === 'rich-text'
-      ? (editorRef.current?.getHTML() || content)
+      ? (editorRef.current?.getHTML() || contentRef.current)
       : `<pre>${escapeHtml(getStructuredExportContent())}</pre>`
 
     const htmlContent = `<!DOCTYPE html>
@@ -2765,7 +2800,7 @@ export default function NoteEditor({
 
     downloadTextFile(`${fileBase}.html`, htmlContent, 'text/html;charset=utf-8')
     toast.push({ title: 'HTML exported' })
-  }, [title, note?.title, noteType, content, getStructuredExportContent, downloadTextFile, toast])
+  }, [title, note?.title, noteType, getStructuredExportContent, downloadTextFile, toast])
 
   const handleExportPlainText = useCallback(() => {
     const fileBase = sanitizePathSegment(title || note?.title || '', 'untitled-note')
@@ -2773,7 +2808,7 @@ export default function NoteEditor({
 
     let plainText: string
     if (noteType === 'rich-text') {
-      const html = editorRef.current?.getHTML() || content
+      const html = editorRef.current?.getHTML() || contentRef.current
       // Parse HTML and extract text with basic formatting
       const div = document.createElement('div')
       div.innerHTML = html
@@ -2833,7 +2868,7 @@ export default function NoteEditor({
 
     downloadTextFile(`${fileBase}.txt`, plainText, 'text/plain;charset=utf-8')
     toast.push({ title: 'Plain text exported' })
-  }, [title, note?.title, noteType, content, getStructuredExportContent, downloadTextFile, toast])
+  }, [title, note?.title, noteType, getStructuredExportContent, downloadTextFile, toast])
 
   const handleImportDocx = useCallback(() => {
     const input = document.createElement('input')
@@ -2884,12 +2919,13 @@ export default function NoteEditor({
            cleanHtml = plainHtml
         }
         
-        // Set content
-        if (content.trim() === '' || content === '<p></p>') {
-            handleContentChange(cleanHtml)
-        } else {
-            handleContentChange(content + '<hr>' + cleanHtml)
-        }
+        // Set content through the editor handle so the (now uncontrolled) editor
+        // reflects the imported HTML without relying on the `value` prop.
+        const current = editorRef.current?.getHTML() ?? contentRef.current
+        const nextHtml = current.trim() === '' || current === '<p></p>'
+          ? cleanHtml
+          : current + '<hr>' + cleanHtml
+        editorRef.current?.setHTML(nextHtml)
         
         if (editorRef.current) {
              editorRef.current.focus()
@@ -2906,13 +2942,13 @@ export default function NoteEditor({
       }
     }
     input.click()
-  }, [content, handleContentChange, toast])
+  }, [toast])
 
   const handleExportPdf = useCallback(async () => {
     const fileBase = sanitizePathSegment(title || note?.title || '', 'untitled-note')
     const printableTitle = title || note?.title || 'Untitled note'
     const bodyHtml = noteType === 'rich-text'
-      ? (editorRef.current?.getHTML() || content)
+      ? (editorRef.current?.getHTML() || contentRef.current)
       : `<pre>${escapeHtml(getStructuredExportContent())}</pre>`
 
     try {
@@ -3090,7 +3126,7 @@ export default function NoteEditor({
         toast.push({ title: 'Could not export PDF' })
       }
     }
-  }, [title, note?.title, noteType, content, getStructuredExportContent, toast])
+  }, [title, note?.title, noteType, getStructuredExportContent, toast])
 
   const handleCopyShareLink = useCallback(async () => {
     if (!shareUrl) return
@@ -3317,17 +3353,17 @@ export default function NoteEditor({
       // Insert the HTML at the end of the current content
       const currentHtml = editorRef.current.getHTML()
       const newContent = currentHtml + text
-      handleContentChange(newContent)
+      editorRef.current.setHTML(newContent)
       toast.push({ title: 'Content inserted' })
     }
-  }, [noteType, handleContentChange, toast])
+  }, [noteType, toast])
 
   const handleAIReplaceText = useCallback((text: string) => {
-    if (noteType === 'rich-text') {
-      handleContentChange(text)
+    if (noteType === 'rich-text' && editorRef.current) {
+      editorRef.current.setHTML(text)
       toast.push({ title: 'Content replaced' })
     }
-  }, [noteType, handleContentChange, toast])
+  }, [noteType, toast])
   
   // Replace selected text with AI-generated text
   const handleAIReplaceSelection = useCallback((text: string) => {
@@ -3509,6 +3545,80 @@ export default function NoteEditor({
     [allNotes, onSelectNote, toast]
   )
 
+  // Stabilized props for the memoized RichTextEditor so typing doesn't
+  // recreate these references (which would defeat memoization).
+  const editorCustomBlocks = useMemo(() => [
+    noteLinkBlock,
+    imageBlock,
+    dataSheetTableBlock,
+    fileBlock,
+    pdfAnnotationEmbedBlock,
+    {
+      type: 'table',
+      render: (payload?: any) => {
+        const rows = (payload && payload.rows) || 3
+        const cols = (payload && payload.cols) || 3
+        let html = '<div class="overflow-auto my-2"><table class="min-w-full table-fixed border-collapse">'
+        for (let r = 0; r < rows; r++) {
+          html += '<tr>'
+          for (let c = 0; c < cols; c++) {
+            html += '<td class="border px-2 py-1 align-top">' + (r === 0 ? '<strong>Header</strong>' : '&nbsp;') + '</td>'
+          }
+          html += '</tr>'
+        }
+        html += '</table></div>'
+        return html
+      },
+      parse: (el: HTMLElement) => {
+        // naive parse: count rows/cols
+        const table = el.querySelector('table')
+        if (!table) return { rows: 0, cols: 0 }
+        const rows = table.querySelectorAll('tr').length
+        const firstRow = table.querySelector('tr')
+        const cols = firstRow ? firstRow.querySelectorAll('td,th').length : 0
+        return { rows, cols }
+      }
+    }
+  ], [])
+
+  const handleImagePaste = useCallback(async (file: File) => {
+    try {
+      return await uploadAndBuildImagePayload(file, 'paste')
+    } catch (error) {
+      console.error('Paste upload failed:', error)
+      toast.push({ title: 'Paste failed', description: 'Could not upload pasted image.' })
+      return null
+    }
+  }, [uploadAndBuildImagePayload, toast])
+
+  const handleImageDrop = useCallback(async (file: File) => {
+    try {
+      return await uploadAndBuildImagePayload(file, 'drop')
+    } catch (error) {
+      console.error('Drop upload failed:', error)
+      toast.push({ title: 'Drop failed', description: 'Could not upload dropped image.' })
+      return null
+    }
+  }, [uploadAndBuildImagePayload, toast])
+
+  const handleEditorCustomCommand = useCallback((commandId: string) => {
+    if (commandId === 'note-link') {
+      saveNoteLinkSelection()
+      setShowNoteLinkDialog(true)
+    }
+  }, [saveNoteLinkSelection])
+
+  // Stable callbacks for the memoized NoteDetailsSidebar
+  const handleScrollToHeading = useCallback((headingId: string) => {
+    editorRef.current?.scrollToHeading(headingId)
+  }, [])
+
+  const openSettings = useCallback(() => setShowSettings(true), [])
+  const openAIAssistant = useCallback(() => setShowAIAssistant(true), [])
+  const openConnections = useCallback(() => setShowKnowledgeGraph(true), [])
+  const toggleRightSidebar = useCallback(() => setRightSidebarCollapsed((prev) => !prev), [])
+  const handleManualSave = useCallback(() => { void handleSave() }, [handleSave])
+
   return (
     <>
       {/* Right Sidebar — Note Details */}
@@ -3519,7 +3629,7 @@ export default function NoteEditor({
           noteType={noteType}
           title={title}
           onTitleChange={setTitle}
-          onSave={() => handleSave()}
+          onSave={handleManualSave}
           onDelete={note && onDelete ? handleDelete : undefined}
           isSaving={isSaving || isAutosaving}
           isDeleting={isDeleting}
@@ -3529,19 +3639,19 @@ export default function NoteEditor({
           projectInfo={projectInfo}
           stats={stats}
           headings={headings}
-          onScrollToHeading={(headingId) => editorRef.current?.scrollToHeading(headingId)}
+          onScrollToHeading={handleScrollToHeading}
           wordGoal={wordGoal}
           wordGoalProgress={wordGoalProgress}
           onSetWordGoal={handleSetWordGoal}
-          onOpenSettings={() => setShowSettings(true)}
-          onOpenAIAssistant={() => setShowAIAssistant(true)}
+          onOpenSettings={openSettings}
+          onOpenAIAssistant={openAIAssistant}
           onExportMarkdown={handleExportMarkdown}
           onExportPdf={handleExportPdf}
           onExportDocx={handleExportDocx}
           onExportHtml={handleExportHtml}
           onExportPlainText={handleExportPlainText}
           onImportDocx={handleImportDocx}
-          onOpenConnections={() => setShowKnowledgeGraph(true)}
+          onOpenConnections={openConnections}
           backlinks={connectionData.backlinks}
           connectionsCount={connectionData.connectionsCount}
           onSelectBacklink={handleSelectBacklink}
@@ -3558,7 +3668,7 @@ export default function NoteEditor({
           isUnpublishing={isUnpublishingShare}
           canPublish={!!note?.id}
           collapsed={rightSidebarCollapsed}
-          onToggleCollapsed={() => setRightSidebarCollapsed(prev => !prev)}
+          onToggleCollapsed={toggleRightSidebar}
         />
       )}
 
@@ -3631,67 +3741,14 @@ export default function NoteEditor({
                 <ErrorBoundary label="Rich Text Editor" inline>
                 <RichTextEditor
                     ref={editorRef}
-                    value={content}
+                    value={note?.content ?? ''}
                     onChange={handleContentChange}
                     disabled={isSaving || isDeleting}
                     placeholder="Start writing your note..."
-                    onImagePaste={async (file: File) => {
-                      try {
-                        return await uploadAndBuildImagePayload(file, 'paste')
-                      } catch (error) {
-                        console.error('Paste upload failed:', error)
-                        toast.push({ title: 'Paste failed', description: 'Could not upload pasted image.' })
-                        return null
-                      }
-                    }}
-                    onImageDrop={async (file: File) => {
-                      try {
-                        return await uploadAndBuildImagePayload(file, 'drop')
-                      } catch (error) {
-                        console.error('Drop upload failed:', error)
-                        toast.push({ title: 'Drop failed', description: 'Could not upload dropped image.' })
-                        return null
-                      }
-                    }}
-                    onCustomCommand={(commandId) => {
-                      if (commandId === 'note-link') {
-                        saveNoteLinkSelection()
-                        setShowNoteLinkDialog(true)
-                      }
-                    }}
-                    customBlocks={[
-                      noteLinkBlock,
-                      imageBlock,
-                      dataSheetTableBlock,
-                      fileBlock,
-                      pdfAnnotationEmbedBlock,
-                      {
-                        type: 'table',
-                        render: (payload?: any) => {
-                          const rows = (payload && payload.rows) || 3
-                          const cols = (payload && payload.cols) || 3
-                          let html = '<div class="overflow-auto my-2"><table class="min-w-full table-fixed border-collapse">'
-                          for (let r = 0; r < rows; r++) {
-                            html += '<tr>'
-                            for (let c = 0; c < cols; c++) {
-                              html += '<td class="border px-2 py-1 align-top">' + (r === 0 ? '<strong>Header</strong>' : '&nbsp;') + '</td>'
-                            }
-                            html += '</tr>'
-                          }
-                          html += '</table></div>'
-                          return html
-                        },
-                        parse: (el: HTMLElement) => {
-                          // naive parse: count rows/cols
-                          const table = el.querySelector('table')
-                          if (!table) return { rows: 0, cols: 0 }
-                          const rows = table.querySelectorAll('tr').length
-                          const firstRow = table.querySelector('tr')
-                          const cols = firstRow ? firstRow.querySelectorAll('td,th').length : 0
-                          return { rows, cols }
-                        }
-                      }
-                    ]}
+                    onImagePaste={handleImagePaste}
+                    onImageDrop={handleImageDrop}
+                    onCustomCommand={handleEditorCustomCommand}
+                    customBlocks={editorCustomBlocks}
                   />
                 </ErrorBoundary>
               )}

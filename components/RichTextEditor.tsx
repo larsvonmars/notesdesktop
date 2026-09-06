@@ -2,6 +2,7 @@
 
 import {
   forwardRef,
+  memo,
   useCallback,
   useEffect,
   useImperativeHandle,
@@ -54,7 +55,7 @@ import {
   getClosestList,
   initListDragReorder,
 } from '@/lib/editor/listHandler'
-import { HistoryManager, createDebouncedCapture } from '@/lib/editor/historyManager'
+import { HistoryManager, createDebouncedCapture, type DebouncedCapture } from '@/lib/editor/historyManager'
 import {
   looksLikeMarkdown,
   markdownToHtml,
@@ -64,7 +65,6 @@ import {
 import {
   getSelectionContext,
   getClosestFromSelection,
-  isSelectionInsideRoot,
   saveSelectionRange,
   restoreSelectionRange,
 } from '@/lib/editor/selectionUtils'
@@ -122,6 +122,8 @@ export interface RichTextEditorHandle {
   exec: (command: RichTextCommand) => void
   insertCustomBlock?: (type: string, payload?: any) => void
   getHTML: () => string
+  /** Replace the entire editor content (sanitized) and emit a change. */
+  setHTML: (html: string) => void
   getMarkdown: () => string
   getHeadings: () => Array<{ id: string; level: number; text: string }>
   queryCommandState: (command: string) => boolean
@@ -375,18 +377,17 @@ const ensureEditorHasContent = (editor: HTMLDivElement) => {
   }
 }
 
-const RichTextEditor = forwardRef<RichTextEditorHandle, RichTextEditorProps>(
+const RichTextEditorImpl = forwardRef<RichTextEditorHandle, RichTextEditorProps>(
   ({ value, onChange, disabled, placeholder, customBlocks, onCustomCommand, onImagePaste, onImageDrop }, ref) => {
     const customBlocksRef = useRef<CustomBlockDescriptor[] | undefined>(undefined)
       const editorRef = useRef<HTMLDivElement | null>(null)
     const historyManagerRef = useRef<HistoryManager | null>(null)
-    const debouncedCaptureRef = useRef<(() => void) | null>(null)
+    const debouncedCaptureRef = useRef<DebouncedCapture | null>(null)
     const lastSyncedValueRef = useRef<string>('')
     const pendingExternalValueRef = useRef<string | null>(null)
     const mutationObserverRef = useRef<MutationObserver | null>(null)
     const checklistNormalizationTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
     const isProcessingCommandRef = useRef<boolean>(false)
-    const activeFormatsFrameRef = useRef<number | null>(null)
     const isComposingRef = useRef<boolean>(false)
     const {
       showLinkDialog,
@@ -444,12 +445,12 @@ const RichTextEditor = forwardRef<RichTextEditorHandle, RichTextEditorProps>(
     } = useTableDialogState()
     const savedSelectionRef = useRef<Range | null>(null)
     const [autoformatEnabled] = useState(true)
-    const [activeFormats, setActiveFormats] = useState<Set<string>>(new Set())
     const [pdfPreview, setPdfPreview] = useState<{ isOpen: boolean; filePath: string | null; fileName: string | null }>({
       isOpen: false,
       filePath: null,
       fileName: null,
     })
+    const [tableOutlinesVisible, setTableOutlinesVisible] = useState(true)
 
     useEffect(() => {
       const handlePreviewPdf = (event: Event) => {
@@ -460,10 +461,6 @@ const RichTextEditor = forwardRef<RichTextEditorHandle, RichTextEditorProps>(
       }
       window.addEventListener(FILE_BLOCK_PREVIEW_PDF_EVENT, handlePreviewPdf as EventListener)
       return () => window.removeEventListener(FILE_BLOCK_PREVIEW_PDF_EVENT, handlePreviewPdf as EventListener)
-    }, [])
-
-    const isSelectionInsideEditor = useCallback(() => {
-      return isSelectionInsideRoot(editorRef.current)
     }, [])
 
     const queryCommandStateLocal = useCallback((command: string) => {
@@ -532,78 +529,6 @@ const RichTextEditor = forwardRef<RichTextEditorHandle, RichTextEditorProps>(
         return false
       }
     }, [])
-
-    const updateActiveFormats = useCallback(() => {
-      try {
-        const editor = editorRef.current
-        if (!editor) {
-          setActiveFormats(new Set())
-          return
-        }
-
-        const context = getSelectionContext(editor)
-        const element = context?.element
-
-        if (!element) {
-          setActiveFormats(new Set())
-          return
-        }
-
-        const formats = new Set<string>()
-
-        if (element.closest('strong, b')) formats.add('bold')
-        if (element.closest('em, i')) formats.add('italic')
-        if (element.closest('u')) formats.add('underline')
-        if (element.closest('s, strike')) formats.add('strike')
-        if (element.closest('code')) formats.add('code')
-        if (element.closest('ul')) formats.add('unordered-list')
-        if (element.closest('ol')) formats.add('ordered-list')
-        if (element.closest('ul[data-checklist="true"], ol[data-checklist="true"]')) {
-          formats.add('checklist')
-        }
-        if (element.closest('h1')) formats.add('heading1')
-        if (element.closest('h2')) formats.add('heading2')
-        if (element.closest('h3')) formats.add('heading3')
-        if (element.closest('h4')) formats.add('heading4')
-        if (element.closest('h5')) formats.add('heading5')
-        if (element.closest('h6')) formats.add('heading6')
-        if (element.closest('blockquote')) formats.add('blockquote')
-
-        // Detect text alignment
-        const currentAlign = getTextAlignment(editorRef.current)
-        formats.add(`align-${currentAlign}`)
-
-        // Detect highlight color
-        const hlEl = element.closest('[data-highlight]') as HTMLElement | null
-        if (hlEl) {
-          const hlColor = hlEl.getAttribute('data-highlight')
-          if (hlColor) formats.add(`highlight:${hlColor}`)
-        }
-
-        // Detect text color
-        const colorEl = element.closest('[data-color]') as HTMLElement | null
-        if (colorEl) {
-          const colorVal = colorEl.getAttribute('data-color')
-          if (colorVal) formats.add(`color:${colorVal}`)
-        }
-
-        setActiveFormats(formats)
-      } catch (error) {
-        console.error('Error updating active formats:', error)
-        setActiveFormats(new Set())
-      }
-    }, [])
-
-    const scheduleActiveFormatsUpdate = useCallback(() => {
-      if (activeFormatsFrameRef.current !== null) {
-        window.cancelAnimationFrame(activeFormatsFrameRef.current)
-      }
-
-      activeFormatsFrameRef.current = window.requestAnimationFrame(() => {
-        updateActiveFormats()
-        activeFormatsFrameRef.current = null
-      })
-    }, [updateActiveFormats])
 
     const insertFragmentAtSelection = useCallback(
       (fragment: DocumentFragment) => {
@@ -714,19 +639,6 @@ const RichTextEditor = forwardRef<RichTextEditorHandle, RichTextEditorProps>(
       customBlocksRef.current = customBlocks
     }, [customBlocks])
 
-    useEffect(() => {
-      const handleSelection = () => {
-        if (!isSelectionInsideEditor()) {
-          setActiveFormats(new Set())
-          return
-        }
-        scheduleActiveFormatsUpdate()
-      }
-
-      document.addEventListener('selectionchange', handleSelection)
-      return () => document.removeEventListener('selectionchange', handleSelection)
-    }, [isSelectionInsideEditor, scheduleActiveFormatsUpdate])
-
     const sanitize = useCallback(
       (html: string) => {
         if (typeof window === 'undefined') return html
@@ -758,7 +670,7 @@ const RichTextEditor = forwardRef<RichTextEditorHandle, RichTextEditorProps>(
       }, 150)
     }, [normalizeChecklistItemsInline])
 
-    const emitChange = useCallback(() => {
+    const emitChange = useCallback((skipSanitize = false) => {
       if (!editorRef.current) return
 
       try {
@@ -767,21 +679,26 @@ const RichTextEditor = forwardRef<RichTextEditorHandle, RichTextEditorProps>(
           return
         }
 
-        const sanitized = sanitize(editorRef.current.innerHTML)
+        // Typed input only ever produces text nodes (browsers never parse
+        // keystrokes as HTML), so running DOMPurify over the entire document on
+        // every input event is wasted work and the main source of typing lag on
+        // large notes. Sanitization is still applied to untrusted content
+        // (initial load, paste, drop, block re-render) at the call sites.
+        const nextValue = skipSanitize
+          ? editorRef.current.innerHTML
+          : sanitize(editorRef.current.innerHTML)
 
-        if (sanitized !== lastSyncedValueRef.current) {
-          lastSyncedValueRef.current = sanitized
-          onChange(sanitized)
+        if (nextValue !== lastSyncedValueRef.current) {
+          lastSyncedValueRef.current = nextValue
+          onChange(nextValue)
           if (debouncedCaptureRef.current) {
             debouncedCaptureRef.current()
           }
         }
-
-        scheduleActiveFormatsUpdate()
       } catch (error) {
         console.error('Error emitting change:', error)
       }
-    }, [onChange, sanitize, scheduleActiveFormatsUpdate])
+    }, [onChange, sanitize])
 
     // Track IME composition state so we can skip handleKeyDown during composition
     useEffect(() => {
@@ -961,8 +878,10 @@ const RichTextEditor = forwardRef<RichTextEditorHandle, RichTextEditorProps>(
 
         if (table.getAttribute('data-no-outline') === 'true') {
           table.removeAttribute('data-no-outline')
+          setTableOutlinesVisible(true)
         } else {
           table.setAttribute('data-no-outline', 'true')
+          setTableOutlinesVisible(false)
         }
 
         emitChange()
@@ -1008,18 +927,35 @@ const RichTextEditor = forwardRef<RichTextEditorHandle, RichTextEditorProps>(
 
       const observer = new MutationObserver((mutations) => {
         const hasRelevantChanges = mutations.some(mutation => {
-          if (mutation.target instanceof HTMLElement) {
-            const target = mutation.target
-            if (target.tagName === 'LI' || target.closest('li') || target.querySelector('li')) {
-              return true
-            }
+          if (mutation.type === 'characterData') {
+            return false
+          }
+
+          if (mutation.type === 'attributes') {
+            return mutation.target instanceof HTMLElement
+          }
+
+          // Only structural list changes warrant a normalization pass —
+          // plain text edits inside an <li> are handled incrementally
+          const isStructuralListNode = (node: Node) => {
+            if (!(node instanceof HTMLElement)) return false
+            return (
+              node.tagName === 'LI' ||
+              node.tagName === 'UL' ||
+              node.tagName === 'OL' ||
+              !!node.querySelector('li') ||
+              !!node.querySelector('input[type="checkbox"]')
+            )
           }
 
           for (const node of Array.from(mutation.addedNodes)) {
-            if (node instanceof HTMLElement) {
-              if (node.tagName === 'LI' || node.querySelector('li') || node.querySelector('input[type="checkbox"]')) {
-                return true
-              }
+            if (isStructuralListNode(node)) {
+              return true
+            }
+          }
+          for (const node of Array.from(mutation.removedNodes)) {
+            if (isStructuralListNode(node)) {
+              return true
             }
           }
 
@@ -1044,9 +980,6 @@ const RichTextEditor = forwardRef<RichTextEditorHandle, RichTextEditorProps>(
         observer.disconnect()
         if (checklistNormalizationTimerRef.current) {
           clearTimeout(checklistNormalizationTimerRef.current)
-        }
-        if (activeFormatsFrameRef.current !== null) {
-          window.cancelAnimationFrame(activeFormatsFrameRef.current)
         }
       }
     }, [scheduleChecklistNormalization])
@@ -1679,11 +1612,12 @@ const RichTextEditor = forwardRef<RichTextEditorHandle, RichTextEditorProps>(
     }, [])
 
     // Search functionality
-    const highlightMatch = useCallback((matchIndex: number) => {
-      if (!editorRef.current || matchIndex < 0 || matchIndex >= searchMatches.length) return
+    const highlightMatch = useCallback((matchIndex: number, matchesOverride?: SearchMatch[]) => {
+      const matches = matchesOverride ?? searchMatches
+      if (!editorRef.current || matchIndex < 0 || matchIndex >= matches.length) return
 
       try {
-        const match = searchMatches[matchIndex]
+        const match = matches[matchIndex]
         const range = document.createRange()
         const selection = window.getSelection()
 
@@ -1757,7 +1691,9 @@ const RichTextEditor = forwardRef<RichTextEditorHandle, RichTextEditorProps>(
         setCurrentMatchIndex(0)
 
         if (matches.length > 0) {
-          highlightMatch(0)
+          // Pass the freshly computed matches explicitly — the `searchMatches`
+          // state in this closure is still stale for the first find.
+          highlightMatch(0, matches)
         }
       } catch (error) {
         console.error('Error performing search:', error)
@@ -2053,6 +1989,19 @@ const RichTextEditor = forwardRef<RichTextEditorHandle, RichTextEditorProps>(
       () => ({
         focus: () => editorRef.current?.focus(),
         getHTML: () => sanitize(editorRef.current?.innerHTML ?? ''),
+        setHTML: (html: string) => {
+          const editorEl = editorRef.current
+          if (!editorEl || !editorEl.isConnected) return
+
+          try {
+            editorEl.innerHTML = sanitize(html)
+            ensureEditorHasContent(editorEl)
+            rehydrateExistingBlocks()
+            emitChange()
+          } catch (error) {
+            console.error('Error in setHTML:', error)
+          }
+        },
         getMarkdown: () => htmlToMarkdown(editorRef.current?.innerHTML ?? ''),
         getHeadings,
         getRootElement: () => editorRef.current,
@@ -2196,7 +2145,7 @@ const RichTextEditor = forwardRef<RichTextEditorHandle, RichTextEditorProps>(
           executeRichTextCommand(command)
         }
       }),
-      [sanitize, getHeadings, scrollToHeading, executeRichTextCommand, insertCustomBlock, saveSelection, onCustomCommand, insertLink, openTableDialog]
+      [sanitize, getHeadings, scrollToHeading, executeRichTextCommand, insertCustomBlock, saveSelection, onCustomCommand, insertLink, openTableDialog, emitChange, rehydrateExistingBlocks]
     )
 
     // Initialize history manager
@@ -2206,6 +2155,10 @@ const RichTextEditor = forwardRef<RichTextEditorHandle, RichTextEditorProps>(
         manager.initialize()
         historyManagerRef.current = manager
         debouncedCaptureRef.current = createDebouncedCapture(manager)
+      }
+
+      return () => {
+        debouncedCaptureRef.current?.cancel()
       }
     }, [])
 
@@ -2220,7 +2173,10 @@ const RichTextEditor = forwardRef<RichTextEditorHandle, RichTextEditorProps>(
           return
         }
 
-        const sanitizedValue = sanitize(value || '')
+        const incomingValue = value || ''
+        // Values the editor itself emitted are already sanitized — skip the extra pass
+        const isSelfEmission = incomingValue === lastSyncedValueRef.current
+        const sanitizedValue = isSelfEmission ? incomingValue : sanitize(incomingValue)
 
         if (lastSyncedValueRef.current !== sanitizedValue) {
           const editorHasFocus = editorEl === document.activeElement || editorEl.contains(document.activeElement)
@@ -2245,7 +2201,9 @@ const RichTextEditor = forwardRef<RichTextEditorHandle, RichTextEditorProps>(
 
           if (historyManagerRef.current) {
             try {
-              historyManagerRef.current.capture()
+              // Genuine external load (e.g. a different note): reset history so
+              // undo can't restore content from the previous document
+              historyManagerRef.current.initialize()
             } catch (error) {
               console.error('Error capturing history:', error)
             }
@@ -2280,7 +2238,7 @@ const RichTextEditor = forwardRef<RichTextEditorHandle, RichTextEditorProps>(
 
         if (historyManagerRef.current) {
           try {
-            historyManagerRef.current.capture()
+            historyManagerRef.current.initialize()
           } catch (error) {
             console.error('Error capturing history after pending value flush:', error)
           }
@@ -2338,11 +2296,13 @@ const RichTextEditor = forwardRef<RichTextEditorHandle, RichTextEditorProps>(
       if (!editorRef.current) return
 
       let cleanupFn: (() => void) | undefined = undefined
+      let mounted = true
 
       const initImageBlocks = async () => {
         try {
           const { initializeImageBlockInteractions } = await import('@/lib/editor/imageBlock')
-          cleanupFn = initializeImageBlockInteractions(editorRef.current!, emitChange)
+          if (!mounted || !editorRef.current) return
+          cleanupFn = initializeImageBlockInteractions(editorRef.current, emitChange)
         } catch (error) {
           console.error('Failed to initialize image block interactions:', error)
         }
@@ -2351,6 +2311,7 @@ const RichTextEditor = forwardRef<RichTextEditorHandle, RichTextEditorProps>(
       initImageBlocks()
 
       return () => {
+        mounted = false
         if (cleanupFn) {
           cleanupFn()
         }
@@ -2371,11 +2332,13 @@ const RichTextEditor = forwardRef<RichTextEditorHandle, RichTextEditorProps>(
 
     const handleInput = () => {
       try {
+        if (isComposingRef.current) return
         if (!editorRef.current || !editorRef.current.isConnected) {
           console.warn('Editor disconnected during input')
           return
         }
-        emitChange()
+        // Skip the DOMPurify pass on typed input — see emitChange()
+        emitChange(true)
       } catch (error) {
         console.error('Error in handleInput:', error)
       }
@@ -2977,9 +2940,13 @@ const RichTextEditor = forwardRef<RichTextEditorHandle, RichTextEditorProps>(
       handleAsyncImageInsertion(imageFile, 'drop', 'Uploading dropped image...')
     }
 
-    // Determine outlines visibility for the currently selected table (per-table)
-    const currentTable = typeof window !== 'undefined' ? getClosestFromSelection('table', editorRef.current) as HTMLElement | null : null
-    const outlinesVisibleForToolbar = currentTable ? currentTable.getAttribute('data-no-outline') !== 'true' : true
+    // Keep the outline toggle in sync with the currently selected table.
+    // (Previously read from the DOM during render on every keystroke.)
+    useEffect(() => {
+      if (!tableToolbarVisible) return
+      const table = getClosestFromSelection('table', editorRef.current) as HTMLElement | null
+      setTableOutlinesVisible(table ? table.getAttribute('data-no-outline') !== 'true' : true)
+    }, [tableToolbarVisible, tableToolbarPos])
 
     // Handle virtual keyboard on mobile: adjust editor padding so cursor stays visible
     useEffect(() => {
@@ -3128,7 +3095,7 @@ const RichTextEditor = forwardRef<RichTextEditorHandle, RichTextEditorProps>(
           onDeleteCol={deleteTableCol}
           onDeleteTable={deleteTable}
           onToggleHeaderRow={toggleHeaderRow}
-          outlinesVisible={outlinesVisibleForToolbar}
+          outlinesVisible={tableOutlinesVisible}
           onToggleOutlines={toggleTableOutlines}
         />
 
@@ -3143,6 +3110,11 @@ const RichTextEditor = forwardRef<RichTextEditorHandle, RichTextEditorProps>(
   }
 )
 
-RichTextEditor.displayName = 'RichTextEditor'
+RichTextEditorImpl.displayName = 'RichTextEditor'
+
+// Memoized so the heavy editor body skips re-rendering on parent updates that
+// only touch the parent's `content` state (the editor is the source of truth
+// while focused and syncs `value` internally via an effect).
+const RichTextEditor = memo(RichTextEditorImpl)
 
 export default RichTextEditor

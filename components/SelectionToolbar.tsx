@@ -479,4 +479,4 @@ const SelectionToolbar = forwardRef<HTMLDivElement, SelectionToolbarProps>(
 
 SelectionToolbar.displayName = 'SelectionToolbar'
 
-export default SelectionToolbar
+export default memo(SelectionToolbar)

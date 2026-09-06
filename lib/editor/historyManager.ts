@@ -260,23 +260,41 @@ export class HistoryManager {
 }
 
 /**
+ * Debounced history capture function with a cancel() method to drop
+ * any pending capture (e.g. on unmount).
+ */
+export interface DebouncedCapture {
+  (): void
+  cancel: () => void
+}
+
+/**
  * Create a debounced function for history capture
  */
 export function createDebouncedCapture(
   historyManager: HistoryManager,
   delay?: number
-): () => void {
+): DebouncedCapture {
   let timeoutId: ReturnType<typeof setTimeout> | null = null
   const actualDelay = delay ?? historyManager.getDebounceDelay()
-  
-  return () => {
+
+  const capture = (() => {
     if (timeoutId) {
       clearTimeout(timeoutId)
     }
-    
+
     timeoutId = setTimeout(() => {
       historyManager.push()
       timeoutId = null
     }, actualDelay)
+  }) as DebouncedCapture
+
+  capture.cancel = () => {
+    if (timeoutId) {
+      clearTimeout(timeoutId)
+      timeoutId = null
+    }
   }
+
+  return capture
 }
