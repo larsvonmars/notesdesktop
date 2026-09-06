@@ -473,6 +473,10 @@ function editorReducer(state: EditorState, action: EditorAction): EditorState {
       return { ...state, isPanning: false, panStart: null }
 
     case 'SET_HOVERING_EMPTY_SPACE':
+      // Fires on every pointer-move while hovering; returning a fresh state
+      // object here would re-render the whole canvas component for no visual
+      // change. Bail out when the value is unchanged.
+      if (state.isHoveringEmptySpace === action.payload) return state
       return { ...state, isHoveringEmptySpace: action.payload }
 
     case 'RESET_VIEW':
@@ -1653,6 +1657,12 @@ const MindmapEditor = forwardRef<MindmapEditorHandle, MindmapEditorProps>(
     }, [selectedNodeId, mindmapData, onSelectedNodeChange])
 
     useEffect(() => {
+      // Fast path: the parent echoes back the exact object this editor emitted
+      // via onChange (this happens on every pointer-move during a node drag).
+      // Skip the expensive deep normalize + JSON.stringify round-trip in that
+      // case — it's the hottest path in this component.
+      if (initialData && initialData === mindmapDataRef.current) return
+
       const nextData = normalizeMindmapData(initialData)
       const currentSignature = JSON.stringify(mindmapDataRef.current)
       const incomingSignature = JSON.stringify(nextData)
@@ -1677,8 +1687,13 @@ const MindmapEditor = forwardRef<MindmapEditorHandle, MindmapEditorProps>(
         skipOnChangeRef.current = false
         return
       }
+      // Defer emitting while a node is being dragged: dragging dispatches an
+      // UPDATE_NODE per pointer-move, and emitting on each move forces the
+      // parent (and this component) to re-render at pointer-move rate. The
+      // final position is emitted once the drag stops (draggingNodeId → null).
+      if (draggingNodeId) return
       onChange?.(mindmapData)
-    }, [mindmapData, onChange])
+    }, [mindmapData, onChange, draggingNodeId])
     const resolveChildrenVisibility = useCallback(
       (nodeId: string, now: number): { value: number; animating: boolean } => {
         const animation = animationsRef.current.get(nodeId)

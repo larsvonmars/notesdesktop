@@ -3497,6 +3497,20 @@ export default function NoteEditor({
     [allNotes]
   )
 
+  const mindmapTextNotes = useMemo(
+    () =>
+      textNotesForMindmap.map((item) => ({
+        id: item.id,
+        title: item.title || 'Untitled',
+        content: item.content || '',
+      })),
+    [textNotesForMindmap]
+  )
+
+  const handleMindmapSelectedNodeChange = useCallback((nodeId: string | null) => {
+    setSelectedMindmapNodeId(nodeId)
+  }, [])
+
   const handleCreateTextNoteFromMindmap = useCallback(
     async ({ title: sourceTitle, description }: { title: string; description: string }) => {
       const title = sourceTitle.trim() || 'Untitled Note'
@@ -3695,12 +3709,8 @@ export default function NoteEditor({
                     ref={mindmapEditorRef}
                     initialData={mindmapData || undefined}
                     onChange={setMindmapData}
-                    onSelectedNodeChange={(nodeId, _node) => setSelectedMindmapNodeId(nodeId)}
-                    textNotes={textNotesForMindmap.map((item) => ({
-                      id: item.id,
-                      title: item.title || 'Untitled',
-                      content: item.content || '',
-                    }))}
+                    onSelectedNodeChange={handleMindmapSelectedNodeChange}
+                    textNotes={mindmapTextNotes}
                     onCreateTextNote={handleCreateTextNoteFromMindmap}
                     onOpenTextNote={handleOpenTextNoteFromMindmap}
                     readOnly={isSaving || isDeleting}
