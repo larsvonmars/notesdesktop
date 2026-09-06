@@ -17,6 +17,8 @@ export interface Project {
   quick_links: QuickLink[]
   created_at: string
   updated_at: string
+  /** Set when the project is archived (hidden from the active workspace). */
+  archived_at?: string | null
 }
 
 export interface CreateProjectInput {
@@ -35,13 +37,28 @@ export interface UpdateProjectInput {
 }
 
 /**
- * Fetch all projects for the current user
+ * Fetch the current user's ACTIVE (non-archived) projects.
  */
 export async function getProjects(): Promise<Project[]> {
   const { data, error } = await supabase
     .from('projects')
     .select('*')
+    .is('archived_at', null)
     .order('position', { ascending: true })
+
+  if (error) throw error
+  return data || []
+}
+
+/**
+ * Fetch the current user's ARCHIVED projects (most recently archived first).
+ */
+export async function getArchivedProjects(): Promise<Project[]> {
+  const { data, error } = await supabase
+    .from('projects')
+    .select('*')
+    .not('archived_at', 'is', null)
+    .order('archived_at', { ascending: false })
 
   if (error) throw error
   return data || []
@@ -123,7 +140,46 @@ export async function updateProject(
 }
 
 /**
- * Delete a project (sets project_id to null for child folders/notes)
+ * Archive a project: hides it (and its folders/notes) from the active
+ * workspace without deleting anything. Returns the updated project.
+ */
+export async function archiveProject(id: string): Promise<Project> {
+  const { data, error } = await supabase
+    .from('projects')
+    .update({
+      archived_at: new Date().toISOString(),
+      updated_at: new Date().toISOString(),
+    })
+    .eq('id', id)
+    .select()
+    .single()
+
+  if (error) throw error
+  return data
+}
+
+/**
+ * Restore an archived project back into the active workspace.
+ */
+export async function restoreProject(id: string): Promise<Project> {
+  const { data, error } = await supabase
+    .from('projects')
+    .update({
+      archived_at: null,
+      updated_at: new Date().toISOString(),
+    })
+    .eq('id', id)
+    .select()
+    .single()
+
+  if (error) throw error
+  return data
+}
+
+/**
+ * Delete a project. Child folders/notes keep their rows but their project_id
+ * is set to NULL by the database FK (ON DELETE SET NULL), so they become
+ * unfiled rather than being destroyed.
  */
 export async function deleteProject(id: string): Promise<void> {
   const { error } = await supabase

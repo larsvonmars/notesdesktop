@@ -91,6 +91,7 @@ create index if not exists notes_project_id_idx on public.notes(project_id);
 | `position` | integer | Order in project list |
 | `created_at` | timestamp | Creation time |
 | `updated_at` | timestamp | Last update time |
+| `archived_at` | timestamp | When the project was archived (NULL = active) |
 
 ### Updated Folders Table
 
@@ -107,6 +108,24 @@ Additional column:
 | Column | Type | Description |
 |--------|------|-------------|
 | `project_id` | uuid | Parent project (null for no project) |
+
+## Archiving Projects (soft-delete)
+
+Projects can be archived instead of deleted. Archived projects are hidden from
+`getProjects()` (active workspace) but are returned by `getArchivedProjects()`.
+Folders/notes keep their `project_id`, so restoring the project brings all its
+content back. Deleting an archived project still un-files its folders/notes
+(`ON DELETE SET NULL`).
+
+See `supabase/schemas/PROJECT_ARCHIVE_SCHEMA.sql` (idempotent):
+
+```sql
+alter table public.projects
+  add column if not exists archived_at timestamp with time zone;
+
+create index if not exists projects_user_archived_idx
+  on public.projects (user_id, archived_at);
+```
 
 ## Project Hierarchy
 

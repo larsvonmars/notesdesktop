@@ -5,7 +5,7 @@
 ### Web Version (Recommended - macOS Compatible)
 
 ```bash
-./start-web.sh
+../scripts/start-web.sh
 # OR
 npm run dev
 ```
@@ -48,7 +48,7 @@ All features are fully functional in the web version:
 
 4. **Start the app**:
    ```bash
-   ./start-web.sh
+   ../scripts/start-web.sh
    ```
 
 5. **Create an account**:

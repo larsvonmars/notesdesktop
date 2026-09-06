@@ -67,7 +67,7 @@ A comprehensive, production-ready task management and calendar system has been s
 ## 📁 Files Created
 
 ### Database Schema
-- **`TASK_CALENDAR_SCHEMA.sql`** - Complete SQL schema (9 tables, RLS policies, indexes, triggers)
+- **`supabase/schemas/TASK_CALENDAR_SCHEMA.sql`** - Complete SQL schema (9 tables, RLS policies, indexes, triggers)
 
 ### Backend API
 - **`lib/tasks.ts`** - Task management API (20+ functions)
@@ -92,7 +92,7 @@ A comprehensive, production-ready task management and calendar system has been s
 1. **Run the Database Schema**:
    ```bash
    # Open Supabase Dashboard → SQL Editor
-   # Copy and run the contents of TASK_CALENDAR_SCHEMA.sql
+   # Copy and run the contents of supabase/schemas/TASK_CALENDAR_SCHEMA.sql
    ```
 
 2. **Verify Tables Created**:
@@ -332,7 +332,7 @@ Potential additions:
 ## 🎓 Learning Resources
 
 - **`TASK_CALENDAR_GUIDE.md`**: Complete user and developer guide
-- **`TASK_CALENDAR_SCHEMA.sql`**: Database schema with comments
+- **`supabase/schemas/TASK_CALENDAR_SCHEMA.sql`**: Database schema with comments
 - **`lib/tasks.ts`**: Task API with JSDoc comments
 - **`lib/events.ts`**: Events API with examples
 - **`components/TaskCalendarModal.tsx`**: UI component with detailed logic

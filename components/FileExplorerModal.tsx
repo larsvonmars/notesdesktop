@@ -906,23 +906,23 @@ export default function FileExplorerModal({
 
           {/* ============ CONTENT ============ */}
           <div
-            className={`flex-1 overflow-y-auto min-h-[300px] ${isDragOver ? 'bg-alpine-50 ring-2 ring-inset ring-alpine-300' : ''}`}
+            className={`flex-1 overflow-y-auto min-h-[300px] ${isDragOver ? 'bg-alpine-50 dark:bg-alpine-900/25 ring-2 ring-inset ring-alpine-300 dark:ring-alpine-700' : ''}`}
             onDragOver={handleDragOver}
             onDragLeave={handleDragLeave}
             onDrop={handleDrop}
           >
             {/* Upload progress */}
             {uploadProgress && (
-              <div className="px-5 py-2 bg-alpine-50 border-b border-alpine-100">
-                <div className="flex items-center gap-2 text-sm text-alpine-700">
+              <div className="px-5 py-2 bg-alpine-50 dark:bg-alpine-900/30 border-b border-alpine-100 dark:border-alpine-800/50">
+                <div className="flex items-center gap-2 text-sm text-alpine-700 dark:text-alpine-300">
                   <Loader2 size={14} className="animate-spin" />
                   <span>
                     Uploading {uploadProgress.done}/{uploadProgress.total} files...
                   </span>
                 </div>
-                <div className="mt-1 h-1.5 rounded-full bg-alpine-200">
+                <div className="mt-1 h-1.5 rounded-full bg-alpine-200 dark:bg-alpine-800/60">
                   <div
-                    className="h-full rounded-full bg-alpine-600 transition-all"
+                    className="h-full rounded-full bg-alpine-600 dark:bg-alpine-500 transition-all"
                     style={{ width: `${(uploadProgress.done / uploadProgress.total) * 100}%` }}
                   />
                 </div>
@@ -975,8 +975,8 @@ export default function FileExplorerModal({
 
             {/* Drag overlay */}
             {isDragOver && (
-              <div className="absolute inset-0 z-10 flex items-center justify-center bg-alpine-50  pointer-events-none">
-                <div className="flex flex-col items-center gap-2 text-alpine-700">
+              <div className="absolute inset-0 z-10 flex items-center justify-center bg-alpine-50 dark:bg-alpine-950/70 pointer-events-none">
+                <div className="flex flex-col items-center gap-2 text-alpine-700 dark:text-alpine-200">
                   <Upload size={40} />
                   <p className="font-medium">Drop files to upload</p>
                 </div>

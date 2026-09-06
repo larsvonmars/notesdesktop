@@ -2,12 +2,13 @@
 
 import { useAuth } from '@/lib/auth-context'
 import { useRouter, useSearchParams } from 'next/navigation'
-import { useEffect, useState, useRef, useCallback, Suspense } from 'react'
+import { useEffect, useState, useRef, useCallback, useMemo, Suspense } from 'react'
 import NoteEditor, { Note } from '@/components/NoteEditor'
 import WelcomeBackModal from '@/components/WelcomeBackModal'
 import FileExplorerModal from '@/components/FileExplorerModal'
 import ProjectDashboard from '@/components/ProjectDashboard'
 import SidebarTree from '@/components/SidebarTree'
+import ArchivedProjectsModal from '@/components/ArchivedProjectsModal'
 import { Loader2, FileEdit, Sparkles, FileText, PenTool, Network, BookOpen, Table2, FilePenLine, X, Menu, ChevronLeft, ChevronRight, FolderOpen, Home, LogOut, FileQuestion, Target, Lightbulb, Scale, LayoutGrid } from 'lucide-react'
 import type { LucideIcon } from 'lucide-react'
 import { useIsMobile } from '@/lib/useIsMobile'
@@ -45,9 +46,12 @@ import {
 } from '@/lib/folders'
 import {
   getProjects,
+  getArchivedProjects,
   subscribeToProjects,
   createProject,
   updateProject,
+  archiveProject as archiveProjectApi,
+  restoreProject as restoreProjectApi,
   deleteProject as deleteProjectApi,
   moveNoteToProject,
   moveFolderToProject,
@@ -97,7 +101,17 @@ function WorkspaceContent() {
 
   // Projects state
   const [projects, setProjects] = useState<Project[]>([])
+  const [archivedProjects, setArchivedProjects] = useState<Project[]>([])
   const [isLoadingProjects, setIsLoadingProjects] = useState(true)
+  const [showArchiveModal, setShowArchiveModal] = useState(false)
+
+  // Project ids that are archived — used to keep archived content out of the
+  // active workspace (folders/notes belonging to an archived project).
+  const archivedProjectIds = useMemo(
+    () => new Set(archivedProjects.map((p) => p.id)),
+    [archivedProjects]
+  )
+  const archivedProjectIdsRef = useRef<Set<string>>(new Set())
   
   // Sidebar state
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false)
@@ -196,6 +210,7 @@ function WorkspaceContent() {
   activateExistingNoteRef.current = activateExistingNote
   applyFolderSelectionRef.current = applyFolderSelection
   updateNavigationParamsRef.current = updateNavigationParams
+  archivedProjectIdsRef.current = archivedProjectIds
 
   useEffect(() => {
     if (!loading && !user) {
@@ -301,6 +316,7 @@ function WorkspaceContent() {
     if (user) {
       loadFolders()
       loadProjects()
+      loadArchivedProjects()
     }
   }, [user])
   
@@ -418,6 +434,16 @@ function WorkspaceContent() {
         // If we're suppressing realtime reloads (e.g. an autosave just happened), ignore
         if (suppressRealtimeRef.current) return
 
+        // Keep notes belonging to archived projects out of the active workspace.
+        if (newRow && archivedProjectIdsRef.current.has(newRow.project_id)) {
+          if (eventType === 'INSERT') return
+          if (eventType === 'UPDATE') {
+            setAllNotes((prev) => prev.filter((n) => n.id !== newRow.id))
+            setNotes((prev) => prev.filter((n) => n.id !== newRow.id))
+            return
+          }
+        }
+
         // Helper: determine if a note belongs in the currently selected folder view
         const belongsInCurrentFolder = (note: any) => {
           if (selectedFolderId === null) return note.folder_id === null
@@ -483,6 +509,9 @@ function WorkspaceContent() {
     if (!user) return
     const unsubscribeProjects = subscribeToProjects(user.id, () => {
       loadProjects()
+      loadArchivedProjects()
+      loadFolders()
+      loadAllNotes()
     })
     return () => {
       unsubscribeProjects()
@@ -500,9 +529,26 @@ function WorkspaceContent() {
     }
   }
 
+  const loadArchivedProjects = async () => {
+    try {
+      const fetched = await getArchivedProjects()
+      setArchivedProjects(fetched)
+    } catch (error) {
+      console.error('Error loading archived projects:', error)
+    }
+  }
+
+  // Filter out folders/notes that belong to archived projects so they never
+  // surface in the active workspace (recent, search, tree, folder lists).
+  const filterOutArchivedContent = <T extends { project_id: string | null }>(items: T[]): T[] => {
+    const ids = archivedProjectIdsRef.current
+    if (ids.size === 0) return items
+    return items.filter((item) => !item.project_id || !ids.has(item.project_id))
+  }
+
   const loadFolders = async () => {
     try {
-      const fetchedFolders = await getFolders()
+      const fetchedFolders = filterOutArchivedContent(await getFolders())
       setFolders(fetchedFolders)
       setFolderTree(buildFolderTree(fetchedFolders))
     } catch (error) {
@@ -515,7 +561,7 @@ function WorkspaceContent() {
   const loadNotesInFolder = async (folderId: string | null) => {
     try {
       setIsLoadingNotes(true)
-      const fetchedNotes = await getNotesByFolder(folderId)
+      const fetchedNotes = filterOutArchivedContent(await getNotesByFolder(folderId))
       setNotes(fetchedNotes)
     } catch (error) {
       console.error('Error loading notes:', error)
@@ -527,7 +573,7 @@ function WorkspaceContent() {
   // Load all notes for AI tool calling
   const loadAllNotes = async () => {
     try {
-      const fetchedNotes = await getNotes()
+      const fetchedNotes = filterOutArchivedContent(await getNotes())
       setAllNotes(fetchedNotes)
     } catch (error) {
       console.error('Error loading all notes:', error)
@@ -993,6 +1039,75 @@ function WorkspaceContent() {
       toast.push({ title: 'Error', description: 'Failed to update project color', duration: 5000 })
     }
   }
+  // ---- Archive handlers ----
+  const handleArchiveProject = async (projectId: string) => {
+    try {
+      const archived = await archiveProjectApi(projectId)
+      setProjects(prev => prev.filter(p => p.id !== projectId))
+      setArchivedProjects(prev => [archived, ...prev])
+
+      // If the archived project was open (dashboard, folder, or note), reset to root.
+      const folderInProject = selectedFolderId
+        ? folders.find(f => f.id === selectedFolderId)?.project_id === projectId
+        : false
+      if (
+        selectedProjectId === projectId ||
+        selectedNote?.project_id === projectId ||
+        folderInProject
+      ) {
+        applyFolderSelection(null)
+        if (activeView === 'projects') setActiveView('notes')
+      }
+
+      loadFolders()
+      loadAllNotes()
+      toast.push({
+        title: 'Project archived',
+        description: `"${archived.name}" was moved to Archive`,
+        duration: 3000,
+      })
+    } catch (error) {
+      console.error('Error archiving project:', error)
+      toast.push({ title: 'Error', description: 'Failed to archive project', duration: 5000 })
+    }
+  }
+
+  const handleRestoreProject = async (projectId: string) => {
+    try {
+      const restored = await restoreProjectApi(projectId)
+      setArchivedProjects(prev => prev.filter(p => p.id !== projectId))
+      setProjects(prev =>
+        [...prev.filter(p => p.id !== projectId), restored].sort((a, b) => a.position - b.position)
+      )
+      loadFolders()
+      loadAllNotes()
+      toast.push({
+        title: 'Project restored',
+        description: `"${restored.name}" is back in your workspace`,
+        duration: 3000,
+      })
+    } catch (error) {
+      console.error('Error restoring project:', error)
+      toast.push({ title: 'Error', description: 'Failed to restore project', duration: 5000 })
+    }
+  }
+
+  const handleDeleteArchivedProject = async (projectId: string) => {
+    try {
+      await deleteProjectApi(projectId)
+      setArchivedProjects(prev => prev.filter(p => p.id !== projectId))
+      loadFolders()
+      loadAllNotes()
+      toast.push({
+        title: 'Project deleted',
+        description: 'Its folders and notes were moved to Unfiled',
+        duration: 3000,
+      })
+    } catch (error) {
+      console.error('Error deleting archived project:', error)
+      toast.push({ title: 'Error', description: 'Failed to delete project', duration: 5000 })
+    }
+  }
 
   const handleMoveNoteToProject = async (noteId: string, projectId: string | null) => {
     try {
@@ -1038,7 +1153,7 @@ function WorkspaceContent() {
     }
   }
 
-  const sidebarOffset = sidebarCollapsed ? '64px' : '320px'
+  const sidebarOffset = sidebarCollapsed ? '64px' : '300px'
 
   // Set CSS variable for fixed-position elements (e.g. bottom bar in NoteEditor)
   useEffect(() => {
@@ -1131,8 +1246,8 @@ function WorkspaceContent() {
       <div className="flex items-center justify-center h-full">
         <div className="text-center p-8 max-w-md">
           <div className="relative mb-8">
-            <div className="absolute inset-0 bg-alpine-100 rounded-full blur-3xl opacity-40"></div>
-            <FileEdit className={`relative text-alpine-500 mx-auto ${isMobile ? 'w-16 h-16' : 'w-24 h-24'}`} strokeWidth={1.5} />
+            <div className="absolute inset-0 bg-accent-light rounded-full blur-3xl opacity-40"></div>
+            <FileEdit className={`relative text-accent mx-auto ${isMobile ? 'w-16 h-16' : 'w-24 h-24'}`} strokeWidth={1.5} />
           </div>
           <h1 className={`font-bold text-foreground mb-3 ${isMobile ? 'text-2xl' : 'text-3xl'}`}>Welcome to MindViz Notes</h1>
           <p className={`text-muted mb-8 ${isMobile ? 'text-base' : 'text-lg'}`}>
@@ -1170,8 +1285,9 @@ function WorkspaceContent() {
     >
       {/* Unified Sidebar — always visible on desktop, regardless of activeView */}
       {!isMobile && (
-        <aside className={`fixed inset-y-0 left-0 z-40 border-r border-border/30 bg-surface/95 backdrop-blur-xl flex flex-col transition-all duration-300 ${sidebarCollapsed ? 'w-16' : 'w-[320px]'}`}>
+        <aside className={`fixed inset-y-0 left-0 z-40 flex flex-col border-r border-border/60 bg-surface transition-[width] duration-300 ease-out ${sidebarCollapsed ? 'w-16' : 'w-[300px]'}`}>
           <SidebarTree
+            dense
             projects={projects}
             folderTree={folderTree}
             allNotes={allNotes}
@@ -1205,6 +1321,9 @@ function WorkspaceContent() {
               setActiveView('projects')
             }}
             onOpenFileExplorer={() => setShowFileExplorerModal(true)}
+            onArchiveProject={handleArchiveProject}
+            onOpenArchive={() => setShowArchiveModal(true)}
+            archivedCount={archivedProjects.length}
             collapsed={sidebarCollapsed}
             onToggleCollapsed={() => setSidebarCollapsed(prev => !prev)}
           />
@@ -1213,20 +1332,21 @@ function WorkspaceContent() {
 
       {/* Mobile header */}
       {isMobile && (
-        <header className="safe-top fixed inset-x-0 top-0 z-40 border-b border-border bg-surface px-4 py-3">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-3">
-              <button
-                onClick={() => setWorkspaceNavOpen(prev => !prev)}
-                className="rounded-lg p-2 text-muted transition-colors hover:bg-surface-hover hover:text-foreground"
-                aria-label="Toggle navigation"
-              >
-                <Menu size={20} />
-              </button>
-              <h2 className="text-sm font-semibold text-foreground">MindViz Notes</h2>
-            </div>
-            <img src="/icon-192.png" alt="MindViz Notes" className="h-8 w-8 rounded-lg" />
+        <header className="safe-top fixed inset-x-0 top-0 z-40 flex items-center justify-between border-b border-border/60 bg-surface px-3 py-2.5">
+          <div className="flex items-center gap-1.5">
+            <button
+              onClick={() => setWorkspaceNavOpen(prev => !prev)}
+              className="flex h-8 w-8 items-center justify-center rounded-lg text-muted/80 transition-colors hover:bg-surface-hover hover:text-foreground"
+              aria-label="Toggle navigation"
+            >
+              <Menu size={18} />
+            </button>
+            <span className="flex h-[22px] w-[22px] items-center justify-center rounded-[6px] bg-foreground text-[10px] font-bold text-background">
+              N
+            </span>
+            <h2 className="text-[15px] font-semibold tracking-tight text-foreground">MindViz Notes</h2>
           </div>
+          <span className="h-2 w-2 rounded-full bg-accent/80" aria-hidden />
         </header>
       )}
 
@@ -1248,7 +1368,7 @@ function WorkspaceContent() {
             }}
           />
           <aside
-            className="safe-top fixed inset-y-0 left-0 z-50 w-[320px] border-r border-border bg-surface flex flex-col"
+            className="safe-top fixed inset-y-0 left-0 z-50 flex w-[300px] max-w-[85vw] flex-col border-r border-border/60 bg-surface shadow-2xl"
             onTouchStart={(event) => {
               if (event.touches.length !== 1) return
               const touch = event.touches[0]
@@ -1260,22 +1380,23 @@ function WorkspaceContent() {
               endCloseSwipe(touch.clientX, touch.clientY)
             }}
           >
-            <div className="flex items-center justify-between border-b border-border px-4 py-3">
-              <div className="flex items-center gap-3">
-                <img src="/icon-192.png" alt="MindViz Notes" className="h-8 w-8 rounded-lg" />
-                <span className="text-sm font-semibold text-foreground">MindViz Notes</span>
-              </div>
+            {/* Drawer header */}
+            <div className="flex shrink-0 items-center gap-2 px-3 pb-2 pt-3">
+              <span className="flex h-[22px] w-[22px] items-center justify-center rounded-[6px] bg-foreground text-[10px] font-bold text-background">
+                N
+              </span>
+              <span className="flex-1 truncate text-[13px] font-semibold text-foreground/90">MindViz Notes</span>
               <button
                 onClick={() => setWorkspaceNavOpen(false)}
-                className="rounded-lg p-1.5 text-muted transition-colors hover:bg-surface-hover hover:text-foreground"
+                className="flex h-7 w-7 items-center justify-center rounded-md text-muted/70 transition-colors hover:bg-surface-hover hover:text-foreground"
                 aria-label="Close navigation"
               >
-                <X size={16} />
+                <X size={15} />
               </button>
             </div>
 
-            {/* Mobile nav shortcuts */}
-            <div className="border-b border-border px-2 py-2 flex gap-1">
+            {/* Mobile view toggle */}
+            <div className="flex shrink-0 gap-1 px-3 pb-2">
               {([
                 { key: 'notes' as WorkspaceView, label: 'Notes', icon: FileText },
                 { key: 'files' as WorkspaceView, label: 'Files', icon: FolderOpen },
@@ -1283,10 +1404,10 @@ function WorkspaceContent() {
                 <button
                   key={key}
                   onClick={() => { switchWorkspaceView(key); setWorkspaceNavOpen(false) }}
-                  className={`flex-1 flex items-center justify-center gap-1.5 rounded-lg px-2 py-2 text-xs font-medium transition-all ${
+                  className={`flex flex-1 items-center justify-center gap-1.5 rounded-md px-2 py-1.5 text-[13px] font-medium transition-colors ${
                     activeView === key
-                      ? 'bg-accent text-accent-foreground shadow-sm'
-                      : 'text-muted hover:bg-surface-hover hover:text-foreground'
+                      ? 'bg-surface-active/70 text-foreground'
+                      : 'text-muted/70 hover:bg-surface-hover hover:text-foreground'
                   }`}
                 >
                   <Icon className="h-3.5 w-3.5 shrink-0" />
@@ -1296,7 +1417,7 @@ function WorkspaceContent() {
             </div>
 
             {/* Mobile project/folder/note tree */}
-            <div className="flex-1 overflow-y-auto">
+            <div className="min-h-0 flex-1 overflow-hidden">
               <SidebarTree
                 projects={projects}
                 folderTree={folderTree}
@@ -1337,17 +1458,24 @@ function WorkspaceContent() {
                   setShowFileExplorerModal(true)
                   setWorkspaceNavOpen(false)
                 }}
+                onArchiveProject={handleArchiveProject}
+                onOpenArchive={() => {
+                  setShowArchiveModal(true)
+                  setWorkspaceNavOpen(false)
+                }}
+                archivedCount={archivedProjects.length}
                 collapsed={false}
                 onToggleCollapsed={() => setWorkspaceNavOpen(false)}
+                showHeader={false}
               />
             </div>
 
-            <div className="border-t border-border px-2 py-2">
+            <div className="shrink-0 border-t border-border/60 px-2 py-2">
               <button
                 onClick={handleSignOut}
-                className="group flex w-full items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium text-muted transition-all hover:bg-danger-light hover:text-danger"
+                className="group flex w-full items-center gap-2.5 rounded-md px-2 py-2 text-[13px] font-medium text-muted/80 transition-colors hover:bg-danger-light hover:text-danger"
               >
-                <LogOut className="h-[18px] w-[18px] shrink-0" />
+                <LogOut className="h-4 w-4 shrink-0" />
                 <span className="truncate">Sign out</span>
               </button>
             </div>
@@ -1360,7 +1488,7 @@ function WorkspaceContent() {
         className="flex-1 w-full h-screen overflow-hidden bg-background"
         style={
           isMobile
-            ? { paddingTop: 'calc(56px + var(--sat))' }
+            ? { paddingTop: 'calc(52px + var(--sat))' }
             : { paddingLeft: sidebarOffset }
         }
       >
@@ -1408,8 +1536,8 @@ function WorkspaceContent() {
                 onClick={() => setShowFilesPanel(prev => !prev)}
                 className={`absolute top-1/2 -translate-y-1/2 z-20 flex items-center justify-center w-5 h-14 rounded-l-lg border border-r-0 shadow-sm transition-all ${
                   showFilesPanel
-                    ? 'bg-alpine-600 border-alpine-600 text-white'
-                    : 'bg-white dark:bg-slate-800 border-gray-200 dark:border-slate-700 text-gray-400 dark:text-slate-500 hover:bg-alpine-50 dark:hover:bg-alpine-900/20 hover:text-alpine-600 hover:border-alpine-300'
+                    ? 'bg-accent border-accent text-accent-foreground'
+                    : 'bg-surface border-border text-muted/70 hover:bg-accent/10 hover:text-accent hover:border-accent/40'
                 }`}
                 style={{ right: showFilesPanel ? '360px' : '0' }}
                 title={showFilesPanel ? 'Close files panel' : 'Open files panel'}
@@ -1619,7 +1747,15 @@ function WorkspaceContent() {
           </div>
         </div>
       )}
-      
+
+      {/* Archive modal */}
+      <ArchivedProjectsModal
+        isOpen={showArchiveModal}
+        onClose={() => setShowArchiveModal(false)}
+        projects={archivedProjects}
+        onRestore={handleRestoreProject}
+        onDelete={handleDeleteArchivedProject}
+      />
     </div>
   )
 }

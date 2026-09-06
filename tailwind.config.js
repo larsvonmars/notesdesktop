@@ -28,6 +28,24 @@ module.exports = {
         'warning-light': 'var(--warning-light)',
         danger: 'var(--danger)',
         'danger-light': 'var(--danger-light)',
+        // `slate` is remapped to a pure-neutral scale (no cool/blue tint).
+        // The app's semantic dark tokens are neutral/stone; keeping slate
+        // blue-tinted caused panels like the File Explorer to clash with the
+        // near-black theme in dark mode. All existing `slate-*` utilities now
+        // resolve to these neutral values.
+        slate: {
+          50:  '#fafafa',
+          100: '#f5f5f5',
+          200: '#e5e5e5',
+          300: '#d4d4d4',
+          400: '#a3a3a3',
+          500: '#737373',
+          600: '#525252',
+          700: '#404040',
+          800: '#262626',
+          900: '#171717',
+          950: '#0a0a0a',
+        },
         alpine: {
           50:  '#EFF8FF',
           100: '#DBEEFE',

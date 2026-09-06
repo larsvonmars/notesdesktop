@@ -13,7 +13,7 @@
 
 ### 📁 Files Created
 
-- `TASK_CALENDAR_ENHANCEMENTS.sql` - Database schema for Kanban + enhanced tasks
+- `supabase/schemas/TASK_CALENDAR_ENHANCEMENTS.sql` - Database schema for Kanban + enhanced tasks
 - `lib/kanban.ts` - API functions for board management (335 lines)
 - `components/KanbanBoard.tsx` - Drag-and-drop Kanban UI (460 lines)
 - `KANBAN_GUIDE.md` - Complete documentation
@@ -32,19 +32,19 @@
 If you've already tried to create the tables:
 
 ```sql
--- Copy TASK_CALENDAR_CLEANUP.sql to Supabase SQL Editor and run
+-- Copy supabase/schemas/TASK_CALENDAR_CLEANUP.sql to Supabase SQL Editor and run
 ```
 
 ### Step 2: Run Main Schema
 
 ```sql
--- Copy TASK_CALENDAR_SCHEMA.sql to Supabase SQL Editor and run
+-- Copy supabase/schemas/TASK_CALENDAR_SCHEMA.sql to Supabase SQL Editor and run
 ```
 
 ### Step 3: Run Enhancements
 
 ```sql
--- Copy TASK_CALENDAR_ENHANCEMENTS.sql to Supabase SQL Editor and run
+-- Copy supabase/schemas/TASK_CALENDAR_ENHANCEMENTS.sql to Supabase SQL Editor and run
 ```
 
 ## 🎨 How to Use

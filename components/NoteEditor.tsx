@@ -3714,19 +3714,19 @@ export default function NoteEditor({
       {/* Word Goal Input Modal */}
       {showWordGoalInput && (
         <div className="fixed inset-0 z-[70] flex items-center justify-center p-4 bg-black/50">
-          <div className="bg-white rounded-xl shadow-2xl border border-gray-200 max-w-md w-full p-6">
+          <div className="bg-surface rounded-xl shadow-2xl border border-border max-w-md w-full p-6">
             <div className="flex items-start gap-4 mb-4">
-              <div className="flex-shrink-0 w-12 h-12 rounded-full bg-alpine-100 flex items-center justify-center">
-                <Target size={24} className="text-alpine-600" />
+              <div className="flex-shrink-0 w-12 h-12 rounded-full bg-accent-light flex items-center justify-center">
+                <Target size={24} className="text-accent" />
               </div>
               <div className="flex-1">
-                <h3 className="text-lg font-semibold text-gray-900 mb-1">Set Word Goal</h3>
-                <p className="text-sm text-gray-500">Set a target word count for this note</p>
+                <h3 className="text-lg font-semibold text-foreground mb-1">Set Word Goal</h3>
+                <p className="text-sm text-muted">Set a target word count for this note</p>
               </div>
             </div>
             
             <div className="mb-4">
-              <label className="block text-sm font-medium text-gray-700 mb-2">
+              <label className="block text-sm font-medium text-foreground/80 mb-2">
                 Target word count
               </label>
               <input
@@ -3746,22 +3746,22 @@ export default function NoteEditor({
                     setShowWordGoalInput(false)
                   }
                 }}
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-alpine-500 focus:border-transparent"
+                className="w-full bg-surface px-3 py-2 border border-border rounded-lg text-foreground focus:ring-2 focus:ring-accent/30 focus:border-accent/50 focus:outline-none"
               />
-              <p className="text-xs text-gray-400 mt-1">Current: {stats.words} words</p>
+              <p className="text-xs text-muted/70 mt-1">Current: {stats.words} words</p>
             </div>
 
             <div className="flex items-center justify-between gap-2">
               <button
                 onClick={() => handleSetWordGoal(null)}
-                className="px-4 py-2 text-sm font-medium text-red-600 hover:bg-red-50 rounded-lg transition-colors"
+                className="px-4 py-2 text-sm font-medium text-danger hover:bg-danger-light rounded-lg transition-colors"
               >
                 Clear Goal
               </button>
               <div className="flex gap-2">
                 <button
                   onClick={() => setShowWordGoalInput(false)}
-                  className="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors"
+                  className="px-4 py-2 text-sm font-medium text-foreground/80 bg-surface border border-border rounded-lg hover:bg-surface-hover transition-colors"
                 >
                   Cancel
                 </button>
@@ -3774,7 +3774,7 @@ export default function NoteEditor({
                       }
                     }
                   }}
-                  className="px-4 py-2 text-sm font-medium text-white bg-alpine-600 rounded-lg hover:bg-alpine-700 transition-colors"
+                  className="px-4 py-2 text-sm font-medium text-accent-foreground bg-accent rounded-lg hover:opacity-90 transition-opacity"
                 >
                   Set Goal
                 </button>

@@ -6,7 +6,7 @@
 
 1. Open your Supabase Dashboard at https://app.supabase.com
 2. Go to **SQL Editor** → **New Query**
-3. Open `TASK_CALENDAR_SCHEMA.sql` from your project
+3. Open `supabase/schemas/TASK_CALENDAR_SCHEMA.sql` from your project
 4. Copy the entire file contents
 5. Paste into SQL Editor
 6. Click **Run** or press `Cmd/Ctrl + Enter`

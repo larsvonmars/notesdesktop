@@ -31,7 +31,7 @@ A comprehensive task management and calendar system with sophisticated features 
 
 1. **Run the SQL Schema**:
    - Open Supabase Dashboard → SQL Editor
-   - Copy contents from `TASK_CALENDAR_SCHEMA.sql`
+   - Copy contents from `supabase/schemas/TASK_CALENDAR_SCHEMA.sql`
    - Execute the query
    - Verify all tables are created in Table Editor
 

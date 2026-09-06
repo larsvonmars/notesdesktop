@@ -183,17 +183,17 @@ All tables have Row Level Security enabled:
 
 1. **Cleanup (if needed)**
    ```sql
-   -- Run TASK_CALENDAR_CLEANUP.sql
+   -- Run supabase/schemas/TASK_CALENDAR_CLEANUP.sql
    ```
 
 2. **Base Schema**
    ```sql
-   -- Run TASK_CALENDAR_SCHEMA.sql
+   -- Run supabase/schemas/TASK_CALENDAR_SCHEMA.sql
    ```
 
 3. **Enhancements**
    ```sql
-   -- Run TASK_CALENDAR_ENHANCEMENTS.sql
+   -- Run supabase/schemas/TASK_CALENDAR_ENHANCEMENTS.sql
    ```
 
 ### First Use

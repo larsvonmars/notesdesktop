@@ -27,21 +27,21 @@ npm install @dnd-kit/core @dnd-kit/sortable @dnd-kit/utilities
 #### First: Run the cleanup script (if you've already created tables)
 
 ```sql
--- File: TASK_CALENDAR_CLEANUP.sql
+-- File: supabase/schemas/TASK_CALENDAR_CLEANUP.sql
 -- Run this first to remove any existing tables
 ```
 
 #### Second: Run the main schema
 
 ```sql
--- File: TASK_CALENDAR_SCHEMA.sql
+-- File: supabase/schemas/TASK_CALENDAR_SCHEMA.sql
 -- Run this to create all base tables
 ```
 
 #### Third: Run the enhancements schema
 
 ```sql
--- File: TASK_CALENDAR_ENHANCEMENTS.sql
+-- File: supabase/schemas/TASK_CALENDAR_ENHANCEMENTS.sql
 -- Run this to add Kanban features and enhanced task fields
 ```
 

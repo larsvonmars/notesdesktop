@@ -20,7 +20,7 @@
   --warning-light:     #fef3c7;
   --danger:            #ef4444;
   --danger-light:      #fee2e2;
-  --sidebar-width:     320px;
+  --sidebar-width:     300px;
   --sidebar-collapsed: 64px;
 
   /* Alpine gradient (kept for backward compat) */
