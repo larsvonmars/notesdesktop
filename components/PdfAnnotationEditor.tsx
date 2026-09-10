@@ -19,6 +19,7 @@ import {
   ChevronLeft,
   ChevronRight,
   Pen,
+  Pencil,
   Highlighter,
   Eraser,
   Type,
@@ -170,6 +171,14 @@ function uid(): string {
   return Math.random().toString(36).slice(2, 10) + Date.now().toString(36)
 }
 
+/** True if a point (unscaled page coords) lies inside a text annotation's box. */
+function textAnnotationContains(ta: TextAnnotation, x: number, y: number): boolean {
+  return (
+    x >= ta.x && x <= ta.x + ta.width &&
+    y >= ta.y && y <= ta.y + (ta.height || ta.fontSize * 1.5)
+  )
+}
+
 // ============================================================================
 // FREEHAND RENDERING (reuses perfect-freehand like DrawingEditor)
 // ============================================================================
@@ -273,6 +282,9 @@ const PdfAnnotationEditor = forwardRef<PdfAnnotationEditorHandle, PdfAnnotationE
     const fileInputRef = useRef<HTMLInputElement>(null)
     const textAreaRef = useRef<HTMLTextAreaElement>(null)
     const renderTaskRef = useRef<import('pdfjs-dist').RenderTask | null>(null)
+    // Last canvas pointerdown — used for manual double-click detection (browser dblclick is
+    // unreliable after preventDefault() on pointerdown)
+    const lastCanvasClickRef = useRef<{ time: number; x: number; y: number } | null>(null)
 
     // Canvas dimensions (set after PDF page renders)
     const [canvasWidth, setCanvasWidth] = useState(800)
@@ -432,6 +444,50 @@ const PdfAnnotationEditor = forwardRef<PdfAnnotationEditorHandle, PdfAnnotationE
       setHistoryIdx(nextIdx)
       emitChange(nextPages)
     }, [historyIdx, history, emitChange])
+
+    // ────────────────────────────────────────────────────────
+    // Text annotation editing
+    // ────────────────────────────────────────────────────────
+    /**
+     * Re-open a committed text annotation for editing. The committed copy stays in
+     * `pages` (and is hidden from the canvas while editing) until it is committed
+     * again, so focus changes never lose the annotation.
+     */
+    const startEditingText = useCallback((ta: TextAnnotation) => {
+      setEditingText({ ...ta })
+      setSelectedId(null)
+      setDragOffset(null)
+      setResizeHandle(null)
+    }, [])
+
+    /** Commit the in-progress text edit. Returns the updated pages (or null if there was nothing to commit). */
+    const commitText = useCallback((): PdfAnnotationPage[] | null => {
+      if (!editingText) return null
+      const keep = editingText.text.trim().length > 0
+      const exists = !!pages
+        .find(p => p.pageNumber === currentPage)
+        ?.textAnnotations.some(t => t.id === editingText.id)
+
+      // Empty, brand-new annotation → nothing to commit
+      if (!keep && !exists) {
+        setEditingText(null)
+        return null
+      }
+
+      const newPages = updatePageAnnotations(currentPage, p => ({
+        ...p,
+        textAnnotations: keep
+          ? exists
+            ? p.textAnnotations.map(t => (t.id === editingText.id ? editingText : t))
+            : [...p.textAnnotations, editingText]
+          : p.textAnnotations.filter(t => t.id !== editingText.id),
+      }))
+      setPages(newPages)
+      pushHistory(newPages)
+      emitChange(newPages)
+      setEditingText(null)
+      return newPages
+    }, [editingText, currentPage, pages, updatePageAnnotations, pushHistory, emitChange])
 
     // ────────────────────────────────────────────────────────
     // Insert / delete blank pages
@@ -992,8 +1048,9 @@ const PdfAnnotationEditor = forwardRef<PdfAnnotationEditorHandle, PdfAnnotationE
         drawShape(ctx, shapePreview, scale, false)
       }
 
-      // Draw text annotations
+      // Draw text annotations (the one being edited is shown by the textarea overlay instead)
       for (const ta of pageAnnot.textAnnotations) {
+        if (editingText && ta.id === editingText.id) continue
         ctx.save()
         const fontStyle = `${ta.italic ? 'italic ' : ''}${ta.bold ? 'bold ' : ''}${ta.fontSize * scale}px ${ta.fontFamily ?? 'sans-serif'}`
         ctx.font = fontStyle
@@ -1015,7 +1072,7 @@ const PdfAnnotationEditor = forwardRef<PdfAnnotationEditorHandle, PdfAnnotationE
         }
         ctx.restore()
       }
-    }, [canvasWidth, canvasHeight, currentPage, zoom, pages, isDrawing, currentStrokePoints, tool, color, strokeSize, shapePreview, selectedId, getPageAnnotations])
+    }, [canvasWidth, canvasHeight, currentPage, zoom, pages, isDrawing, currentStrokePoints, tool, color, strokeSize, shapePreview, selectedId, editingText, getPageAnnotations])
 
     useEffect(() => {
       renderAnnotations()
@@ -1147,6 +1204,32 @@ const PdfAnnotationEditor = forwardRef<PdfAnnotationEditorHandle, PdfAnnotationE
         e.preventDefault()
         const pos = getPointerPos(e)
 
+        // Manual double-click detection (preventDefault above can suppress the browser's dblclick)
+        const now = Date.now()
+        const prevClick = lastCanvasClickRef.current
+        const isDoubleClick =
+          !!prevClick &&
+          now - prevClick.time < 500 &&
+          Math.hypot(e.clientX - prevClick.x, e.clientY - prevClick.y) < 10
+        lastCanvasClickRef.current = { time: now, x: e.clientX, y: e.clientY }
+
+        // Finish any in-progress text edit first — this click only commits it
+        if (editingText) {
+          commitText()
+          return
+        }
+
+        // Double-clicking a committed text annotation re-opens it for editing
+        if (isDoubleClick && tool !== 'eraser') {
+          const hitText = getPageAnnotations(currentPage).textAnnotations.find(ta =>
+            textAnnotationContains(ta, pos.x, pos.y)
+          )
+          if (hitText) {
+            startEditingText(hitText)
+            return
+          }
+        }
+
         if (tool === 'pen' || tool === 'highlighter') {
           setIsDrawing(true)
           setCurrentStrokePoints([pos])
@@ -1154,6 +1237,14 @@ const PdfAnnotationEditor = forwardRef<PdfAnnotationEditorHandle, PdfAnnotationE
           setIsDrawing(true)
           eraseAtPoint(pos)
         } else if (tool === 'text') {
+          // Clicking an existing annotation edits it instead of stacking a new one on top
+          const existingText = getPageAnnotations(currentPage).textAnnotations.find(ta =>
+            textAnnotationContains(ta, pos.x, pos.y)
+          )
+          if (existingText) {
+            startEditingText(existingText)
+            return
+          }
           // Place a new text annotation
           const newText: TextAnnotation = {
             id: uid(),
@@ -1274,7 +1365,7 @@ const PdfAnnotationEditor = forwardRef<PdfAnnotationEditorHandle, PdfAnnotationE
         }
       },
       // eslint-disable-next-line react-hooks/exhaustive-deps
-      [disabled, tool, color, currentPage, zoom, pages, selectedId, strokeSize]
+      [disabled, tool, color, currentPage, zoom, pages, selectedId, strokeSize, editingText, commitText, startEditingText, getPageAnnotations]
     )
 
     const handlePointerMove = useCallback(
@@ -1424,75 +1515,23 @@ const PdfAnnotationEditor = forwardRef<PdfAnnotationEditorHandle, PdfAnnotationE
     )
 
     // ────────────────────────────────────────────────────────
-    // Double-click: re-enter edit mode on a committed text annotation
-    // ────────────────────────────────────────────────────────
-    const handleDoubleClick = useCallback(
-      (e: React.MouseEvent<HTMLCanvasElement>) => {
-        const rect = annotCanvasRef.current!.getBoundingClientRect()
-        const vx = e.clientX - rect.left
-        const vy = e.clientY - rect.top
-        let cx: number, cy: number
-        switch (viewRotation) {
-          case 90:  cx = vy / zoom; cy = (canvasWidth - vx) / zoom; break
-          case 180: cx = (canvasWidth - vx) / zoom; cy = (canvasHeight - vy) / zoom; break
-          case 270: cx = (canvasHeight - vy) / zoom; cy = vx / zoom; break
-          default:  cx = vx / zoom; cy = vy / zoom
-        }
-        const pos = { x: cx, y: cy }
-        const pageAnnot = getPageAnnotations(currentPage)
-        const ta = pageAnnot.textAnnotations.find(t =>
-          pos.x >= t.x && pos.x <= t.x + t.width &&
-          pos.y >= t.y && pos.y <= t.y + (t.height || t.fontSize * 1.5)
-        )
-        if (ta) {
-          // Pull the annotation back out of committed state and into editing
-          const newPages = updatePageAnnotations(currentPage, p => ({
-            ...p,
-            textAnnotations: p.textAnnotations.filter(t => t.id !== ta.id),
-          }))
-          setPages(newPages)
-          setEditingText(ta)
-          setTool('text')
-        }
-      },
-      [currentPage, zoom, viewRotation, canvasWidth, canvasHeight, getPageAnnotations, updatePageAnnotations]
-    )
-
-    // ────────────────────────────────────────────────────────
-    // Text annotation commit
-    // ────────────────────────────────────────────────────────
-    const commitText = useCallback(() => {
-      if (!editingText || !editingText.text.trim()) {
-        setEditingText(null)
-        return
-      }
-      const newPages = updatePageAnnotations(currentPage, p => ({
-        ...p,
-        textAnnotations: [...p.textAnnotations, editingText],
-      }))
-      setPages(newPages)
-      pushHistory(newPages)
-      emitChange(newPages)
-      setEditingText(null)
-    }, [editingText, currentPage, updatePageAnnotations, pushHistory, emitChange])
-
-    // ────────────────────────────────────────────────────────
     // Page navigation
     // ────────────────────────────────────────────────────────
     const goToPage = useCallback((pg: number) => {
+      // Commit any in-progress text edit before leaving the page
+      const latestPages = commitText() ?? pages
       setCurrentPage(pg)
       setSelectedId(null)
-      setEditingText(null)
       if (value?.pdfStoragePath) {
         onChange({
           pdfStoragePath: value.pdfStoragePath,
-          pages,
+          pages: latestPages,
           currentPage: pg,
           totalPages,
           zoom,
         })
       }
-    }, [value?.pdfStoragePath, pages, totalPages, zoom, onChange])
+    }, [commitText, value?.pdfStoragePath, pages, totalPages, zoom, onChange])
 
     // ────────────────────────────────────────────────────────
     // Keyboard shortcuts: delete, undo/redo, tool switching, page nav
@@ -1513,11 +1552,15 @@ const PdfAnnotationEditor = forwardRef<PdfAnnotationEditorHandle, PdfAnnotationE
             setSelectedId(null)
           }
         }
-        // Undo/redo keyboard shortcuts
+        // Undo/redo keyboard shortcuts (leave native undo to focused text inputs while editing)
         if ((e.metaKey || e.ctrlKey) && e.key === 'z') {
-          e.preventDefault()
-          if (e.shiftKey) redo()
-          else undo()
+          const target = e.target as HTMLElement
+          const isInput = target.tagName === 'INPUT' || target.tagName === 'TEXTAREA'
+          if (!editingText && !isInput) {
+            e.preventDefault()
+            if (e.shiftKey) redo()
+            else undo()
+          }
         }
         // Find/search shortcut (Ctrl/Cmd+F)
         if ((e.metaKey || e.ctrlKey) && e.key === 'f') {
@@ -2801,7 +2844,6 @@ const PdfAnnotationEditor = forwardRef<PdfAnnotationEditorHandle, PdfAnnotationE
                 onPointerDown={handlePointerDown}
                 onPointerMove={handlePointerMove}
                 onPointerUp={handlePointerUp}
-                onDoubleClick={handleDoubleClick}
               />
               </div>{/* end rotation wrapper */}
 
@@ -2816,6 +2858,14 @@ const PdfAnnotationEditor = forwardRef<PdfAnnotationEditorHandle, PdfAnnotationE
                     className="absolute z-40 flex items-center gap-0.5 rounded-lg border border-border bg-surface px-1.5 py-1 shadow-md"
                     style={{ left: vx, top: Math.max(0, vy - 40) }}
                   >
+                    <button
+                      onMouseDown={e => { e.preventDefault(); startEditingText(ta) }}
+                      title="Edit text"
+                      className="rounded p-1 text-muted-foreground hover:bg-surface-hover"
+                    >
+                      <Pencil size={13} />
+                    </button>
+                    <div className="mx-0.5 h-4 w-px bg-border" />
                     <button
                       onMouseDown={e => { e.preventDefault(); toggleTextBold(ta.id) }}
                       title="Bold"
