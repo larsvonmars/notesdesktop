@@ -9,6 +9,7 @@ import FileExplorerModal from '@/components/FileExplorerModal'
 import ProjectDashboard from '@/components/ProjectDashboard'
 import SidebarTree from '@/components/SidebarTree'
 import ArchivedProjectsModal from '@/components/ArchivedProjectsModal'
+import NewProjectModal from '@/components/NewProjectModal'
 import { Loader2, FileEdit, Sparkles, FileText, PenTool, Network, BookOpen, Table2, FilePenLine, X, Menu, ChevronLeft, ChevronRight, FolderOpen, Home, LogOut, FileQuestion, Target, Lightbulb, Scale, LayoutGrid } from 'lucide-react'
 import type { LucideIcon } from 'lucide-react'
 import { useIsMobile } from '@/lib/useIsMobile'
@@ -104,6 +105,8 @@ function WorkspaceContent() {
   const [archivedProjects, setArchivedProjects] = useState<Project[]>([])
   const [isLoadingProjects, setIsLoadingProjects] = useState(true)
   const [showArchiveModal, setShowArchiveModal] = useState(false)
+  // New-project modal state (name + color are chosen before the project is created)
+  const [showNewProjectModal, setShowNewProjectModal] = useState(false)
 
   // Project ids that are archived — used to keep archived content out of the
   // active workspace (folders/notes belonging to an archived project).
@@ -990,14 +993,21 @@ function WorkspaceContent() {
   }
 
   // ---- Project CRUD handlers ----
-  const handleCreateProject = async () => {
+  // Opens the creation modal so the user can name the project and pick a color first.
+  const handleCreateProject = () => {
+    setShowNewProjectModal(true)
+  }
+
+  const handleConfirmCreateProject = async ({ name, color }: { name: string; color: string }) => {
     try {
-      const newProject = await createProject({ name: 'New Project' })
+      const newProject = await createProject({ name, color })
       setProjects(prev => [...prev, newProject])
       toast.push({ title: 'Project created', description: `"${newProject.name}" created`, duration: 3000 })
     } catch (error) {
       console.error('Error creating project:', error)
       toast.push({ title: 'Error', description: 'Failed to create project', duration: 5000 })
+      // Re-throw so the modal stays open and the entered name/color are kept.
+      throw error
     }
   }
 
@@ -1747,6 +1757,13 @@ function WorkspaceContent() {
           </div>
         </div>
       )}
+
+      {/* New Project Modal (name + color) */}
+      <NewProjectModal
+        isOpen={showNewProjectModal}
+        onClose={() => setShowNewProjectModal(false)}
+        onCreate={handleConfirmCreateProject}
+      />
 
       {/* Archive modal */}
       <ArchivedProjectsModal

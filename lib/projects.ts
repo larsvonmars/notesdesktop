@@ -36,6 +36,16 @@ export interface UpdateProjectInput {
   quick_links?: QuickLink[]
 }
 
+/** Color used for new projects when the user doesn't pick one. */
+export const DEFAULT_PROJECT_COLOR = '#3B82F6'
+
+/** Curated palette offered when creating or recoloring a project. */
+export const PROJECT_COLOR_PRESETS = [
+  '#EF4444', '#F97316', '#F59E0B', '#EAB308', '#84CC16', '#22C55E',
+  '#14B8A6', '#06B6D4', '#3B82F6', '#6366F1', '#8B5CF6', '#A855F7',
+  '#D946EF', '#EC4899', '#F43F5E', '#6B7280', '#78716C', '#0EA5E9',
+] as const
+
 /**
  * Fetch the current user's ACTIVE (non-archived) projects.
  */
@@ -103,7 +113,7 @@ export async function createProject(input: CreateProjectInput): Promise<Project>
       user_id: user.id,
       name: input.name,
       description: input.description ?? null,
-      color: input.color ?? '#3B82F6',
+      color: input.color ?? DEFAULT_PROJECT_COLOR,
       position,
     })
     .select()
