@@ -20,6 +20,7 @@ import {
   ChevronRight,
   Pen,
   Pencil,
+  Copy,
   Highlighter,
   Eraser,
   Type,
@@ -201,6 +202,72 @@ function textLineDrawX(
   return align === 'center'
     ? ta.x * scale + (ta.width * scale - lineWidth) / 2
     : ta.x * scale + ta.width * scale - lineWidth
+}
+
+// ============================================================================
+// PDF TEXT LAYER / SEARCH HELPERS
+// ============================================================================
+
+/** Minimal surface of pdfjs-dist's `TextLayer` instance that we use. */
+interface PdfTextLayerHandle {
+  render: () => Promise<void>
+  cancel: () => void
+  /** One span per text item, in text-content order (marked-content wrappers excluded). */
+  textDivs: HTMLElement[]
+}
+
+/** Per-page search index: normalized text plus the string offset of each text item. */
+interface SearchIndexPage {
+  pageNumber: number
+  normalized: string
+  itemOffsets: number[]
+}
+
+/** A search hit mapped to a range of text items on one page. */
+interface SearchMatch {
+  pageNumber: number
+  itemStart: number
+  itemEnd: number
+}
+
+/**
+ * Case- and diacritics-insensitive normalization used for searching.
+ * Length is preserved (one code unit in → one out), so match offsets can be
+ * mapped back onto the original text items.
+ */
+function normalizeForSearch(text: string): string {
+  let out = ''
+  for (let i = 0; i < text.length; i++) {
+    const ch = text[i]
+    const lower = ch.toLowerCase()
+    // Some characters lower-case to multiple code points (e.g. İ) — keep one unit
+    const base = lower.length > 1 ? lower[0] : lower
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const nf: string | undefined = typeof (base as any).normalize === 'function'
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      ? (base as any).normalize('NFD')
+      : undefined
+    const stripped = nf ? nf.replace(/[\u0300-\u036f]/g, '') : ''
+    out += stripped || base
+  }
+  return out
+}
+
+/** Index of the text item containing the given offset (binary search over itemOffsets). */
+function findItemIndexAtOffset(offsets: number[], offset: number): number {
+  let lo = 0
+  let hi = offsets.length - 1
+  let result = 0
+  while (lo <= hi) {
+    const mid = (lo + hi) >> 1
+    if (offsets[mid] <= offset) {
+      result = mid
+      lo = mid + 1
+    } else {
+      hi = mid - 1
+    }
+  }
+  return result
 }
 
 /** Line advance used by the canvas text renderer (baselines are `fontSize * 1.2` apart). */
@@ -560,12 +627,18 @@ const PdfAnnotationEditor = forwardRef<PdfAnnotationEditorHandle, PdfAnnotationE
     const [searchCurrentIdx, setSearchCurrentIdx] = useState(0)
     const [textLayerVersion, setTextLayerVersion] = useState(0)
     const textLayerRef = useRef<HTMLDivElement>(null)
-    const textLayerInstanceRef = useRef<{ cancel: () => void } | null>(null)
-    // Cross-page search index (built once per PDF; rebuilt when page count changes)
-    const [searchIndex, setSearchIndex] = useState<{ pageNumber: number; texts: string[] }[]>([])
+    const textLayerInstanceRef = useRef<PdfTextLayerHandle | null>(null)
+    // Cross-page search index (text items per page, built once per PDF)
+    const [searchIndex, setSearchIndex] = useState<SearchIndexPage[]>([])
     const [searchIndexBuilding, setSearchIndexBuilding] = useState(false)
-    const searchGlobalResultsRef = useRef<{ pageNumber: number; spanIdx: number }[]>([])
-    const pendingHighlightRef = useRef<{ spanIdx: number } | null>(null)
+    const searchGlobalResultsRef = useRef<SearchMatch[]>([])
+    const pendingHighlightIdxRef = useRef<number | null>(null)
+    // Currently selected text in the text layer (drives the floating Copy button)
+    const [selectedText, setSelectedText] = useState('')
+    const selectedTextRef = useRef('')
+
+    /** pdfPageNumber of the page being displayed (undefined for inserted blank pages). */
+    const currentPdfPageNumber = pages.find(p => p.pageNumber === currentPage)?.pdfPageNumber
 
     // ────────────────────────────────────────────────────────
     // Imperative handle
@@ -1859,11 +1932,24 @@ const PdfAnnotationEditor = forwardRef<PdfAnnotationEditorHandle, PdfAnnotationE
         // Find/search shortcut (Ctrl/Cmd+F)
         if ((e.metaKey || e.ctrlKey) && e.key === 'f') {
           e.preventDefault()
-          setShowTextLayer(true)
           setSearchVisible(v => {
             if (!v) setSearchQuery('')
             return true
           })
+        }
+        // Select all page text while the text-selection tool is active
+        if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'a' && tool === 'textselect' && !editingText) {
+          const target = e.target as HTMLElement
+          const isInput = target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.tagName === 'SELECT'
+          const layerEl = textLayerRef.current
+          if (!isInput && layerEl) {
+            e.preventDefault()
+            const range = document.createRange()
+            range.selectNodeContents(layerEl)
+            const sel = window.getSelection()
+            sel?.removeAllRanges()
+            sel?.addRange(range)
+          }
         }
         // Close search on Escape
         if (e.key === 'Escape') {
@@ -1879,10 +1965,15 @@ const PdfAnnotationEditor = forwardRef<PdfAnnotationEditorHandle, PdfAnnotationE
             't': 'text', 'r': 'rectangle', 'c': 'circle', 'a': 'arrow',
             'l': 'line', 'n': 'sticky', 'i': 'textselect',
           }
-          if (keyToTool[e.key.toLowerCase()]) {
+          const nextTool = keyToTool[e.key.toLowerCase()]
+          if (nextTool) {
             const target = e.target as HTMLElement
             const isInput = target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.tagName === 'SELECT'
-            if (!isInput) setTool(keyToTool[e.key.toLowerCase()])
+            if (!isInput) {
+              setTool(nextTool)
+              // The text-selection tool implies the text layer is enabled
+              if (nextTool === 'textselect') setShowTextLayer(true)
+            }
           }
           // Page navigation
           if (e.key === 'ArrowRight' || e.key === 'ArrowDown') {
@@ -2044,8 +2135,10 @@ const PdfAnnotationEditor = forwardRef<PdfAnnotationEditorHandle, PdfAnnotationE
 
     // ────────────────────────────────────────────────────────
     // Text layer rendering (pdfjs TextLayer class, pdfjs-dist 4.x)
-    // Always rendered in background so it's ready when the user enables text selection.
-    // Visibility/pointer-events are controlled separately by showTextLayer/tool.
+    // Always rendered in the background so search highlights and text selection
+    // are instantly available. Visibility/pointer-events are controlled separately.
+    // NOTE: must NOT depend on `pages` — re-rendering would drop the user's text
+    // selection whenever an annotation changes.
     // ────────────────────────────────────────────────────────
     useEffect(() => {
       const el = textLayerRef.current
@@ -2056,24 +2149,23 @@ const PdfAnnotationEditor = forwardRef<PdfAnnotationEditorHandle, PdfAnnotationE
       }
       if (el) el.innerHTML = ''
 
-      if (!pdfDoc || !el) return
+      if (!pdfDoc || !el || !currentPdfPageNumber) return
 
       let cancelled = false
 
       async function renderTextLayerForPage() {
         const lib = pdfjsLib
         if (!lib) return
-        const pageData = pages.find(p => p.pageNumber === currentPage)
-        if (!pageData?.pdfPageNumber) return
 
-        const page = await pdfDoc!.getPage(pageData.pdfPageNumber)
+        const page = await pdfDoc!.getPage(currentPdfPageNumber!)
         if (cancelled) return
 
         const viewport = page.getViewport({ scale: zoom })
+        // pdfjs 4.x sizes/positions the spans with `calc(... * var(--scale-factor))`
+        el!.style.setProperty('--scale-factor', String(viewport.scale))
 
-        // pdfjs-dist 4.x exposes TextLayer class
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        const tl: { render: () => Promise<void>; cancel: () => void } = new (lib as any).TextLayer({
+        const tl: PdfTextLayerHandle = new (lib as any).TextLayer({
           textContentSource: page.streamTextContent(),
           container: el!,
           viewport,
@@ -2096,7 +2188,7 @@ const PdfAnnotationEditor = forwardRef<PdfAnnotationEditorHandle, PdfAnnotationE
         textLayerInstanceRef.current = null
         if (el) el.innerHTML = ''
       }
-    }, [pdfDoc, currentPage, zoom, pages])
+    }, [pdfDoc, currentPage, zoom, currentPdfPageNumber])
 
     // ────────────────────────────────────────────────────────
     // Build cross-page search index (text items per page)
@@ -2109,21 +2201,29 @@ const PdfAnnotationEditor = forwardRef<PdfAnnotationEditorHandle, PdfAnnotationE
       const loadingTimer = setTimeout(() => { if (!cancelled) setSearchIndexBuilding(true) }, 400)
 
       ;(async () => {
-        const idx: { pageNumber: number; texts: string[] }[] = []
+        const idx: SearchIndexPage[] = []
         for (const pg of pagesRef.current) {
           if (cancelled) break
           if (pg.isBlank || !pg.pdfPageNumber) {
-            idx.push({ pageNumber: pg.pageNumber, texts: [] })
+            idx.push({ pageNumber: pg.pageNumber, normalized: '', itemOffsets: [] })
             continue
           }
           try {
             const page = await pdfDoc.getPage(pg.pdfPageNumber)
             const tc = await page.getTextContent()
+            // Only items with `str` produce text-layer spans, so indexes stay aligned
             // eslint-disable-next-line @typescript-eslint/no-explicit-any
-            const texts = tc.items.map((item: any) => ('str' in item ? (item.str as string) : ''))
-            idx.push({ pageNumber: pg.pageNumber, texts })
+            const items = (tc.items as any[]).filter(item => typeof item.str === 'string')
+            const itemOffsets: number[] = []
+            let raw = ''
+            for (const item of items) {
+              itemOffsets.push(raw.length)
+              raw += item.str as string
+              if (item.hasEOL) raw += '\n'
+            }
+            idx.push({ pageNumber: pg.pageNumber, normalized: normalizeForSearch(raw), itemOffsets })
           } catch {
-            idx.push({ pageNumber: pg.pageNumber, texts: [] })
+            idx.push({ pageNumber: pg.pageNumber, normalized: '', itemOffsets: [] })
           }
         }
         if (!cancelled) {
@@ -2148,51 +2248,54 @@ const PdfAnnotationEditor = forwardRef<PdfAnnotationEditorHandle, PdfAnnotationE
     /** Apply per-page DOM highlights for the current page. `activeGlobalIdx`
      *  is the index into searchGlobalResultsRef.current to mark as active. */
     const applyPageHighlights = useCallback((activeGlobalIdx: number) => {
-      const el = textLayerRef.current
-      if (!el) return
-      const spans = Array.from(el.querySelectorAll('span')) as HTMLElement[]
-      // Clear old
-      for (const s of spans) s.classList.remove('pdfannot-match', 'pdfannot-match-active')
+      const divs = textLayerInstanceRef.current?.textDivs ?? []
+      for (const d of divs) d.classList.remove('pdfannot-match', 'pdfannot-match-active')
+      if (divs.length === 0) return
 
       const results = searchGlobalResultsRef.current
       const pg = currentPageRef.current
-      // Mark all matches on this page
-      for (const r of results) {
-        if (r.pageNumber === pg && r.spanIdx < spans.length) {
-          spans[r.spanIdx].classList.add('pdfannot-match')
-        }
+      for (let i = 0; i < results.length; i++) {
+        const r = results[i]
+        if (r.pageNumber !== pg) continue
+        const cls = i === activeGlobalIdx ? 'pdfannot-match-active' : 'pdfannot-match'
+        const from = Math.max(0, r.itemStart)
+        const to = Math.min(divs.length - 1, r.itemEnd)
+        for (let k = from; k <= to; k++) divs[k].classList.add(cls)
       }
-      // Mark the active one if it's on this page
+
+      // Scroll the active match into view if it's on this page
       const active = results[activeGlobalIdx]
-      if (active && active.pageNumber === pg && active.spanIdx < spans.length) {
-        spans[active.spanIdx].classList.remove('pdfannot-match')
-        spans[active.spanIdx].classList.add('pdfannot-match-active')
-        spans[active.spanIdx].scrollIntoView({ block: 'nearest', behavior: 'smooth' })
+      if (active && active.pageNumber === pg) {
+        divs[Math.max(0, Math.min(divs.length - 1, active.itemStart))]
+          ?.scrollIntoView({ block: 'nearest', inline: 'nearest', behavior: 'smooth' })
       }
     }, [])
 
     useEffect(() => {
       // Clear DOM highlights whenever the query changes
-      const el = textLayerRef.current
-      if (el) {
-        el.querySelectorAll('.pdfannot-match, .pdfannot-match-active')
-          .forEach(s => s.classList.remove('pdfannot-match', 'pdfannot-match-active'))
-      }
+      const divs = textLayerInstanceRef.current?.textDivs ?? []
+      for (const d of divs) d.classList.remove('pdfannot-match', 'pdfannot-match-active')
 
-      if (!searchQuery.trim() || searchIndex.length === 0) {
+      const q = normalizeForSearch(searchQuery.trim())
+      if (!q || searchIndex.length === 0) {
         searchGlobalResultsRef.current = []
         setSearchMatchCount(0)
         setSearchCurrentIdx(-1)
         return
       }
 
-      const q = searchQuery.toLowerCase()
-      const allMatches: { pageNumber: number; spanIdx: number }[] = []
+      // Match against the joined page text so phrases work across text items
+      const allMatches: SearchMatch[] = []
       for (const entry of searchIndex) {
-        for (let i = 0; i < entry.texts.length; i++) {
-          if (entry.texts[i].toLowerCase().includes(q)) {
-            allMatches.push({ pageNumber: entry.pageNumber, spanIdx: i })
-          }
+        if (!entry.normalized) continue
+        let from = entry.normalized.indexOf(q)
+        while (from !== -1) {
+          allMatches.push({
+            pageNumber: entry.pageNumber,
+            itemStart: findItemIndexAtOffset(entry.itemOffsets, from),
+            itemEnd: findItemIndexAtOffset(entry.itemOffsets, from + q.length - 1),
+          })
+          from = entry.normalized.indexOf(q, from + Math.max(1, q.length))
         }
       }
 
@@ -2211,7 +2314,7 @@ const PdfAnnotationEditor = forwardRef<PdfAnnotationEditorHandle, PdfAnnotationE
 
       const target = allMatches[startIdx]
       if (target.pageNumber !== currentPageRef.current) {
-        pendingHighlightRef.current = { spanIdx: target.spanIdx }
+        pendingHighlightIdxRef.current = startIdx
         goToPage(target.pageNumber)
       } else {
         // Apply highlights after state flushes (textLayerVersion will bump if needed)
@@ -2220,21 +2323,16 @@ const PdfAnnotationEditor = forwardRef<PdfAnnotationEditorHandle, PdfAnnotationE
     // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [searchQuery, searchIndex])
 
-    // After the text layer re-renders (new page), restore pending highlight
+    // After the text layer re-renders (page change, zoom, …), restore highlights
     useEffect(() => {
-      if (pendingHighlightRef.current === null) return
-      applyPageHighlights(searchGlobalResultsRef.current.findIndex(
-        (r, i) => {
-          void i
-          return r.pageNumber === currentPageRef.current && r.spanIdx === pendingHighlightRef.current!.spanIdx
-        }
-      ) !== -1
-        ? searchGlobalResultsRef.current.findIndex(
-            r => r.pageNumber === currentPageRef.current && r.spanIdx === pendingHighlightRef.current!.spanIdx
-          )
-        : searchGlobalResultsRef.current.findIndex(r => r.pageNumber === currentPageRef.current)
-      )
-      pendingHighlightRef.current = null
+      const results = searchGlobalResultsRef.current
+      if (results.length === 0) return
+      const idx = pendingHighlightIdxRef.current
+      pendingHighlightIdxRef.current = null
+      const targetIdx = idx !== null && results[idx]?.pageNumber === currentPageRef.current
+        ? idx
+        : results.findIndex(r => r.pageNumber === currentPageRef.current)
+      if (targetIdx !== -1) applyPageHighlights(targetIdx)
     // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [textLayerVersion])
 
@@ -2247,7 +2345,7 @@ const PdfAnnotationEditor = forwardRef<PdfAnnotationEditorHandle, PdfAnnotationE
         setSearchCurrentIdx(next)
         const target = results[next]
         if (target.pageNumber !== currentPageRef.current) {
-          pendingHighlightRef.current = { spanIdx: target.spanIdx }
+          pendingHighlightIdxRef.current = next
           goToPage(target.pageNumber)
         } else {
           applyPageHighlights(next)
@@ -2255,6 +2353,83 @@ const PdfAnnotationEditor = forwardRef<PdfAnnotationEditorHandle, PdfAnnotationE
       },
       [searchCurrentIdx, goToPage, applyPageHighlights]
     )
+
+    // ────────────────────────────────────────────────────────
+    // Text layer selection → floating Copy button
+    // ────────────────────────────────────────────────────────
+    useEffect(() => {
+      if (tool !== 'textselect') {
+        if (selectedTextRef.current) {
+          selectedTextRef.current = ''
+          setSelectedText('')
+        }
+        return
+      }
+      const update = () => {
+        const sel = window.getSelection()
+        const el = textLayerRef.current
+        let text = ''
+        if (sel && !sel.isCollapsed && sel.rangeCount > 0 && el) {
+          const range = sel.getRangeAt(0)
+          if (el.contains(range.commonAncestorContainer)) text = sel.toString()
+        }
+        if (text !== selectedTextRef.current) {
+          selectedTextRef.current = text
+          setSelectedText(text)
+        }
+      }
+      // Clear stale state (a re-rendered layer drops the previous selection)
+      update()
+      let timer: ReturnType<typeof setTimeout> | null = null
+      const onSelectionChange = () => {
+        if (timer) clearTimeout(timer)
+        timer = setTimeout(update, 120)
+      }
+      document.addEventListener('selectionchange', onSelectionChange)
+      return () => {
+        document.removeEventListener('selectionchange', onSelectionChange)
+        if (timer) clearTimeout(timer)
+      }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [tool, textLayerVersion])
+
+    const handleCopySelectedText = useCallback(async () => {
+      const text = selectedTextRef.current || selectedText
+      if (!text) return
+      let ok = false
+      try {
+        if (navigator.clipboard?.writeText) {
+          await navigator.clipboard.writeText(text)
+          ok = true
+        }
+      } catch {
+        ok = false
+      }
+      if (!ok) {
+        // Fallback for webviews that block the async clipboard API
+        try {
+          const textarea = document.createElement('textarea')
+          textarea.value = text
+          textarea.style.position = 'fixed'
+          textarea.style.top = '-1000px'
+          textarea.style.opacity = '0'
+          document.body.appendChild(textarea)
+          textarea.select()
+          ok = document.execCommand('copy')
+          textarea.remove()
+        } catch {
+          ok = false
+        }
+      }
+      if (ok) {
+        toast.push({
+          title: 'Copied',
+          description: `${text.length} character${text.length === 1 ? '' : 's'} copied to clipboard.`,
+        })
+      } else {
+        toast.push({ title: 'Copy failed', description: 'The clipboard could not be accessed.' })
+      }
+    }, [selectedText, toast])
 
     // ────────────────────────────────────────────────────────
     // Select an already-uploaded PDF from storage
@@ -2705,7 +2880,11 @@ const PdfAnnotationEditor = forwardRef<PdfAnnotationEditorHandle, PdfAnnotationE
                     <button
                       key={t.id}
                       title={t.label}
-                      onClick={() => setTool(t.id)}
+                      onClick={() => {
+                        setTool(t.id)
+                        // The text-selection tool implies the text layer is enabled
+                        if (t.id === 'textselect') setShowTextLayer(true)
+                      }}
                       className={`rounded p-1.5 transition-colors ${
                         tool === t.id
                           ? 'bg-rose-100 text-rose-600 dark:bg-rose-900/40 dark:text-rose-400'
@@ -2841,12 +3020,23 @@ const PdfAnnotationEditor = forwardRef<PdfAnnotationEditorHandle, PdfAnnotationE
 
                 {/* Text layer */}
                 <button
-                  title={showTextLayer ? 'Hide PDF text layer' : 'Show PDF text layer (enables text selection & search)'}
+                  title={showTextLayer ? 'Hide PDF text layer' : 'Select & copy PDF text'}
                   onClick={() => {
-                    setShowTextLayer(v => {
-                      if (v) { setSearchVisible(false); setSearchQuery('') }
-                      return !v
-                    })
+                    if (showTextLayer) {
+                      setShowTextLayer(false)
+                      setTool(t => (t === 'textselect' ? 'select' : t))
+                      setSearchVisible(false)
+                      setSearchQuery('')
+                      if (selectedTextRef.current) {
+                        selectedTextRef.current = ''
+                        setSelectedText('')
+                      }
+                    } else {
+                      // Showing the layer implies the text-selection tool, otherwise it is not usable
+                      setShowTextLayer(true)
+                      setTool('textselect')
+                      setSelectedId(null)
+                    }
                   }}
                   className={`flex items-center gap-1 rounded px-2 py-1 text-xs transition-colors ${
                     showTextLayer
@@ -2862,7 +3052,6 @@ const PdfAnnotationEditor = forwardRef<PdfAnnotationEditorHandle, PdfAnnotationE
                 <button
                   title="Find in PDF (Ctrl+F)"
                   onClick={() => {
-                    setShowTextLayer(true)
                     setSearchVisible(v => { if (!v) setSearchQuery(''); return true })
                   }}
                   className={`flex items-center gap-1 rounded px-2 py-1 text-xs transition-colors ${
@@ -2955,7 +3144,7 @@ const PdfAnnotationEditor = forwardRef<PdfAnnotationEditorHandle, PdfAnnotationE
         </div>
 
         {/* Find/search bar */}
-        {searchVisible && showTextLayer && (
+        {searchVisible && (
           <div className="flex items-center gap-1.5 border-b border-border bg-surface px-3 py-1.5">
             {searchIndexBuilding
               ? <Loader2 size={13} className="shrink-0 animate-spin text-muted-foreground" />
@@ -3110,7 +3299,8 @@ const PdfAnnotationEditor = forwardRef<PdfAnnotationEditorHandle, PdfAnnotationE
                 style={{
                   width: canvasWidth,
                   height: canvasHeight,
-                  display: showTextLayer ? 'block' : 'none',
+                  // Visible while the text layer mode is on or a search is active (highlights)
+                  display: showTextLayer || searchVisible ? 'block' : 'none',
                   pointerEvents: showTextLayer && tool === 'textselect' ? 'auto' : 'none',
                 }}
               />
@@ -3588,6 +3778,19 @@ const PdfAnnotationEditor = forwardRef<PdfAnnotationEditorHandle, PdfAnnotationE
                   </div>
                 )
               })()}
+
+              {/* Floating copy button — appears when text is selected in the text layer */}
+              {selectedText && (
+                <button
+                  onMouseDown={e => e.preventDefault()}
+                  onClick={handleCopySelectedText}
+                  title="Copy selected text"
+                  className="absolute right-2 top-2 z-40 flex items-center gap-1 rounded-md border border-border bg-surface px-2 py-1 text-xs text-foreground shadow-md transition-colors hover:bg-surface-hover"
+                >
+                  <Copy size={13} />
+                  Copy
+                </button>
+              )}
             </div>
           </div>
         </div>

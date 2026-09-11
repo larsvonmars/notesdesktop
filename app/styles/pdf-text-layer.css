@@ -1,0 +1,64 @@
+/* ===== PDF text layer (pdfjs-dist TextLayer) =====
+   The text layer positions transparent text spans over the rendered PDF page so
+   text can be selected, copied and searched. These rules mirror the canonical
+   pdf.js viewer styles — pdfjs 4.x positions/sizes spans with the
+   `--scale-factor` custom property (set inline by PdfAnnotationEditor). */
+
+.pdf-text-layer {
+  position: absolute;
+  left: 0;
+  top: 0;
+  text-align: initial;
+  overflow: hidden;
+  opacity: 1;
+  line-height: 1;
+  -webkit-text-size-adjust: none;
+  text-size-adjust: none;
+  forced-color-adjust: none;
+  transform-origin: 0 0;
+  caret-color: CanvasText;
+}
+
+.pdf-text-layer :is(span, br) {
+  color: transparent;
+  position: absolute;
+  white-space: pre;
+  cursor: text;
+  transform-origin: 0% 0%;
+}
+
+.pdf-text-layer > :not(.markedContent),
+.pdf-text-layer .markedContent span:not(.markedContent) {
+  z-index: 1;
+}
+
+.pdf-text-layer span.markedContent {
+  top: 0;
+  height: 0;
+}
+
+.pdf-text-layer span[role='img'] {
+  user-select: none;
+  cursor: default;
+}
+
+/* Search matches */
+.pdf-text-layer .pdfannot-match {
+  background: rgba(255, 213, 79, 0.5);
+  border-radius: 2px;
+}
+
+.pdf-text-layer .pdfannot-match-active {
+  background: rgba(255, 152, 0, 0.75);
+  box-shadow: 0 0 0 1px rgba(234, 88, 12, 0.9);
+  border-radius: 2px;
+}
+
+/* Text selection */
+.pdf-text-layer ::selection {
+  background: rgba(59, 130, 246, 0.35);
+}
+
+.pdf-text-layer br::selection {
+  background: transparent;
+}

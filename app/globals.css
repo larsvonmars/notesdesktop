@@ -21,6 +21,7 @@
 /* Feature-specific styles */
 @import './styles/share-note.css';
 @import './styles/file-blocks.css';
+@import './styles/pdf-text-layer.css';
 
 @tailwind base;
 @tailwind components;
