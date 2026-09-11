@@ -173,9 +173,12 @@ function uid(): string {
 
 /** True if a point (unscaled page coords) lies inside a text annotation's box. */
 function textAnnotationContains(ta: TextAnnotation, x: number, y: number): boolean {
+  // Use the measured (wrapped) box so the hit area always matches what is drawn —
+  // including annotations committed before wrapping was introduced
+  const box = measureTextAnnotationBox(ta)
   return (
-    x >= ta.x && x <= ta.x + ta.width &&
-    y >= ta.y && y <= ta.y + (ta.height || ta.fontSize * 1.5)
+    x >= ta.x && x <= ta.x + box.width &&
+    y >= ta.y && y <= ta.y + box.height
   )
 }
 
@@ -461,6 +464,13 @@ const PdfAnnotationEditor = forwardRef<PdfAnnotationEditorHandle, PdfAnnotationE
     // Last canvas pointerdown — used for manual double-click detection (browser dblclick is
     // unreliable after preventDefault() on pointerdown)
     const lastCanvasClickRef = useRef<{ time: number; x: number; y: number } | null>(null)
+    // Editing UI wrapper (textarea + formatting toolbar) — keeps the edit session alive
+    // while the user interacts with its own toolbar
+    const editingWrapperRef = useRef<HTMLDivElement>(null)
+    // Typography remembered from the last edited text box, applied to new ones
+    const lastTextStyleRef = useRef<{ fontSize: number; bold?: boolean; italic?: boolean; fontFamily?: string }>({
+      fontSize: DEFAULT_FONT_SIZE,
+    })
 
     // Canvas dimensions (set after PDF page renders)
     const [canvasWidth, setCanvasWidth] = useState(800)
@@ -651,13 +661,32 @@ const PdfAnnotationEditor = forwardRef<PdfAnnotationEditorHandle, PdfAnnotationE
       setResizeHandle(null)
     }, [])
 
+    /** Update the annotation being edited (live — box size and wrapping recompute immediately). */
+    const updateEditingText = useCallback((updates: Partial<TextAnnotation>) => {
+      setEditingText(prev => (prev ? { ...prev, ...updates } : prev))
+    }, [])
+
+    const adjustEditingFontSize = useCallback((delta: number) => {
+      setEditingText(prev =>
+        prev ? { ...prev, fontSize: Math.max(8, Math.min(96, prev.fontSize + delta)) } : prev
+      )
+    }, [])
+
     /** Commit the in-progress text edit. Returns the updated pages (or null if there was nothing to commit). */
     const commitText = useCallback((): PdfAnnotationPage[] | null => {
       if (!editingText) return null
+      // Remember the typography for the next new text box
+      lastTextStyleRef.current = {
+        fontSize: editingText.fontSize,
+        bold: editingText.bold,
+        italic: editingText.italic,
+        fontFamily: editingText.fontFamily,
+      }
       const keep = editingText.text.trim().length > 0
-      const exists = !!pages
+      const existing = pages
         .find(p => p.pageNumber === currentPage)
-        ?.textAnnotations.some(t => t.id === editingText.id)
+        ?.textAnnotations.find(t => t.id === editingText.id)
+      const exists = !!existing
 
       // Empty, brand-new annotation → nothing to commit
       if (!keep && !exists) {
@@ -674,6 +703,23 @@ const PdfAnnotationEditor = forwardRef<PdfAnnotationEditorHandle, PdfAnnotationE
           : editingText
       const box = measureTextAnnotationBox(effectiveText)
       const finalText: TextAnnotation = { ...effectiveText, width: box.width, height: box.height }
+
+      // Nothing was actually changed → just close (no noise in the undo history)
+      if (
+        existing &&
+        keep &&
+        existing.text === finalText.text &&
+        existing.fontSize === finalText.fontSize &&
+        existing.color === finalText.color &&
+        !!existing.bold === !!finalText.bold &&
+        !!existing.italic === !!finalText.italic &&
+        (existing.fontFamily ?? 'sans-serif') === (finalText.fontFamily ?? 'sans-serif') &&
+        Math.abs(existing.width - finalText.width) < 0.01 &&
+        Math.abs(existing.height - finalText.height) < 0.01
+      ) {
+        setEditingText(null)
+        return null
+      }
 
       const newPages = updatePageAnnotations(currentPage, p => ({
         ...p,
@@ -848,8 +894,7 @@ const PdfAnnotationEditor = forwardRef<PdfAnnotationEditorHandle, PdfAnnotationE
           return !(pos.x >= minX && pos.x <= maxX && pos.y >= minY && pos.y <= maxY)
         })
         const newTexts = pageAnnot.textAnnotations.filter(t =>
-          !(pos.x >= t.x && pos.x <= t.x + t.width &&
-            pos.y >= t.y && pos.y <= t.y + (t.height || t.fontSize * 1.5))
+          !textAnnotationContains(t, pos.x, pos.y)
         )
         const newStickies = (pageAnnot.stickyNotes ?? []).filter(sn =>
           !(pos.x >= sn.x && pos.x <= sn.x + sn.width &&
@@ -1446,16 +1491,20 @@ const PdfAnnotationEditor = forwardRef<PdfAnnotationEditorHandle, PdfAnnotationE
             startEditingText(existingText)
             return
           }
-          // Place a new text annotation
+          // Place a new text annotation (reusing the last used typography)
+          const style = lastTextStyleRef.current
           const newText: TextAnnotation = {
             id: uid(),
             x: pos.x,
             y: pos.y,
             width: 200,
-            height: DEFAULT_FONT_SIZE * 1.5,
+            height: style.fontSize * 1.5,
             text: '',
-            fontSize: DEFAULT_FONT_SIZE,
+            fontSize: style.fontSize,
             color,
+            ...(style.bold ? { bold: true } : {}),
+            ...(style.italic ? { italic: true } : {}),
+            ...(style.fontFamily ? { fontFamily: style.fontFamily } : {}),
           }
           setEditingText(newText)
         } else if (tool === 'rectangle' || tool === 'circle' || tool === 'arrow' || tool === 'line') {
@@ -1509,10 +1558,7 @@ const PdfAnnotationEditor = forwardRef<PdfAnnotationEditorHandle, PdfAnnotationE
           // Check text annotations
           if (!hit) {
             for (const ta of pageAnnot.textAnnotations) {
-              if (
-                pos.x >= ta.x && pos.x <= ta.x + ta.width &&
-                pos.y >= ta.y && pos.y <= ta.y + (ta.height || ta.fontSize * 1.5)
-              ) {
+              if (textAnnotationContains(ta, pos.x, pos.y)) {
                 setSelectedId(ta.id)
                 setDragOffset({ x: pos.x - ta.x, y: pos.y - ta.y })
                 hit = true
@@ -3314,63 +3360,147 @@ const PdfAnnotationEditor = forwardRef<PdfAnnotationEditorHandle, PdfAnnotationE
                 )
               })}
 
-              {/* Text editing overlay — styled to match the committed text exactly
-                  (font, line spacing, box size/position and rotation), so nothing
-                  shifts or resizes when the edit is committed */}
+              {/* Text editing overlay — formatting toolbar + textarea styled to match the
+                  committed text exactly (font, wrapping, box, position and rotation) */}
               {editingText && (() => {
                 const { vx, vy } = logicalToVisual(editingText.x, editingText.y)
                 const box = measureTextAnnotationBox(editingText)
+                const toolbarTop = vy - 34 >= 0 ? vy - 34 : vy + box.height * zoom + 6
                 return (
-                  <textarea
-                    ref={textAreaRef}
-                    autoFocus
-                    spellCheck={false}
-                    className="absolute border-0 bg-transparent"
-                    style={{
-                      left: vx,
-                      top: vy,
-                      width: box.width * zoom,
-                      height: box.height * zoom,
-                      // Aligns the first baseline with the canvas renderer (which draws
-                      // it exactly `fontSize` below the box top)
-                      paddingTop: box.paddingTop * zoom,
-                      paddingRight: 0,
-                      paddingBottom: 0,
-                      paddingLeft: 0,
-                      margin: 0,
-                      boxSizing: 'border-box',
-                      fontSize: editingText.fontSize * zoom,
-                      fontFamily: editingText.fontFamily ?? 'sans-serif',
-                      fontWeight: editingText.bold ? 'bold' : 'normal',
-                      fontStyle: editingText.italic ? 'italic' : 'normal',
-                      lineHeight: TEXT_LINE_HEIGHT,
-                      color: editingText.color,
-                      whiteSpace: 'pre-wrap',
-                      overflowWrap: 'break-word',
-                      overflow: 'hidden',
-                      resize: 'horizontal',
-                      transform: `rotate(${viewRotation}deg)`,
-                      transformOrigin: 'top left',
-                      outline: '1.5px solid #60a5fa',
-                      outlineOffset: 2,
+                  <div
+                    ref={editingWrapperRef}
+                    style={{ display: 'contents' }}
+                    onBlur={e => {
+                      // Interacting with the editing toolbar must not end the edit session
+                      const next = e.relatedTarget as HTMLElement | null
+                      if (next && editingWrapperRef.current?.contains(next)) return
+                      commitText()
                     }}
-                    value={editingText.text}
-                    onChange={e =>
-                      setEditingText(prev =>
-                        prev ? { ...prev, text: e.target.value } : null
-                      )
-                    }
-                    onBlur={commitText}
-                    onKeyDown={e => {
-                      if (e.key === 'Escape') {
-                        setEditingText(null)
-                      } else if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) {
-                        e.preventDefault()
-                        commitText()
+                  >
+                    <div
+                      className="absolute z-40 flex items-center gap-0.5 rounded-lg border border-border bg-surface px-1.5 py-1 shadow-md"
+                      style={{ left: vx, top: toolbarTop }}
+                    >
+                      <button
+                        type="button"
+                        onMouseDown={e => { e.preventDefault(); updateEditingText({ bold: !editingText.bold }) }}
+                        title="Bold (Ctrl/Cmd+B)"
+                        className={`rounded p-1 ${
+                          editingText.bold
+                            ? 'bg-rose-100 text-rose-600 dark:bg-rose-900/40 dark:text-rose-400'
+                            : 'text-muted-foreground hover:bg-surface-hover'
+                        }`}
+                      >
+                        <Bold size={13} />
+                      </button>
+                      <button
+                        type="button"
+                        onMouseDown={e => { e.preventDefault(); updateEditingText({ italic: !editingText.italic }) }}
+                        title="Italic (Ctrl/Cmd+I)"
+                        className={`rounded p-1 ${
+                          editingText.italic
+                            ? 'bg-rose-100 text-rose-600 dark:bg-rose-900/40 dark:text-rose-400'
+                            : 'text-muted-foreground hover:bg-surface-hover'
+                        }`}
+                      >
+                        <Italic size={13} />
+                      </button>
+                      <div className="mx-0.5 h-4 w-px bg-border" />
+                      <button
+                        type="button"
+                        onMouseDown={e => { e.preventDefault(); adjustEditingFontSize(-2) }}
+                        title="Decrease font size"
+                        className="rounded px-1.5 text-sm text-muted-foreground hover:bg-surface-hover"
+                      >−</button>
+                      <span className="min-w-[2.5rem] text-center text-[11px] text-muted-foreground">{editingText.fontSize}px</span>
+                      <button
+                        type="button"
+                        onMouseDown={e => { e.preventDefault(); adjustEditingFontSize(2) }}
+                        title="Increase font size"
+                        className="rounded px-1.5 text-sm text-muted-foreground hover:bg-surface-hover"
+                      >+</button>
+                      <div className="mx-0.5 h-4 w-px bg-border" />
+                      {COLORS.map(c => (
+                        <button
+                          key={c}
+                          type="button"
+                          title={`Text color: ${c}`}
+                          onMouseDown={e => { e.preventDefault(); updateEditingText({ color: c }) }}
+                          className={`h-4 w-4 rounded-full border transition-transform ${
+                            editingText.color === c ? 'scale-125 border-foreground' : 'border-border'
+                          }`}
+                          style={{ backgroundColor: c }}
+                        />
+                      ))}
+                      <div className="mx-0.5 h-4 w-px bg-border" />
+                      <select
+                        value={editingText.fontFamily ?? 'sans-serif'}
+                        onChange={e => updateEditingText({ fontFamily: e.target.value })}
+                        className="rounded border border-border bg-surface py-0.5 text-[11px] text-muted-foreground focus:outline-none"
+                        title="Font family"
+                      >
+                        <option value="sans-serif">Sans</option>
+                        <option value="serif">Serif</option>
+                        <option value="monospace">Mono</option>
+                      </select>
+                    </div>
+                    <textarea
+                      ref={textAreaRef}
+                      autoFocus
+                      spellCheck={false}
+                      placeholder="Type text…"
+                      className="absolute border-0 bg-transparent"
+                      style={{
+                        left: vx,
+                        top: vy,
+                        width: box.width * zoom,
+                        height: box.height * zoom,
+                        // Aligns the first baseline with the canvas renderer (which draws
+                        // it exactly `fontSize` below the box top)
+                        paddingTop: box.paddingTop * zoom,
+                        paddingRight: 0,
+                        paddingBottom: 0,
+                        paddingLeft: 0,
+                        margin: 0,
+                        boxSizing: 'border-box',
+                        fontSize: editingText.fontSize * zoom,
+                        fontFamily: editingText.fontFamily ?? 'sans-serif',
+                        fontWeight: editingText.bold ? 'bold' : 'normal',
+                        fontStyle: editingText.italic ? 'italic' : 'normal',
+                        lineHeight: TEXT_LINE_HEIGHT,
+                        color: editingText.color,
+                        whiteSpace: 'pre-wrap',
+                        overflowWrap: 'break-word',
+                        overflow: 'hidden',
+                        resize: 'horizontal',
+                        transform: `rotate(${viewRotation}deg)`,
+                        transformOrigin: 'top left',
+                        outline: '1.5px solid #60a5fa',
+                        outlineOffset: 2,
+                      }}
+                      value={editingText.text}
+                      onChange={e =>
+                        setEditingText(prev =>
+                          prev ? { ...prev, text: e.target.value } : null
+                        )
                       }
-                      // Plain Enter inserts a line break (multi-line text box)
-                    }}
-                  />
+                      onKeyDown={e => {
+                        if (e.key === 'Escape') {
+                          setEditingText(null)
+                        } else if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) {
+                          e.preventDefault()
+                          commitText()
+                        } else if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'b') {
+                          e.preventDefault()
+                          updateEditingText({ bold: !editingText.bold })
+                        } else if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'i') {
+                          e.preventDefault()
+                          updateEditingText({ italic: !editingText.italic })
+                        }
+                        // Plain Enter inserts a line break (multi-line text box)
+                      }}
+                    />
+                  </div>
                 )
               })()}
             </div>
