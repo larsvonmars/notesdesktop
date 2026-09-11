@@ -26,6 +26,9 @@ import {
   Square,
   Circle,
   ArrowUpRight,
+  AlignLeft,
+  AlignCenter,
+  AlignRight,
   MousePointer2,
   Undo2,
   Redo2,
@@ -87,6 +90,8 @@ export interface TextAnnotation {
   bold?: boolean
   italic?: boolean
   fontFamily?: string
+  /** Horizontal alignment of the wrapped lines (default 'left'). */
+  textAlign?: 'left' | 'center' | 'right'
 }
 
 export interface ShapeAnnotation {
@@ -180,6 +185,22 @@ function textAnnotationContains(ta: TextAnnotation, x: number, y: number): boole
     x >= ta.x && x <= ta.x + box.width &&
     y >= ta.y && y <= ta.y + box.height
   )
+}
+
+/** X position for drawing one wrapped line of a text annotation (honors alignment). */
+function textLineDrawX(
+  ctx: CanvasRenderingContext2D,
+  ta: Pick<TextAnnotation, 'x' | 'width' | 'textAlign'>,
+  line: string,
+  scale: number,
+): number {
+  const align = ta.textAlign
+  if (!align || align === 'left') return ta.x * scale
+  // ctx.font must already be set to the annotation's font when this is called
+  const lineWidth = ctx.measureText(line).width
+  return align === 'center'
+    ? ta.x * scale + (ta.width * scale - lineWidth) / 2
+    : ta.x * scale + ta.width * scale - lineWidth
 }
 
 /** Line advance used by the canvas text renderer (baselines are `fontSize * 1.2` apart). */
@@ -313,7 +334,9 @@ function wrapTextAnnotationLines(
         else i++
         continue
       }
-      lines.push(line)
+      // Hanging breakable spaces at a soft wrap point are invisible in CSS (`pre-wrap`)
+      // and must not skew alignment — only keep them on a paragraph's final line
+      lines.push(j >= units.length ? line : line.replace(/[^\S\u00A0]+$/, ''))
       i = j
     }
   }
@@ -468,7 +491,13 @@ const PdfAnnotationEditor = forwardRef<PdfAnnotationEditorHandle, PdfAnnotationE
     // while the user interacts with its own toolbar
     const editingWrapperRef = useRef<HTMLDivElement>(null)
     // Typography remembered from the last edited text box, applied to new ones
-    const lastTextStyleRef = useRef<{ fontSize: number; bold?: boolean; italic?: boolean; fontFamily?: string }>({
+    const lastTextStyleRef = useRef<{
+      fontSize: number
+      bold?: boolean
+      italic?: boolean
+      fontFamily?: string
+      textAlign?: 'left' | 'center' | 'right'
+    }>({
       fontSize: DEFAULT_FONT_SIZE,
     })
 
@@ -681,6 +710,7 @@ const PdfAnnotationEditor = forwardRef<PdfAnnotationEditorHandle, PdfAnnotationE
         bold: editingText.bold,
         italic: editingText.italic,
         fontFamily: editingText.fontFamily,
+        textAlign: editingText.textAlign,
       }
       const keep = editingText.text.trim().length > 0
       const existing = pages
@@ -714,6 +744,7 @@ const PdfAnnotationEditor = forwardRef<PdfAnnotationEditorHandle, PdfAnnotationE
         !!existing.bold === !!finalText.bold &&
         !!existing.italic === !!finalText.italic &&
         (existing.fontFamily ?? 'sans-serif') === (finalText.fontFamily ?? 'sans-serif') &&
+        (existing.textAlign ?? 'left') === (finalText.textAlign ?? 'left') &&
         Math.abs(existing.width - finalText.width) < 0.01 &&
         Math.abs(existing.height - finalText.height) < 0.01
       ) {
@@ -823,6 +854,21 @@ const PdfAnnotationEditor = forwardRef<PdfAnnotationEditorHandle, PdfAnnotationE
           ...page,
           textAnnotations: page.textAnnotations.map(t =>
             t.id === id ? { ...t, italic: !t.italic } : t
+          ),
+        }))
+        setPages(newPages)
+        pushHistory(newPages)
+        emitChange(newPages)
+      },
+      [currentPage, updatePageAnnotations, pushHistory, emitChange]
+    )
+
+    const changeTextAlign = useCallback(
+      (id: string, align: 'left' | 'center' | 'right') => {
+        const newPages = updatePageAnnotations(currentPage, page => ({
+          ...page,
+          textAnnotations: page.textAnnotations.map(t =>
+            t.id === id ? { ...t, textAlign: align } : t
           ),
         }))
         setPages(newPages)
@@ -1030,7 +1076,7 @@ const PdfAnnotationEditor = forwardRef<PdfAnnotationEditorHandle, PdfAnnotationE
             thumbCtx.font = `${ta.italic ? 'italic ' : ''}${ta.bold ? 'bold ' : ''}${ta.fontSize * thumbScale}px ${ta.fontFamily ?? 'sans-serif'}`
             thumbCtx.fillStyle = ta.color
             wrapTextAnnotationLines(ta, ta.width).forEach((line, li) => {
-              thumbCtx!.fillText(line, ta.x * thumbScale, (ta.y + ta.fontSize + li * ta.fontSize * TEXT_LINE_HEIGHT) * thumbScale)
+              thumbCtx!.fillText(line, textLineDrawX(thumbCtx!, ta, line, thumbScale), (ta.y + ta.fontSize + li * ta.fontSize * TEXT_LINE_HEIGHT) * thumbScale)
             })
             thumbCtx.restore()
           }
@@ -1303,7 +1349,7 @@ const PdfAnnotationEditor = forwardRef<PdfAnnotationEditorHandle, PdfAnnotationE
         ctx.fillStyle = ta.color
         const lines = wrapTextAnnotationLines(ta, ta.width)
         lines.forEach((line, i) => {
-          ctx.fillText(line, ta.x * scale, (ta.y + ta.fontSize + i * ta.fontSize * TEXT_LINE_HEIGHT) * scale)
+          ctx.fillText(line, textLineDrawX(ctx, ta, line, scale), (ta.y + ta.fontSize + i * ta.fontSize * TEXT_LINE_HEIGHT) * scale)
         })
         if (ta.id === selectedId) {
           ctx.strokeStyle = '#3b82f6'
@@ -1505,6 +1551,7 @@ const PdfAnnotationEditor = forwardRef<PdfAnnotationEditorHandle, PdfAnnotationE
             ...(style.bold ? { bold: true } : {}),
             ...(style.italic ? { italic: true } : {}),
             ...(style.fontFamily ? { fontFamily: style.fontFamily } : {}),
+            ...(style.textAlign && style.textAlign !== 'left' ? { textAlign: style.textAlign } : {}),
           }
           setEditingText(newText)
         } else if (tool === 'rectangle' || tool === 'circle' || tool === 'arrow' || tool === 'line') {
@@ -2412,7 +2459,7 @@ const PdfAnnotationEditor = forwardRef<PdfAnnotationEditorHandle, PdfAnnotationE
             tempCtx.font = `${ta.italic ? 'italic ' : ''}${ta.bold ? 'bold ' : ''}${ta.fontSize * exportScale}px ${ta.fontFamily ?? 'sans-serif'}`
             tempCtx.fillStyle = ta.color
             wrapTextAnnotationLines(ta, ta.width).forEach((line, li) => {
-              tempCtx.fillText(line, ta.x * exportScale, (ta.y + ta.fontSize + li * ta.fontSize * TEXT_LINE_HEIGHT) * exportScale)
+              tempCtx.fillText(line, textLineDrawX(tempCtx, ta, line, exportScale), (ta.y + ta.fontSize + li * ta.fontSize * TEXT_LINE_HEIGHT) * exportScale)
             })
             tempCtx.restore()
           }
@@ -3138,6 +3185,24 @@ const PdfAnnotationEditor = forwardRef<PdfAnnotationEditorHandle, PdfAnnotationE
                       <Italic size={13} />
                     </button>
                     <div className="mx-0.5 h-4 w-px bg-border" />
+                    {(['left', 'center', 'right'] as const).map(align => {
+                      const Icon = align === 'left' ? AlignLeft : align === 'center' ? AlignCenter : AlignRight
+                      return (
+                        <button
+                          key={align}
+                          onMouseDown={e => { e.preventDefault(); changeTextAlign(ta.id, align) }}
+                          title={`Align ${align}`}
+                          className={`rounded p-1 ${
+                            (ta.textAlign ?? 'left') === align
+                              ? 'bg-rose-100 text-rose-600 dark:bg-rose-900/40 dark:text-rose-400'
+                              : 'text-muted-foreground hover:bg-surface-hover'
+                          }`}
+                        >
+                          <Icon size={13} />
+                        </button>
+                      )
+                    })}
+                    <div className="mx-0.5 h-4 w-px bg-border" />
                     <button
                       onMouseDown={e => { e.preventDefault(); changeTextFontSize(ta.id, -2) }}
                       title="Decrease font size"
@@ -3406,6 +3471,25 @@ const PdfAnnotationEditor = forwardRef<PdfAnnotationEditorHandle, PdfAnnotationE
                         <Italic size={13} />
                       </button>
                       <div className="mx-0.5 h-4 w-px bg-border" />
+                      {(['left', 'center', 'right'] as const).map(align => {
+                        const Icon = align === 'left' ? AlignLeft : align === 'center' ? AlignCenter : AlignRight
+                        return (
+                          <button
+                            key={align}
+                            type="button"
+                            onMouseDown={e => { e.preventDefault(); updateEditingText({ textAlign: align }) }}
+                            title={`Align ${align}`}
+                            className={`rounded p-1 ${
+                              (editingText.textAlign ?? 'left') === align
+                                ? 'bg-rose-100 text-rose-600 dark:bg-rose-900/40 dark:text-rose-400'
+                                : 'text-muted-foreground hover:bg-surface-hover'
+                            }`}
+                          >
+                            <Icon size={13} />
+                          </button>
+                        )
+                      })}
+                      <div className="mx-0.5 h-4 w-px bg-border" />
                       <button
                         type="button"
                         onMouseDown={e => { e.preventDefault(); adjustEditingFontSize(-2) }}
@@ -3469,6 +3553,7 @@ const PdfAnnotationEditor = forwardRef<PdfAnnotationEditorHandle, PdfAnnotationE
                         fontStyle: editingText.italic ? 'italic' : 'normal',
                         lineHeight: TEXT_LINE_HEIGHT,
                         color: editingText.color,
+                        textAlign: editingText.textAlign ?? 'left',
                         whiteSpace: 'pre-wrap',
                         overflowWrap: 'break-word',
                         overflow: 'hidden',
