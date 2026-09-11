@@ -179,6 +179,54 @@ function textAnnotationContains(ta: TextAnnotation, x: number, y: number): boole
   )
 }
 
+/** Line advance used by the canvas text renderer (baselines are `fontSize * 1.2` apart). */
+const TEXT_LINE_HEIGHT = 1.2
+/** Minimum logical width of a text annotation box (keeps empty fields clickable). */
+const TEXT_MIN_BOX_WIDTH = 80
+
+/**
+ * Measures a text annotation's box in logical page units so that the editing textarea
+ * and the committed canvas rendering are pixel-identical:
+ * - width/height hug the text (canvas never wraps, so the box should not either)
+ * - `paddingTop` puts the textarea's first baseline exactly where `fillText` draws it
+ *   (canvas: `fontSize` below the box top; CSS line box: half-leading + ascent).
+ */
+function measureTextAnnotationBox(
+  ta: Pick<TextAnnotation, 'text' | 'fontSize' | 'bold' | 'italic' | 'fontFamily'>,
+  zoom: number,
+): { width: number; height: number; paddingTop: number } {
+  const lines = ta.text.split('\n')
+  const fontSizeVisual = Math.max(1, ta.fontSize * zoom)
+  let maxWidthVisual = 0
+  let paddingTopRatio = 0
+  try {
+    const ctx = document.createElement('canvas').getContext('2d')
+    if (ctx) {
+      // Line widths at the size actually displayed
+      ctx.font = `${ta.italic ? 'italic ' : ''}${ta.bold ? 'bold ' : ''}${fontSizeVisual}px ${ta.fontFamily ?? 'sans-serif'}`
+      for (const line of lines) {
+        maxWidthVisual = Math.max(maxWidthVisual, ctx.measureText(line).width)
+      }
+      // Font ascent/descent at a reference size (small sizes get rounded to integers)
+      ctx.font = `${ta.italic ? 'italic ' : ''}${ta.bold ? 'bold ' : ''}100px ${ta.fontFamily ?? 'sans-serif'}`
+      const { fontBoundingBoxAscent: ascent, fontBoundingBoxDescent: descent } = ctx.measureText('Hg')
+      if (Number.isFinite(ascent) && Number.isFinite(descent) && ascent > 0) {
+        const a = ascent / 100
+        const d = descent / 100
+        paddingTopRatio = 1 - ((TEXT_LINE_HEIGHT - (a + d)) / 2 + a)
+      }
+    }
+  } catch {
+    /* canvas unavailable — render without the baseline correction */
+  }
+  const paddingTop = ta.fontSize * Math.max(0, paddingTopRatio)
+  return {
+    width: Math.max((maxWidthVisual + 2) / zoom, TEXT_MIN_BOX_WIDTH),
+    paddingTop,
+    height: paddingTop + Math.max(1, lines.length) * ta.fontSize * TEXT_LINE_HEIGHT,
+  }
+}
+
 // ============================================================================
 // FREEHAND RENDERING (reuses perfect-freehand like DrawingEditor)
 // ============================================================================
@@ -474,12 +522,16 @@ const PdfAnnotationEditor = forwardRef<PdfAnnotationEditorHandle, PdfAnnotationE
         return null
       }
 
+      // Persist the same auto-sized box the user saw while editing
+      const box = measureTextAnnotationBox(editingText, zoom)
+      const finalText: TextAnnotation = { ...editingText, width: box.width, height: box.height }
+
       const newPages = updatePageAnnotations(currentPage, p => ({
         ...p,
         textAnnotations: keep
           ? exists
-            ? p.textAnnotations.map(t => (t.id === editingText.id ? editingText : t))
-            : [...p.textAnnotations, editingText]
+            ? p.textAnnotations.map(t => (t.id === editingText.id ? finalText : t))
+            : [...p.textAnnotations, finalText]
           : p.textAnnotations.filter(t => t.id !== editingText.id),
       }))
       setPages(newPages)
@@ -487,7 +539,7 @@ const PdfAnnotationEditor = forwardRef<PdfAnnotationEditorHandle, PdfAnnotationE
       emitChange(newPages)
       setEditingText(null)
       return newPages
-    }, [editingText, currentPage, pages, updatePageAnnotations, pushHistory, emitChange])
+    }, [editingText, currentPage, pages, zoom, updatePageAnnotations, pushHistory, emitChange])
 
     // ────────────────────────────────────────────────────────
     // Insert / delete blank pages
@@ -784,7 +836,7 @@ const PdfAnnotationEditor = forwardRef<PdfAnnotationEditorHandle, PdfAnnotationE
             thumbCtx.font = `${ta.italic ? 'italic ' : ''}${ta.bold ? 'bold ' : ''}${ta.fontSize * thumbScale}px sans-serif`
             thumbCtx.fillStyle = ta.color
             ta.text.split('\n').forEach((line, li) => {
-              thumbCtx!.fillText(line, ta.x * thumbScale, (ta.y + ta.fontSize + li * ta.fontSize * 1.2) * thumbScale)
+              thumbCtx!.fillText(line, ta.x * thumbScale, (ta.y + ta.fontSize + li * ta.fontSize * TEXT_LINE_HEIGHT) * thumbScale)
             })
             thumbCtx.restore()
           }
@@ -1057,7 +1109,7 @@ const PdfAnnotationEditor = forwardRef<PdfAnnotationEditorHandle, PdfAnnotationE
         ctx.fillStyle = ta.color
         const lines = ta.text.split('\n')
         lines.forEach((line, i) => {
-          ctx.fillText(line, ta.x * scale, (ta.y + ta.fontSize + i * ta.fontSize * 1.2) * scale)
+          ctx.fillText(line, ta.x * scale, (ta.y + ta.fontSize + i * ta.fontSize * TEXT_LINE_HEIGHT) * scale)
         })
         if (ta.id === selectedId) {
           ctx.strokeStyle = '#3b82f6'
@@ -1177,16 +1229,16 @@ const PdfAnnotationEditor = forwardRef<PdfAnnotationEditorHandle, PdfAnnotationE
       // Undo CSS rotation to map visual pointer coords back to canvas logical coords
       switch (viewRotation) {
         case 90:
-          cx = (canvasWidth - vy) / zoom
-          cy = vx / zoom
+          cx = vy / zoom
+          cy = (canvasHeight - vx) / zoom
           break
         case 180:
           cx = (canvasWidth - vx) / zoom
           cy = (canvasHeight - vy) / zoom
           break
         case 270:
-          cx = vy / zoom
-          cy = (canvasHeight - vx) / zoom
+          cx = (canvasWidth - vy) / zoom
+          cy = vx / zoom
           break
         default:
           cx = vx / zoom
@@ -1639,23 +1691,25 @@ const PdfAnnotationEditor = forwardRef<PdfAnnotationEditorHandle, PdfAnnotationE
     // ────────────────────────────────────────────────────────
     // Rotation coordinate helpers
     // ────────────────────────────────────────────────────────
-    // Convert unscaled logical canvas coords → visual coords relative to the outer bounding-box div
+    // Convert unscaled logical canvas coords → visual coords relative to the outer bounding-box div.
+    // Mirrors the wrapper's `translate(-50%,-50%) rotate(θ)`: at 90° the logical origin
+    // lands at the top-right of the outer box (canvasHeight, 0), at 270° at its bottom-left.
     function logicalToVisual(lx: number, ly: number): { vx: number; vy: number } {
       const px = lx * zoom
       const py = ly * zoom
       switch (viewRotation) {
-        case 90:  return { vx: py, vy: canvasWidth - px }
+        case 90:  return { vx: canvasHeight - py, vy: px }
         case 180: return { vx: canvasWidth - px, vy: canvasHeight - py }
-        case 270: return { vx: canvasHeight - py, vy: px }
+        case 270: return { vx: py, vy: canvasWidth - px }
         default:  return { vx: px, vy: py }
       }
     }
     // Convert a mouse-movement delta (screen pixels) → logical (unscaled) delta
     function screenDeltaToLogical(dsx: number, dsy: number): { dx: number; dy: number } {
       switch (viewRotation) {
-        case 90:  return { dx: -dsy / zoom, dy: dsx / zoom }
+        case 90:  return { dx: dsy / zoom, dy: -dsx / zoom }
         case 180: return { dx: -dsx / zoom, dy: -dsy / zoom }
-        case 270: return { dx: dsy / zoom, dy: -dsx / zoom }
+        case 270: return { dx: -dsy / zoom, dy: dsx / zoom }
         default:  return { dx: dsx / zoom, dy: dsy / zoom }
       }
     }
@@ -2163,7 +2217,7 @@ const PdfAnnotationEditor = forwardRef<PdfAnnotationEditorHandle, PdfAnnotationE
             tempCtx.font = `${ta.italic ? 'italic ' : ''}${ta.bold ? 'bold ' : ''}${ta.fontSize * exportScale}px ${ta.fontFamily ?? 'sans-serif'}`
             tempCtx.fillStyle = ta.color
             ta.text.split('\n').forEach((line, li) => {
-              tempCtx.fillText(line, ta.x * exportScale, (ta.y + ta.fontSize + li * ta.fontSize * 1.2) * exportScale)
+              tempCtx.fillText(line, ta.x * exportScale, (ta.y + ta.fontSize + li * ta.fontSize * TEXT_LINE_HEIGHT) * exportScale)
             })
             tempCtx.restore()
           }
@@ -3111,22 +3165,44 @@ const PdfAnnotationEditor = forwardRef<PdfAnnotationEditorHandle, PdfAnnotationE
                 )
               })}
 
-              {/* Text editing overlay — rendered at 0° outside the rotation wrapper */}
+              {/* Text editing overlay — styled to match the committed text exactly
+                  (font, line spacing, box size/position and rotation), so nothing
+                  shifts or resizes when the edit is committed */}
               {editingText && (() => {
                 const { vx, vy } = logicalToVisual(editingText.x, editingText.y)
+                const box = measureTextAnnotationBox(editingText, zoom)
                 return (
                   <textarea
                     ref={textAreaRef}
                     autoFocus
-                    className="absolute rounded border border-blue-400 bg-white p-1 text-black outline-none dark:bg-black/80 dark:text-white"
+                    spellCheck={false}
+                    className="absolute border-0 bg-transparent"
                     style={{
                       left: vx,
                       top: vy,
-                      width: editingText.width * zoom,
-                      minHeight: editingText.height * zoom,
+                      width: box.width * zoom,
+                      height: box.height * zoom,
+                      // Aligns the first baseline with the canvas renderer (which draws
+                      // it exactly `fontSize` below the box top)
+                      paddingTop: box.paddingTop * zoom,
+                      paddingRight: 0,
+                      paddingBottom: 0,
+                      paddingLeft: 0,
+                      margin: 0,
+                      boxSizing: 'border-box',
                       fontSize: editingText.fontSize * zoom,
+                      fontFamily: editingText.fontFamily ?? 'sans-serif',
+                      fontWeight: editingText.bold ? 'bold' : 'normal',
+                      fontStyle: editingText.italic ? 'italic' : 'normal',
+                      lineHeight: TEXT_LINE_HEIGHT,
                       color: editingText.color,
-                      resize: 'both',
+                      whiteSpace: 'pre',
+                      overflow: 'hidden',
+                      resize: 'none',
+                      transform: `rotate(${viewRotation}deg)`,
+                      transformOrigin: 'top left',
+                      outline: '1.5px solid #60a5fa',
+                      outlineOffset: 2,
                     }}
                     value={editingText.text}
                     onChange={e =>
