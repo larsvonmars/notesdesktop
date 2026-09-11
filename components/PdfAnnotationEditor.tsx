@@ -181,38 +181,166 @@ function textAnnotationContains(ta: TextAnnotation, x: number, y: number): boole
 
 /** Line advance used by the canvas text renderer (baselines are `fontSize * 1.2` apart). */
 const TEXT_LINE_HEIGHT = 1.2
-/** Minimum logical width of a text annotation box (keeps empty fields clickable). */
-const TEXT_MIN_BOX_WIDTH = 80
+/** Minimum logical width of a text annotation box. */
+const TEXT_MIN_BOX_WIDTH = 40
+/** Wrapping is measured at this reference font size (small sizes get rounded to integers). */
+const TEXT_WRAP_REF_SIZE = 100
+
+/** Offscreen 2d context used for text measurement (lazily created). */
+let textMeasureCtx: CanvasRenderingContext2D | null | undefined
+function getTextMeasureContext(): CanvasRenderingContext2D | null {
+  if (textMeasureCtx === undefined) {
+    try {
+      textMeasureCtx = document.createElement('canvas').getContext('2d')
+    } catch {
+      textMeasureCtx = null
+    }
+  }
+  return textMeasureCtx
+}
+
+/** Whitespace CSS may break at (NBSP deliberately excluded). */
+const WRAP_BREAKABLE_SPACE = /[^\S\u00A0]+/
+/** CJK characters provide a break opportunity after every character. */
+const WRAP_CJK = /[\u3040-\u30FF\u3400-\u4DBF\u4E00-\u9FFF\uF900-\uFAFF\uFF66-\uFF9F]/
+
+interface WrapUnit {
+  text: string
+  /** True when a line break is allowed after this unit. */
+  breakAfter: boolean
+  /** True for whitespace runs (they stay at the end of a line when wrapping). */
+  space?: boolean
+}
+
+function tokenizeForWrapping(paragraph: string): WrapUnit[] {
+  const units: WrapUnit[] = []
+  const chunks = paragraph.match(/[^\S\u00A0]+|[\S\u00A0]+/g) ?? []
+  for (const chunk of chunks) {
+    if (WRAP_BREAKABLE_SPACE.test(chunk)) {
+      units.push({ text: chunk, breakAfter: true, space: true })
+      continue
+    }
+    // Break after hyphens and between CJK characters (mirrors CSS break opportunities)
+    let rest = chunk
+    while (rest) {
+      let segEnd = rest.length
+      let breakAfter = false
+      for (let i = 0; i < rest.length; i++) {
+        const ch = rest[i]
+        if (ch === '-' || WRAP_CJK.test(ch)) {
+          segEnd = i + 1
+          breakAfter = true
+          break
+        }
+      }
+      units.push({ text: rest.slice(0, segEnd), breakAfter })
+      rest = rest.slice(segEnd)
+    }
+  }
+  return units
+}
+
+/** Cache of wrapped lines — line breaks are zoom-independent, so entries stay valid. */
+const textWrapCache = new Map<string, string[]>()
+
+/**
+ * Greedy word wrap mirroring the editing textarea (`white-space: pre-wrap` +
+ * `overflow-wrap: break-word`), so committed text keeps the line breaks the user
+ * arranged while editing. Measured at a reference size → identical at any zoom.
+ */
+function wrapTextAnnotationLines(
+  ta: Pick<TextAnnotation, 'text' | 'width' | 'fontSize' | 'bold' | 'italic' | 'fontFamily'>,
+  maxWidth: number,
+): string[] {
+  const paragraphs = ta.text.split('\n')
+  const ctx = getTextMeasureContext()
+  if (!ctx || !(maxWidth > 0)) return paragraphs
+
+  const cacheKey = `${ta.width}|${ta.fontSize}|${ta.bold ? 'b' : ''}${ta.italic ? 'i' : ''}|${ta.fontFamily ?? 'sans-serif'}|${ta.text}`
+  const cached = textWrapCache.get(cacheKey)
+  if (cached) return cached
+
+  ctx.font = `${ta.italic ? 'italic ' : ''}${ta.bold ? 'bold ' : ''}${TEXT_WRAP_REF_SIZE}px ${ta.fontFamily ?? 'sans-serif'}`
+  const fontSizeScale = ta.fontSize / TEXT_WRAP_REF_SIZE
+  const widthOf = (s: string) => ctx.measureText(s).width * fontSizeScale
+
+  const lines: string[] = []
+  for (const paragraph of paragraphs) {
+    if (paragraph === '') {
+      lines.push('')
+      continue
+    }
+    const units = tokenizeForWrapping(paragraph)
+    let i = 0
+    while (i < units.length) {
+      let line = ''
+      let j = i
+      while (j < units.length) {
+        const unit = units[j]
+        if (unit.space) {
+          // Whitespace stays on the current line (it hangs past the edge at a wrap point)
+          line += unit.text
+          j++
+          continue
+        }
+        if (line === '' && widthOf(unit.text) > maxWidth) break
+        const candidate = line + unit.text
+        if (line !== '' && widthOf(candidate) > maxWidth) break
+        line = candidate
+        j++
+      }
+      if (j === i) {
+        // A single word wider than the box → break it by characters
+        const unit = units[i]
+        let best = 1
+        let lo = 1
+        let hi = unit.text.length
+        while (lo <= hi) {
+          const mid = (lo + hi) >> 1
+          if (widthOf(unit.text.slice(0, mid)) <= maxWidth) {
+            best = mid
+            lo = mid + 1
+          } else {
+            hi = mid - 1
+          }
+        }
+        lines.push(unit.text.slice(0, best))
+        const restText = unit.text.slice(best)
+        if (restText) units[i] = { ...unit, text: restText }
+        else i++
+        continue
+      }
+      lines.push(line)
+      i = j
+    }
+  }
+
+  if (textWrapCache.size > 500) textWrapCache.clear()
+  textWrapCache.set(cacheKey, lines)
+  return lines
+}
 
 /**
  * Measures a text annotation's box in logical page units so that the editing textarea
  * and the committed canvas rendering are pixel-identical:
- * - width/height hug the text (canvas never wraps, so the box should not either)
+ * - `width` is the wrap width; the box height covers the wrapped lines
  * - `paddingTop` puts the textarea's first baseline exactly where `fillText` draws it
  *   (canvas: `fontSize` below the box top; CSS line box: half-leading + ascent).
  */
 function measureTextAnnotationBox(
-  ta: Pick<TextAnnotation, 'text' | 'fontSize' | 'bold' | 'italic' | 'fontFamily'>,
-  zoom: number,
+  ta: Pick<TextAnnotation, 'text' | 'width' | 'fontSize' | 'bold' | 'italic' | 'fontFamily'>,
 ): { width: number; height: number; paddingTop: number } {
-  const lines = ta.text.split('\n')
-  const fontSizeVisual = Math.max(1, ta.fontSize * zoom)
-  let maxWidthVisual = 0
+  const width = Math.max(ta.width, TEXT_MIN_BOX_WIDTH)
+  const lines = wrapTextAnnotationLines(ta, width)
   let paddingTopRatio = 0
   try {
-    const ctx = document.createElement('canvas').getContext('2d')
+    const ctx = getTextMeasureContext()
     if (ctx) {
-      // Line widths at the size actually displayed
-      ctx.font = `${ta.italic ? 'italic ' : ''}${ta.bold ? 'bold ' : ''}${fontSizeVisual}px ${ta.fontFamily ?? 'sans-serif'}`
-      for (const line of lines) {
-        maxWidthVisual = Math.max(maxWidthVisual, ctx.measureText(line).width)
-      }
-      // Font ascent/descent at a reference size (small sizes get rounded to integers)
-      ctx.font = `${ta.italic ? 'italic ' : ''}${ta.bold ? 'bold ' : ''}100px ${ta.fontFamily ?? 'sans-serif'}`
+      ctx.font = `${ta.italic ? 'italic ' : ''}${ta.bold ? 'bold ' : ''}${TEXT_WRAP_REF_SIZE}px ${ta.fontFamily ?? 'sans-serif'}`
       const { fontBoundingBoxAscent: ascent, fontBoundingBoxDescent: descent } = ctx.measureText('Hg')
       if (Number.isFinite(ascent) && Number.isFinite(descent) && ascent > 0) {
-        const a = ascent / 100
-        const d = descent / 100
+        const a = ascent / TEXT_WRAP_REF_SIZE
+        const d = descent / TEXT_WRAP_REF_SIZE
         paddingTopRatio = 1 - ((TEXT_LINE_HEIGHT - (a + d)) / 2 + a)
       }
     }
@@ -221,7 +349,7 @@ function measureTextAnnotationBox(
   }
   const paddingTop = ta.fontSize * Math.max(0, paddingTopRatio)
   return {
-    width: Math.max((maxWidthVisual + 2) / zoom, TEXT_MIN_BOX_WIDTH),
+    width,
     paddingTop,
     height: paddingTop + Math.max(1, lines.length) * ta.fontSize * TEXT_LINE_HEIGHT,
   }
@@ -359,6 +487,21 @@ const PdfAnnotationEditor = forwardRef<PdfAnnotationEditorHandle, PdfAnnotationE
     useEffect(() => { currentPageRef.current = currentPage }, [currentPage])
     useEffect(() => { zoomRef.current = zoom }, [zoom])
     useEffect(() => { totalPagesRef.current = totalPages }, [totalPages])
+
+    // Keep the wrap width in state while the user drags the textarea's horizontal resize
+    // handle, so the wrapped line count (and thus the box height) updates live.
+    useEffect(() => {
+      if (!editingText) return
+      const el = textAreaRef.current
+      if (!el || typeof ResizeObserver === 'undefined') return
+      const observer = new ResizeObserver(() => {
+        const width = el.offsetWidth / zoom
+        setEditingText(prev => (prev && Math.abs(prev.width - width) > 0.5 ? { ...prev, width } : prev))
+      })
+      observer.observe(el)
+      return () => observer.disconnect()
+      // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [editingText?.id, zoom])
 
     // Page slide animation
     const [pageAnim, setPageAnim] = useState<'exit-up' | 'exit-down' | 'enter-from-bottom' | 'enter-from-top' | null>(null)
@@ -522,9 +665,15 @@ const PdfAnnotationEditor = forwardRef<PdfAnnotationEditorHandle, PdfAnnotationE
         return null
       }
 
-      // Persist the same auto-sized box the user saw while editing
-      const box = measureTextAnnotationBox(editingText, zoom)
-      const finalText: TextAnnotation = { ...editingText, width: box.width, height: box.height }
+      // Persist the same box the user saw while editing: manual width from the DOM in case
+      // the resize observer has not caught up, height from the wrapped content lines
+      const domWidth = textAreaRef.current ? textAreaRef.current.offsetWidth / zoom : 0
+      const effectiveText: TextAnnotation =
+        domWidth > 0 && Math.abs(domWidth - editingText.width) > 0.5
+          ? { ...editingText, width: domWidth }
+          : editingText
+      const box = measureTextAnnotationBox(effectiveText)
+      const finalText: TextAnnotation = { ...effectiveText, width: box.width, height: box.height }
 
       const newPages = updatePageAnnotations(currentPage, p => ({
         ...p,
@@ -833,9 +982,9 @@ const PdfAnnotationEditor = forwardRef<PdfAnnotationEditorHandle, PdfAnnotationE
           }
           for (const ta of pageAnnot.textAnnotations) {
             thumbCtx.save()
-            thumbCtx.font = `${ta.italic ? 'italic ' : ''}${ta.bold ? 'bold ' : ''}${ta.fontSize * thumbScale}px sans-serif`
+            thumbCtx.font = `${ta.italic ? 'italic ' : ''}${ta.bold ? 'bold ' : ''}${ta.fontSize * thumbScale}px ${ta.fontFamily ?? 'sans-serif'}`
             thumbCtx.fillStyle = ta.color
-            ta.text.split('\n').forEach((line, li) => {
+            wrapTextAnnotationLines(ta, ta.width).forEach((line, li) => {
               thumbCtx!.fillText(line, ta.x * thumbScale, (ta.y + ta.fontSize + li * ta.fontSize * TEXT_LINE_HEIGHT) * thumbScale)
             })
             thumbCtx.restore()
@@ -1107,7 +1256,7 @@ const PdfAnnotationEditor = forwardRef<PdfAnnotationEditorHandle, PdfAnnotationE
         const fontStyle = `${ta.italic ? 'italic ' : ''}${ta.bold ? 'bold ' : ''}${ta.fontSize * scale}px ${ta.fontFamily ?? 'sans-serif'}`
         ctx.font = fontStyle
         ctx.fillStyle = ta.color
-        const lines = ta.text.split('\n')
+        const lines = wrapTextAnnotationLines(ta, ta.width)
         lines.forEach((line, i) => {
           ctx.fillText(line, ta.x * scale, (ta.y + ta.fontSize + i * ta.fontSize * TEXT_LINE_HEIGHT) * scale)
         })
@@ -2216,7 +2365,7 @@ const PdfAnnotationEditor = forwardRef<PdfAnnotationEditorHandle, PdfAnnotationE
             tempCtx.save()
             tempCtx.font = `${ta.italic ? 'italic ' : ''}${ta.bold ? 'bold ' : ''}${ta.fontSize * exportScale}px ${ta.fontFamily ?? 'sans-serif'}`
             tempCtx.fillStyle = ta.color
-            ta.text.split('\n').forEach((line, li) => {
+            wrapTextAnnotationLines(ta, ta.width).forEach((line, li) => {
               tempCtx.fillText(line, ta.x * exportScale, (ta.y + ta.fontSize + li * ta.fontSize * TEXT_LINE_HEIGHT) * exportScale)
             })
             tempCtx.restore()
@@ -3170,7 +3319,7 @@ const PdfAnnotationEditor = forwardRef<PdfAnnotationEditorHandle, PdfAnnotationE
                   shifts or resizes when the edit is committed */}
               {editingText && (() => {
                 const { vx, vy } = logicalToVisual(editingText.x, editingText.y)
-                const box = measureTextAnnotationBox(editingText, zoom)
+                const box = measureTextAnnotationBox(editingText)
                 return (
                   <textarea
                     ref={textAreaRef}
@@ -3196,9 +3345,10 @@ const PdfAnnotationEditor = forwardRef<PdfAnnotationEditorHandle, PdfAnnotationE
                       fontStyle: editingText.italic ? 'italic' : 'normal',
                       lineHeight: TEXT_LINE_HEIGHT,
                       color: editingText.color,
-                      whiteSpace: 'pre',
+                      whiteSpace: 'pre-wrap',
+                      overflowWrap: 'break-word',
                       overflow: 'hidden',
-                      resize: 'none',
+                      resize: 'horizontal',
                       transform: `rotate(${viewRotation}deg)`,
                       transformOrigin: 'top left',
                       outline: '1.5px solid #60a5fa',
@@ -3214,10 +3364,11 @@ const PdfAnnotationEditor = forwardRef<PdfAnnotationEditorHandle, PdfAnnotationE
                     onKeyDown={e => {
                       if (e.key === 'Escape') {
                         setEditingText(null)
-                      } else if (e.key === 'Enter' && !e.shiftKey) {
+                      } else if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) {
                         e.preventDefault()
                         commitText()
                       }
+                      // Plain Enter inserts a line break (multi-line text box)
                     }}
                   />
                 )
