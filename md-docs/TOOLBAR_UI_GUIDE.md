@@ -114,10 +114,17 @@ modal** — the note stays visible and editable while you search:
 ### Block handle
 
 Hovering a block (paragraph, heading, list, quote, code block, …) shows a small
-label in the left gutter. Click it for **Turn into / Duplicate / Move up / Move
-down / Delete** — or drag it to reorder blocks with a drop indicator.
-`Alt+↑` / `Alt+↓` move the block under the caret without the mouse. Structural
-changes are single undo steps.
+label in the left gutter. Click it for **Turn into / Duplicate / Indent /
+Outdent / Move up / Move down / Delete** — or drag it to reorder blocks with a
+drop indicator. `Shift`+click the handle of a second block to select the whole
+range and act on it as a group (the handle then shows the block count), and
+drag the pinned handle to move the selection. `Alt+↑` / `Alt+↓` move the block
+under the caret without the mouse. Structural changes are single undo steps.
+
+Typing **`/`** at the start of a line opens the block inserter (filter with the
+label or keywords like `h2`, `todo`, `divider`; `↑`/`↓` to pick, `Enter` to
+apply, `Escape` to keep the text). `Tab` / `Shift+Tab` indent and outdent plain
+blocks by up to three levels — inside lists they nest the list item as before.
 
 The selection toolbar's "More" panel also has **Aa** (Text case:
 Title Case / UPPERCASE / lowercase) and the eraser (**Clear formatting**,
@@ -149,6 +156,9 @@ All formatting commands have keyboard shortcuts for power users:
 | Normal text | `Cmd/Ctrl+Alt+0` |
 | Move block up | `Alt+↑` |
 | Move block down | `Alt+↓` |
+| Indent / outdent block | `Tab` / `Shift+Tab` |
+| Block inserter | `/` |
+| Select a block range | `Shift`+click (block handle) |
 | Clear formatting | `Cmd/Ctrl+\` |
 | Paste as plain text | `Cmd/Ctrl+Shift+V` |
 | Bullet List | `Cmd/Ctrl+Shift+L` |

@@ -1,0 +1,91 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>notesdesktop – selection toolbar harness</title>
+    <style>
+      body {
+        font-family: -apple-system, BlinkMacSystemFont, sans-serif;
+        margin: 0;
+        padding: 24px;
+        color: #111;
+      }
+      h1 { font-size: 16px; }
+      #editor {
+        border: 1px solid #cbd5e1;
+        border-radius: 10px;
+        padding: 16px;
+        max-width: 640px;
+        min-height: 220px;
+        outline: none;
+        font-size: 16px;
+        line-height: 1.7;
+      }
+      #editor:focus { border-color: #3b8ff6; }
+      .spacer { height: 1600px; }
+      #log {
+        font-size: 12px;
+        font-family: ui-monospace, monospace;
+        white-space: pre-wrap;
+        padding: 12px 0;
+        max-width: 900px;
+      }
+      .controls { display: flex; gap: 16px; align-items: center; margin: 12px 0; font-size: 13px; }
+      /* Minimal stand-in for the Tailwind utilities the toolbar relies on. */
+      [role='toolbar'] {
+        position: fixed;
+        z-index: 50;
+        display: flex;
+        flex-direction: column;
+        background: #fff;
+        border: 1px solid #e2e8f0;
+        border-radius: 16px;
+        box-shadow: 0 10px 30px rgba(15, 23, 42, 0.18);
+      }
+      [role='toolbar'] > div {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: center;
+        gap: 2px;
+        padding: 6px 8px;
+      }
+      [role='toolbar'] > div + div { border-top: 1px solid #e2e8f0; }
+      [role='toolbar'] button {
+        height: 32px;
+        min-width: 32px;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        background: transparent;
+        border: 1px solid transparent;
+        border-radius: 9999px;
+        cursor: pointer;
+        font-size: 12px;
+      }
+      [role='toolbar'] button:hover { background: #f1f5f9; }
+      [role='toolbar'] button[aria-pressed='true'] { background: #dbeefe; border-color: #93ccfd; }
+      [role='toolbar'] svg { width: 15px; height: 15px; }
+      [role='toolbar'] .relative { position: relative; }
+      [role='toolbar'] [role='listbox'] {
+        position: absolute;
+        z-index: 20;
+        min-width: 170px;
+        background: #fff;
+        border: 1px solid #e2e8f0;
+        border-radius: 12px;
+        padding: 4px 0;
+        box-shadow: 0 12px 32px rgba(15, 23, 42, 0.18);
+      }
+      [role='toolbar'] [role='listbox'].top-full { top: 100%; }
+      [role='toolbar'] [role='listbox'].bottom-full { bottom: 100%; }
+      [role='toolbar'] [role='listbox'] button { width: 100%; border-radius: 0; justify-content: space-between; padding: 0 12px; }
+    </style>
+  </head>
+  <body>
+    <div id="root"></div>
+    <div id="log"></div>
+    <div class="spacer"></div>
+    <script src="./bundle.js"></script>
+  </body>
+</html>

@@ -24,18 +24,23 @@ import {
   Heading1,
   Heading2,
   Heading3,
+  IndentDecrease,
+  IndentIncrease,
   List,
   ListOrdered,
   Pilcrow,
   Quote,
   Trash2,
+  X,
   type LucideIcon,
 } from 'lucide-react'
 import {
   blockKind,
   blockLabel,
+  canIndentBlock,
   dropIndicatorTop,
   findDropReference,
+  getBlockRange,
   getTopLevelBlock,
   isStructuralBlock,
   type BlockKind,
@@ -55,14 +60,17 @@ export type BlockActionId =
   | 'delete'
   | 'move-up'
   | 'move-down'
+  | 'indent'
+  | 'outdent'
+  | 'clear-selection'
 
 interface BlockControlsProps {
   editorRef: React.RefObject<HTMLDivElement | null>
   disabled?: boolean
-  /** A block was dropped: the owner moves it (history + persistence). */
-  onDropBlock: (block: HTMLElement, reference: HTMLElement | null) => void
-  /** Runs a menu action against a block. */
-  onAction: (action: BlockActionId, block: HTMLElement) => void
+  /** Blocks were dropped: the owner moves them (history + persistence). */
+  onDropBlock: (blocks: HTMLElement[], reference: HTMLElement | null) => void
+  /** Runs a menu action against one block or a contiguous selection. */
+  onAction: (action: BlockActionId, blocks: HTMLElement[]) => void
 }
 
 interface MenuEntry {
@@ -71,6 +79,20 @@ interface MenuEntry {
   Icon: LucideIcon
   /** Block kinds this entry currently represents (ticked in the menu). */
   matches: BlockKind[]
+}
+
+/** A contiguous run of blocks selected with shift+click on the handle. */
+interface BlockSelection {
+  /** Fixed end of the range — shift+clicking grows or shrinks towards it. */
+  anchor: HTMLElement
+  blocks: HTMLElement[]
+}
+
+interface ActiveHandle {
+  top: number
+  label: string
+  title: string
+  blocks: HTMLElement[]
 }
 
 const TURN_INTO_ENTRIES: MenuEntry[] = [
@@ -87,11 +109,14 @@ const TURN_INTO_ENTRIES: MenuEntry[] = [
 
 const ACTION_ENTRIES: MenuEntry[] = [
   { id: 'duplicate', label: 'Duplicate', Icon: Copy, matches: [] },
+  { id: 'indent', label: 'Indent', Icon: IndentIncrease, matches: [] },
+  { id: 'outdent', label: 'Outdent', Icon: IndentDecrease, matches: [] },
   { id: 'move-up', label: 'Move up', Icon: ArrowUp, matches: [] },
   { id: 'move-down', label: 'Move down', Icon: ArrowDown, matches: [] },
   { id: 'delete', label: 'Delete', Icon: Trash2, matches: [] },
 ]
 
+/** Menu width/height are used for clamping; the multi-selection menu is taller. */
 const MENU_WIDTH = 208
 const MENU_MAX_HEIGHT = 336
 const HANDLE_HEIGHT = 24
@@ -109,26 +134,136 @@ export default function BlockControls({
   const frameRef = useRef<number | null>(null)
   const hideTimerRef = useRef<number | null>(null)
   const hoveredBlockRef = useRef<HTMLElement | null>(null)
-  const draggedBlockRef = useRef<HTMLElement | null>(null)
+  const draggedBlocksRef = useRef<HTMLElement[]>([])
   const dropReferenceRef = useRef<HTMLElement | null>(null)
   const menuOpenRef = useRef(false)
   const disabledRef = useRef(disabled)
 
   const handleDisabledRef = useRef(false)
+  /** Block whose handle was clicked last — the anchor of the next shift range. */
+  const anchorBlockRef = useRef<HTMLElement | null>(null)
+  const selectionRef = useRef<BlockSelection | null>(null)
 
   const [handle, setHandle] = useState<{ top: number; label: string; block: HTMLElement } | null>(
     null
   )
+  const [selection, setSelection] = useState<BlockSelection | null>(null)
+  const [selectionRect, setSelectionRect] = useState<{ top: number; height: number } | null>(null)
   const [menu, setMenu] = useState<{
     top: number
     left: number
     kind: BlockKind
-    block: HTMLElement
+    blocks: HTMLElement[]
+    canIndent: boolean
   } | null>(null)
   const [dropTop, setDropTop] = useState<number | null>(null)
 
+  // Native listeners read the latest values from refs (assigned on every render).
   disabledRef.current = disabled
   menuOpenRef.current = !!menu
+  selectionRef.current = selection
+
+  const selectionActive =
+    !!selectionRect &&
+    !!selection &&
+    selection.blocks.length > 1 &&
+    // Undo/redo and external value syncs replace the whole subtree — the
+    // selection would be stale, so it must not paint over the new content.
+    selection.blocks.every((block) => block.isConnected)
+  const hoveredBlock = handle?.block ?? null
+  const hoverInsideSelection =
+    selectionActive && !!hoveredBlock && !!selection && selection.blocks.includes(hoveredBlock)
+
+  // The handle pins itself to the top of a selection — unless the pointer is
+  // hovering a block outside of it, where it follows that block so a
+  // shift+click can grow the range.
+  const activeHandle: ActiveHandle | null = (() => {
+    if (selectionActive && selection && selectionRect && (!hoveredBlock || hoverInsideSelection)) {
+      const count = selection.blocks.length
+      return {
+        top: selectionRect.top,
+        label: String(count),
+        title: `${count} blocks selected`,
+        blocks: selection.blocks,
+      }
+    }
+    if (handle) {
+      return {
+        top: handle.top,
+        label: handle.label,
+        title: `Block options (${handle.label})`,
+        blocks: [handle.block],
+      }
+    }
+    return null
+  })()
+
+  const clearSelection = useCallback(() => {
+    selectionRef.current = null
+    setSelection(null)
+    setSelectionRect(null)
+  }, [])
+
+  /** Keep the selection overlay glued to its blocks (scroll, resize, edits). */
+  const syncSelectionRect = useCallback(() => {
+    const editor = editorRef.current
+    const current = selectionRef.current
+    if (!editor || !current) {
+      setSelectionRect(null)
+      return
+    }
+
+    const live = current.blocks.filter(
+      (block) => block.isConnected && block.parentElement === editor
+    )
+    if (live.length !== current.blocks.length) {
+      // The owner rewrote the document (delete, undo, …) — drop the selection.
+      selectionRef.current = null
+      setSelection(null)
+      setSelectionRect(null)
+      return
+    }
+
+    const editorRect = editor.getBoundingClientRect()
+    const firstRect = live[0].getBoundingClientRect()
+    const lastRect = live[live.length - 1].getBoundingClientRect()
+    setSelectionRect({
+      top: firstRect.top - editorRect.top,
+      height: Math.max(lastRect.bottom - firstRect.top, 4),
+    })
+  }, [editorRef])
+
+  // Follow the selection while the editor scrolls, and let a second Escape
+  // clear it (the first one belongs to the menu).
+  useEffect(() => {
+    if (!selection) return
+
+    syncSelectionRect()
+
+    const editor = editorRef.current
+    const remeasure = () => {
+      if (frameRef.current !== null) return
+      frameRef.current = window.requestAnimationFrame(() => {
+        frameRef.current = null
+        syncSelectionRect()
+      })
+    }
+
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key !== 'Escape' || menuOpenRef.current) return
+      clearSelection()
+    }
+
+    editor?.addEventListener('scroll', remeasure, true)
+    window.addEventListener('resize', remeasure)
+    document.addEventListener('keydown', onKeyDown, true)
+
+    return () => {
+      editor?.removeEventListener('scroll', remeasure, true)
+      window.removeEventListener('resize', remeasure)
+      document.removeEventListener('keydown', onKeyDown, true)
+    }
+  }, [clearSelection, editorRef, selection, syncSelectionRect])
 
   // Hover handles only make sense for mouse/trackpad. Touch users reorder with
   // Alt+↑/↓ (handled by the editor).
@@ -234,9 +369,16 @@ export default function BlockControls({
       hideHandle()
     }
 
+    // Clicking into the text ends a block selection — the overlay sits outside
+    // the editor, so any pointerdown inside it means "back to plain editing".
+    const onEditorPointerDown = () => {
+      if (selectionRef.current) clearSelection()
+    }
+
     editor.addEventListener('pointermove', onPointerActivity)
     editor.addEventListener('pointerover', onPointerActivity)
     editor.addEventListener('pointerleave', onPointerLeave)
+    editor.addEventListener('pointerdown', onEditorPointerDown)
     editor.addEventListener('scroll', onScrollOrResize, true)
     window.addEventListener('resize', onScrollOrResize)
 
@@ -244,19 +386,19 @@ export default function BlockControls({
       editor.removeEventListener('pointermove', onPointerActivity)
       editor.removeEventListener('pointerover', onPointerActivity)
       editor.removeEventListener('pointerleave', onPointerLeave)
+      editor.removeEventListener('pointerdown', onEditorPointerDown)
       editor.removeEventListener('scroll', onScrollOrResize, true)
       window.removeEventListener('resize', onScrollOrResize)
       if (frameRef.current !== null) window.cancelAnimationFrame(frameRef.current)
     }
-  }, [editorRef, hideHandle, positionHandle, scheduleHide])
+  }, [clearSelection, editorRef, hideHandle, positionHandle, scheduleHide])
 
   // ── Drag & drop reordering ──────────────────────────────────────────────
   const resetDrag = useCallback(() => {
-    const dragged = draggedBlockRef.current
-    if (dragged) {
-      dragged.style.opacity = ''
-    }
-    draggedBlockRef.current = null
+    draggedBlocksRef.current.forEach((block) => {
+      block.style.opacity = ''
+    })
+    draggedBlocksRef.current = []
     dropReferenceRef.current = null
     setDropTop(null)
   }, [])
@@ -266,20 +408,22 @@ export default function BlockControls({
     if (!editor) return
 
     const onDragOver = (event: DragEvent) => {
-      const dragged = draggedBlockRef.current
-      if (!dragged || disabledRef.current) return
+      const dragged = draggedBlocksRef.current
+      if (dragged.length === 0 || disabledRef.current) return
 
       event.preventDefault()
       if (event.dataTransfer) event.dataTransfer.dropEffect = 'move'
 
+      // Every block of the dragged run is ignored, so the indicator lands on a
+      // real target and never inside the selection itself.
       const reference = findDropReference(editor, event.clientY, dragged)
       dropReferenceRef.current = reference
       setDropTop(dropIndicatorTop(editor, reference))
     }
 
     const onDrop = (event: DragEvent) => {
-      const dragged = draggedBlockRef.current
-      if (!dragged || disabledRef.current) return
+      const dragged = draggedBlocksRef.current
+      if (dragged.length === 0 || disabledRef.current) return
 
       event.preventDefault()
       const reference = dropReferenceRef.current
@@ -332,35 +476,82 @@ export default function BlockControls({
     }
   }, [editorRef, menu])
 
-  const openMenu = useCallback(() => {
-    // The block travels with the handle so a pending hide timer can never turn
-    // the click into a no-op.
-    const block = handle?.block ?? hoveredBlockRef.current
-    const editor = editorRef.current
-    if (!block || !block.isConnected || !editor || disabledRef.current) return
+  const openMenu = useCallback(
+    ({ extend, blocks }: { extend: boolean; blocks: HTMLElement[] }) => {
+      // The blocks travel with the handle so a pending hide timer can never
+      // turn the click into a no-op.
+      const editor = editorRef.current
+      const clicked = blocks[0] ?? handle?.block ?? hoveredBlockRef.current
+      if (!clicked || !clicked.isConnected || !editor || disabledRef.current) return
 
-    const editorRect = editor.getBoundingClientRect()
-    const blockRect = block.getBoundingClientRect()
+      let nextBlocks = blocks.length > 0 ? blocks : [clicked]
 
-    const top = Math.max(4, Math.min(
-      blockRect.top - editorRect.top,
-      Math.max(4, editorRect.height - MENU_MAX_HEIGHT - 4)
-    ))
-    const left = Math.max(4, Math.min(30, editorRect.width - MENU_WIDTH - 4))
+      // Shift+click grows (or shrinks) the range towards the clicked block.
+      if (extend) {
+        const anchor = selectionRef.current?.anchor ?? anchorBlockRef.current ?? clicked
+        const range = getBlockRange(editor, anchor, clicked)
+        if (range.length > 0) nextBlocks = range
+      }
 
-    cancelHide()
-    setMenu({ top, left, kind: blockKind(block), block })
-  }, [cancelHide, editorRef, handle])
+      if (nextBlocks.length > 1) {
+        const anchor =
+          selectionRef.current && nextBlocks.includes(selectionRef.current.anchor)
+            ? selectionRef.current.anchor
+            : nextBlocks[0]
+        const next: BlockSelection = { anchor, blocks: nextBlocks }
+        selectionRef.current = next
+        setSelection(next)
+        syncSelectionRect()
+      } else {
+        anchorBlockRef.current = clicked
+        clearSelection()
+        anchorBlockRef.current = clicked
+      }
+
+      const firstRect = nextBlocks[0].getBoundingClientRect()
+      const editorRect = editor.getBoundingClientRect()
+
+      const top = Math.max(
+        4,
+        Math.min(
+          firstRect.top - editorRect.top,
+          Math.max(4, editorRect.height - MENU_MAX_HEIGHT - 4)
+        )
+      )
+      const left = Math.max(4, Math.min(30, editorRect.width - MENU_WIDTH - 4))
+
+      cancelHide()
+      setMenu({
+        top,
+        left,
+        kind: blockKind(nextBlocks[0]),
+        blocks: nextBlocks,
+        canIndent: nextBlocks.some((block) => canIndentBlock(block)),
+      })
+    },
+    [cancelHide, clearSelection, editorRef, handle, syncSelectionRect]
+  )
 
   const runAction = useCallback(
     (id: BlockActionId) => {
-      const block = menu?.block ?? null
+      const blocks = menu?.blocks ?? []
       setMenu(null)
       hideHandle()
-      if (!block || !block.isConnected) return
-      onAction(id, block)
+
+      if (id === 'clear-selection') {
+        clearSelection()
+        return
+      }
+
+      if (blocks.length === 0) return
+      onAction(id, blocks)
+
+      // The owner edits the DOM synchronously — re-measure on the next frame.
+      // Blocks that were deleted disconnect themselves and clear the selection
+      // inside syncSelectionRect.
+      window.requestAnimationFrame(() => syncSelectionRect())
     },
-    [hideHandle, menu, onAction]
+    [clearSelection, hideHandle, menu, onAction, syncSelectionRect]
   )
 
   const handleMenuKeys = useCallback(
@@ -390,7 +581,11 @@ export default function BlockControls({
   )
 
   const kind = menu?.kind ?? 'other'
-  const showTurnInto = !isStructuralBlock(kind)
+  const isMulti = (menu?.blocks.length ?? 0) > 1
+  const showTurnInto = !isMulti && !isStructuralBlock(kind)
+  const actionEntries = ACTION_ENTRIES.filter(
+    ({ id }) => (id !== 'indent' && id !== 'outdent') || (menu?.canIndent ?? false)
+  )
 
   return (
     <div
@@ -406,15 +601,24 @@ export default function BlockControls({
         />
       )}
 
-      {handle && !menu && (
+      {selectionActive && selectionRect && (
+        <div
+          data-testid="block-selection-highlight"
+          className="absolute left-0 right-2 rounded-md bg-alpine-500/10 ring-1 ring-inset ring-alpine-500/30"
+          style={{ top: selectionRect.top, height: selectionRect.height }}
+          aria-hidden="true"
+        />
+      )}
+
+      {activeHandle && !menu && (
         <button
           ref={handleRef}
           type="button"
           tabIndex={-1}
-          title="Block options"
-          aria-label={`Block options (${handle.label})`}
+          title={activeHandle.title}
+          aria-label={activeHandle.title}
           className="pointer-events-auto absolute left-0.5 flex h-6 min-w-6 items-center justify-center rounded-md border border-transparent px-1 text-[10px] font-semibold text-muted opacity-70 transition-colors hover:border-border hover:bg-surface-hover hover:text-foreground hover:opacity-100"
-          style={{ top: handle.top }}
+          style={{ top: activeHandle.top }}
           draggable
           onPointerEnter={cancelHide}
           onPointerLeave={(event) => {
@@ -423,25 +627,35 @@ export default function BlockControls({
             if (related && menuRef.current?.contains(related)) return
             scheduleHide()
           }}
-          onClick={openMenu}
+          onClick={(event) => {
+            openMenu({ extend: event.shiftKey, blocks: activeHandle.blocks })
+          }}
           onDragStart={(event) => {
-            const block = handle?.block ?? hoveredBlockRef.current
-            if (!block || !block.isConnected) {
+            const live = activeHandle.blocks.filter((block) => block.isConnected)
+            if (live.length === 0) {
               event.preventDefault()
               return
             }
-            draggedBlockRef.current = block
-            block.style.opacity = '0.45'
-            event.dataTransfer?.setData('text/plain', block.textContent?.slice(0, 200) ?? '')
+            draggedBlocksRef.current = live
+            live.forEach((block) => {
+              block.style.opacity = '0.45'
+            })
+            event.dataTransfer?.setData(
+              'text/plain',
+              live
+                .map((block) => block.textContent ?? '')
+                .join('\n')
+                .slice(0, 200)
+            )
             if (event.dataTransfer) event.dataTransfer.effectAllowed = 'move'
             setMenu(null)
           }}
         >
-          <span aria-hidden="true">{handle.label}</span>
+          <span aria-hidden="true">{activeHandle.label}</span>
         </button>
       )}
 
-      {handle && !menu && <div className="sr-only">{`Block type ${handle.label}`}</div>}
+      {activeHandle && !menu && <div className="sr-only">{activeHandle.title}</div>}
 
       {menu && (
         <div
@@ -452,6 +666,12 @@ export default function BlockControls({
           style={{ top: menu.top, left: menu.left, width: MENU_WIDTH }}
           onKeyDown={handleMenuKeys}
         >
+          {isMulti && (
+            <div className="px-2 pb-1 pt-1.5 text-[10px] font-semibold uppercase tracking-wide text-muted">
+              {menu.blocks.length} blocks selected
+            </div>
+          )}
+
           {showTurnInto && (
             <>
               <div className="px-2 pb-1 pt-1.5 text-[10px] font-semibold uppercase tracking-wide text-muted">
@@ -480,7 +700,7 @@ export default function BlockControls({
             </>
           )}
 
-          {ACTION_ENTRIES.map(({ id, label, Icon }) => (
+          {actionEntries.map(({ id, label, Icon }) => (
             <button
               key={id}
               type="button"
@@ -496,6 +716,21 @@ export default function BlockControls({
               <span className="flex-1 truncate">{label}</span>
             </button>
           ))}
+
+          {isMulti && (
+            <>
+              <div className="my-1 h-px bg-border" />
+              <button
+                type="button"
+                role="menuitem"
+                onClick={() => runAction('clear-selection')}
+                className="flex w-full items-center gap-2 rounded-lg px-2 py-1.5 text-left text-sm text-muted transition-colors hover:bg-surface-hover hover:text-foreground"
+              >
+                <X size={15} strokeWidth={2} />
+                <span className="flex-1 truncate">Clear selection</span>
+              </button>
+            </>
+          )}
         </div>
       )}
     </div>

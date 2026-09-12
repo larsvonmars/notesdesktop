@@ -109,6 +109,26 @@ export const KEYBOARD_SHORTCUTS: KeyboardShortcut[] = [
     category: 'blocks'
   },
   {
+    keys: ['Tab'],
+    description: 'Indent block or list item',
+    category: 'blocks'
+  },
+  {
+    keys: ['⇧Tab', 'Shift+Tab'],
+    description: 'Outdent block or list item',
+    category: 'blocks'
+  },
+  {
+    keys: ['/'],
+    description: 'Block inserter (at start of a line)',
+    category: 'blocks'
+  },
+  {
+    keys: ['⇧Click', 'Shift+Click'],
+    description: 'Select a range of blocks (on the block handle)',
+    category: 'blocks'
+  },
+  {
     keys: ['⌘⇧E', 'Ctrl+Shift+E'],
     description: 'Align Center',
     category: 'blocks'
@@ -164,12 +184,12 @@ export const KEYBOARD_SHORTCUTS: KeyboardShortcut[] = [
   // Navigation shortcuts
   {
     keys: ['Tab'],
-    description: 'Indent list / Next table cell',
+    description: 'Next table cell (in a table)',
     category: 'navigation'
   },
   {
     keys: ['⇧Tab', 'Shift+Tab'],
-    description: 'Outdent list / Previous table cell',
+    description: 'Previous table cell (in a table)',
     category: 'navigation'
   },
   {

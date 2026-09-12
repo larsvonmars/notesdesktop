@@ -20,6 +20,9 @@ import LinkDialog from './editor/LinkDialog'
 import LinkPopover from './editor/LinkPopover'
 import SearchReplaceBar from './editor/SearchReplaceBar'
 import BlockControls, { type BlockActionId } from './editor/BlockControls'
+import SlashMenu from './editor/SlashMenu'
+import type { SlashCommandId } from '@/lib/editor/slashCommands'
+import { findTextPosition } from '@/lib/editor/textOffsets'
 import TableInsertDialog from './editor/TableInsertDialog'
 import TableToolbar from './editor/TableToolbar'
 import {
@@ -47,14 +50,19 @@ import {
 } from '@/lib/editor/domNormalizer'
 import {
   blockKind,
-  canMoveBlockBefore,
+  canIndentBlock,
+  canMoveBlocksBefore,
   convertBlockToCode,
-  duplicateBlock,
+  duplicateBlocks,
+  getBlockIndent,
   getTopLevelBlock,
+  indentBlock,
+  MAX_BLOCK_INDENT,
   moveBlock,
-  moveBlockBefore,
+  moveBlocks,
+  moveBlocksBefore,
   placeCaretInBlock,
-  removeBlock,
+  removeBlocks,
 } from '@/lib/editor/blockTools'
 import { handleParagraphEnter } from '@/lib/editor/enterHandler'
 import {
@@ -1993,31 +2001,52 @@ const RichTextEditorImpl = forwardRef<RichTextEditorHandle, RichTextEditorProps>
      * Block menu actions from the hover handle (`components/editor/BlockControls.tsx`).
      * Turn-into actions reuse the regular commands so all their bookkeeping
      * (heading ids, list normalization, cursor restoration) stays in one place.
+     * Actions that make sense on a shift+click selection receive every block.
      */
     const handleBlockAction = useCallback(
-      (action: BlockActionId, block: HTMLElement) => {
+      (action: BlockActionId, blocks: HTMLElement[]) => {
         const editor = editorRef.current
-        if (disabled || !editor || !editor.contains(block)) return
+        if (disabled || !editor) return
 
-        const kind = blockKind(block)
-        const alreadyThatKind =
-          (action === 'paragraph' && (kind === 'paragraph' || kind === 'other')) ||
-          (action === 'h1' && kind === 'h1') ||
-          (action === 'h2' && kind === 'h2') ||
-          (action === 'h3' && kind === 'h3') ||
-          (action === 'quote' && kind === 'quote') ||
-          (action === 'code' && kind === 'code') ||
-          (action === 'ul' && kind === 'ul') ||
-          (action === 'ol' && kind === 'ol') ||
-          (action === 'checklist' && kind === 'checklist')
+        const live = blocks.filter(
+          (block) => editor.contains(block) && block.parentElement === editor
+        )
+        if (live.length === 0) return
 
-        // Commands would toggle the block back; the menu means "make it this".
-        if (alreadyThatKind) return
+        const single = live.length === 1 ? live[0] : null
+
+        if (single) {
+          const kind = blockKind(single)
+          const alreadyThatKind =
+            (action === 'paragraph' && (kind === 'paragraph' || kind === 'other')) ||
+            (action === 'h1' && kind === 'h1') ||
+            (action === 'h2' && kind === 'h2') ||
+            (action === 'h3' && kind === 'h3') ||
+            (action === 'quote' && kind === 'quote') ||
+            (action === 'code' && kind === 'code') ||
+            (action === 'ul' && kind === 'ul') ||
+            (action === 'ol' && kind === 'ol') ||
+            (action === 'checklist' && kind === 'checklist')
+
+          // Commands would toggle the block back; the menu means "make it this".
+          if (alreadyThatKind) return
+        }
 
         // Structural edits are always undoable on their own. The debounced
         // history capture may still be pending, so force a snapshot first —
         // otherwise a quick Cmd/Ctrl+Z right after the action does nothing.
         historyManagerRef.current?.push(true)
+
+        // Indentation is stored per block, so a selection just moves together.
+        if (action === 'indent' || action === 'outdent') {
+          const delta = action === 'indent' ? 1 : -1
+          if (live.some((block) => indentBlock(block, delta))) {
+            editor.focus({ preventScroll: true })
+            keepCaretVisibleInEditor(editor)
+            emitChange()
+          }
+          return
+        }
 
         if (
           action === 'duplicate' ||
@@ -2027,15 +2056,15 @@ const RichTextEditorImpl = forwardRef<RichTextEditorHandle, RichTextEditorProps>
         ) {
           let changed = false
           if (action === 'duplicate') {
-            const clone = duplicateBlock(editor, block)
-            if (clone) {
-              placeCaretInBlock(clone)
+            const clones = duplicateBlocks(editor, live)
+            if (clones.length > 0) {
+              placeCaretInBlock(clones[0])
               changed = true
             }
           } else if (action === 'delete') {
-            changed = removeBlock(editor, block)
+            changed = removeBlocks(editor, live)
           } else {
-            changed = moveBlock(editor, block, action === 'move-up' ? 'up' : 'down')
+            changed = moveBlocks(editor, live, action === 'move-up' ? 'up' : 'down')
           }
 
           if (changed) {
@@ -2047,7 +2076,9 @@ const RichTextEditorImpl = forwardRef<RichTextEditorHandle, RichTextEditorProps>
           return
         }
 
-        // Turn-into: aim the command at that block first.
+        // Turn-into: aim the command at that block first (single block only —
+        // the menu hides these entries for a multi-block selection).
+        const block = single ?? live[0]
         if (!placeCaretInBlock(block)) return
 
         // The menu button unmounts on click — keep the keyboard on the text.
@@ -2091,13 +2122,13 @@ const RichTextEditorImpl = forwardRef<RichTextEditorHandle, RichTextEditorProps>
 
     /** Drag reorder finished — the owner performs the structural change. */
     const handleBlockDrop = useCallback(
-      (block: HTMLElement, reference: HTMLElement | null) => {
+      (blocks: HTMLElement[], reference: HTMLElement | null) => {
         const editor = editorRef.current
-        if (disabled || !editor || !canMoveBlockBefore(editor, block, reference)) return
+        if (disabled || !editor || !canMoveBlocksBefore(editor, blocks, reference)) return
 
         // Structural edits are always undoable on their own.
         historyManagerRef.current?.push(true)
-        if (!moveBlockBefore(editor, block, reference)) return
+        if (!moveBlocksBefore(editor, blocks, reference)) return
 
         editor.focus({ preventScroll: true })
         keepCaretVisibleInEditor(editor)
@@ -2105,6 +2136,83 @@ const RichTextEditorImpl = forwardRef<RichTextEditorHandle, RichTextEditorProps>
         emitChange()
       },
       [disabled, emitChange]
+    )
+
+    /**
+     * Slash menu (`components/editor/SlashMenu.tsx`): the typed `/query` is
+     * removed first, then the regular command runs on the emptied block so all
+     * of its bookkeeping (heading ids, list normalization, caret restoration)
+     * stays in one place.
+     */
+    const handleSlashCommand = useCallback(
+      (id: SlashCommandId, trigger: { block: HTMLElement; start: number; end: number }) => {
+        const editor = editorRef.current
+        if (disabled || !editor || !trigger.block.isConnected) return
+        if (trigger.block.parentElement !== editor) return
+
+        // Offsets are resolved to fresh caret positions: the text nodes a menu
+        // was opened on may already have been replaced by the browser.
+        const startPos = findTextPosition(trigger.block, trigger.start)
+        const endPos = findTextPosition(trigger.block, trigger.end)
+        if (!startPos || !endPos) return
+
+        const range = document.createRange()
+        range.setStart(startPos.node, startPos.offset)
+        range.setEnd(endPos.node, endPos.offset)
+
+        const selection = window.getSelection()
+        if (!selection) return
+
+        historyManagerRef.current?.push(true)
+        range.deleteContents()
+        selection.removeAllRanges()
+        // deleteContents() collapses the range to the start of what it removed.
+        selection.addRange(range)
+        editor.focus({ preventScroll: true })
+
+        const block = trigger.block
+
+        switch (id) {
+          case 'paragraph':
+            execCommand('formatBlock', 'p')
+            break
+          case 'h1':
+            applyHeading(1)
+            break
+          case 'h2':
+            applyHeading(2)
+            break
+          case 'h3':
+            applyHeading(3)
+            break
+          case 'quote':
+            execCommand('formatBlock', 'blockquote')
+            break
+          case 'code':
+            if (block) convertBlockToCode(editor, block)
+            break
+          case 'ul':
+            execCommand('insertUnorderedList')
+            break
+          case 'ol':
+            execCommand('insertOrderedList')
+            break
+          case 'checklist':
+            toggleChecklist()
+            break
+          case 'divider':
+            insertHorizontalRule()
+            break
+          case 'table':
+            saveSelection()
+            openTableDialog(3, 3)
+            break
+        }
+
+        normalizeEditorContent(editor)
+        emitChange()
+      },
+      [applyHeading, disabled, emitChange, execCommand, insertHorizontalRule, openTableDialog, saveSelection, toggleChecklist]
     )
 
     const applyHistoryAction = useCallback(
@@ -2826,6 +2934,25 @@ const RichTextEditorImpl = forwardRef<RichTextEditorHandle, RichTextEditorProps>
                 }
                 return
               }
+
+              // Plain blocks move sideways one step (persisted as data-indent).
+              // Swallowed even at the limits so Tab never jumps out of the editor.
+              const editor = editorRef.current
+              const block = getTopLevelBlock(selection.anchorNode, editor)
+              if (editor && block && canIndentBlock(block)) {
+                event.preventDefault()
+
+                const delta = event.shiftKey ? -1 : 1
+                const nextIndent = getBlockIndent(block) + delta
+                if (nextIndent >= 0 && nextIndent <= MAX_BLOCK_INDENT) {
+                  historyManagerRef.current?.push(true)
+                  if (indentBlock(block, delta)) {
+                    keepCaretVisibleInEditor(editor)
+                    emitChange()
+                  }
+                }
+                return
+              }
             }
           } catch (error) {
             console.error('Error handling Tab indent/outdent:', error)
@@ -3437,6 +3564,12 @@ const RichTextEditorImpl = forwardRef<RichTextEditorHandle, RichTextEditorProps>
             disabled={disabled}
             onDropBlock={handleBlockDrop}
             onAction={handleBlockAction}
+          />
+
+          <SlashMenu
+            editorRef={editorRef}
+            disabled={disabled}
+            onSelect={handleSlashCommand}
           />
         </div>
 

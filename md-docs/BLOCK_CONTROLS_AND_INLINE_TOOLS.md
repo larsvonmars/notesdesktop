@@ -2,6 +2,8 @@
 
 Second feature round for the rich text editor (first round: find bar, paste,
 shortcuts, code blocks — see [EDITOR_FEATURES_IMPROVEMENTS.md](./EDITOR_FEATURES_IMPROVEMENTS.md)).
+Third round (multi-block selections, slash menu, Tab indentation):
+[BLOCK_GROUPS_AND_SLASH_MENU.md](./BLOCK_GROUPS_AND_SLASH_MENU.md).
 
 ## 1. Block handle (hover, menu, drag, keyboard)
 

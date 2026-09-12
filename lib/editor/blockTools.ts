@@ -180,15 +180,19 @@ export function moveBlockBefore(
 
 /**
  * Block that a drop at `clientY` would be inserted before (null = append).
- * The dragged block itself is ignored so the calculation is stable mid-drag.
+ * Dragged blocks are ignored so the calculation is stable mid-drag — pass the
+ * whole run when a multi-block selection is being dragged.
  */
 export function findDropReference(
   editor: HTMLElement,
   clientY: number,
-  dragged: HTMLElement | null
+  dragged: HTMLElement | readonly HTMLElement[] | null
 ): HTMLElement | null {
+  const ignored: readonly HTMLElement[] =
+    dragged === null ? [] : Array.isArray(dragged) ? dragged : [dragged as HTMLElement]
+
   for (const block of getElementChildren(editor)) {
-    if (block === dragged) continue
+    if (ignored.includes(block)) continue
     const rect = block.getBoundingClientRect()
     if (clientY < rect.top + rect.height / 2) return block
   }
@@ -215,29 +219,7 @@ export function dropIndicatorTop(
 export function duplicateBlock(editor: HTMLElement, block: HTMLElement): HTMLElement | null {
   if (!editor.contains(block) || block.parentElement !== editor) return null
 
-  const clone = block.cloneNode(true) as HTMLElement
-
-  // Never duplicate `id`s — heading ids are TOC anchors, other ids belong to
-  // injected widgets. Headings get a fresh, unique generated anchor instead.
-  clone.removeAttribute('id')
-  clone.querySelectorAll('[id]').forEach((element) => element.removeAttribute('id'))
-  if (HEADING_PATTERN.test(clone.tagName.toLowerCase())) {
-    try {
-      const base = generateHeadingId(clone.textContent || '')
-      if (base) {
-        let candidate = base
-        let suffix = 2
-        while (editor.querySelector(`[id="${candidate}"]`)) {
-          candidate = `${base}-${suffix}`
-          suffix += 1
-        }
-        clone.id = candidate
-      }
-    } catch {
-      /* best effort */
-    }
-  }
-
+  const clone = cloneBlockForDuplicate(editor, block)
   block.after(clone)
   return clone
 }
@@ -296,4 +278,257 @@ export function convertBlockToCode(
   setCursorAtStart(code)
 
   return pre
+}
+
+// ── Indentation ───────────────────────────────────────────────────────────
+
+/** Furthest a block can be pushed in with Tab. */
+export const MAX_BLOCK_INDENT = 3
+
+/** Current indentation level of a block (0 when unset, clamped to the max). */
+export function getBlockIndent(block: HTMLElement | null | undefined): number {
+  if (!block) return 0
+
+  const parsed = Number.parseInt(block.getAttribute('data-indent') ?? '', 10)
+  if (!Number.isFinite(parsed) || parsed <= 0) return 0
+
+  return Math.min(parsed, MAX_BLOCK_INDENT)
+}
+
+/**
+ * Blocks that Tab moves sideways. Lists nest through their own indent/outdent
+ * (see listHandler) and custom islands never move at all.
+ */
+export function canIndentBlock(block: HTMLElement | null | undefined): boolean {
+  if (!block) return false
+
+  const kind = blockKind(block)
+  return (
+    kind !== 'ul' && kind !== 'ol' && kind !== 'checklist' && kind !== 'table' && kind !== 'block'
+  )
+}
+
+/** Write an indentation level, dropping the attribute entirely at 0. */
+export function setBlockIndent(block: HTMLElement, level: number): boolean {
+  const clamped = Math.max(0, Math.min(MAX_BLOCK_INDENT, Math.floor(level)))
+  if (clamped === getBlockIndent(block)) return false
+
+  if (clamped === 0) {
+    block.removeAttribute('data-indent')
+  } else {
+    block.setAttribute('data-indent', String(clamped))
+  }
+
+  return true
+}
+
+/**
+ * Tab / Shift+Tab entry point: move a block one step further in or out.
+ * Returns false when the block cannot be indented or nothing would change.
+ */
+export function indentBlock(block: HTMLElement, delta: number): boolean {
+  if (!canIndentBlock(block)) return false
+  return setBlockIndent(block, getBlockIndent(block) + delta)
+}
+
+// ── Multi-block selections ────────────────────────────────────────────────
+
+/** Contiguous run between two blocks (order of the arguments does not matter). */
+export function getBlockRange(
+  editor: HTMLElement,
+  from: HTMLElement,
+  to: HTMLElement
+): HTMLElement[] {
+  const children = getElementChildren(editor)
+  const fromIndex = children.indexOf(from)
+  const toIndex = children.indexOf(to)
+  if (fromIndex === -1 || toIndex === -1) return []
+
+  const start = Math.min(fromIndex, toIndex)
+  const end = Math.max(fromIndex, toIndex)
+  return children.slice(start, end + 1)
+}
+
+/**
+ * Reduce an arbitrary set of blocks to the contiguous run they span.
+ * Selections always come from `getBlockRange`, but resolving again here keeps
+ * the group helpers safe to call with stale or gappy input.
+ */
+function resolveBlockRun(editor: HTMLElement, blocks: readonly HTMLElement[]): HTMLElement[] {
+  const children = getElementChildren(editor)
+  const indexes = blocks
+    .filter((block) => !!block && block.parentElement === editor)
+    .map((block) => children.indexOf(block))
+    .filter((index) => index >= 0)
+    .sort((a, b) => a - b)
+
+  if (indexes.length === 0) return []
+
+  const run: HTMLElement[] = []
+  for (let index = indexes[0]; index <= indexes[indexes.length - 1]; index += 1) {
+    run.push(children[index])
+  }
+  return run
+}
+
+/** True when the whole run can still move one step in `direction`. */
+export function canMoveBlocks(
+  editor: HTMLElement,
+  blocks: readonly HTMLElement[],
+  direction: 'up' | 'down'
+): boolean {
+  const run = resolveBlockRun(editor, blocks)
+  if (run.length === 0) return false
+
+  if (direction === 'up') {
+    const before = run[0].previousElementSibling
+    return !!before && before.parentElement === editor
+  }
+
+  const after = run[run.length - 1].nextElementSibling
+  return !!after && after.parentElement === editor
+}
+
+/**
+ * True when dropping the run in front of `reference` would change the order.
+ * The reference must stay outside of the run.
+ */
+export function canMoveBlocksBefore(
+  editor: HTMLElement,
+  blocks: readonly HTMLElement[],
+  reference: HTMLElement | null
+): boolean {
+  const run = resolveBlockRun(editor, blocks)
+  if (run.length === 0) return false
+
+  if (reference === null) return editor.lastElementChild !== run[run.length - 1]
+  if (!editor.contains(reference) || run.includes(reference)) return false
+
+  return run[run.length - 1].nextElementSibling !== reference
+}
+
+/** Insert the whole run before `reference` (null = append), keeping its order. */
+export function moveBlocksBefore(
+  editor: HTMLElement,
+  blocks: readonly HTMLElement[],
+  reference: HTMLElement | null
+): boolean {
+  const run = resolveBlockRun(editor, blocks)
+  if (run.length === 0 || !canMoveBlocksBefore(editor, run, reference)) return false
+
+  for (const block of run) {
+    if (reference === null) {
+      editor.appendChild(block)
+    } else {
+      editor.insertBefore(block, reference)
+    }
+  }
+
+  return true
+}
+
+/**
+ * Move a contiguous run one block up or down. The run stays intact: only the
+ * element crossing the boundary is re-inserted.
+ */
+export function moveBlocks(
+  editor: HTMLElement,
+  blocks: readonly HTMLElement[],
+  direction: 'up' | 'down'
+): boolean {
+  const run = resolveBlockRun(editor, blocks)
+  if (run.length === 0 || !canMoveBlocks(editor, run, direction)) return false
+
+  if (direction === 'up') {
+    // The block just above the run has to jump below it (append when it ends
+    // the document), which slides the whole run up by one.
+    const before = run[0].previousElementSibling as HTMLElement
+    editor.insertBefore(before, run[run.length - 1].nextSibling)
+  } else {
+    // Mirror image: the block just below the run jumps above it.
+    const last = run[run.length - 1]
+    const after = last.nextElementSibling as HTMLElement
+    editor.insertBefore(after, run[0])
+  }
+
+  return true
+}
+
+/** Deep-copy a block with fresh ids (shared by single and group duplication). */
+function cloneBlockForDuplicate(editor: HTMLElement, block: HTMLElement): HTMLElement {
+  const clone = block.cloneNode(true) as HTMLElement
+
+  // Never duplicate `id`s — heading ids are TOC anchors, other ids belong to
+  // injected widgets. Headings get a fresh, unique generated anchor instead.
+  clone.removeAttribute('id')
+  clone.querySelectorAll('[id]').forEach((element) => element.removeAttribute('id'))
+  if (HEADING_PATTERN.test(clone.tagName.toLowerCase())) {
+    try {
+      const base = generateHeadingId(clone.textContent || '')
+      if (base) {
+        let candidate = base
+        let suffix = 2
+        while (editor.querySelector(`[id="${candidate}"]`)) {
+          candidate = `${base}-${suffix}`
+          suffix += 1
+        }
+        clone.id = candidate
+      }
+    } catch {
+      /* best effort */
+    }
+  }
+
+  return clone
+}
+
+/**
+ * Duplicate a run of blocks, keeping the original order. The clones land
+ * directly below the selection, so they can be dragged away as a group.
+ */
+export function duplicateBlocks(
+  editor: HTMLElement,
+  blocks: readonly HTMLElement[]
+): HTMLElement[] {
+  const run = resolveBlockRun(editor, blocks)
+  if (run.length === 0) return []
+
+  const clones: HTMLElement[] = []
+  let anchor: HTMLElement = run[run.length - 1]
+
+  for (const block of run) {
+    const clone = cloneBlockForDuplicate(editor, block)
+    anchor.after(clone)
+    clones.push(clone)
+    anchor = clone
+  }
+
+  return clones
+}
+
+/**
+ * Remove a run of blocks, caret to the following (or previous) block.
+ * Removing everything leaves a single empty paragraph behind.
+ */
+export function removeBlocks(editor: HTMLElement, blocks: readonly HTMLElement[]): boolean {
+  const run = resolveBlockRun(editor, blocks)
+  if (run.length === 0) return false
+
+  // Never leave the editor without a block to type into.
+  if (run.length >= getElementChildren(editor).length) {
+    const paragraph = document.createElement('p')
+    paragraph.appendChild(document.createElement('br'))
+    editor.replaceChildren(paragraph)
+    setCursorAtStart(paragraph)
+    return true
+  }
+
+  const next = run[run.length - 1].nextElementSibling as HTMLElement | null
+  const previous = run[0].previousElementSibling as HTMLElement | null
+  run.forEach((block) => block.remove())
+
+  const focusTarget = next ?? previous
+  if (focusTarget) setCursorAtStart(focusTarget)
+
+  return true
 }

@@ -2,16 +2,27 @@ import { describe, it, expect, beforeEach, afterEach } from 'vitest'
 import {
   blockKind,
   blockLabel,
+  canMoveBlocks,
+  canMoveBlocksBefore,
   canMoveBlockBefore,
   convertBlockToCode,
   duplicateBlock,
+  duplicateBlocks,
   findDropReference,
+  getBlockIndent,
+  getBlockRange,
   getElementChildren,
   getTopLevelBlock,
+  indentBlock,
   isStructuralBlock,
+  MAX_BLOCK_INDENT,
   moveBlock,
   moveBlockBefore,
+  moveBlocks,
+  moveBlocksBefore,
   removeBlock,
+  removeBlocks,
+  setBlockIndent,
 } from '../lib/editor/blockTools'
 
 describe('blockTools', () => {
@@ -228,6 +239,167 @@ describe('blockTools', () => {
       expect(convertBlockToCode(editor, list)).toBeNull()
       expect(convertBlockToCode(editor, divider)).toBeNull()
       expect(convertBlockToCode(editor, paragraph)).not.toBeNull()
+    })
+  })
+
+  describe('block indentation', () => {
+    it('clamps levels and drops the attribute at zero', () => {
+      editor.innerHTML = '<p>text</p>'
+      const block = getElementChildren(editor)[0]
+
+      expect(getBlockIndent(block)).toBe(0)
+      expect(setBlockIndent(block, 2)).toBe(true)
+      expect(block.getAttribute('data-indent')).toBe('2')
+      expect(getBlockIndent(block)).toBe(2)
+
+      expect(setBlockIndent(block, 9)).toBe(true)
+      expect(getBlockIndent(block)).toBe(MAX_BLOCK_INDENT)
+
+      expect(setBlockIndent(block, 0)).toBe(true)
+      expect(block.hasAttribute('data-indent')).toBe(false)
+    })
+
+    it('ignores junk values', () => {
+      editor.innerHTML = '<p data-indent="abc">a</p><p data-indent="-2">b</p><p data-indent="1">c</p>'
+      const [junk, negative, valid] = getElementChildren(editor)
+
+      expect(getBlockIndent(junk)).toBe(0)
+      expect(getBlockIndent(negative)).toBe(0)
+      expect(getBlockIndent(valid)).toBe(1)
+    })
+
+    it('moves blocks in and out, but never lists or islands', () => {
+      editor.innerHTML = '<p>p</p><h2>h</h2><ul><li>a</li></ul><div data-block="true"></div>'
+      const [paragraph, heading, list, island] = getElementChildren(editor)
+
+      expect(indentBlock(paragraph, 1)).toBe(true)
+      expect(indentBlock(heading, 1)).toBe(true)
+      expect(indentBlock(list, 1)).toBe(false)
+      expect(indentBlock(island, 1)).toBe(false)
+
+      // Outdent stops at zero.
+      expect(indentBlock(paragraph, -1)).toBe(true)
+      expect(indentBlock(paragraph, -1)).toBe(false)
+      expect(getBlockIndent(paragraph)).toBe(0)
+    })
+  })
+
+  describe('block range + group operations', () => {
+    const setUpFour = () => {
+      editor.innerHTML = '<p>one</p><p>two</p><p>three</p><p>four</p>'
+      return getElementChildren(editor)
+    }
+
+    it('builds a contiguous range regardless of argument order', () => {
+      const [one, two, three, four] = setUpFour()
+
+      expect(getBlockRange(editor, one, three)).toEqual([one, two, three])
+      expect(getBlockRange(editor, three, one)).toEqual([one, two, three])
+      expect(getBlockRange(editor, four, four)).toEqual([four])
+
+      const detached = document.createElement('p')
+      expect(getBlockRange(editor, detached, two)).toEqual([])
+    })
+
+    it('moves a run one step and stops at the boundaries', () => {
+      const [one, two, three] = setUpFour()
+
+      expect(moveBlocks(editor, [two, three], 'up')).toBe(true)
+      expect(getElementChildren(editor).map((b) => b.textContent)).toEqual([
+        'two',
+        'three',
+        'one',
+        'four',
+      ])
+
+      expect(canMoveBlocks(editor, [two, three], 'up')).toBe(false)
+      expect(moveBlocks(editor, [two, three], 'up')).toBe(false)
+
+      expect(moveBlocks(editor, [two, three], 'down')).toBe(true)
+      expect(getElementChildren(editor).map((b) => b.textContent)).toEqual([
+        'one',
+        'two',
+        'three',
+        'four',
+      ])
+    })
+
+    it('fills gaps between the given blocks and keeps order when duplicating', () => {
+      const [one, two, three, four] = setUpFour()
+
+      const clones = duplicateBlocks(editor, [two, four])
+
+      expect(clones).toHaveLength(3)
+      expect(getElementChildren(editor).map((b) => b.textContent)).toEqual([
+        'one',
+        'two',
+        'three',
+        'four',
+        'two',
+        'three',
+        'four',
+      ])
+      // Originals untouched.
+      expect(one.isConnected).toBe(true)
+    })
+
+    it('gives duplicated headings unique anchors', () => {
+      editor.innerHTML = '<h2 id="intro">Intro</h2><p>body</p>'
+      const [heading] = getElementChildren(editor)
+
+      duplicateBlocks(editor, [heading])
+
+      const ids = getElementChildren(editor).map((block) => block.id)
+      expect(ids).toEqual(['intro', 'intro-2', ''])
+    })
+
+    it('removes a run and leaves one editable paragraph when everything goes', () => {
+      const [one, two, three, four] = setUpFour()
+
+      expect(removeBlocks(editor, [two, three])).toBe(true)
+      expect(getElementChildren(editor).map((b) => b.textContent)).toEqual(['one', 'four'])
+
+      expect(removeBlocks(editor, [one, four])).toBe(true)
+      const remaining = getElementChildren(editor)
+      expect(remaining).toHaveLength(1)
+      expect(remaining[0].textContent).toBe('')
+    })
+
+    it('drops a run in front of a reference, or appends at the end', () => {
+      const [one, two, three, four] = setUpFour()
+
+      expect(canMoveBlocksBefore(editor, [one, two], two)).toBe(false) // inside the run
+      expect(moveBlocksBefore(editor, [one, two], three)).toBe(false) // already there
+
+      expect(moveBlocksBefore(editor, [one, two], four)).toBe(true)
+      expect(getElementChildren(editor).map((b) => b.textContent)).toEqual([
+        'three',
+        'one',
+        'two',
+        'four',
+      ])
+
+      expect(moveBlocksBefore(editor, [one, two], null)).toBe(true)
+      expect(getElementChildren(editor).map((b) => b.textContent)).toEqual([
+        'three',
+        'four',
+        'one',
+        'two',
+      ])
+    })
+
+    it('ignores every block of a dragged run when finding the drop target', () => {
+      const [one, two, three] = setUpFour().slice(0, 3)
+      withRect(one, 0, 20)
+      withRect(two, 20, 20)
+      withRect(three, 40, 20)
+
+      // In the middle of `three` → insert before it.
+      expect(findDropReference(editor, 45, [one, two])).toBe(three)
+      // In the middle of the dragged run → next non-dragged block.
+      expect(findDropReference(editor, 30, [one, two])).toBe(three)
+      // Below everything → append.
+      expect(findDropReference(editor, 200, [one, two])).toBeNull()
     })
   })
 })
