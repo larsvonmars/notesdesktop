@@ -1,5 +1,12 @@
 # Hyperlink Added to Insert Content Block Menu
 
+> **Update:** the separate "Insert Content Block" modal menu is gone. Every entry
+> it offered (Headings 1–6, lists, quote, divider, hyperlink, table, note link,
+> data sheet table, image, file) now lives in the **block inserter** that opens
+> with `/` or with the floating **+** button / `+` key. See
+> [BLOCK_GROUPS_AND_SLASH_MENU.md](./BLOCK_GROUPS_AND_SLASH_MENU.md). The rest of
+> this document is kept as the historical record of that feature.
+
 ## What Changed
 
 Added a **Hyperlink** option to the "Insert Content Block" menu in the rich text editor.

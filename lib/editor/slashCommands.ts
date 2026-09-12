@@ -13,35 +13,218 @@ export type SlashCommandId =
   | 'h1'
   | 'h2'
   | 'h3'
-  | 'quote'
-  | 'code'
+  | 'h4'
+  | 'h5'
+  | 'h6'
   | 'ul'
   | 'ol'
   | 'checklist'
+  | 'quote'
+  | 'code'
   | 'divider'
+  | 'hyperlink'
   | 'table'
+  | 'note-link'
+  | 'data-sheet-table'
+  | 'image'
+  | 'file'
+
+export type SlashCategory = 'Text' | 'Headings' | 'Lists' | 'Content' | 'Media'
+
+/** Header order for the unfiltered palette view. */
+export const SLASH_CATEGORY_ORDER: SlashCategory[] = ['Text', 'Headings', 'Lists', 'Content', 'Media']
 
 export interface SlashCommandDefinition {
   id: SlashCommandId
   label: string
+  /** One-liner shown as the row tooltip. */
+  description: string
   /** Extra search terms ("todo", "checkbox", …) and alternate spellings. */
   keywords: string[]
+  category: SlashCategory
 }
 
-/** Catalogue order = menu order when nothing has been typed yet. */
+/**
+ * Catalogue for the slash menu. It intentionally covers everything the old
+ * floating "insert content block" menu offered — the editor keeps the text
+ * commands, the app-level entries (note link, data sheet, image, file) are
+ * forwarded through `onCustomCommand`.
+ *
+ * Order = menu order when nothing has been typed yet (grouped by category).
+ */
 export const SLASH_COMMANDS: SlashCommandDefinition[] = [
-  { id: 'paragraph', label: 'Paragraph', keywords: ['text', 'body', 'plain', 'p'] },
-  { id: 'h1', label: 'Heading 1', keywords: ['h1', 'title', '#'] },
-  { id: 'h2', label: 'Heading 2', keywords: ['h2', 'subtitle', '##'] },
-  { id: 'h3', label: 'Heading 3', keywords: ['h3', '###', 'subheading'] },
-  { id: 'ul', label: 'Bulleted list', keywords: ['bullet', 'list', 'ul', '-'] },
-  { id: 'ol', label: 'Numbered list', keywords: ['number', 'ordered', 'list', 'ol', '1.'] },
-  { id: 'checklist', label: 'Checklist', keywords: ['todo', 'task', 'checkbox', 'check'] },
-  { id: 'quote', label: 'Quote', keywords: ['blockquote', 'citation', '>'] },
-  { id: 'code', label: 'Code block', keywords: ['code', 'pre', 'snippet', '```'] },
-  { id: 'divider', label: 'Divider', keywords: ['hr', 'separator', 'rule', 'line', '---'] },
-  { id: 'table', label: 'Table', keywords: ['grid', 'rows', 'columns', 'cells'] },
+  // Text
+  {
+    id: 'paragraph',
+    label: 'Text',
+    description: 'Plain paragraph',
+    keywords: ['paragraph', 'body', 'plain', 'p'],
+    category: 'Text',
+  },
+  // Headings
+  {
+    id: 'h1',
+    label: 'Heading 1',
+    description: 'Large section heading',
+    keywords: ['h1', 'title', 'big', '#'],
+    category: 'Headings',
+  },
+  {
+    id: 'h2',
+    label: 'Heading 2',
+    description: 'Medium section heading',
+    keywords: ['h2', 'subtitle', '##'],
+    category: 'Headings',
+  },
+  {
+    id: 'h3',
+    label: 'Heading 3',
+    description: 'Small section heading',
+    keywords: ['h3', 'subheading', '###'],
+    category: 'Headings',
+  },
+  {
+    id: 'h4',
+    label: 'Heading 4',
+    description: 'Sub-section heading',
+    keywords: ['h4', '####'],
+    category: 'Headings',
+  },
+  {
+    id: 'h5',
+    label: 'Heading 5',
+    description: 'Minor heading',
+    keywords: ['h5', '#####'],
+    category: 'Headings',
+  },
+  {
+    id: 'h6',
+    label: 'Heading 6',
+    description: 'Smallest heading',
+    keywords: ['h6', '######'],
+    category: 'Headings',
+  },
+  // Lists
+  {
+    id: 'ul',
+    label: 'Bulleted list',
+    description: 'Create an unordered list',
+    keywords: ['bullet', 'list', 'unordered', 'ul', '-'],
+    category: 'Lists',
+  },
+  {
+    id: 'ol',
+    label: 'Numbered list',
+    description: 'Create an ordered list',
+    keywords: ['number', 'ordered', 'list', 'ol', '1.'],
+    category: 'Lists',
+  },
+  {
+    id: 'checklist',
+    label: 'Checklist',
+    description: 'Task list with checkboxes',
+    keywords: ['todo', 'task', 'checkbox', 'check'],
+    category: 'Lists',
+  },
+  // Content
+  {
+    id: 'quote',
+    label: 'Quote',
+    description: 'Insert a blockquote',
+    keywords: ['blockquote', 'citation', 'cite', '>'],
+    category: 'Content',
+  },
+  {
+    id: 'code',
+    label: 'Code block',
+    description: 'Literal text with monospace styling',
+    keywords: ['code', 'pre', 'snippet', '```'],
+    category: 'Content',
+  },
+  {
+    id: 'divider',
+    label: 'Divider',
+    description: 'Add a horizontal rule',
+    keywords: ['hr', 'separator', 'rule', 'line', '---'],
+    category: 'Content',
+  },
+  {
+    id: 'hyperlink',
+    label: 'Hyperlink',
+    description: 'Insert a web link',
+    keywords: ['url', 'link', 'a', 'web', 'href'],
+    category: 'Content',
+  },
+  {
+    id: 'table',
+    label: 'Table',
+    description: 'Insert a customizable table',
+    keywords: ['tbl', 'grid', 'spreadsheet', 'rows', 'columns'],
+    category: 'Content',
+  },
+  {
+    id: 'note-link',
+    label: 'Note link',
+    description: 'Link to another note',
+    keywords: ['nl', 'notelink', 'internal', 'wiki'],
+    category: 'Content',
+  },
+  {
+    id: 'data-sheet-table',
+    label: 'Data sheet table',
+    description: 'Insert a table from a data sheet',
+    keywords: ['dst', 'data', 'sheet', 'spreadsheet'],
+    category: 'Content',
+  },
+  // Media
+  {
+    id: 'image',
+    label: 'Image',
+    description: 'Insert an image',
+    keywords: ['img', 'picture', 'photo', 'pic'],
+    category: 'Media',
+  },
+  {
+    id: 'file',
+    label: 'File',
+    description: 'Attach a file from your storage',
+    keywords: ['attachment', 'attach', 'upload', 'doc'],
+    category: 'Media',
+  },
 ]
+
+export interface SlashCommandGroup {
+  category: SlashCategory
+  commands: SlashCommandDefinition[]
+}
+
+/**
+ * Split commands into category sections (palette order). Commands whose
+ * category is unknown are appended under `Content` so nothing can get lost.
+ */
+export function groupSlashCommands(
+  commands: readonly SlashCommandDefinition[]
+): SlashCommandGroup[] {
+  const groups: SlashCommandGroup[] = []
+
+  for (const category of SLASH_CATEGORY_ORDER) {
+    const matching = commands.filter((command) => command.category === category)
+    if (matching.length > 0) groups.push({ category, commands: matching })
+  }
+
+  const grouped = new Set(groups.flatMap((group) => group.commands))
+  const leftovers = commands.filter((command) => !grouped.has(command))
+  if (leftovers.length > 0) {
+    const contentGroup = groups.find((group) => group.category === 'Content')
+    if (contentGroup) {
+      contentGroup.commands = [...contentGroup.commands, ...leftovers]
+    } else {
+      groups.push({ category: 'Content', commands: leftovers })
+    }
+  }
+
+  return groups
+}
 
 /** Longest query the menu still reacts to (`/` + 24 characters). */
 export const SLASH_QUERY_MAX_LENGTH = 24

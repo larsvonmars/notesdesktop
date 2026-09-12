@@ -8,6 +8,7 @@ import {
   convertBlockToCode,
   duplicateBlock,
   duplicateBlocks,
+  ensureBlockPlaceholder,
   findDropReference,
   getBlockIndent,
   getBlockRange,
@@ -281,6 +282,41 @@ describe('blockTools', () => {
       expect(indentBlock(paragraph, -1)).toBe(true)
       expect(indentBlock(paragraph, -1)).toBe(false)
       expect(getBlockIndent(paragraph)).toBe(0)
+    })
+  })
+
+  describe('ensureBlockPlaceholder', () => {
+    it('gives a content-less block its <br> back', () => {
+      editor.innerHTML = '<p></p>'
+      const block = getElementChildren(editor)[0]
+
+      expect(ensureBlockPlaceholder(block)).toBe(true)
+      expect(block.innerHTML).toBe('<br>')
+      expect(ensureBlockPlaceholder(block)).toBe(false)
+    })
+
+    it('drops empty text nodes left behind by a deletion', () => {
+      editor.innerHTML = '<p></p>'
+      const block = getElementChildren(editor)[0]
+      block.appendChild(document.createTextNode(''))
+      block.appendChild(document.createTextNode(''))
+
+      expect(ensureBlockPlaceholder(block)).toBe(true)
+      expect(block.innerHTML).toBe('<br>')
+    })
+
+    it('never touches blocks that still hold something', () => {
+      editor.innerHTML =
+        '<p>text</p><p><br></p><p><img src="data:image/png;base64,x" alt=""></p>' +
+        '<div data-block="true"></div><pre><code>const x = 1</code></pre>'
+
+      const blocks = getElementChildren(editor)
+      blocks.forEach((block) => expect(ensureBlockPlaceholder(block)).toBe(false))
+    })
+
+    it('ignores detached blocks', () => {
+      const orphan = document.createElement('p')
+      expect(ensureBlockPlaceholder(orphan)).toBe(false)
     })
   })
 

@@ -121,10 +121,14 @@ range and act on it as a group (the handle then shows the block count), and
 drag the pinned handle to move the selection. `Alt+↑` / `Alt+↓` move the block
 under the caret without the mouse. Structural changes are single undo steps.
 
-Typing **`/`** at the start of a line opens the block inserter (filter with the
-label or keywords like `h2`, `todo`, `divider`; `↑`/`↓` to pick, `Enter` to
-apply, `Escape` to keep the text). `Tab` / `Shift+Tab` indent and outdent plain
-blocks by up to three levels — inside lists they nest the list item as before.
+Typing **`/`** at the start of a line opens the block inserter — the same
+palette as the floating **+** button and the `+` key. It covers everything the
+old "Insert Content Block" menu offered: Text, Headings 1–6, bulleted/numbered
+lists, checklist, quote, code block, divider, hyperlink, table, note link, data
+sheet table, image and file. Filter by label or keyword (`h2`, `todo`, `img`,
+`---` …), `↑`/`↓` to pick, `Enter` to apply, `Escape` to keep the text.
+`Tab` / `Shift+Tab` indent and outdent plain blocks by up to three levels —
+inside lists they nest the list item as before.
 
 The selection toolbar's "More" panel also has **Aa** (Text case:
 Title Case / UPPERCASE / lowercase) and the eraser (**Clear formatting**,
@@ -157,7 +161,7 @@ All formatting commands have keyboard shortcuts for power users:
 | Move block up | `Alt+↑` |
 | Move block down | `Alt+↓` |
 | Indent / outdent block | `Tab` / `Shift+Tab` |
-| Block inserter | `/` |
+| Block inserter | `/` or `+` (or the floating **+** button) |
 | Select a block range | `Shift`+click (block handle) |
 | Clear formatting | `Cmd/Ctrl+\` |
 | Paste as plain text | `Cmd/Ctrl+Shift+V` |

@@ -35,24 +35,45 @@ Pure helpers (`tests/blockTools.test.ts`): `getBlockRange`, `canMoveBlocks`,
 (unique heading anchors), `removeBlocks` (leaves one empty paragraph when
 everything goes) and `findDropReference` (ignores a whole dragged run).
 
-## 2. Slash menu (`/`)
+## 2. Block inserter (the slash menu)
 
 `components/editor/SlashMenu.tsx` + `lib/editor/slashCommands.ts`.
 
-Typing `/` after the start of a line (or whitespace) opens a filterable block
-palette; typing narrows it, `↑`/`↓` walk it, `Enter`/`Tab` apply, `Escape`
-closes it **and leaves the typed text alone**.
+**One palette, four ways in.** It replaces the old floating "Insert Content
+Block" modal entirely; every command that menu offered is in the catalogue now.
+
+| Entry point | Behaviour |
+|-------------|-----------|
+| Type `/` at the start of a line (or after whitespace) | Opens with the typed text as the filter; the `/query` is removed when a command is applied |
+| Floating **+** button (bottom right, rich text notes) | Opens the same palette at the caret |
+| `+` key (while the caret is in the note body) | Same as the button |
+| Type while a "+"-opened palette is visible | Filters it; whatever you typed is removed on apply, normal prose (whitespace) closes it |
+
+Typing narrows the list, `↑`/`↓` walk it, `Enter`/`Tab` apply, `Escape` closes
+it **without touching the text**. An unfiltered palette shows category sections
+(Text, Headings, Lists, Content, Media); while filtering it becomes one flat
+ranked list.
 
 | Command | Keywords (examples) | Result |
 |---------|---------------------|--------|
-| Paragraph | `text`, `p` | `formatBlock p` |
-| Heading 1–3 | `#`, `##`, `###`, `title` | `applyHeading(1…3)` |
+| Text | `paragraph`, `p` | `formatBlock p` |
+| Heading 1–6 | `h1`…`h6`, `#`…`######`, `title` | `applyHeading(1…6)` |
 | Bulleted / Numbered list | `bullet`, `ul`, `-`, `1.` | list commands |
 | Checklist | `todo`, `task`, `checkbox` | checklist command |
-| Quote | `>`, `blockquote` | `formatBlock blockquote` |
+| Quote | `>`, `blockquote`, `cite` | `formatBlock blockquote` |
 | Code block | `pre`, `snippet`, ` ``` ` | `convertBlockToCode` |
 | Divider | `hr`, `---`, `separator` | horizontal rule |
-| Table | `grid`, `rows`, `columns` | opens the table size dialog |
+| Hyperlink | `url`, `link`, `a`, `href` | link dialog |
+| Table | `tbl`, `grid`, `rows`, `columns` | table size dialog |
+| Note link | `nl`, `notelink`, `wiki` | app: note picker (`onCustomCommand('note-link')`) |
+| Data sheet table | `dst`, `data`, `sheet` | app: data sheet picker |
+| Image | `img`, `picture`, `photo` | app: image file dialog + upload |
+| File | `attach`, `attachment`, `upload` | app: file picker |
+
+Editor-level commands run through the same code paths as the toolbar and the
+block menu (heading ids, list normalisation, caret restoration); app-level ones
+are forwarded to the host through the existing `onCustomCommand` hook, so
+`NoteEditor` keeps owning uploads, pickers and dialogs.
 
 Implementation notes:
 
@@ -67,13 +88,16 @@ Implementation notes:
   from those positions.
 * Skipped inside code blocks (`pre`), custom `[data-block]` islands and table
   cells, and while a non-collapsed selection exists.
-* Applying a command removes the `/query` first, then runs the same command
-  path the toolbar/block menu uses (heading ids, list normalisation and caret
-  handling stay in one place) and takes one history snapshot.
+* Applying a command takes one history snapshot, so `Cmd/Ctrl+Z` always steps
+  back over it.
+* Commands that only insert elsewhere (image, file, note link, table, …) leave
+  the emptied block behind — `ensureBlockPlaceholder` puts its `<br>` back so the
+  block keeps its line height and stays clickable.
 
 Pure helpers (`tests/slashCommands.test.ts`): `matchSlashTrigger` (line-scoped,
-no spaces, max 24 characters) and `filterSlashCommands` (exact label → label
-prefix → keyword prefix → substring, catalogue order as tie-break).
+no spaces, max 24 characters), `filterSlashCommands` (exact label → label
+prefix → keyword prefix → substring, catalogue order as tie-break) and
+`groupSlashCommands` (ordered category sections).
 
 ## 3. Block indentation (`Tab` / `Shift+Tab`)
 
@@ -94,14 +118,18 @@ prefix → keyword prefix → substring, catalogue order as tie-break).
 * `tests/blockTools.test.ts` — indentation clamping/junk values/list guards,
   contiguous ranges, run moves (both directions + boundaries), gap-filling
   duplication, heading-anchor deduplication, run deletion, drop references with
-  a dragged run.
+  a dragged run, and `ensureBlockPlaceholder` (empty text nodes, islands, media).
 * `tests/slashCommands.test.ts` — trigger matching (line scope, whitespace
-  neighbourhood, second slash, query length) and filter ranking.
+  neighbourhood, second slash, query length), filter ranking for every command
+  (including `nl`, `dst`, `img`, `attach`) and category grouping.
 * `tests/textOffsets.test.ts` — offset ⇄ caret round-trips, `<br>` handling,
   nested text nodes, out-of-block guards.
 * Browser harness (real editor, Playwright): `Tab`/`Shift+Tab` with computed
   margins, shift+click ranges with the "3 blocks selected" menu, group
   duplicate/delete/move/indent + undo, pinned handle with count, group drag with
-  dimming and reorder, slash menu open/filter (`h2`, `todo`, `bullet`,
-  `divider`, `table`)/arrow navigation/apply/`Escape`, and the empty
-  "No matching blocks" state.
+  dimming and reorder, the inserter's category sections and filtered list,
+  `/h5`/`/link`/`/todo`/`/divider`/`/table`, the app-level commands
+  (`note-link`, `image`, `file`, `data-sheet-table` forwarded through
+  `onCustomCommand`), the "+" button and `+` key opening the same palette with
+  typed filtering, `Escape` leaving the text untouched, the empty
+  "No matching blocks" state and undo after every apply.

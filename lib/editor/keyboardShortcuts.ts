@@ -124,6 +124,11 @@ export const KEYBOARD_SHORTCUTS: KeyboardShortcut[] = [
     category: 'blocks'
   },
   {
+    keys: ['+'],
+    description: 'Block inserter at the caret',
+    category: 'blocks'
+  },
+  {
     keys: ['⇧Click', 'Shift+Click'],
     description: 'Select a range of blocks (on the block handle)',
     category: 'blocks'

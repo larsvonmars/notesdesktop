@@ -3,35 +3,15 @@
 import { useState, useEffect, useCallback, useMemo, useRef, useDeferredValue } from 'react'
 import DOMPurify from 'dompurify'
 import {
-  List,
-  ListOrdered,
-  Quote,
-  CheckSquare,
   Save,
   Trash2,
-  X,
-  Heading1,
-  Heading2,
-  Heading3,
-  Heading4,
-  Heading5,
-  Heading6,
   ListTree,
-  Link as LinkIcon,
-  Search as SearchIcon,
   PenTool,
   Loader2,
   Target,
   Edit2,
   Network,
-  Table as TableIcon,
-  Table2 as Table2Icon,
-  FileText,
   Plus,
-  Minus as HorizontalRule,
-  ListOrdered as OrderedListIcon,
-  Image as ImageIcon,
-  Paperclip,
 } from 'lucide-react'
 import RichTextEditor, {
   type RichTextCommand,
@@ -580,11 +560,6 @@ export default function NoteEditor({
   const [showNoteLinkDialog, setShowNoteLinkDialog] = useState(false)
   const [showDataSheetPicker, setShowDataSheetPicker] = useState(false)
   const savedNoteLinkSelection = useRef<Range | null>(null)
-  const savedContentBlockSelectionRef = useRef<Range | null>(null)
-  const [showContentBlocksMenu, setShowContentBlocksMenu] = useState(false)
-  const [blockSearchQuery, setBlockSearchQuery] = useState('')
-  const [selectedBlockIndex, setSelectedBlockIndex] = useState(0)
-  const blockSearchInputRef = useRef<HTMLInputElement>(null)
   const [showKnowledgeGraph, setShowKnowledgeGraph] = useState(false)
   const [showProjectsModal, setShowProjectsModal] = useState(false)
   const [showFilePicker, setShowFilePicker] = useState(false)
@@ -688,63 +663,6 @@ export default function NoteEditor({
   
   // Selected mindmap node state for AI assistant integration
   const [selectedMindmapNodeId, setSelectedMindmapNodeId] = useState<string | null>(null)
-
-  // Content blocks configuration
-  const contentBlocks = useMemo(() => [
-    // Headings
-    { id: 'heading1', label: 'Heading 1', description: 'Large section heading', icon: Heading1, color: 'indigo', category: 'Headings', command: 'heading1' as RichTextCommand, keywords: ['h1', 'title', 'big'] },
-    { id: 'heading2', label: 'Heading 2', description: 'Medium section heading', icon: Heading2, color: 'indigo', category: 'Headings', command: 'heading2' as RichTextCommand, keywords: ['h2', 'subtitle'] },
-    { id: 'heading3', label: 'Heading 3', description: 'Small section heading', icon: Heading3, color: 'indigo', category: 'Headings', command: 'heading3' as RichTextCommand, keywords: ['h3'] },
-    { id: 'heading4', label: 'Heading 4', description: 'Sub-section heading', icon: Heading4, color: 'indigo', category: 'Headings', command: 'heading4' as RichTextCommand, keywords: ['h4'] },
-    { id: 'heading5', label: 'Heading 5', description: 'Minor heading', icon: Heading5, color: 'indigo', category: 'Headings', command: 'heading5' as RichTextCommand, keywords: ['h5'] },
-    { id: 'heading6', label: 'Heading 6', description: 'Smallest heading', icon: Heading6, color: 'indigo', category: 'Headings', command: 'heading6' as RichTextCommand, keywords: ['h6'] },
-    // Lists
-    { id: 'unordered-list', label: 'Bullet List', description: 'Create an unordered list', icon: List, color: 'green', category: 'Lists', command: 'unordered-list' as RichTextCommand, keywords: ['ul', 'bullet', 'unordered'] },
-    { id: 'ordered-list', label: 'Numbered List', description: 'Create an ordered list', icon: OrderedListIcon, color: 'green', category: 'Lists', command: 'ordered-list' as RichTextCommand, keywords: ['ol', 'numbered', 'ordered'] },
-    { id: 'checklist', label: 'Checklist', description: 'Task list with checkboxes', icon: CheckSquare, color: 'green', category: 'Lists', command: 'checklist' as RichTextCommand, keywords: ['cl', 'todo', 'tasks', 'check', 'checkbox'] },
-    // Content
-    { id: 'blockquote', label: 'Quote', description: 'Insert a blockquote', icon: Quote, color: 'amber', category: 'Content', command: 'blockquote' as RichTextCommand, keywords: ['bq', 'blockquote', 'cite'] },
-    { id: 'horizontal-rule', label: 'Divider', description: 'Add a horizontal rule', icon: HorizontalRule, color: 'gray', category: 'Content', command: 'horizontal-rule' as RichTextCommand, keywords: ['hr', 'rule', 'separator', 'line'] },
-    { id: 'hyperlink', label: 'Hyperlink', description: 'Insert a web link', icon: LinkIcon, color: 'blue', category: 'Content', command: 'link' as RichTextCommand, keywords: ['url', 'link', 'a', 'web', 'href'] },
-    { id: 'table', label: 'Table', description: 'Insert a customizable table', icon: TableIcon, color: 'blue', category: 'Content', command: null, keywords: ['tbl', 'grid', 'spreadsheet'] },
-    { id: 'note-link', label: 'Note Link', description: 'Link to another note', icon: FileText, color: 'purple', category: 'Content', command: null, keywords: ['nl', 'notelink', 'internal'] },
-    { id: 'data-sheet-table', label: 'Data Sheet Table', description: 'Insert table from a data sheet', icon: Table2Icon, color: 'emerald', category: 'Content', command: null, keywords: ['dst', 'data', 'sheet'] },
-    { id: 'image', label: 'Image', description: 'Insert an image', icon: ImageIcon, color: 'pink', category: 'Media', command: null, keywords: ['img', 'picture', 'photo', 'pic'] },
-    { id: 'file', label: 'File', description: 'Attach a file from your storage', icon: Paperclip, color: 'alpine', category: 'Media', command: null, keywords: ['attachment', 'attach', 'upload', 'doc'] },
-  ], [])
-
-  // Filter content blocks based on search query
-  const filteredBlocks = useMemo(() => {
-    if (!blockSearchQuery.trim()) return contentBlocks
-    
-    const query = blockSearchQuery.toLowerCase()
-    return contentBlocks.filter(block => 
-      block.label.toLowerCase().includes(query) ||
-      block.description.toLowerCase().includes(query) ||
-      block.category.toLowerCase().includes(query) ||
-      (block.keywords && block.keywords.some(kw => kw.toLowerCase().includes(query)))
-    )
-  }, [blockSearchQuery, contentBlocks])
-
-  // Reset selected index when filtered blocks change
-  useEffect(() => {
-    if (selectedBlockIndex >= filteredBlocks.length) {
-      setSelectedBlockIndex(Math.max(0, filteredBlocks.length - 1))
-    }
-  }, [filteredBlocks.length, selectedBlockIndex])
-
-  // Focus search input when menu opens
-  useEffect(() => {
-    if (showContentBlocksMenu && blockSearchInputRef.current) {
-      setTimeout(() => {
-        blockSearchInputRef.current?.focus()
-      }, 50)
-    } else {
-      // Reset search when menu closes
-      setBlockSearchQuery('')
-      setSelectedBlockIndex(0)
-    }
-  }, [showContentBlocksMenu])
 
   const scheduleHeadingsUpdate = useCallback(() => {
     if (headingUpdateTimeoutRef.current !== null) {
@@ -1232,106 +1150,6 @@ export default function NoteEditor({
     []
   )
   
-  const saveContentBlockSelection = useCallback(() => {
-    if (typeof window === 'undefined') return
-    const editorElement = editorRef.current?.getRootElement()
-    const selection = window.getSelection()
-    if (!selection || selection.rangeCount === 0 || !editorElement) return
-
-    const range = selection.getRangeAt(0)
-    if (!editorElement.contains(range.commonAncestorContainer)) return
-
-    savedContentBlockSelectionRef.current = range.cloneRange()
-  }, [])
-
-  const restoreContentBlockSelection = useCallback(() => {
-    if (typeof window === 'undefined') {
-      savedContentBlockSelectionRef.current = null
-      return
-    }
-
-    const savedRange = savedContentBlockSelectionRef.current
-    const editorElement = editorRef.current?.getRootElement()
-
-    if (!savedRange || !editorElement) return
-
-    const { startContainer, endContainer } = savedRange
-    if (
-      !startContainer.isConnected ||
-      !endContainer.isConnected ||
-      !editorElement.contains(startContainer) ||
-      !editorElement.contains(endContainer)
-    ) {
-      savedContentBlockSelectionRef.current = null
-      return
-    }
-
-    const selection = window.getSelection()
-    if (!selection) return
-
-    selection.removeAllRanges()
-    selection.addRange(savedRange)
-    savedContentBlockSelectionRef.current = null
-  }, [])
-
-  const runAfterMenuClose = useCallback(
-    (action?: () => void) => {
-      const execute = () => {
-        editorRef.current?.focus()
-        restoreContentBlockSelection()
-        action?.()
-      }
-
-      if (typeof window === 'undefined') {
-        execute()
-        return
-      }
-
-      if (showContentBlocksMenu) {
-        window.requestAnimationFrame(() => {
-          window.requestAnimationFrame(execute)
-        })
-      } else {
-        execute()
-      }
-    },
-    [restoreContentBlockSelection, showContentBlocksMenu]
-  )
-
-  const openContentBlocksMenu = useCallback(() => {
-    if (showContentBlocksMenu) return
-    saveContentBlockSelection()
-    setShowContentBlocksMenu(true)
-  }, [saveContentBlockSelection, showContentBlocksMenu])
-
-  const hideContentBlocksMenu = useCallback(
-    (afterClose?: () => void) => {
-      setShowContentBlocksMenu(false)
-      runAfterMenuClose(afterClose)
-    },
-    [runAfterMenuClose]
-  )
-
-  // Handle content block insertion
-  const handleInsertTable = useCallback(() => {
-    hideContentBlocksMenu(() => {
-      editorRef.current?.showTableDialog()
-    })
-  }, [hideContentBlocksMenu])
-
-  const handleInsertNoteLink = useCallback(() => {
-    hideContentBlocksMenu(() => {
-      editorRef.current?.requestNoteLink()
-    })
-  }, [hideContentBlocksMenu])
-
-  const handleInsertDataSheetTable = useCallback(() => {
-    hideContentBlocksMenu(() => {
-      saveNoteLinkSelection()
-      setShowDataSheetPicker(true)
-    })
-  }, [hideContentBlocksMenu, saveNoteLinkSelection])
-
   const handleDataSheetTableSelect = useCallback(
     (payload: DataSheetTablePayload) => {
       // Restore the saved selection first
@@ -1612,69 +1430,74 @@ export default function NoteEditor({
     }
   }, [])
 
+  /**
+   * Insert an image — reached from the block inserter (`/` → Image).
+   * The selection is saved first because the native/HTML file dialog moves
+   * focus away from the note.
+   */
   const handleInsertImage = useCallback(async () => {
+    saveNoteLinkSelection()
 
-    hideContentBlocksMenu(async () => {
-      try {
-        // Try to use Tauri native file dialog first
-        const { isTauriEnvironment, selectImageFile, readImageAsDataUrl } = await import('@/lib/tauri/imageStorage')
-        
-        if (isTauriEnvironment()) {
-          // Use Tauri native file dialog
-          const selected = await selectImageFile()
-          
-          if (selected) {
-            const dataUrl = await readImageAsDataUrl(selected.path)
-            if (dataUrl && editorRef.current && editorRef.current.insertCustomBlock) {
-              const imageFile = await dataUrlToFile(dataUrl, selected.name)
-              const payload = await uploadAndBuildImagePayload(imageFile, 'insert')
+    const placeImage = (payload: Awaited<ReturnType<typeof uploadAndBuildImagePayload>>) => {
+      if (!payload || !editorRef.current?.insertCustomBlock) return
 
-              if (!payload) return
-
-              editorRef.current.insertCustomBlock('image', {
-                ...payload,
-              })
-              setHasChanges(true)
-            }
-          }
-        } else {
-          // Fall back to web file input
-          const input = document.createElement('input')
-          input.type = 'file'
-          input.accept = 'image/*'
-          input.onchange = async (e: Event) => {
-            const target = e.target as HTMLInputElement
-            const file = target.files?.[0]
-            if (file) {
-              try {
-                const payload = await uploadAndBuildImagePayload(file, 'insert')
-                if (!payload || !editorRef.current?.insertCustomBlock) return
-
-                editorRef.current.insertCustomBlock('image', {
-                  ...payload,
-                })
-                setHasChanges(true)
-              } catch (uploadError) {
-                console.error('Image upload failed:', uploadError)
-                toast.push({ title: 'Upload failed', description: 'Could not upload image. Please try again.' })
-              }
-            }
-          }
-          input.click()
+      if (savedNoteLinkSelection.current) {
+        const selection = window.getSelection()
+        if (selection) {
+          selection.removeAllRanges()
+          selection.addRange(savedNoteLinkSelection.current)
         }
-      } catch (error) {
-        console.error('Failed to insert image:', error)
-        toast.push({ title: 'Error', description: 'Failed to insert image. Please try again.' })
       }
-    })
-  }, [hideContentBlocksMenu, uploadAndBuildImagePayload, toast])
+      editorRef.current.focus()
+      editorRef.current.insertCustomBlock('image', { ...payload })
+      savedNoteLinkSelection.current = null
+      setHasChanges(true)
+    }
+
+    try {
+      // Try to use Tauri native file dialog first
+      const { isTauriEnvironment, selectImageFile, readImageAsDataUrl } = await import('@/lib/tauri/imageStorage')
+
+      if (isTauriEnvironment()) {
+        // Use Tauri native file dialog
+        const selected = await selectImageFile()
+
+        if (selected) {
+          const dataUrl = await readImageAsDataUrl(selected.path)
+          if (dataUrl) {
+            const imageFile = await dataUrlToFile(dataUrl, selected.name)
+            placeImage(await uploadAndBuildImagePayload(imageFile, 'insert'))
+          }
+        }
+      } else {
+        // Fall back to web file input
+        const input = document.createElement('input')
+        input.type = 'file'
+        input.accept = 'image/*'
+        input.onchange = async (e: Event) => {
+          const target = e.target as HTMLInputElement
+          const file = target.files?.[0]
+          if (file) {
+            try {
+              placeImage(await uploadAndBuildImagePayload(file, 'insert'))
+            } catch (uploadError) {
+              console.error('Image upload failed:', uploadError)
+              toast.push({ title: 'Upload failed', description: 'Could not upload image. Please try again.' })
+            }
+          }
+        }
+        input.click()
+      }
+    } catch (error) {
+      console.error('Failed to insert image:', error)
+      toast.push({ title: 'Error', description: 'Failed to insert image. Please try again.' })
+    }
+  }, [saveNoteLinkSelection, uploadAndBuildImagePayload, toast])
 
   const handleInsertFile = useCallback(() => {
-    hideContentBlocksMenu(() => {
-      saveNoteLinkSelection()
-      setShowFilePicker(true)
-    })
-  }, [hideContentBlocksMenu, saveNoteLinkSelection])
+    saveNoteLinkSelection()
+    setShowFilePicker(true)
+  }, [saveNoteLinkSelection])
 
   const handleFilePickerSelect = useCallback((files: Array<{ name: string; path: string; size: number; type: string }>) => {
     setShowFilePicker(false)
@@ -1707,65 +1530,6 @@ export default function NoteEditor({
       setHasChanges(true)
     }, 10)
   }, [])
-
-  const handleInsertContentBlock = useCallback((command: RichTextCommand) => {
-    hideContentBlocksMenu(() => {
-      editorRef.current?.exec(command)
-    })
-  }, [hideContentBlocksMenu])
-
-  const executeBlockAction = useCallback((blockId: string) => {
-    const block = contentBlocks.find(b => b.id === blockId)
-    if (!block) return
-
-    if (blockId === 'table') {
-      handleInsertTable()
-    } else if (blockId === 'note-link') {
-      handleInsertNoteLink()
-    } else if (blockId === 'data-sheet-table') {
-      handleInsertDataSheetTable()
-    } else if (blockId === 'image') {
-      handleInsertImage()
-    } else if (blockId === 'file') {
-      handleInsertFile()
-    } else if (block.command) {
-      handleInsertContentBlock(block.command)
-    }
-  }, [contentBlocks, handleInsertContentBlock, handleInsertNoteLink, handleInsertTable, handleInsertImage, handleInsertFile, handleInsertDataSheetTable])
-
-  // Keyboard navigation for content blocks menu
-  const handleBlockMenuKeyDown = useCallback((e: KeyboardEvent | React.KeyboardEvent) => {
-    if (!showContentBlocksMenu) return
-
-    if (e.key === 'Escape') {
-      e.preventDefault()
-      hideContentBlocksMenu()
-    } else if (e.key === 'ArrowDown') {
-      e.preventDefault()
-      setSelectedBlockIndex(prev => Math.min(prev + 1, filteredBlocks.length - 1))
-    } else if (e.key === 'ArrowUp') {
-      e.preventDefault()
-      setSelectedBlockIndex(prev => Math.max(prev - 1, 0))
-    } else if (e.key === 'Enter') {
-      e.preventDefault()
-      const selectedBlock = filteredBlocks[selectedBlockIndex]
-      if (selectedBlock) {
-        executeBlockAction(selectedBlock.id)
-      }
-    }
-  }, [showContentBlocksMenu, selectedBlockIndex, filteredBlocks, executeBlockAction, hideContentBlocksMenu])
-
-  // Add global keyboard listener for content blocks menu
-  useEffect(() => {
-    if (!showContentBlocksMenu) return
-
-    const handleKeyDown = (e: KeyboardEvent) => {
-      handleBlockMenuKeyDown(e)
-    }
-
-    window.addEventListener('keydown', handleKeyDown)
-    return () => window.removeEventListener('keydown', handleKeyDown)
-  }, [showContentBlocksMenu, handleBlockMenuKeyDown])
 
   // Handle clicking on note links
   useEffect(() => {
@@ -2214,9 +1978,10 @@ export default function NoteEditor({
 
   useEffect(() => {
     const handler = (event: KeyboardEvent) => {
-      // "+" opens the content-blocks menu — but only while the caret is in the
-      // note body. It must never swallow a literal "+" typed into the title,
-      // the find bar, the link dialog or any other field.
+      // "+" opens the block inserter at the caret — the same palette as `/`.
+      // It must never swallow a literal "+" typed into the title, the find bar,
+      // the link dialog or any other field, so it only fires while the caret is
+      // inside the note body.
       const target = event.target as HTMLElement | null
       const editorElement = editorRef.current?.getRootElement() ?? null
       const typingInEditor =
@@ -2230,7 +1995,7 @@ export default function NoteEditor({
         !isDeleting
       ) {
         event.preventDefault()
-        openContentBlocksMenu()
+        editorRef.current?.openSlashMenu()
         return
       }
 
@@ -2255,7 +2020,7 @@ export default function NoteEditor({
 
     window.addEventListener('keydown', handler)
     return () => window.removeEventListener('keydown', handler)
-  }, [handleSave, hasChanges, isSaving, noteType, isDeleting, openContentBlocksMenu])
+  }, [handleSave, hasChanges, isSaving, noteType, isDeleting])
 
   // Listen for selection changes to update active format states
   useEffect(() => {
@@ -3590,8 +3355,25 @@ export default function NoteEditor({
     if (commandId === 'note-link') {
       saveNoteLinkSelection()
       setShowNoteLinkDialog(true)
+      return
     }
-  }, [saveNoteLinkSelection])
+
+    if (commandId === 'data-sheet-table') {
+      saveNoteLinkSelection()
+      setShowDataSheetPicker(true)
+      return
+    }
+
+    if (commandId === 'file') {
+      saveNoteLinkSelection()
+      setShowFilePicker(true)
+      return
+    }
+
+    if (commandId === 'image') {
+      void handleInsertImage()
+    }
+  }, [handleInsertImage, saveNoteLinkSelection])
 
   // Stable callbacks for the memoized NoteDetailsSidebar
   const handleScrollToHeading = useCallback((headingId: string) => {
@@ -3880,10 +3662,11 @@ export default function NoteEditor({
         />
       )}
 
-      {/* Floating Content Blocks Button - Only show for rich text notes */}
-      {noteType === 'rich-text' && !showContentBlocksMenu && (
+      {/* Floating block inserter - opens the same palette as typing "/" */}
+      {noteType === 'rich-text' && (
         <button
-          onClick={openContentBlocksMenu}
+          onMouseDown={(event) => event.preventDefault()}
+          onClick={() => editorRef.current?.openSlashMenu()}
           className={`fixed z-40 rounded-full bg-alpine-600 hover:bg-alpine-700 text-white shadow-lg hover:shadow-xl transition-all duration-200 flex items-center justify-center group ${
             isMobile ? 'right-4 bottom-20 w-14 h-14 touch-target safe-bottom' : 'bottom-24 w-14 h-14'
           }`}
@@ -3894,123 +3677,6 @@ export default function NoteEditor({
         </button>
       )}
 
-      {/* Content Blocks Menu */}
-      {showContentBlocksMenu && noteType === 'rich-text' && (
-        <div 
-          className="fixed inset-0 z-50 flex items-center justify-center bg-black/20" 
-          onClick={() => hideContentBlocksMenu()}
-        >
-          <div 
-            className={`bg-white shadow-2xl border border-gray-200 overflow-hidden flex flex-col ${
-              isMobile
-                ? 'fixed inset-x-0 bottom-0 rounded-t-2xl max-h-[70vh] safe-bottom'
-                : 'rounded-xl w-96 max-h-[80vh]'
-            }`}
-            onClick={(e) => e.stopPropagation()}
-          >
-            {/* Header with search */}
-            <div className="flex flex-col border-b border-gray-100 sticky top-0 bg-white z-10">
-              <div className="flex items-center justify-between px-4 py-3">
-                <h3 className="text-sm font-semibold text-gray-900">Insert Content Block</h3>
-                <button
-                  onClick={() => hideContentBlocksMenu()}
-                  className="text-gray-400 hover:text-gray-600 transition-colors"
-                  aria-label="Close menu"
-                >
-                  <X size={16} />
-                </button>
-              </div>
-              
-              {/* Search bar */}
-              <div className="px-4 pb-3">
-                <div className="relative">
-                  <SearchIcon 
-                    size={16} 
-                    className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none" 
-                  />
-                  <input
-                    ref={blockSearchInputRef}
-                    type="text"
-                    value={blockSearchQuery}
-                    onChange={(e) => {
-                      setBlockSearchQuery(e.target.value)
-                      setSelectedBlockIndex(0)
-                    }}
-                    onKeyDown={handleBlockMenuKeyDown}
-                    placeholder="Search blocks..."
-                    className="w-full pl-9 pr-3 py-2 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-alpine-500 focus:border-transparent"
-                  />
-                </div>
-                <p className="text-xs text-gray-500 mt-2">
-                  Use ↑↓ to navigate, Enter to select, Esc to close
-                </p>
-              </div>
-            </div>
-
-            {/* Content blocks list */}
-            <div className="overflow-y-auto flex-1 py-2">
-              {filteredBlocks.length === 0 ? (
-                <div className="px-4 py-8 text-center text-sm text-gray-500">
-                  No blocks found matching &quot;{blockSearchQuery}&quot;
-                </div>
-              ) : (
-                <>
-                  {Object.entries(
-                    filteredBlocks.reduce((acc, block) => {
-                      if (!acc[block.category]) acc[block.category] = []
-                      acc[block.category].push(block)
-                      return acc
-                    }, {} as Record<string, typeof filteredBlocks>)
-                  ).map(([category, blocks]) => (
-                    <div key={category}>
-                      {/* Category header - only show if not searching or multiple categories present */}
-                      {(!blockSearchQuery || Object.keys(
-                        filteredBlocks.reduce((acc, block) => {
-                          acc[block.category] = true
-                          return acc
-                        }, {} as Record<string, boolean>)
-                      ).length > 1) && (
-                        <div className="px-3 pt-3 pb-1 first:pt-1">
-                          <div className="text-xs font-semibold text-gray-500 uppercase tracking-wide">
-                            {category}
-                          </div>
-                        </div>
-                      )}
-                      
-                      {blocks.map((block) => {
-                        const blockIndex = filteredBlocks.indexOf(block)
-                        const isSelected = blockIndex === selectedBlockIndex
-                        const IconComponent = block.icon
-                        
-                        return (
-                          <button
-                            key={block.id}
-                            onClick={() => executeBlockAction(block.id)}
-                            className={`w-full flex items-center gap-3 px-3 py-3 rounded-lg transition-colors text-left ${
-                              isSelected 
-                                ? 'bg-alpine-50 ring-2 ring-alpine-500 ring-inset' 
-                                : 'hover:bg-gray-50'
-                            }`}
-                            onMouseEnter={() => setSelectedBlockIndex(blockIndex)}
-                          >
-                            <div className={`flex-shrink-0 w-10 h-10 rounded-lg bg-${block.color}-100 flex items-center justify-center`}>
-                              <IconComponent size={20} className={`text-${block.color}-600`} />
-                            </div>
-                            <div className="flex-1 min-w-0">
-                              <div className="font-medium text-gray-900 text-sm">{block.label}</div>
-                              <div className="text-xs text-gray-500">{block.description}</div>
-                            </div>
-                          </button>
-                        )
-                      })}
-                    </div>
-                  ))}
-                </>
-              )}
-            </div>
-          </div>
-        </div>
-      )}
       {/* Settings Modal */}
       <SettingsModal isOpen={showSettings} onClose={() => setShowSettings(false)} />
 

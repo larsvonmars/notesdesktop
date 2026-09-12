@@ -20,7 +20,7 @@ import LinkDialog from './editor/LinkDialog'
 import LinkPopover from './editor/LinkPopover'
 import SearchReplaceBar from './editor/SearchReplaceBar'
 import BlockControls, { type BlockActionId } from './editor/BlockControls'
-import SlashMenu from './editor/SlashMenu'
+import SlashMenu, { type SlashMenuHandle } from './editor/SlashMenu'
 import type { SlashCommandId } from '@/lib/editor/slashCommands'
 import { findTextPosition } from '@/lib/editor/textOffsets'
 import TableInsertDialog from './editor/TableInsertDialog'
@@ -54,6 +54,7 @@ import {
   canMoveBlocksBefore,
   convertBlockToCode,
   duplicateBlocks,
+  ensureBlockPlaceholder,
   getBlockIndent,
   getTopLevelBlock,
   indentBlock,
@@ -172,6 +173,8 @@ export interface RichTextEditorHandle {
   showSearchDialog: () => void
   showTableDialog: () => void
   requestNoteLink: () => void
+  /** Open the block inserter at the caret (same palette as typing `/`). */
+  openSlashMenu: () => void
   getRootElement: () => HTMLDivElement | null
   scrollToHeading: (headingId: string) => void
 }
@@ -2139,10 +2142,14 @@ const RichTextEditorImpl = forwardRef<RichTextEditorHandle, RichTextEditorProps>
     )
 
     /**
-     * Slash menu (`components/editor/SlashMenu.tsx`): the typed `/query` is
-     * removed first, then the regular command runs on the emptied block so all
-     * of its bookkeeping (heading ids, list normalization, caret restoration)
-     * stays in one place.
+     * Slash menu (`components/editor/SlashMenu.tsx`): the single block
+     * inserter. The typed `/query` is removed first, then the regular command
+     * runs on the emptied block so all of its bookkeeping (heading ids, list
+     * normalization, caret restoration) stays in one place.
+     *
+     * App-level entries (note link, data sheet table, image, file) are
+     * forwarded to the host through `onCustomCommand`, which is the same hook
+     * the old toolbar button used.
      */
     const handleSlashCommand = useCallback(
       (id: SlashCommandId, trigger: { block: HTMLElement; start: number; end: number }) => {
@@ -2150,24 +2157,32 @@ const RichTextEditorImpl = forwardRef<RichTextEditorHandle, RichTextEditorProps>
         if (disabled || !editor || !trigger.block.isConnected) return
         if (trigger.block.parentElement !== editor) return
 
-        // Offsets are resolved to fresh caret positions: the text nodes a menu
-        // was opened on may already have been replaced by the browser.
-        const startPos = findTextPosition(trigger.block, trigger.start)
-        const endPos = findTextPosition(trigger.block, trigger.end)
-        if (!startPos || !endPos) return
+        // A manual open (the "+" button) passes an empty range: nothing to delete.
+        const removesText = trigger.end > trigger.start
 
-        const range = document.createRange()
-        range.setStart(startPos.node, startPos.offset)
-        range.setEnd(endPos.node, endPos.offset)
+        if (removesText) {
+          // Offsets are resolved to fresh caret positions: the text nodes a
+          // menu was opened on may already have been replaced by the browser.
+          const startPos = findTextPosition(trigger.block, trigger.start)
+          const endPos = findTextPosition(trigger.block, trigger.end)
+          if (!startPos || !endPos) return
 
-        const selection = window.getSelection()
-        if (!selection) return
+          const range = document.createRange()
+          range.setStart(startPos.node, startPos.offset)
+          range.setEnd(endPos.node, endPos.offset)
 
-        historyManagerRef.current?.push(true)
-        range.deleteContents()
-        selection.removeAllRanges()
-        // deleteContents() collapses the range to the start of what it removed.
-        selection.addRange(range)
+          const selection = window.getSelection()
+          if (!selection) return
+
+          historyManagerRef.current?.push(true)
+          range.deleteContents()
+          selection.removeAllRanges()
+          // deleteContents() collapses the range to the start of what it removed.
+          selection.addRange(range)
+        } else {
+          historyManagerRef.current?.push(true)
+        }
+
         editor.focus({ preventScroll: true })
 
         const block = trigger.block
@@ -2184,6 +2199,15 @@ const RichTextEditorImpl = forwardRef<RichTextEditorHandle, RichTextEditorProps>
             break
           case 'h3':
             applyHeading(3)
+            break
+          case 'h4':
+            applyHeading(4)
+            break
+          case 'h5':
+            applyHeading(5)
+            break
+          case 'h6':
+            applyHeading(6)
             break
           case 'quote':
             execCommand('formatBlock', 'blockquote')
@@ -2203,16 +2227,41 @@ const RichTextEditorImpl = forwardRef<RichTextEditorHandle, RichTextEditorProps>
           case 'divider':
             insertHorizontalRule()
             break
+          case 'hyperlink':
+            insertLink()
+            break
           case 'table':
             saveSelection()
             openTableDialog(3, 3)
             break
+          case 'note-link':
+          case 'data-sheet-table':
+          case 'image':
+          case 'file':
+            saveSelection()
+            onCustomCommand?.(id)
+            break
         }
+
+        // Commands that only insert something elsewhere (image, note link, …)
+        // leave the emptied paragraph behind — keep it clickable.
+        ensureBlockPlaceholder(block)
 
         normalizeEditorContent(editor)
         emitChange()
       },
-      [applyHeading, disabled, emitChange, execCommand, insertHorizontalRule, openTableDialog, saveSelection, toggleChecklist]
+      [
+        applyHeading,
+        disabled,
+        emitChange,
+        execCommand,
+        insertHorizontalRule,
+        insertLink,
+        onCustomCommand,
+        openTableDialog,
+        saveSelection,
+        toggleChecklist,
+      ]
     )
 
     const applyHistoryAction = useCallback(
@@ -2545,6 +2594,10 @@ const RichTextEditorImpl = forwardRef<RichTextEditorHandle, RichTextEditorProps>
         requestNoteLink: () => {
           saveSelection()
           onCustomCommand?.('note-link')
+        },
+        openSlashMenu: () => {
+          editorRef.current?.focus({ preventScroll: true })
+          slashMenuRef.current?.open()
         },
         insertCustomBlock: (type: string, payload?: any) => {
           return insertCustomBlock(type, payload)
@@ -3537,6 +3590,8 @@ const RichTextEditorImpl = forwardRef<RichTextEditorHandle, RichTextEditorProps>
       return () => vv.removeEventListener('resize', onResize)
     }, [])
 
+    const slashMenuRef = useRef<SlashMenuHandle | null>(null)
+
     return (
       <div className="flex h-full min-h-0 flex-col overflow-hidden">
         <div className="relative flex-1 min-h-0 overflow-hidden">
@@ -3567,6 +3622,7 @@ const RichTextEditorImpl = forwardRef<RichTextEditorHandle, RichTextEditorProps>
           />
 
           <SlashMenu
+            ref={slashMenuRef}
             editorRef={editorRef}
             disabled={disabled}
             onSelect={handleSlashCommand}

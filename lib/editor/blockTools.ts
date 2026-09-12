@@ -331,6 +331,29 @@ export function indentBlock(block: HTMLElement, delta: number): boolean {
   return setBlockIndent(block, getBlockIndent(block) + delta)
 }
 
+/**
+ * Give an empty block its `<br>` placeholder back. Without it the block has no
+ * line height — it cannot be clicked and the caret has nowhere to live (e.g.
+ * after the slash menu removed its `/query` text).
+ */
+export function ensureBlockPlaceholder(block: HTMLElement | null | undefined): boolean {
+  if (!block || !block.isConnected) return false
+  // Custom islands render their own content — never inject nodes into them.
+  if (block.hasAttribute('data-block') || block.hasAttribute('data-block-type')) return false
+  if ((block.textContent ?? '').trim().length > 0) return false
+  if (block.querySelector('br, img, hr, input, table, [data-block]')) return false
+
+  // Typing and deleting can leave empty text nodes behind — drop them so the
+  // block is only treated as content-less when it really is.
+  Array.from(block.childNodes).forEach((child) => {
+    if (child.nodeType === Node.TEXT_NODE && !child.textContent) child.remove()
+  })
+  if (block.childNodes.length > 0) return false
+
+  block.appendChild(document.createElement('br'))
+  return true
+}
+
 // ── Multi-block selections ────────────────────────────────────────────────
 
 /** Contiguous run between two blocks (order of the arguments does not matter). */
