@@ -12,6 +12,43 @@ The `lib/editor/cursorPosition.ts` module provides a comprehensive set of utilit
 4. **Safety**: Built-in checks for DOM validity and element existence
 5. **Focus Management**: Explicit focus handling prevents cursor jumping
 
+## Block-Swap Safe Cursor Restoration (preferred pattern)
+
+Whenever a command replaces a block (`<p>` → `<h3>`, block → `<ul><li>`, undo/redo),
+the browser **detaches the selection** the moment the node containing it is
+removed and snaps the caret to the editor root — this renders at the very top of
+the note and is the root cause of the "cursor jumps to the top" bug. Restoring
+with a timeout leaves that broken state visible for at least one frame and lets
+fast typing land outside the new block.
+
+**Pattern: capture before the DOM change, restore synchronously in the same task.**
+
+| Utility | Use for |
+| --- | --- |
+| `captureBlockSelection(block)` / `restoreBlockSelection(snapshot, newBlock)` | Block swaps where children are **moved** (headings, lists, style conversions). Node-identity restore first, text-offset fallback. Keeps non-collapsed selections (no more collapsing a selection into a caret). |
+| `captureBlockCursorPath(editor)` / `restoreBlockCursorPath(editor, path)` | Full document replacements (`editor.innerHTML = …`, undo/redo). Stores block index + text offset, which survives node recreation. |
+| `isCaretAnchoredToEditorRoot(editor)` | Detect the broken "caret on the editor root" state. Use it to gate any delayed repair so it never fights a user-moved caret (typing puts the caret inside a block, so the check fails and nothing happens). |
+| `keepCaretVisibleInEditor(editor)` | Minimal, non-animated scroll adjustment. Skips zero-sized caret rects (empty blocks) so it cannot cause a jump itself. |
+
+```typescript
+// Example: converting a paragraph to a heading
+const snapshot = captureBlockSelection(block)
+
+const heading = document.createElement('h3')
+while (block.firstChild) heading.appendChild(block.firstChild)
+block.parentNode!.replaceChild(heading, block)
+
+// Same task — no frame is ever painted with a detached caret
+restoreBlockSelection(snapshot, heading)
+
+ensureEditorFocus(editorElement)          // focus({ preventScroll: true })
+keepCaretVisibleInEditor(editorElement)
+```
+
+Call sites following this pattern: `applyBlockFormat`, `createList`/`convertListType`
+(`lib/editor/listHandler.ts`), `HistoryManager.restore`, `normalizeEditorContent`
+(structural fallback when a cleanup pass merges away the caret's text node).
+
 ## Core Functions
 
 ### Basic Cursor Positioning

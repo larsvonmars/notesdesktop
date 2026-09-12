@@ -58,6 +58,31 @@ describe('HistoryManager', () => {
       expect(editor.innerHTML).toBe(v1Content)
     })
 
+    it('undo should keep the caret in its block instead of jumping to the top', () => {
+      editor.innerHTML = '<p>First</p><p>Second</p><p>Third paragraph</p>'
+      hm.initialize()
+
+      const third = editor.querySelectorAll('p')[2]
+      const range = document.createRange()
+      range.setStart(third.firstChild!, 6)
+      range.collapse(true)
+      window.getSelection()!.removeAllRanges()
+      window.getSelection()!.addRange(range)
+
+      hm.push(true)
+
+      // Simulate an edit in the same block, then undo it
+      third.firstChild!.textContent = 'Third paragraph edited'
+      hm.push(true)
+      hm.undo()
+
+      const selection = window.getSelection()!
+      const restored = selection.getRangeAt(0)
+      const blocks = Array.from(editor.children)
+      expect(blocks[2].contains(restored.startContainer)).toBe(true)
+      expect(restored.startOffset).toBe(6)
+    })
+
     it('pushing after undo should discard redo stack', () => {
       vi.useFakeTimers()
       hm.initialize()

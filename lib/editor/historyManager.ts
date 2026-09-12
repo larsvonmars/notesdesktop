@@ -4,12 +4,17 @@
  * Supports transaction grouping for multi-step operations.
  */
 
-import { saveSelection, restoreSelection, type SelectionSnapshot } from './commandDispatcher'
-import { CURSOR_TIMING } from './cursorPosition'
+import {
+  captureBlockCursorPath,
+  keepCaretVisibleInEditor,
+  restoreBlockCursorPath,
+  CURSOR_TIMING,
+  type BlockCursorPath,
+} from './cursorPosition'
 
 interface HistorySnapshot {
   content: string
-  selection: SelectionSnapshot | null
+  cursor: BlockCursorPath | null
   timestamp: number
   /** If set, this snapshot is part of a named transaction group */
   group?: string
@@ -72,7 +77,7 @@ export class HistoryManager {
     const content = this.editorElement.innerHTML
     const snapshot: HistorySnapshot = {
       content,
-      selection: saveSelection(),
+      cursor: captureBlockCursorPath(this.editorElement),
       timestamp: now,
       group: this.activeGroup || undefined,
     }
@@ -169,8 +174,11 @@ export class HistoryManager {
   }
   
   /**
-   * Restore a snapshot
-   * Improved with better timing for cursor restoration
+   * Restore a snapshot.
+   *
+   * The caret is re-applied synchronously from the structural cursor path —
+   * replacing `innerHTML` destroys every node, so the old node-based selection
+   * could never be restored and the caret was left at the top of the note.
    */
   private restore(snapshot: HistorySnapshot): void {
     // Disable capturing during restore
@@ -180,21 +188,21 @@ export class HistoryManager {
       // Restore content
       this.editorElement.innerHTML = snapshot.content
       
-      // Ensure editor has focus
-      this.editorElement.focus()
+      // Ensure editor has focus (without letting the engine scroll for us)
+      try {
+        this.editorElement.focus({ preventScroll: true })
+      } catch {
+        this.editorElement.focus()
+      }
       
-      // Restore selection with improved timing
-      if (snapshot.selection) {
-        // Use medium delay to ensure DOM is updated and ready
-        setTimeout(() => {
-          try {
-            restoreSelection(snapshot.selection!)
-            // Ensure focus is maintained
-            this.editorElement.focus()
-          } catch (error) {
-            console.warn('Failed to restore selection:', error)
-          }
-        }, CURSOR_TIMING.MEDIUM)
+      // Restore the caret in the same task so no frame renders without it
+      if (snapshot.cursor) {
+        try {
+          restoreBlockCursorPath(this.editorElement, snapshot.cursor)
+          keepCaretVisibleInEditor(this.editorElement)
+        } catch (error) {
+          console.warn('Failed to restore cursor after history change:', error)
+        }
       }
     } finally {
       // Re-enable capturing with longer delay to prevent immediate re-capture

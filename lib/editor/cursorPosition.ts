@@ -23,8 +23,16 @@ export function setCursorAtEnd(element: HTMLElement): boolean {
         // Text node - position at end of text
         range.setStart(lastNode, lastNode.textContent?.length ?? 0)
       } else if (lastNode.nodeType === Node.ELEMENT_NODE) {
-        // Element node - position after it
-        range.setStartAfter(lastNode)
+        const lastElement = lastNode as Element
+        if (lastElement.tagName === 'BR' && element.childNodes.length === 1) {
+          // Empty block whose only content is a placeholder <br>:
+          // the caret belongs *before* the break, otherwise typing inserts a
+          // line after it (<h3><br>text</h3>) instead of filling the block.
+          range.setStart(element, 0)
+        } else {
+          // Element node - position after it
+          range.setStartAfter(lastNode)
+        }
       } else {
         // Other node types - position at end of element
         range.selectNodeContents(element)
@@ -257,6 +265,341 @@ export function restoreTextOffsetInBlock(
     return setCursorAtEnd(block)
   } catch (error) {
     console.error('Failed to restore text offset:', error)
+    return false
+  }
+}
+
+/**
+ * Snapshot of a selection that is taken *before* a block is replaced.
+ *
+ * Block format changes (paragraph → heading, list creation, …) move the
+ * block's children into a replacement element instead of cloning them, so the
+ * captured node references stay valid. That allows the selection to be
+ * re-applied synchronously — without it browsers drop the caret to the editor
+ * root (the infamous "cursor jumps to the top") for at least one frame, and
+ * fast typing lands outside the new block.
+ */
+export interface BlockSelectionSnapshot {
+  startContainer: Node
+  startOffset: number
+  endContainer: Node
+  endOffset: number
+  collapsed: boolean
+  /** Plain-text offset of the selection start within the block (fallback). */
+  startTextOffset: number
+  /** Plain-text offset of the selection end within the block (fallback). */
+  endTextOffset: number
+}
+
+/** Character offset of a DOM position relative to the start of `block`. */
+function getCharacterOffsetWithin(
+  block: HTMLElement,
+  node: Node,
+  offset: number
+): number | null {
+  if (!block.contains(node) && node !== block) return null
+
+  try {
+    const probe = document.createRange()
+    probe.selectNodeContents(block)
+    probe.setEnd(node, offset)
+    return probe.toString().length
+  } catch {
+    return null
+  }
+}
+
+/** Clamp an offset so it is valid for its node (text length / child count). */
+function clampRangeOffset(node: Node, offset: number): number {
+  if (node.nodeType === Node.TEXT_NODE) {
+    return Math.max(0, Math.min(offset, node.textContent?.length ?? 0))
+  }
+  return Math.max(0, Math.min(offset, node.childNodes.length))
+}
+
+/** Resolve a character offset inside a block to a concrete DOM position. */
+function positionFromTextOffset(
+  block: HTMLElement,
+  offset: number
+): { node: Node; offset: number } {
+  let remaining = Math.max(0, offset)
+  const walker = document.createTreeWalker(block, NodeFilter.SHOW_TEXT)
+  let lastText: Text | null = null
+
+  let node: Node | null
+  while ((node = walker.nextNode())) {
+    const text = node as Text
+    lastText = text
+    const length = text.data.length
+    if (remaining <= length) {
+      return { node: text, offset: remaining }
+    }
+    remaining -= length
+  }
+
+  if (lastText) {
+    return { node: lastText, offset: lastText.data.length }
+  }
+
+  // Block without text nodes (e.g. <p><br></p>) — caret goes before the
+  // placeholder so typing fills the block rather than adding a line after it.
+  return { node: block, offset: 0 }
+}
+
+/**
+ * Capture the current selection if it lives inside `block`.
+ * Returns null when there is no usable selection (or it belongs elsewhere).
+ */
+export function captureBlockSelection(block: HTMLElement): BlockSelectionSnapshot | null {
+  try {
+    const selection = window.getSelection()
+    if (!selection || selection.rangeCount === 0) return null
+
+    const range = selection.getRangeAt(0)
+    if (!range.startContainer.isConnected || !range.endContainer.isConnected) return null
+    if (!block.contains(range.startContainer) && range.startContainer !== block) return null
+
+    const startTextOffset =
+      getCharacterOffsetWithin(block, range.startContainer, range.startOffset) ?? 0
+    const endTextOffset =
+      getCharacterOffsetWithin(block, range.endContainer, range.endOffset) ?? startTextOffset
+
+    return {
+      startContainer: range.startContainer,
+      startOffset: range.startOffset,
+      endContainer: range.endContainer,
+      endOffset: range.endOffset,
+      collapsed: range.collapsed,
+      startTextOffset,
+      endTextOffset,
+    }
+  } catch (error) {
+    console.warn('Failed to capture block selection:', error)
+    return null
+  }
+}
+
+/**
+ * Re-apply a captured selection, ideally straight after the block swap.
+ *
+ * 1. Exact restore using the original nodes (valid because children were moved).
+ * 2. Text-offset fallback inside the replacement block.
+ *
+ * Returns true when a selection was applied.
+ */
+export function restoreBlockSelection(
+  snapshot: BlockSelectionSnapshot | null,
+  block?: HTMLElement | null
+): boolean {
+  if (!snapshot) return false
+
+  const selection = window.getSelection()
+  if (!selection) return false
+
+  // 1) Exact restore — same nodes, same offsets.
+  if (snapshot.startContainer.isConnected && snapshot.endContainer.isConnected) {
+    try {
+      const range = document.createRange()
+      range.setStart(
+        snapshot.startContainer,
+        clampRangeOffset(snapshot.startContainer, snapshot.startOffset)
+      )
+      range.setEnd(
+        snapshot.endContainer,
+        clampRangeOffset(snapshot.endContainer, snapshot.endOffset)
+      )
+      selection.removeAllRanges()
+      selection.addRange(range)
+      return true
+    } catch {
+      // Fall through to offset-based restore
+    }
+  }
+
+  // 2) Text-offset fallback within the replacement block.
+  if (!block || !block.isConnected) return false
+
+  try {
+    const start = positionFromTextOffset(block, snapshot.startTextOffset)
+    const range = document.createRange()
+    range.setStart(start.node, start.offset)
+
+    if (!snapshot.collapsed && snapshot.endTextOffset > snapshot.startTextOffset) {
+      const end = positionFromTextOffset(block, snapshot.endTextOffset)
+      range.setEnd(end.node, end.offset)
+    } else {
+      range.collapse(true)
+    }
+
+    selection.removeAllRanges()
+    selection.addRange(range)
+    return true
+  } catch (error) {
+    console.warn('Failed to restore block selection:', error)
+    return false
+  }
+}
+
+/**
+ * True when the caret is attached to the editor root rather than to a block.
+ * This is the state browsers fall back to when the node containing the caret
+ * is removed from the DOM (e.g. during a block swap) — and it renders at the
+ * very top of the editor, which is what users perceive as "the cursor jumped".
+ */
+export function isCaretAnchoredToEditorRoot(editorElement: HTMLElement | null | undefined): boolean {
+  if (!editorElement) return false
+
+  try {
+    const selection = window.getSelection()
+    if (!selection || selection.rangeCount === 0) return false
+    return selection.getRangeAt(0).startContainer === editorElement
+  } catch {
+    return false
+  }
+}
+
+/**
+ * Scroll the editor minimally so the caret stays visible.
+ * Unlike `scrollCursorIntoView` this never animates and never scrolls to a
+ * zero-sized (empty block) caret rect, so it cannot cause a visible jump.
+ */
+export function keepCaretVisibleInEditor(editorElement: HTMLElement | null | undefined): void {
+  if (!editorElement || !editorElement.isConnected) return
+
+  try {
+    const selection = window.getSelection()
+    if (!selection || selection.rangeCount === 0) return
+
+    const rect = selection.getRangeAt(0).getBoundingClientRect()
+    // Empty blocks report a zero rect at 0,0 — nothing sensible to scroll to.
+    if (rect.width === 0 && rect.height === 0 && rect.top === 0 && rect.left === 0) return
+
+    const editorRect = editorElement.getBoundingClientRect()
+    const margin = 8
+
+    if (rect.top < editorRect.top + margin) {
+      editorElement.scrollTop -= editorRect.top + margin - rect.top
+    } else if (rect.bottom > editorRect.bottom - margin) {
+      editorElement.scrollTop += rect.bottom - (editorRect.bottom - margin)
+    }
+  } catch {
+    // Best-effort only
+  }
+}
+
+/**
+ * Structural caret description that survives a full document replacement
+ * (`innerHTML = …`, e.g. undo/redo). Node-based snapshots cannot be used there
+ * because every node is recreated, which used to leave undo with the caret at
+ * the top of the note.
+ */
+export interface BlockCursorPath {
+  /** Index of the caret's top-level block among the editor's children */
+  blockIndex: number
+  /** Character offset of the caret inside that block */
+  textOffset: number
+  /** Whether the captured selection was collapsed */
+  collapsed: boolean
+  /** Block index of the selection end (only for non-collapsed selections) */
+  endBlockIndex?: number
+  /** Character offset of the selection end inside its own block */
+  endTextOffset?: number
+}
+
+/** Closest descendant of `editorElement` that contains `node`. */
+function getTopLevelBlock(editorElement: HTMLElement, node: Node): HTMLElement | null {
+  let current: Node | null = node
+  while (current && current.parentNode !== editorElement) {
+    current = current.parentNode
+  }
+  return current instanceof HTMLElement ? current : null
+}
+
+/** Capture the caret as block index + text offset (survives innerHTML swaps). */
+export function captureBlockCursorPath(
+  editorElement: HTMLElement | null | undefined
+): BlockCursorPath | null {
+  if (!editorElement) return null
+
+  try {
+    const selection = window.getSelection()
+    if (!selection || selection.rangeCount === 0) return null
+
+    const range = selection.getRangeAt(0)
+    if (!range.startContainer.isConnected) return null
+    if (!editorElement.contains(range.startContainer)) return null
+
+    const startBlock = getTopLevelBlock(editorElement, range.startContainer)
+    if (!startBlock) return null
+
+    const blockIndex = Array.prototype.indexOf.call(editorElement.children, startBlock)
+    if (blockIndex < 0) return null
+
+    const path: BlockCursorPath = {
+      blockIndex,
+      textOffset:
+        getCharacterOffsetWithin(startBlock, range.startContainer, range.startOffset) ?? 0,
+      collapsed: range.collapsed,
+    }
+
+    if (!range.collapsed) {
+      const endBlock = getTopLevelBlock(editorElement, range.endContainer)
+      const endBlockIndex = endBlock
+        ? Array.prototype.indexOf.call(editorElement.children, endBlock)
+        : -1
+      if (endBlock && endBlockIndex >= 0) {
+        path.endBlockIndex = endBlockIndex
+        path.endTextOffset =
+          getCharacterOffsetWithin(endBlock, range.endContainer, range.endOffset) ??
+          path.textOffset
+      }
+    }
+
+    return path
+  } catch (error) {
+    console.warn('Failed to capture block cursor path:', error)
+    return null
+  }
+}
+
+/** Re-apply a caret captured with `captureBlockCursorPath`. */
+export function restoreBlockCursorPath(
+  editorElement: HTMLElement | null | undefined,
+  path: BlockCursorPath | null
+): boolean {
+  if (!editorElement || !path) return false
+
+  const blocks = editorElement.children
+  if (blocks.length === 0) return false
+
+  const selection = window.getSelection()
+  if (!selection) return false
+
+  try {
+    const clampIndex = (index: number) => Math.max(0, Math.min(index, blocks.length - 1))
+    const startBlock = blocks[clampIndex(path.blockIndex)] as HTMLElement
+    const start = positionFromTextOffset(startBlock, path.textOffset)
+
+    const range = document.createRange()
+    range.setStart(start.node, start.offset)
+
+    if (!path.collapsed && path.endBlockIndex !== undefined && path.endTextOffset !== undefined) {
+      const endBlock = blocks[clampIndex(path.endBlockIndex)] as HTMLElement
+      const end = positionFromTextOffset(endBlock, path.endTextOffset)
+      try {
+        range.setEnd(end.node, end.offset)
+      } catch {
+        range.collapse(true)
+      }
+    } else {
+      range.collapse(true)
+    }
+
+    selection.removeAllRanges()
+    selection.addRange(range)
+    return true
+  } catch (error) {
+    console.warn('Failed to restore block cursor path:', error)
     return false
   }
 }

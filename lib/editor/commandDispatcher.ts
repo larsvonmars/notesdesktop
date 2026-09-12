@@ -4,9 +4,13 @@
  */
 
 import { 
-  getTextOffsetInBlock,
-  restoreTextOffsetInBlock,
+  captureBlockSelection,
+  isCaretAnchoredToEditorRoot,
+  keepCaretVisibleInEditor,
   positionCursorInElement,
+  restoreBlockSelection,
+  setCursorAtEnd,
+  setCursorAtStart,
   CURSOR_TIMING
 } from './cursorPosition'
 
@@ -411,14 +415,8 @@ export function applyBlockFormat(
       try {
         document.execCommand('formatBlock', false, `<${tagName}>`)
         
-        // Ensure cursor is properly positioned after execCommand
-        if (editorElement && editorElement.isConnected) {
-          setTimeout(() => {
-            if (editorElement.isConnected) {
-              editorElement.focus()
-            }
-          }, CURSOR_TIMING.SHORT)
-        }
+        // Keep keyboard focus in the editor without scrolling the caret around
+        ensureEditorFocus(editorElement)
         return
       } catch (error) {
         console.warn('formatBlock fallback via execCommand failed:', error)
@@ -432,11 +430,13 @@ export function applyBlockFormat(
       
       if (editorElement && editorElement.isConnected) {
         editorElement.appendChild(newBlock)
-        // Use improved cursor positioning
+        // Position synchronously so fast typing can't land in the wrong node,
+        // then re-assert with WebView-friendly timing.
+        setCursorAtStart(newBlock)
         positionCursorInElement(newBlock, 'start', editorElement)
       } else {
         range.insertNode(newBlock)
-        positionCursorInElement(newBlock, 'start')
+        setCursorAtStart(newBlock)
       }
       
       return
@@ -444,6 +444,12 @@ export function applyBlockFormat(
 
     if (editorElement && block === editorElement) {
       console.warn('Unable to identify block ancestor for formatBlock without execCommand fallback.')
+      return
+    }
+
+    // Never touch DOM outside the editor (e.g. a stray selection in a menu)
+    if (editorElement && !editorElement.contains(block)) {
+      console.warn('Block is outside the editor, skipping format change')
       return
     }
     
@@ -460,14 +466,14 @@ export function applyBlockFormat(
     
     // If no change needed, just ensure focus and return
     if (currentTag === targetTag) {
-      if (editorElement && editorElement.isConnected) {
-        editorElement.focus()
-      }
+      ensureEditorFocus(editorElement)
       return
     }
-    
-    // Save text offset within the block for better cursor restoration
-    const textOffset = getTextOffsetInBlock(block)
+
+    // Capture the caret / selection BEFORE the DOM change. The block's children
+    // are moved (not cloned) into the replacement element, so this snapshot
+    // stays valid and can be re-applied synchronously below.
+    const restoreSnapshot = captureBlockSelection(block)
     
     // Create new block with the target tag
     const newBlock = document.createElement(targetTag)
@@ -502,37 +508,59 @@ export function applyBlockFormat(
       return
     }
     
-    // Focus editor first (critical for WebView)
-    if (editorElement && editorElement.isConnected) {
-      editorElement.focus()
+    // Re-apply the caret in the SAME task. Replacing the block detaches the
+    // browser's selection and it snaps to the editor root (top of the note)
+    // until something restores it — that intermediate state is what users see
+    // as "the cursor jumped to the top", and fast typing would land outside
+    // the new block.
+    const restored = restoreBlockSelection(restoreSnapshot, newBlock)
+    
+    ensureEditorFocus(editorElement)
+    
+    if (!restored) {
+      // Last-resort synchronous fallback (e.g. selection was lost entirely)
+      setCursorAtEnd(newBlock)
     }
     
-    // Restore cursor position with improved timing
-    setTimeout(() => {
-      // Verify block is still in DOM
-      if (!newBlock.isConnected) {
-        console.warn('Block was removed from DOM after creation')
-        return
-      }
+    keepCaretVisibleInEditor(editorElement)
+    
+    // WebView safety net: some engines adjust the selection a tick later.
+    // This only repairs the detached "caret on the editor root" state and never
+    // fights the user — if they typed or moved the caret, it is inside a block
+    // and the check fails.
+    const repairCaretIfDetached = () => {
+      if (!newBlock.isConnected) return
+      const root = editorElement && editorElement.isConnected
+        ? editorElement
+        : (newBlock.parentElement as HTMLElement | null)
+      if (!isCaretAnchoredToEditorRoot(root)) return
       
-      try {
-        restoreTextOffsetInBlock(newBlock, textOffset)
-      } catch (error) {
-        console.warn('Failed to restore cursor position:', error)
-        // Fallback: position at end of block
-        try {
-          if (editorElement && editorElement.isConnected) {
-            positionCursorInElement(newBlock, 'end', editorElement)
-          } else {
-            positionCursorInElement(newBlock, 'end')
-          }
-        } catch (e) {
-          console.warn('Failed to position cursor at end:', e)
-        }
+      if (!restoreBlockSelection(restoreSnapshot, newBlock)) {
+        setCursorAtEnd(newBlock)
       }
-    }, CURSOR_TIMING.LONG)
+      keepCaretVisibleInEditor(editorElement)
+    }
+    
+    requestAnimationFrame(repairCaretIfDetached)
+    setTimeout(repairCaretIfDetached, CURSOR_TIMING.LONG)
   } catch (error) {
     console.error('Error in applyBlockFormat:', error)
+  }
+}
+
+/**
+ * Focus the editor without scrolling the caret into view — scrolling on focus
+ * is a common source of visible "jumps" (WebKit scrolls to the top when the
+ * selection is momentarily attached to the editor root).
+ */
+function ensureEditorFocus(editorElement?: HTMLElement | null): void {
+  if (!editorElement || !editorElement.isConnected) return
+  if (document.activeElement === editorElement) return
+  
+  try {
+    editorElement.focus({ preventScroll: true })
+  } catch {
+    editorElement.focus()
   }
 }
 

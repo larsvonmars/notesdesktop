@@ -110,6 +110,16 @@ export const KEYBOARD_SHORTCUTS: KeyboardShortcut[] = [
     description: 'Find & Replace',
     category: 'editing'
   },
+  {
+    keys: ['Enter'],
+    description: 'New paragraph block',
+    category: 'editing'
+  },
+  {
+    keys: ['⇧Enter', 'Shift+Enter'],
+    description: 'Line break in the current block',
+    category: 'editing'
+  },
   
   // Navigation shortcuts
   {

@@ -190,6 +190,29 @@ describe('DOM Normalizer', () => {
       expect(editor.querySelectorAll('strong').length).toBe(1)
       expect(editor.querySelector('strong')!.textContent).toBe('ab')
     })
+
+    it('should keep the caret when normalization merges away its text node', () => {
+      const p = document.createElement('p')
+      const t1 = document.createTextNode('Hello ')
+      const t2 = document.createTextNode('world')
+      p.appendChild(t1)
+      p.appendChild(t2)
+      editor.appendChild(p)
+
+      // Caret inside the second text node — the one the merge pass removes
+      const range = document.createRange()
+      range.setStart(t2, 3)
+      range.collapse(true)
+      window.getSelection()!.removeAllRanges()
+      window.getSelection()!.addRange(range)
+
+      normalizeEditorContent(editor)
+
+      const restored = window.getSelection()!.getRangeAt(0)
+      expect(p.contains(restored.startContainer)).toBe(true)
+      expect(restored.startOffset).toBe(9) // "Hello world" → 6 + 3
+      expect(p.textContent).toBe('Hello world')
+    })
   })
 
   // ---------- sanitizeInlineNodes ----------

@@ -3,6 +3,8 @@
  * Keeps the editor DOM structure clean and predictable
  */
 
+import { captureBlockCursorPath, restoreBlockCursorPath } from './cursorPosition'
+
 /**
  * Map of semantically equivalent tag names. For example, <b> and <strong> are equivalent.
  */
@@ -214,6 +216,9 @@ export function normalizeEditorContent(editorElement: HTMLElement): void {
   // Save selection before normalization
   const selection = window.getSelection()
   const savedRange = selection && selection.rangeCount > 0 ? selection.getRangeAt(0).cloneRange() : null
+  // Structural fallback: survives nodes being merged/removed by the cleanup
+  // passes below (a detached selection would otherwise snap to the top).
+  const savedPath = captureBlockCursorPath(editorElement)
 
   normalizeElement(editorElement)
   
@@ -232,10 +237,16 @@ export function normalizeEditorContent(editorElement: HTMLElement): void {
       if (editorElement.contains(savedRange.startContainer) && editorElement.contains(savedRange.endContainer)) {
         selection.removeAllRanges()
         selection.addRange(savedRange)
+        return
       }
     } catch {
       // Range may be stale if normalization removed the target nodes
     }
+  }
+
+  // The caret's node was merged/removed — re-apply it from the structural path
+  if (savedPath && selection) {
+    restoreBlockCursorPath(editorElement, savedPath)
   }
 }
 

@@ -19,8 +19,11 @@
 import {
   saveSelection,
   restoreSelection,
-  type SelectionSnapshot,
 } from './commandDispatcher'
+import {
+  captureBlockSelection,
+  restoreBlockSelection,
+} from './cursorPosition'
 
 // ─── constants ──────────────────────────────────────────────────────────────
 
@@ -232,28 +235,35 @@ export function createList(
   const list = document.createElement(type)
   const li = document.createElement('li')
 
-  const snapshot = saveSelection()
-
   if (range.collapsed) {
     // If inside a <p> or other block, consume its content
     const block = findParentBlock(range.startContainer)
     if (block && block !== editorElement) {
+      // Capture the caret before the block is swapped for the list: the block's
+      // children are *moved* into the <li>, so the snapshot can be re-applied
+      // synchronously and the caret keeps its position inside the text.
+      const blockSnapshot = captureBlockSelection(block)
       while (block.firstChild) li.appendChild(block.firstChild)
       block.parentNode?.replaceChild(list, block)
+      list.appendChild(li)
+      if (!restoreBlockSelection(blockSnapshot, li)) {
+        positionCursorIn(li)
+      }
     } else {
       li.appendChild(document.createElement('br'))
+      list.appendChild(li)
       range.insertNode(list)
+      positionCursorIn(li)
     }
-    list.appendChild(li)
-    positionCursorIn(li)
   } else {
+    const listSnapshot = saveSelection()
     const contents = range.extractContents()
     li.appendChild(contents)
     list.appendChild(li)
     range.insertNode(list)
-    if (snapshot) {
+    if (listSnapshot) {
       try {
-        restoreSelection(snapshot)
+        restoreSelection(listSnapshot)
       } catch {
         positionCursorIn(li, 'end')
       }
@@ -333,8 +343,15 @@ export function convertListType(
   Array.from(list.attributes).forEach((attr) =>
     newList.setAttribute(attr.name, attr.value),
   )
+
+  // The <li> children are moved, so the selection can be re-applied afterwards
+  // instead of being dropped when the old list element is replaced.
+  const listSnapshot = captureBlockSelection(list)
+
   while (list.firstChild) newList.appendChild(list.firstChild)
   list.parentNode?.replaceChild(newList, list)
+
+  restoreBlockSelection(listSnapshot, newList)
 }
 
 /** Toggle between types: if already that type → remove, otherwise create/convert */

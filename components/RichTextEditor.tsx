@@ -34,6 +34,7 @@ import {
   saveCursorPosition,
   restoreCursorPosition,
   positionCursorInElement,
+  setCursorAtStart,
   applyCursorOperation,
   CURSOR_TIMING
 } from '@/lib/editor/cursorPosition'
@@ -41,6 +42,7 @@ import {
   normalizeEditorContent,
   sanitizeInlineNodes
 } from '@/lib/editor/domNormalizer'
+import { handleParagraphEnter } from '@/lib/editor/enterHandler'
 import {
   toggleListType,
   toggleChecklistState,
@@ -700,6 +702,17 @@ const RichTextEditorImpl = forwardRef<RichTextEditorHandle, RichTextEditorProps>
       }
     }, [onChange, sanitize])
 
+    // Make the engine's native Enter split into <p> instead of <div> wherever
+    // the custom Enter handler defers to the browser (e.g. table cells).
+    // No-op on engines that don't support the command.
+    useEffect(() => {
+      try {
+        document.execCommand('defaultParagraphSeparator', false, 'p')
+      } catch {
+        // Ignore — handleParagraphEnter still guarantees <p> blocks
+      }
+    }, [])
+
     // Track IME composition state so we can skip handleKeyDown during composition
     useEffect(() => {
       const editor = editorRef.current
@@ -1332,20 +1345,24 @@ const RichTextEditorImpl = forwardRef<RichTextEditorHandle, RichTextEditorProps>
               if (selection && selection.rangeCount > 0) {
                 try {
                   const range = selection.getRangeAt(0)
-                  if (!range.startContainer.isConnected) return
+                  // The caret is re-applied synchronously by applyBlockFormat,
+                  // so it should always sit inside the new heading. Still, never
+                  // bail out of the cleanup below — normalization and the change
+                  // notification must run even if the selection was lost.
+                  if (range.startContainer.isConnected) {
+                    let node: Node | null = range.startContainer
 
-                  let node: Node | null = range.startContainer
-
-                  while (node && node !== editor) {
-                    if (node.nodeType === Node.ELEMENT_NODE) {
-                      const element = node as HTMLElement
-                      const tagName = element.tagName?.toLowerCase()
-                      if (tagName === `h${level}`) {
-                        targetHeading = element
-                        break
+                    while (node && node !== editor) {
+                      if (node.nodeType === Node.ELEMENT_NODE) {
+                        const element = node as HTMLElement
+                        const tagName = element.tagName?.toLowerCase()
+                        if (tagName === `h${level}`) {
+                          targetHeading = element
+                          break
+                        }
                       }
+                      node = node.parentElement
                     }
-                    node = node.parentElement
                   }
                 } catch (e) {
                   console.warn('Error finding heading element:', e)
@@ -1818,6 +1835,9 @@ const RichTextEditorImpl = forwardRef<RichTextEditorHandle, RichTextEditorProps>
             hr.parentNode.insertBefore(p, hr.nextSibling)
 
             if (p.isConnected && editor.isConnected) {
+              // Position synchronously first so the caret never lingers on the
+              // old position for a frame, then re-assert for WebViews.
+              setCursorAtStart(p)
               positionCursorInElement(p, 'start', editor)
             }
           } catch (e) {
@@ -2528,6 +2548,44 @@ const RichTextEditorImpl = forwardRef<RichTextEditorHandle, RichTextEditorProps>
             }
           } catch (error) {
             console.error('Error handling list Enter key:', error)
+          }
+        }
+
+        // Handle Shift+Enter for a soft line break (<br>) inside the current block.
+        // Handled explicitly so Shift+Enter can never produce a new block on any engine.
+        if (event.key === 'Enter' && event.shiftKey && !event.metaKey && !event.ctrlKey && !event.altKey) {
+          try {
+            // Native soft-break command. If it is unavailable, fall through to
+            // the browser default, which is a soft break as well.
+            if (document.execCommand('insertLineBreak')) {
+              event.preventDefault()
+              emitChange()
+              return
+            }
+          } catch (error) {
+            console.error('Error handling soft line break:', error)
+          }
+        }
+
+        // Handle Enter: always start a new paragraph block. Headings, quotes
+        // and other blocks are left behind instead of being cloned — see
+        // handleParagraphEnter for the full block model.
+        if (
+          event.key === 'Enter' &&
+          !event.shiftKey &&
+          !event.metaKey &&
+          !event.ctrlKey &&
+          !event.altKey
+        ) {
+          try {
+            const editor = editorRef.current
+            if (handleParagraphEnter(editor)) {
+              event.preventDefault()
+              emitChange()
+              return
+            }
+          } catch (error) {
+            console.error('Error handling paragraph Enter key:', error)
           }
         }
 
