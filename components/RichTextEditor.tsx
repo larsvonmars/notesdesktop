@@ -18,7 +18,7 @@ import DOMPurify from 'dompurify'
 import type { Config } from 'dompurify'
 import LinkDialog from './editor/LinkDialog'
 import LinkPopover from './editor/LinkPopover'
-import SearchReplaceDialog from './editor/SearchReplaceDialog'
+import SearchReplaceBar from './editor/SearchReplaceBar'
 import TableInsertDialog from './editor/TableInsertDialog'
 import TableToolbar from './editor/TableToolbar'
 import {
@@ -82,8 +82,19 @@ import {
   useLinkDialogState,
   useSearchDialogState,
   useTableDialogState,
-  type SearchMatch,
 } from '@/lib/editor/useEditorDialogState'
+import {
+  MAX_SEARCH_MATCHES,
+  findMatches,
+  matchRange,
+  replaceMatches,
+  type SearchMatch,
+} from '@/lib/editor/searchMatches'
+import {
+  applySearchHighlights,
+  clearSearchHighlights,
+  supportsSearchHighlights,
+} from '@/lib/editor/searchHighlight'
 import {
   FILE_BLOCK_PREVIEW_PDF_EVENT,
   type FileBlockPreviewPdfEventDetail,
@@ -208,12 +219,7 @@ export interface CustomBlockDescriptor {
   parse?: (el: HTMLElement) => any
 }
 
-// Performance limits
-const MAX_SEARCH_MATCHES = 1000
-const MAX_REPLACE_MATCHES = 1000
-
 // Regex patterns
-const REGEX_ESCAPE_PATTERN = /[.*+?^${}()|[\]\\]/g
 const EXTRA_BLANK_LINES_PATTERN = /\n{3,}/g
 const ZERO_WIDTH_CHARS_PATTERN = /[\u200B-\u200D\uFEFF]/g
 const GEMINI_CITATION_TAG_PATTERN = /\[cite_start\]|\[cite:\s*\d+(?:\s*,\s*\d+)*\s*\]/gi
@@ -392,6 +398,9 @@ const RichTextEditorImpl = forwardRef<RichTextEditorHandle, RichTextEditorProps>
     const checklistNormalizationTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
     const isProcessingCommandRef = useRef<boolean>(false)
     const isComposingRef = useRef<boolean>(false)
+    /** Set by Cmd/Ctrl+Shift+V so the next paste event skips HTML/markdown. */
+    const plainTextPasteRef = useRef<boolean>(false)
+    const plainTextPasteTimerRef = useRef<number | null>(null)
     const {
       showLinkDialog,
       setShowLinkDialog,
@@ -431,6 +440,10 @@ const RichTextEditorImpl = forwardRef<RichTextEditorHandle, RichTextEditorProps>
       setCurrentMatchIndex,
       caseSensitive,
       setCaseSensitive,
+      wholeWord,
+      setWholeWord,
+      searchFocusSignal,
+      focusSearchField,
       resetSearchDialog,
     } = useSearchDialogState()
     const {
@@ -1629,183 +1642,234 @@ const RichTextEditorImpl = forwardRef<RichTextEditorHandle, RichTextEditorProps>
       window.open(url, '_blank', 'noopener,noreferrer')
     }, [])
 
-    // Search functionality
-    const highlightMatch = useCallback((matchIndex: number, matchesOverride?: SearchMatch[]) => {
-      const matches = matchesOverride ?? searchMatches
-      if (!editorRef.current || matchIndex < 0 || matchIndex >= matches.length) return
+    // ── Find & replace ────────────────────────────────────────────────────
+    // Matches are per text node (lib/editor/searchMatches.ts) and the current
+    // match is painted with the CSS Custom Highlight API when available, so
+    // searching never mutates the note or steals the caret.
+    const currentMatchIndexRef = useRef(0)
 
-      try {
-        const match = matches[matchIndex]
-        const range = document.createRange()
+    useEffect(() => {
+      currentMatchIndexRef.current = currentMatchIndex
+    }, [currentMatchIndex])
+
+    const paintMatches = useCallback((matches: SearchMatch[], index: number) => {
+      if (!supportsSearchHighlights()) return
+      const ranges = matches.map((match) => matchRange(match))
+      applySearchHighlights(ranges, ranges[index] ?? null)
+    }, [])
+
+    const revealMatch = useCallback((matches: SearchMatch[], index: number, select: boolean) => {
+      const match = matches[index]
+      if (!match || !match.node.isConnected) return
+
+      if (select) {
         const selection = window.getSelection()
-
-        if (!selection) return
-
-        const walker = document.createTreeWalker(
-          editorRef.current,
-          NodeFilter.SHOW_TEXT,
-          null
-        )
-
-        let currentPos = 0
-        let node = walker.nextNode()
-
-        while (node) {
-          const nodeLength = node.textContent?.length || 0
-          if (currentPos + nodeLength > match.index) {
-            const rawOffset = match.index - currentPos
-            const offset = Math.max(0, Math.min(rawOffset, nodeLength))
-            const endOffset = Math.min(offset + match.length, nodeLength)
-
-            range.setStart(node, offset)
-            range.setEnd(node, endOffset)
-            break
-          }
-          currentPos += nodeLength
-          node = walker.nextNode()
+        if (selection) {
+          const range = matchRange(match)
+          selection.removeAllRanges()
+          selection.addRange(range)
         }
-
-        selection.removeAllRanges()
-        selection.addRange(range)
-
-        const containerElement = range.startContainer.parentElement
-        if (containerElement && containerElement.scrollIntoView) {
-          containerElement.scrollIntoView({
-            behavior: 'smooth',
-            block: 'center'
-          })
-        }
-      } catch (error) {
-        console.error('Error highlighting match:', error)
       }
-    }, [searchMatches])
 
-    const performSearch = useCallback(() => {
+      const parent = match.node.parentElement
+      parent?.scrollIntoView?.({ behavior: 'smooth', block: 'center' })
+    }, [])
+
+    const performSearch = useCallback((): SearchMatch[] => {
       try {
         if (!editorRef.current || !searchQuery) {
+          currentMatchIndexRef.current = 0
           setSearchMatches([])
-          return
+          setCurrentMatchIndex(0)
+          clearSearchHighlights()
+          return []
         }
 
-        const content = editorRef.current.textContent || ''
-        const query = caseSensitive ? searchQuery : searchQuery.toLowerCase()
-        const searchIn = caseSensitive ? content : content.toLowerCase()
+        const matches = findMatches(editorRef.current, searchQuery, {
+          caseSensitive,
+          wholeWord,
+        })
 
-        const matches: SearchMatch[] = []
-        let index = searchIn.indexOf(query)
-        let matchCount = 0
+        const nextIndex =
+          matches.length === 0 ? 0 : Math.min(currentMatchIndexRef.current, matches.length - 1)
 
-        while (index !== -1 && matchCount < MAX_SEARCH_MATCHES) {
-          matches.push({
-            index,
-            length: searchQuery.length,
-            text: content.substring(index, index + searchQuery.length)
-          })
-          index = searchIn.indexOf(query, index + 1)
-          matchCount++
-        }
-
+        currentMatchIndexRef.current = nextIndex
         setSearchMatches(matches)
-        setCurrentMatchIndex(0)
+        setCurrentMatchIndex(nextIndex)
+        paintMatches(matches, nextIndex)
 
-        if (matches.length > 0) {
-          // Pass the freshly computed matches explicitly — the `searchMatches`
-          // state in this closure is still stale for the first find.
-          highlightMatch(0, matches)
+        // Browsers without the Highlight API show the current match by
+        // selecting it (the highlight colours are unavailable there).
+        if (matches.length > 0 && !supportsSearchHighlights()) {
+          revealMatch(matches, nextIndex, true)
         }
+
+        return matches
       } catch (error) {
         console.error('Error performing search:', error)
         setSearchMatches([])
+        return []
       }
-    }, [searchQuery, caseSensitive, highlightMatch])
+    }, [
+      searchQuery,
+      caseSensitive,
+      wholeWord,
+      setSearchMatches,
+      setCurrentMatchIndex,
+      paintMatches,
+      revealMatch,
+    ])
 
-    const nextMatch = useCallback(() => {
-      if (searchMatches.length === 0) return
-      const nextIndex = (currentMatchIndex + 1) % searchMatches.length
-      setCurrentMatchIndex(nextIndex)
-      highlightMatch(nextIndex)
-    }, [currentMatchIndex, searchMatches, highlightMatch])
+    const goToMatch = useCallback(
+      (index: number) => {
+        const matches = searchMatches
+        if (matches.length === 0) return
 
-    const previousMatch = useCallback(() => {
-      if (searchMatches.length === 0) return
-      const prevIndex = (currentMatchIndex - 1 + searchMatches.length) % searchMatches.length
-      setCurrentMatchIndex(prevIndex)
-      highlightMatch(prevIndex)
-    }, [currentMatchIndex, searchMatches, highlightMatch])
+        const nextIndex = ((index % matches.length) + matches.length) % matches.length
+        currentMatchIndexRef.current = nextIndex
+        setCurrentMatchIndex(nextIndex)
+        paintMatches(matches, nextIndex)
+        revealMatch(matches, nextIndex, !supportsSearchHighlights())
+      },
+      [searchMatches, paintMatches, revealMatch, setCurrentMatchIndex]
+    )
+
+    const nextMatch = useCallback(() => goToMatch(currentMatchIndexRef.current + 1), [goToMatch])
+    const previousMatch = useCallback(
+      () => goToMatch(currentMatchIndexRef.current - 1),
+      [goToMatch]
+    )
 
     const replaceCurrentMatch = useCallback(() => {
-      if (searchMatches.length === 0 || !editorRef.current) return
+      const editor = editorRef.current
+      const match = searchMatches[currentMatchIndexRef.current]
+      if (!editor || !match || !match.node.isConnected) return
 
       try {
-        highlightMatch(currentMatchIndex)
-        const replaced = insertPlainTextAtSelection(replaceQuery)
-
-        if (replaced) {
-          normalizeEditorContent(editorRef.current)
-          mergeAdjacentLists(editorRef.current)
-          scheduleChecklistNormalization()
+        const range = matchRange(match)
+        range.deleteContents()
+        if (replaceQuery) {
+          range.insertNode(document.createTextNode(replaceQuery))
         }
 
+        normalizeEditorContent(editor)
+        mergeAdjacentLists(editor)
+        scheduleChecklistNormalization()
         emitChange()
+        // Keeps the index — it now points at the following match.
         performSearch()
       } catch (error) {
         console.error('Error replacing current match:', error)
       }
-    }, [currentMatchIndex, replaceQuery, searchMatches, highlightMatch, insertPlainTextAtSelection, emitChange, performSearch, scheduleChecklistNormalization])
+    }, [
+      searchMatches,
+      replaceQuery,
+      emitChange,
+      performSearch,
+      scheduleChecklistNormalization,
+    ])
 
     const replaceAllMatches = useCallback(() => {
-      if (!editorRef.current || !searchQuery) return
+      const editor = editorRef.current
+      if (!editor || searchMatches.length === 0) return
 
       try {
-        const contentRoot = editorRef.current
-        const flags = caseSensitive ? 'g' : 'gi'
-
-        const escapedQuery = searchQuery.replace(REGEX_ESCAPE_PATTERN, '\\$&')
-        const regex = new RegExp(escapedQuery, flags)
-
-        const textNodes: Text[] = []
-        const walker = document.createTreeWalker(contentRoot, NodeFilter.SHOW_TEXT, null)
-        let node = walker.nextNode()
-
-        while (node) {
-          if (node.nodeType === Node.TEXT_NODE) {
-            textNodes.push(node as Text)
-          }
-          node = walker.nextNode()
-        }
-
-        let matchCount = 0
-        textNodes.forEach((textNode) => {
-          const value = textNode.textContent || ''
-          if (!value) return
-          const matches = value.match(regex)
-          if (matches) {
-            matchCount += matches.length
-          }
-        })
-
-        if (matchCount >= MAX_REPLACE_MATCHES) {
-          console.warn(`Too many matches (${matchCount}+) for replace all operation`)
+        const replaced = replaceMatches(editor, searchMatches, replaceQuery)
+        if (replaced === 0) {
+          performSearch()
           return
         }
 
-        if (matchCount === 0) return
-
-        textNodes.forEach((textNode) => {
-          const value = textNode.textContent || ''
-          if (!value) return
-          textNode.textContent = value.replace(regex, replaceQuery)
-        })
-
-        normalizeEditorContent(editorRef.current)
-        mergeAdjacentLists(editorRef.current)
+        normalizeEditorContent(editor)
+        mergeAdjacentLists(editor)
         scheduleChecklistNormalization()
         emitChange()
         performSearch()
       } catch (error) {
         console.error('Error replacing all matches:', error)
       }
-    }, [searchQuery, replaceQuery, caseSensitive, emitChange, performSearch, scheduleChecklistNormalization])
+    }, [searchMatches, replaceQuery, emitChange, performSearch, scheduleChecklistNormalization])
+
+    const openSearch = useCallback(() => {
+      // Prefill from the current selection — standard find behaviour.
+      const editor = editorRef.current
+      const selection = window.getSelection()
+      let prefill = ''
+
+      if (editor && selection && selection.rangeCount > 0 && !selection.isCollapsed) {
+        const range = selection.getRangeAt(0)
+        if (editor.contains(range.commonAncestorContainer)) {
+          prefill = selection.toString().replace(/\s+/g, ' ').trim().slice(0, 120)
+        }
+      }
+
+      setShowSearchDialog(true)
+      if (prefill) setSearchQuery(prefill)
+      focusSearchField()
+    }, [focusSearchField, setSearchQuery, setShowSearchDialog])
+
+    const closeSearch = useCallback(() => {
+      clearSearchHighlights()
+      resetSearchDialog()
+      // Return focus to the note without yanking the scroll position back to
+      // the caret (the user may have scrolled while searching).
+      try {
+        editorRef.current?.focus({ preventScroll: true })
+      } catch {
+        try {
+          editorRef.current?.focus()
+        } catch {
+          /* best effort */
+        }
+      }
+    }, [resetSearchDialog])
+
+    // Live search: debounced while typing, and re-run when the toggles change.
+    useEffect(() => {
+      if (!showSearchDialog) return
+
+      const handle = window.setTimeout(() => {
+        const matches = performSearch()
+        const first = matches[0]
+        if (!first || !first.node.isConnected) return
+
+        // Only pull the first match into view when it is off-screen, so typing
+        // does not yank the document around.
+        const rect = matchRange(first).getBoundingClientRect()
+        if (rect.bottom < 0 || rect.top > window.innerHeight) {
+          revealMatch(matches, 0, false)
+        }
+      }, 120)
+
+      return () => window.clearTimeout(handle)
+    }, [showSearchDialog, searchQuery, caseSensitive, wholeWord, performSearch, revealMatch])
+
+    // Keep counts and highlights accurate while the note is edited behind the bar.
+    useEffect(() => {
+      if (!showSearchDialog) return
+      const editor = editorRef.current
+      if (!editor) return
+
+      let handle: number | null = null
+      const observer = new MutationObserver(() => {
+        if (handle !== null) window.clearTimeout(handle)
+        handle = window.setTimeout(() => {
+          handle = null
+          performSearch()
+        }, 250)
+      })
+
+      observer.observe(editor, { childList: true, subtree: true, characterData: true })
+
+      return () => {
+        observer.disconnect()
+        if (handle !== null) window.clearTimeout(handle)
+      }
+    }, [showSearchDialog, performSearch])
+
+    // Never leave highlights registered after the editor goes away.
+    useEffect(() => clearSearchHighlights, [])
+
 
     const insertHorizontalRule = useCallback(() => {
       if (disabled || !editorRef.current || !editorRef.current.isConnected) return
@@ -1851,6 +1915,62 @@ const RichTextEditorImpl = forwardRef<RichTextEditorHandle, RichTextEditorProps>
         console.error('Error inserting horizontal rule:', error)
       }
     }, [disabled, emitChange])
+
+    /**
+     * Turn an empty block (or the caret position) into a code block.
+     * Used by the ``` autoformat trigger; also reachable for future callers.
+     */
+    const insertCodeBlockAtTrigger = useCallback((): boolean => {
+      const editor = editorRef.current
+      if (disabled || !editor || !editor.isConnected) return false
+
+      const selection = window.getSelection()
+      if (!selection || selection.rangeCount === 0) return false
+
+      const range = selection.getRangeAt(0)
+      if (!range.startContainer.isConnected || !editor.contains(range.startContainer)) {
+        return false
+      }
+
+      const pre = document.createElement('pre')
+      const code = document.createElement('code')
+      // Placeholder <br> keeps the empty block clickable and caret-friendly.
+      code.appendChild(document.createElement('br'))
+      pre.appendChild(code)
+
+      const anchorElement =
+        range.startContainer.nodeType === Node.TEXT_NODE
+          ? range.startContainer.parentElement
+          : (range.startContainer as HTMLElement)
+      const block = anchorElement?.closest(
+        'p, div, h1, h2, h3, h4, h5, h6, blockquote, li'
+      ) as HTMLElement | null
+
+      const isUsableBlock =
+        !!block && !!block.parentElement && editor.contains(block) && block.tagName !== 'PRE'
+
+      if (isUsableBlock && (block!.textContent || '').trim() === '') {
+        // The trigger block is empty (the ``` was removed) — reuse its place.
+        block!.replaceWith(pre)
+      } else if (isUsableBlock) {
+        block!.after(pre)
+      } else {
+        try {
+          range.insertNode(pre)
+        } catch (error) {
+          console.error('Error inserting code block:', error)
+          return false
+        }
+      }
+
+      const caretRange = document.createRange()
+      caretRange.setStart(code, 0)
+      caretRange.collapse(true)
+      selection.removeAllRanges()
+      selection.addRange(caretRange)
+
+      return true
+    }, [disabled])
 
     const applyHistoryAction = useCallback(
       (action: 'undo' | 'redo') => {
@@ -2149,7 +2269,7 @@ const RichTextEditorImpl = forwardRef<RichTextEditorHandle, RichTextEditorProps>
           insertLink()
         },
         showSearchDialog: () => {
-          setShowSearchDialog(true)
+          openSearch()
         },
         showTableDialog: () => {
           saveSelection()
@@ -2384,7 +2504,14 @@ const RichTextEditorImpl = forwardRef<RichTextEditorHandle, RichTextEditorProps>
               const range = selection.getRangeAt(0)
               const node = range.startContainer
 
-              if (node.nodeType === Node.TEXT_NODE && event.key === ' ') {
+              // Inside a code block markdown must stay literal — no autoformat.
+              const autoformatElement =
+                node.nodeType === Node.ELEMENT_NODE
+                  ? (node as Element)
+                  : node.parentElement
+              const insideCodeBlock = !!autoformatElement?.closest('pre')
+
+              if (!insideCodeBlock && node.nodeType === Node.TEXT_NODE && event.key === ' ') {
                 const textNode = node as Text
                 const cursorOffset = range.startOffset
 
@@ -2395,7 +2522,7 @@ const RichTextEditorImpl = forwardRef<RichTextEditorHandle, RichTextEditorProps>
                 }
               }
 
-              if (event.key === ' ') {
+              if (!insideCodeBlock && event.key === ' ') {
                 const textNode = node.nodeType === Node.TEXT_NODE ? node as Text : null
                 if (textNode) {
                   const text = textNode.textContent?.substring(0, range.startOffset) || ''
@@ -2442,6 +2569,10 @@ const RichTextEditorImpl = forwardRef<RichTextEditorHandle, RichTextEditorProps>
                         break
                       case 'blockquote':
                         execCommand('formatBlock', 'blockquote')
+                        break
+                      case 'code-block':
+                        // ``` + space turns the (now empty) line into a code block.
+                        insertCodeBlockAtTrigger()
                         break
                       case 'horizontal-rule':
                         insertHorizontalRule()
@@ -2598,9 +2729,9 @@ const RichTextEditorImpl = forwardRef<RichTextEditorHandle, RichTextEditorProps>
             event.preventDefault()
             return
           }
-          // Close search dialog if open
+          // Close the find bar if it is open
           if (showSearchDialog) {
-            setShowSearchDialog(false)
+            closeSearch()
             event.preventDefault()
             return
           }
@@ -2611,6 +2742,15 @@ const RichTextEditorImpl = forwardRef<RichTextEditorHandle, RichTextEditorProps>
           if (!(event.metaKey || event.ctrlKey)) return
           const key = event.key.toLowerCase()
 
+          // Digit shortcuts must not depend on the keyboard layout: on macOS
+          // Option+1 reports '¡' as `event.key`, so fall back to the physical
+          // key code (Digit1…Digit0).
+          const digitKey = /^[0-9]$/.test(event.key)
+            ? event.key
+            : /^Digit[0-9]$/.test(event.code)
+              ? event.code.slice(5)
+              : null
+
           // Ctrl+Y — redo (Windows convention)
           if (key === 'y' && !event.shiftKey && !event.altKey) {
             event.preventDefault()
@@ -2618,7 +2758,19 @@ const RichTextEditorImpl = forwardRef<RichTextEditorHandle, RichTextEditorProps>
             return
           }
 
-          // Ctrl+Shift+V — paste as plain text (handled in paste handler via flag)
+          // Ctrl/Cmd+Shift+V — paste as plain text. The paste event itself
+          // carries no modifier state, so remember the intent for the next one.
+          if (event.shiftKey && key === 'v') {
+            plainTextPasteRef.current = true
+            if (plainTextPasteTimerRef.current !== null) {
+              window.clearTimeout(plainTextPasteTimerRef.current)
+            }
+            plainTextPasteTimerRef.current = window.setTimeout(() => {
+              plainTextPasteRef.current = false
+              plainTextPasteTimerRef.current = null
+            }, 1500)
+            return
+          }
 
           if (key === 'b' && !event.shiftKey) {
             event.preventDefault()
@@ -2650,24 +2802,28 @@ const RichTextEditorImpl = forwardRef<RichTextEditorHandle, RichTextEditorProps>
           } else if (event.shiftKey && key === 'o') {
             event.preventDefault()
             execCommand('insertOrderedList')
-          } else if (event.altKey && key === '1') {
+          } else if (event.altKey && digitKey === '1') {
             event.preventDefault()
             applyHeading(1)
-          } else if (event.altKey && key === '2') {
+          } else if (event.altKey && digitKey === '2') {
             event.preventDefault()
             applyHeading(2)
-          } else if (event.altKey && key === '3') {
+          } else if (event.altKey && digitKey === '3') {
             event.preventDefault()
             applyHeading(3)
-          } else if (event.altKey && key === '4') {
+          } else if (event.altKey && digitKey === '4') {
             event.preventDefault()
             applyHeading(4)
-          } else if (event.altKey && key === '5') {
+          } else if (event.altKey && digitKey === '5') {
             event.preventDefault()
             applyHeading(5)
-          } else if (event.altKey && key === '6') {
+          } else if (event.altKey && digitKey === '6') {
             event.preventDefault()
             applyHeading(6)
+          } else if (event.altKey && digitKey === '0') {
+            // ⌘/Ctrl+Alt+0 — back to a normal paragraph
+            event.preventDefault()
+            execCommand('formatBlock', 'p')
           } else if (key === '`') {
             event.preventDefault()
             applyCode()
@@ -2676,7 +2832,7 @@ const RichTextEditorImpl = forwardRef<RichTextEditorHandle, RichTextEditorProps>
             insertLink()
           } else if (key === 'f') {
             event.preventDefault()
-            setShowSearchDialog(true)
+            openSearch()
           } else if (key === 'z') {
             event.preventDefault()
             if (event.shiftKey) {
@@ -2811,7 +2967,24 @@ const RichTextEditorImpl = forwardRef<RichTextEditorHandle, RichTextEditorProps>
           stripGeminiCitationTags(rawText)
         )
 
-        // ── 0. Image/file paste path ──────────────────────────────────────
+        // ── 0. Explicit "paste as plain text" (⌘/Ctrl+Shift+V) ────────────
+        // Checked before the image/HTML/markdown paths so the intent always
+        // wins — unless the clipboard holds no text at all (e.g. a screenshot).
+        const plainTextIntent = plainTextPasteRef.current
+        plainTextPasteRef.current = false
+        if (plainTextPasteTimerRef.current !== null) {
+          window.clearTimeout(plainTextPasteTimerRef.current)
+          plainTextPasteTimerRef.current = null
+        }
+
+        if (plainTextIntent && textWithoutGeminiCitations) {
+          if (insertPlainTextAtSelection(textWithoutGeminiCitations)) {
+            finalizeInsertion()
+          }
+          return
+        }
+
+        // ── 0b. Image/file paste path ─────────────────────────────────────
         // Check for pasted images (e.g., screenshots from clipboard)
         if (onImagePaste && event.clipboardData.items) {
           for (const item of Array.from(event.clipboardData.items)) {
@@ -3099,23 +3272,27 @@ const RichTextEditorImpl = forwardRef<RichTextEditorHandle, RichTextEditorProps>
           onRemove={removeLink}
         />
 
-        <SearchReplaceDialog
-          isOpen={showSearchDialog}
-          searchQuery={searchQuery}
-          replaceQuery={replaceQuery}
-          caseSensitive={caseSensitive}
-          searchMatchesCount={searchMatches.length}
-          currentMatchIndex={currentMatchIndex}
-          onClose={resetSearchDialog}
-          onSearchQueryChange={setSearchQuery}
-          onReplaceQueryChange={setReplaceQuery}
-          onCaseSensitiveChange={setCaseSensitive}
-          onFind={performSearch}
-          onPrevious={previousMatch}
-          onNext={nextMatch}
-          onReplace={replaceCurrentMatch}
-          onReplaceAll={replaceAllMatches}
-        />
+        {showSearchDialog && (
+          <SearchReplaceBar
+            searchQuery={searchQuery}
+            replaceQuery={replaceQuery}
+            caseSensitive={caseSensitive}
+            wholeWord={wholeWord}
+            matchesCount={searchMatches.length}
+            currentMatchIndex={currentMatchIndex}
+            capped={searchMatches.length >= MAX_SEARCH_MATCHES}
+            focusSignal={searchFocusSignal}
+            onClose={closeSearch}
+            onSearchQueryChange={setSearchQuery}
+            onReplaceQueryChange={setReplaceQuery}
+            onCaseSensitiveChange={setCaseSensitive}
+            onWholeWordChange={setWholeWord}
+            onPrevious={previousMatch}
+            onNext={nextMatch}
+            onReplace={replaceCurrentMatch}
+            onReplaceAll={replaceAllMatches}
+          />
+        )}
 
         <TableInsertDialog
           isOpen={showTableDialog}

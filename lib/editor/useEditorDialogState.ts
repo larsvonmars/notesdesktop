@@ -1,15 +1,10 @@
 import { useCallback, useEffect, useState } from 'react'
+import type { SearchMatch } from './searchMatches'
 
 export interface RecentLink {
   url: string
   text: string
   timestamp: number
-}
-
-export interface SearchMatch {
-  index: number
-  length: number
-  text: string
 }
 
 export function useLinkDialogState() {
@@ -76,6 +71,8 @@ export function useSearchDialogState() {
   const [searchMatches, setSearchMatches] = useState<SearchMatch[]>([])
   const [currentMatchIndex, setCurrentMatchIndex] = useState(0)
   const [caseSensitive, setCaseSensitive] = useState(false)
+  const [wholeWord, setWholeWord] = useState(false)
+  const [searchFocusSignal, setSearchFocusSignal] = useState(0)
 
   const resetSearchDialog = useCallback(() => {
     setShowSearchDialog(false)
@@ -83,6 +80,10 @@ export function useSearchDialogState() {
     setReplaceQuery('')
     setSearchMatches([])
     setCurrentMatchIndex(0)
+  }, [])
+
+  const focusSearchField = useCallback(() => {
+    setSearchFocusSignal((signal) => signal + 1)
   }, [])
 
   return {
@@ -98,6 +99,10 @@ export function useSearchDialogState() {
     setCurrentMatchIndex,
     caseSensitive,
     setCaseSensitive,
+    wholeWord,
+    setWholeWord,
+    searchFocusSignal,
+    focusSearchField,
     resetSearchDialog,
   }
 }

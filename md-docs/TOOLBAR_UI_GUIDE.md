@@ -98,6 +98,19 @@ Select "important text" → Click Bold button → **important text**
 3. Search and select the note you want to link to
 4. Link is inserted at cursor position
 
+### Find & Replace
+
+Press `Cmd/Ctrl+F` to open the find bar (top of the window). It is **not a
+modal** — the note stays visible and editable while you search:
+
+- **Live results** as you type: every match is highlighted, the counter shows
+  `current/total` (or *No results*)
+- `Enter` jumps to the next match, `Shift+Enter` to the previous one (wraps)
+- Toggle **Match case** / **Match whole word** in the bar
+- The replace row has **Replace** and **Replace all**
+- `Escape` closes the bar and returns focus to the note
+- Opening it while text is selected prefills the query with that selection
+
 ### Keyboard Shortcuts
 
 All formatting commands have keyboard shortcuts for power users:
@@ -111,9 +124,14 @@ All formatting commands have keyboard shortcuts for power users:
 | Code | `Cmd/Ctrl+\`` |
 | Link | `Cmd/Ctrl+K` |
 | Copy selection | `Cmd/Ctrl+C` |
+| Paste as plain text | `Cmd/Ctrl+Shift+V` |
 | Heading 1 | `Cmd/Ctrl+Alt+1` |
 | Heading 2 | `Cmd/Ctrl+Alt+2` |
 | Heading 3 | `Cmd/Ctrl+Alt+3` |
+| Heading 4 | `Cmd/Ctrl+Alt+4` |
+| Heading 5 | `Cmd/Ctrl+Alt+5` |
+| Heading 6 | `Cmd/Ctrl+Alt+6` |
+| Normal text | `Cmd/Ctrl+Alt+0` |
 | Bullet List | `Cmd/Ctrl+Shift+L` |
 | Numbered List | `Cmd/Ctrl+Shift+O` |
 | Checklist | `Cmd/Ctrl+Shift+C` |

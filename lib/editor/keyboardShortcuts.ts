@@ -79,6 +79,26 @@ export const KEYBOARD_SHORTCUTS: KeyboardShortcut[] = [
     category: 'blocks'
   },
   {
+    keys: ['⌘⌥4', 'Ctrl+Alt+4'],
+    description: 'Heading 4',
+    category: 'blocks'
+  },
+  {
+    keys: ['⌘⌥5', 'Ctrl+Alt+5'],
+    description: 'Heading 5',
+    category: 'blocks'
+  },
+  {
+    keys: ['⌘⌥6', 'Ctrl+Alt+6'],
+    description: 'Heading 6',
+    category: 'blocks'
+  },
+  {
+    keys: ['⌘⌥0', 'Ctrl+Alt+0'],
+    description: 'Normal text (paragraph)',
+    category: 'blocks'
+  },
+  {
     keys: ['⌘⇧E', 'Ctrl+Shift+E'],
     description: 'Align Center',
     category: 'blocks'
@@ -108,6 +128,11 @@ export const KEYBOARD_SHORTCUTS: KeyboardShortcut[] = [
   {
     keys: ['⌘F', 'Ctrl+F'],
     description: 'Find & Replace',
+    category: 'editing'
+  },
+  {
+    keys: ['⌘⇧V', 'Ctrl+Shift+V'],
+    description: 'Paste as plain text',
     category: 'editing'
   },
   {
@@ -150,11 +175,12 @@ export const AUTOFORMAT_HELP = [
   { pattern: '__text__', description: 'Underline text' },
   { pattern: '# ', description: 'Heading 1 (at start of line)' },
   { pattern: '## ', description: 'Heading 2 (at start of line)' },
-  { pattern: '### ', description: 'Heading 3 (at start of line)' },
-  { pattern: '- ', description: 'Bulleted list (at start of line)' },
+  { pattern: '### ', description: 'Heading 3 (at start of line, up to ######)' },
+  { pattern: '- or * ', description: 'Bulleted list (at start of line)' },
   { pattern: '1. ', description: 'Numbered list (at start of line)' },
   { pattern: '[ ] ', description: 'Checklist (at start of line)' },
   { pattern: '> ', description: 'Blockquote (at start of line)' },
+  { pattern: '``` ', description: 'Code block (at start of line)' },
   { pattern: '---', description: 'Horizontal rule' },
 ]
 

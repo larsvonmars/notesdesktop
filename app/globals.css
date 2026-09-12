@@ -22,6 +22,7 @@
 @import './styles/share-note.css';
 @import './styles/file-blocks.css';
 @import './styles/pdf-text-layer.css';
+@import './styles/editor-search.css';
 
 @tailwind base;
 @tailwind components;

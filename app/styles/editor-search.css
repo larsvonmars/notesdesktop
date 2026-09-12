@@ -1,0 +1,18 @@
+/* ─── Editor search highlights ────────────────────────────────────────────
+   Painted through the CSS Custom Highlight API (see lib/editor/searchHighlight.ts).
+   Because `::highlight()` paints over text independently of the theme, both
+   colours set their own foreground so they stay readable in light and dark. */
+
+::highlight(note-search-all) {
+  background-color: rgba(250, 204, 21, 0.55);
+  color: #1f2937;
+  text-decoration: underline;
+  text-decoration-color: rgba(202, 138, 4, 0.9);
+  text-decoration-thickness: 1px;
+}
+
+::highlight(note-search-current) {
+  background-color: #2563eb;
+  color: #ffffff;
+  text-decoration: none;
+}

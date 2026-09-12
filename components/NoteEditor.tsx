@@ -2214,8 +2214,21 @@ export default function NoteEditor({
 
   useEffect(() => {
     const handler = (event: KeyboardEvent) => {
-      // Handle "+" key to open content blocks menu (for rich text notes only)
-      if (event.key === '+' && noteType === 'rich-text' && !isSaving && !isDeleting) {
+      // "+" opens the content-blocks menu — but only while the caret is in the
+      // note body. It must never swallow a literal "+" typed into the title,
+      // the find bar, the link dialog or any other field.
+      const target = event.target as HTMLElement | null
+      const editorElement = editorRef.current?.getRootElement() ?? null
+      const typingInEditor =
+        !!target && target.isContentEditable === true && !!editorElement?.contains(target)
+
+      if (
+        typingInEditor &&
+        event.key === '+' &&
+        noteType === 'rich-text' &&
+        !isSaving &&
+        !isDeleting
+      ) {
         event.preventDefault()
         openContentBlocksMenu()
         return

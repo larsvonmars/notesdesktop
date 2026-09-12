@@ -140,6 +140,11 @@ describe('Autoformatting', () => {
       expect(result).toBe('horizontal-rule')
     })
 
+    it('should detect code block pattern', () => {
+      const result = checkListPrefixPattern('```')
+      expect(result).toBe('code-block')
+    })
+
     it('should return null for non-matching patterns', () => {
       const result = checkListPrefixPattern('normal text')
       expect(result).toBe(null)
