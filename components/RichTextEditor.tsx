@@ -19,12 +19,14 @@ import type { Config } from 'dompurify'
 import LinkDialog from './editor/LinkDialog'
 import LinkPopover from './editor/LinkPopover'
 import SearchReplaceBar from './editor/SearchReplaceBar'
+import BlockControls, { type BlockActionId } from './editor/BlockControls'
 import TableInsertDialog from './editor/TableInsertDialog'
 import TableToolbar from './editor/TableToolbar'
 import {
   applyInlineStyle,
   applyBlockFormat,
   applyTextAlignment,
+  clearInlineFormatting,
   getTextAlignment,
   generateHeadingId,
   saveSelection as saveSelectionUtil,
@@ -36,12 +38,24 @@ import {
   positionCursorInElement,
   setCursorAtStart,
   applyCursorOperation,
+  keepCaretVisibleInEditor,
   CURSOR_TIMING
 } from '@/lib/editor/cursorPosition'
 import {
   normalizeEditorContent,
   sanitizeInlineNodes
 } from '@/lib/editor/domNormalizer'
+import {
+  blockKind,
+  canMoveBlockBefore,
+  convertBlockToCode,
+  duplicateBlock,
+  getTopLevelBlock,
+  moveBlock,
+  moveBlockBefore,
+  placeCaretInBlock,
+  removeBlock,
+} from '@/lib/editor/blockTools'
 import { handleParagraphEnter } from '@/lib/editor/enterHandler'
 import {
   toggleListType,
@@ -90,6 +104,7 @@ import {
   replaceMatches,
   type SearchMatch,
 } from '@/lib/editor/searchMatches'
+import { applyTextCase } from '@/lib/editor/textCase'
 import {
   applySearchHighlights,
   clearSearchHighlights,
@@ -123,6 +138,7 @@ export type RichTextCommand =
   | 'redo'
   | 'link'
   | 'copy'
+  | 'clear-formatting'
   | 'horizontal-rule'
   | 'align-left'
   | 'align-center'
@@ -130,6 +146,7 @@ export type RichTextCommand =
   | `highlight:${string}`
   | `color:${string}`
   | `font-size:${string}`
+  | `case:${string}`
 
 export interface RichTextEditorHandle {
   focus: () => void
@@ -1972,6 +1989,124 @@ const RichTextEditorImpl = forwardRef<RichTextEditorHandle, RichTextEditorProps>
       return true
     }, [disabled])
 
+    /**
+     * Block menu actions from the hover handle (`components/editor/BlockControls.tsx`).
+     * Turn-into actions reuse the regular commands so all their bookkeeping
+     * (heading ids, list normalization, cursor restoration) stays in one place.
+     */
+    const handleBlockAction = useCallback(
+      (action: BlockActionId, block: HTMLElement) => {
+        const editor = editorRef.current
+        if (disabled || !editor || !editor.contains(block)) return
+
+        const kind = blockKind(block)
+        const alreadyThatKind =
+          (action === 'paragraph' && (kind === 'paragraph' || kind === 'other')) ||
+          (action === 'h1' && kind === 'h1') ||
+          (action === 'h2' && kind === 'h2') ||
+          (action === 'h3' && kind === 'h3') ||
+          (action === 'quote' && kind === 'quote') ||
+          (action === 'code' && kind === 'code') ||
+          (action === 'ul' && kind === 'ul') ||
+          (action === 'ol' && kind === 'ol') ||
+          (action === 'checklist' && kind === 'checklist')
+
+        // Commands would toggle the block back; the menu means "make it this".
+        if (alreadyThatKind) return
+
+        // Structural edits are always undoable on their own. The debounced
+        // history capture may still be pending, so force a snapshot first —
+        // otherwise a quick Cmd/Ctrl+Z right after the action does nothing.
+        historyManagerRef.current?.push(true)
+
+        if (
+          action === 'duplicate' ||
+          action === 'delete' ||
+          action === 'move-up' ||
+          action === 'move-down'
+        ) {
+          let changed = false
+          if (action === 'duplicate') {
+            const clone = duplicateBlock(editor, block)
+            if (clone) {
+              placeCaretInBlock(clone)
+              changed = true
+            }
+          } else if (action === 'delete') {
+            changed = removeBlock(editor, block)
+          } else {
+            changed = moveBlock(editor, block, action === 'move-up' ? 'up' : 'down')
+          }
+
+          if (changed) {
+            editor.focus({ preventScroll: true })
+            keepCaretVisibleInEditor(editor)
+            normalizeEditorContent(editor)
+            emitChange()
+          }
+          return
+        }
+
+        // Turn-into: aim the command at that block first.
+        if (!placeCaretInBlock(block)) return
+
+        // The menu button unmounts on click — keep the keyboard on the text.
+        editor.focus({ preventScroll: true })
+
+        switch (action) {
+          case 'paragraph':
+            execCommand('formatBlock', 'p')
+            break
+          case 'h1':
+            applyHeading(1)
+            break
+          case 'h2':
+            applyHeading(2)
+            break
+          case 'h3':
+            applyHeading(3)
+            break
+          case 'quote':
+            execCommand('formatBlock', 'blockquote')
+            break
+          case 'code':
+            if (convertBlockToCode(editor, block)) {
+              normalizeEditorContent(editor)
+              emitChange()
+            }
+            break
+          case 'ul':
+            execCommand('insertUnorderedList')
+            break
+          case 'ol':
+            execCommand('insertOrderedList')
+            break
+          case 'checklist':
+            toggleChecklist()
+            break
+        }
+      },
+      [applyHeading, disabled, emitChange, execCommand, toggleChecklist]
+    )
+
+    /** Drag reorder finished — the owner performs the structural change. */
+    const handleBlockDrop = useCallback(
+      (block: HTMLElement, reference: HTMLElement | null) => {
+        const editor = editorRef.current
+        if (disabled || !editor || !canMoveBlockBefore(editor, block, reference)) return
+
+        // Structural edits are always undoable on their own.
+        historyManagerRef.current?.push(true)
+        if (!moveBlockBefore(editor, block, reference)) return
+
+        editor.focus({ preventScroll: true })
+        keepCaretVisibleInEditor(editor)
+        normalizeEditorContent(editor)
+        emitChange()
+      },
+      [disabled, emitChange]
+    )
+
     const applyHistoryAction = useCallback(
       (action: 'undo' | 'redo') => {
         if (!historyManagerRef.current) return
@@ -1988,6 +2123,11 @@ const RichTextEditorImpl = forwardRef<RichTextEditorHandle, RichTextEditorProps>
     )
 
     const executeRichTextCommand = useCallback((cmd: RichTextCommand) => {
+      // Formatting commands are explicit user actions: snapshot first so undo
+      // always has a step to go back to (the debounced capture is still pending
+      // right after a command).
+      historyManagerRef.current?.push(true)
+
       // Support highlight, color and font-size commands like 'highlight:yellow', 'color:red', 'font-size:16'
       if (typeof cmd === 'string') {
         if (cmd.startsWith('highlight:')) {
@@ -2033,6 +2173,17 @@ const RichTextEditorImpl = forwardRef<RichTextEditorHandle, RichTextEditorProps>
             applyFontSize('clear')
           } else {
             applyFontSize(size)
+          }
+          return
+        }
+
+        if (cmd.startsWith('case:')) {
+          const mode = cmd.slice('case:'.length)
+          if (mode === 'upper' || mode === 'lower' || mode === 'title') {
+            const editor = editorRef.current
+            if (editor && applyTextCase(editor, mode)) {
+              emitChange()
+            }
           }
           return
         }
@@ -2089,6 +2240,14 @@ const RichTextEditorImpl = forwardRef<RichTextEditorHandle, RichTextEditorProps>
         case 'link':
           insertLink()
           break
+        case 'clear-formatting': {
+          const editor = editorRef.current
+          if (editor && clearInlineFormatting(editor)) {
+            normalizeEditorContent(editor)
+            emitChange()
+          }
+          break
+        }
         case 'undo':
           applyHistoryAction('undo')
           break
@@ -2496,6 +2655,34 @@ const RichTextEditorImpl = forwardRef<RichTextEditorHandle, RichTextEditorProps>
           return
         }
 
+        // Alt+↑/↓ — move the whole block (paragraph, heading, list, …). This is
+        // the keyboard/touch path for reordering; the hover handle adds drag.
+        if (
+          event.altKey &&
+          !event.metaKey &&
+          !event.ctrlKey &&
+          !event.shiftKey &&
+          (event.key === 'ArrowUp' || event.key === 'ArrowDown')
+        ) {
+          try {
+            const editor = editorRef.current
+            const selection = window.getSelection()
+            const block = getTopLevelBlock(selection?.anchorNode ?? null, editor)
+
+            if (editor && block) {
+              event.preventDefault()
+              historyManagerRef.current?.push(true)
+              if (moveBlock(editor, block, event.key === 'ArrowUp' ? 'up' : 'down')) {
+                keepCaretVisibleInEditor(editor)
+                emitChange()
+              }
+              return
+            }
+          } catch (error) {
+            console.error('Error moving block:', error)
+          }
+        }
+
         // Handle autoformatting
         if (autoformatEnabled && shouldApplyAutoformat(event.nativeEvent)) {
           try {
@@ -2830,6 +3017,14 @@ const RichTextEditorImpl = forwardRef<RichTextEditorHandle, RichTextEditorProps>
           } else if (key === 'k') {
             event.preventDefault()
             insertLink()
+          } else if (key === '\\' || event.code === 'Backslash' || event.code === 'IntlBackslash') {
+            // ⌘/Ctrl+\ — clear formatting (Google Docs convention)
+            event.preventDefault()
+            const editor = editorRef.current
+            if (editor && clearInlineFormatting(editor)) {
+              normalizeEditorContent(editor)
+              emitChange()
+            }
           } else if (key === 'f') {
             event.preventDefault()
             openSearch()
@@ -3217,10 +3412,10 @@ const RichTextEditorImpl = forwardRef<RichTextEditorHandle, RichTextEditorProps>
 
     return (
       <div className="flex h-full min-h-0 flex-col overflow-hidden">
-        <div className="flex-1 min-h-0 overflow-hidden">
+        <div className="relative flex-1 min-h-0 overflow-hidden">
           <div
             ref={editorRef}
-            className="h-full w-full overflow-y-auto whitespace-pre-wrap break-words p-3 focus:outline-none sm:p-4"
+            className="h-full w-full overflow-y-auto whitespace-pre-wrap break-words p-3 pl-7 focus:outline-none sm:p-4 sm:pl-8"
             contentEditable={!disabled}
             data-placeholder={placeholder}
             onInput={handleInput}
@@ -3235,6 +3430,13 @@ const RichTextEditorImpl = forwardRef<RichTextEditorHandle, RichTextEditorProps>
             aria-label="Rich text editor"
             aria-multiline="true"
             aria-disabled={disabled}
+          />
+
+          <BlockControls
+            editorRef={editorRef}
+            disabled={disabled}
+            onDropBlock={handleBlockDrop}
+            onAction={handleBlockAction}
           />
         </div>
 

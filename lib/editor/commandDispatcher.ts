@@ -742,3 +742,195 @@ export function generateHeadingId(text: string): string {
   
   return id || `heading-${Date.now()}`
 }
+
+/** Inline wrappers that "clear formatting" removes. */
+const STRIP_INLINE_SELECTOR = [
+  'strong',
+  'b',
+  'em',
+  'i',
+  'u',
+  's',
+  'strike',
+  'code',
+  'mark',
+  'sub',
+  'sup',
+  'span[data-highlight]',
+  'span[data-color]',
+  'span[style*="font-size"]',
+].join(', ')
+
+/** Never touched: code blocks, custom islands and note links. */
+function shouldKeepWrapper(element: Element): boolean {
+  if (element.closest('pre')) return true
+  if (element.hasAttribute('data-block') || element.hasAttribute('data-block-type')) return true
+  if (element.hasAttribute('data-note-id')) return true
+  return false
+}
+
+/** Move a wrapper's children up and drop the wrapper itself. */
+
+/** True when the selection covers the whole content of `wrapper`. */
+function isFullyCovered(range: Range, wrapper: Element): boolean {
+  try {
+    const content = document.createRange()
+    content.selectNodeContents(wrapper)
+
+    return (
+      range.compareBoundaryPoints(Range.START_TO_START, content) <= 0 &&
+      range.compareBoundaryPoints(Range.END_TO_END, content) >= 0
+    )
+  } catch {
+    return false
+  }
+}
+
+/**
+ * Selection covers only part of the wrapper: pull the covered run out of it
+ * (leaving the surrounding pieces wrapped) and re-insert the run unwrapped.
+ */
+function unwrapCoveredPart(wrapper: Element, range: Range): boolean {
+  const parent = wrapper.parentNode
+  if (!parent || !wrapper.firstChild) return false
+
+  try {
+    const content = document.createRange()
+    content.selectNodeContents(wrapper)
+
+    // The part of the selection that lives inside this wrapper.
+    const covered = document.createRange()
+    const startInside = wrapper.contains(range.startContainer)
+    const endInside = wrapper.contains(range.endContainer)
+
+    if (startInside) {
+      covered.setStart(range.startContainer, range.startOffset)
+    } else {
+      covered.setStart(content.startContainer, content.startOffset)
+    }
+
+    if (endInside) {
+      covered.setEnd(range.endContainer, range.endOffset)
+    } else {
+      covered.setEnd(content.endContainer, content.endOffset)
+    }
+
+    // The browser splits text nodes here, so the wrapper keeps every unselected
+    // character. `covered` collapses to the extraction point afterwards.
+    const coveredFragment = covered.extractContents()
+    if (!coveredFragment.textContent && !coveredFragment.childNodes.length) return false
+
+    // Anything after the extraction point stays wrapped in a clone of this
+    // wrapper, so only the covered run ends up unformatted.
+    let trailingWrapper: Element | null = null
+    const tailStartContainer = covered.startContainer
+    const tailStartOffset = covered.startOffset
+    const lastChild = wrapper.lastChild
+
+    if (lastChild) {
+      try {
+        const tailRange = document.createRange()
+        tailRange.setStart(tailStartContainer, tailStartOffset)
+        tailRange.setEndAfter(lastChild)
+        const tail = tailRange.extractContents()
+
+        if (tail.childNodes.length > 0) {
+          trailingWrapper = wrapper.cloneNode(false) as Element
+          trailingWrapper.appendChild(tail)
+        }
+      } catch {
+        trailingWrapper = null
+      }
+    }
+
+    if (trailingWrapper) {
+      parent.insertBefore(trailingWrapper, wrapper.nextSibling)
+    }
+    parent.insertBefore(coveredFragment, wrapper.nextSibling)
+
+    return true
+  } catch (error) {
+    console.warn('Failed to split formatted element:', error)
+    return false
+  }
+}
+
+/**
+ * Clear inline formatting (bold, italic, underline, strike, inline code,
+ * highlight, text colour, font size) for the current selection.
+ *
+ * With a collapsed caret the whole block is cleared. Formatting that only
+ * partially overlaps the selection is split first, so text outside the
+ * selection keeps its formatting. Links, code blocks and custom blocks are
+ * preserved.
+ *
+ * @returns true when something was changed.
+ */
+export function clearInlineFormatting(editorElement?: HTMLElement | null): boolean {
+  try {
+    const selection = window.getSelection()
+    if (!selection || selection.rangeCount === 0) return false
+
+    const liveRange = selection.getRangeAt(0)
+    if (!liveRange.startContainer.isConnected) return false
+    if (editorElement && !editorElement.contains(liveRange.commonAncestorContainer)) {
+      return false
+    }
+
+    let range: Range
+    if (liveRange.collapsed) {
+      // Nothing selected — clear the block the caret sits in.
+      const block = getBlockAncestor(liveRange.startContainer)
+      const target = block && (!editorElement || editorElement.contains(block)) ? block : null
+      if (!target) return false
+
+      range = document.createRange()
+      range.selectNodeContents(target)
+    } else {
+      range = liveRange.cloneRange()
+    }
+
+    const root: ParentNode = editorElement ?? document
+    // Deepest wrappers first: splitting an inner wrapper must not invalidate the
+    // coverage test of an outer one.
+    const wrappers = Array.from(root.querySelectorAll(STRIP_INLINE_SELECTOR))
+      .filter((element) => !shouldKeepWrapper(element))
+      .sort((a, b) => depthOf(b) - depthOf(a))
+
+    let changed = 0
+    for (const wrapper of wrappers) {
+      if (!wrapper.isConnected || !wrapper.textContent) continue
+
+      let intersects = false
+      try {
+        intersects = range.intersectsNode(wrapper)
+      } catch {
+        intersects = false
+      }
+      if (!intersects) continue
+
+      if (isFullyCovered(range, wrapper)) {
+        unwrapElement(wrapper)
+        changed += 1
+      } else if (unwrapCoveredPart(wrapper, range)) {
+        changed += 1
+      }
+    }
+
+    return changed > 0
+  } catch (error) {
+    console.error('Failed to clear inline formatting:', error)
+    return false
+  }
+}
+
+/** DOM depth, used to process the innermost wrappers first. */
+function depthOf(element: Element): number {
+  let depth = 0
+  let current: Node | null = element
+  while (current.parentNode) {
+    depth += 1
+    current = current.parentNode
+  }
+  return depth
+}

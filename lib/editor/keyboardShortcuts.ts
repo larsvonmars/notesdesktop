@@ -99,6 +99,16 @@ export const KEYBOARD_SHORTCUTS: KeyboardShortcut[] = [
     category: 'blocks'
   },
   {
+    keys: ['⌥↑', 'Alt+↑'],
+    description: 'Move block up',
+    category: 'blocks'
+  },
+  {
+    keys: ['⌥↓', 'Alt+↓'],
+    description: 'Move block down',
+    category: 'blocks'
+  },
+  {
     keys: ['⌘⇧E', 'Ctrl+Shift+E'],
     description: 'Align Center',
     category: 'blocks'
@@ -133,6 +143,11 @@ export const KEYBOARD_SHORTCUTS: KeyboardShortcut[] = [
   {
     keys: ['⌘⇧V', 'Ctrl+Shift+V'],
     description: 'Paste as plain text',
+    category: 'editing'
+  },
+  {
+    keys: ['⌘\\', 'Ctrl+\\'],
+    description: 'Clear formatting',
     category: 'editing'
   },
   {

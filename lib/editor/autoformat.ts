@@ -7,7 +7,24 @@ export interface AutoformatPattern {
   pattern: RegExp
   replacement: (match: string, ...groups: string[]) => string
   requiresSpace?: boolean // Only trigger after space/enter
+  /** Skip this pattern when the text already sits inside a link. */
+  skipInsideLink?: boolean
 }
+
+const escapeHtmlText = (value: string): string =>
+  value
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;')
+
+const escapeHtmlAttribute = (value: string): string =>
+  value
+    .replace(/&/g, '&amp;')
+    .replace(/"/g, '&quot;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
 
 /**
  * Markdown-style autoformatting patterns
@@ -43,6 +60,29 @@ export const AUTOFORMAT_PATTERNS: AutoformatPattern[] = [
     replacement: (match, text) => `<u>${text}</u>`,
     requiresSpace: true
   },
+  // Bare URL typed as https://…, http://… or www.… → real link.
+  // Trailing punctuation stays as text, outside the link.
+  {
+    pattern: /(?:^|\s)((?:https?:\/\/|www\.)[^\s<>]+?)([.,;:!?)\]}'\"]*)$/i,
+    replacement: (match, url, trailing = '') => {
+      let linkUrl = url
+      let suffix = trailing
+
+      // Keep a closing bracket that belongs to an opening one inside the URL
+      // (e.g. …/wiki/Foo_(bar)).
+      const openParens = (linkUrl.match(/\(/g) || []).length
+      const closeParens = (linkUrl.match(/\)/g) || []).length
+      if (openParens > closeParens && suffix.startsWith(')')) {
+        linkUrl += ')'
+        suffix = suffix.slice(1)
+      }
+
+      const href = /^www\./i.test(linkUrl) ? `https://${linkUrl}` : linkUrl
+      return ` <a href="${escapeHtmlAttribute(href)}" target="_blank" rel="noopener noreferrer">${escapeHtmlText(linkUrl)}</a>${escapeHtmlText(suffix)} `
+    },
+    requiresSpace: true,
+    skipInsideLink: true
+  },
 ]
 
 /**
@@ -65,7 +105,9 @@ export function applyAutoformat(
   const beforeCursor = text.substring(0, cursorOffset)
   
   // Try each pattern
-  for (const { pattern, replacement } of AUTOFORMAT_PATTERNS) {
+  for (const { pattern, replacement, skipInsideLink } of AUTOFORMAT_PATTERNS) {
+    if (skipInsideLink && textNode.parentElement?.closest('a')) continue
+
     const match = beforeCursor.match(pattern)
     if (match) {
       const matchStart = cursorOffset - match[0].length

@@ -111,6 +111,21 @@ modal** — the note stays visible and editable while you search:
 - `Escape` closes the bar and returns focus to the note
 - Opening it while text is selected prefills the query with that selection
 
+### Block handle
+
+Hovering a block (paragraph, heading, list, quote, code block, …) shows a small
+label in the left gutter. Click it for **Turn into / Duplicate / Move up / Move
+down / Delete** — or drag it to reorder blocks with a drop indicator.
+`Alt+↑` / `Alt+↓` move the block under the caret without the mouse. Structural
+changes are single undo steps.
+
+The selection toolbar's "More" panel also has **Aa** (Text case:
+Title Case / UPPERCASE / lowercase) and the eraser (**Clear formatting**,
+`Cmd/Ctrl+\`), which strips bold/italic/underline/strike/code/highlight/colour/
+font-size from the selection while splitting partially selected formatting.
+Typing a bare `https://…`, `http://…` or `www.…` followed by a space turns it
+into a link automatically.
+
 ### Keyboard Shortcuts
 
 All formatting commands have keyboard shortcuts for power users:
@@ -132,6 +147,10 @@ All formatting commands have keyboard shortcuts for power users:
 | Heading 5 | `Cmd/Ctrl+Alt+5` |
 | Heading 6 | `Cmd/Ctrl+Alt+6` |
 | Normal text | `Cmd/Ctrl+Alt+0` |
+| Move block up | `Alt+↑` |
+| Move block down | `Alt+↓` |
+| Clear formatting | `Cmd/Ctrl+\` |
+| Paste as plain text | `Cmd/Ctrl+Shift+V` |
 | Bullet List | `Cmd/Ctrl+Shift+L` |
 | Numbered List | `Cmd/Ctrl+Shift+O` |
 | Checklist | `Cmd/Ctrl+Shift+C` |

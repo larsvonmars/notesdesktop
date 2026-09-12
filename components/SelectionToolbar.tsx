@@ -17,6 +17,7 @@ import {
   CheckSquare,
   ChevronDown,
   Copy,
+  Eraser,
   MoreHorizontal,
   Undo,
   Redo,
@@ -104,6 +105,12 @@ const FONT_SIZES = [
   { key: '16', label: '16' },
   { key: '20', label: '20' },
   { key: '24', label: '24' },
+] as const
+
+const TEXT_CASE_OPTIONS = [
+  { command: 'case:title' as RichTextCommand, label: 'Title Case', sample: 'Aa' },
+  { command: 'case:upper' as RichTextCommand, label: 'UPPERCASE', sample: 'AA' },
+  { command: 'case:lower' as RichTextCommand, label: 'lowercase', sample: 'aa' },
 ] as const
 
 /**
@@ -206,7 +213,9 @@ const SelectionToolbar = forwardRef<HTMLDivElement | null, SelectionToolbarProps
     const [showMore, setShowMore] = useState(false)
     const [headingOpen, setHeadingOpen] = useState(false)
     const [headingOpensUp, setHeadingOpensUp] = useState(false)
+    const [caseOpen, setCaseOpen] = useState(false)
     const headingRef = useRef<HTMLDivElement>(null)
+    const caseRef = useRef<HTMLDivElement>(null)
     const containerRef = useRef<HTMLDivElement | null>(null)
     const isMobile = useIsMobile()
     const iconSize = isMobile ? 17 : 15
@@ -230,6 +239,7 @@ const SelectionToolbar = forwardRef<HTMLDivElement | null, SelectionToolbarProps
       if (!visible) {
         setShowMore(false)
         setHeadingOpen(false)
+        setCaseOpen(false)
       }
     }, [visible])
 
@@ -247,6 +257,18 @@ const SelectionToolbar = forwardRef<HTMLDivElement | null, SelectionToolbarProps
       document.addEventListener('mousedown', handler)
       return () => document.removeEventListener('mousedown', handler)
     }, [headingOpen])
+
+    // Close the text-case dropdown on outside click
+    useEffect(() => {
+      if (!caseOpen) return
+      const handler = (e: MouseEvent) => {
+        if (caseRef.current && !caseRef.current.contains(e.target as Node)) {
+          setCaseOpen(false)
+        }
+      }
+      document.addEventListener('mousedown', handler)
+      return () => document.removeEventListener('mousedown', handler)
+    }, [caseOpen])
 
     const fire = useCallback(
       (cmd: RichTextCommand) => {
@@ -278,10 +300,11 @@ const SelectionToolbar = forwardRef<HTMLDivElement | null, SelectionToolbarProps
     const handleKeyDown = useCallback(
       (event: React.KeyboardEvent<HTMLDivElement>) => {
         if (event.key === 'Escape') {
-          if (headingOpen) {
+          if (headingOpen || caseOpen) {
             // Close only the dropdown; the toolbar stays (and keeps the selection).
             event.stopPropagation()
             setHeadingOpen(false)
+            setCaseOpen(false)
             return
           }
           // No dropdown: dismiss the toolbar but let the event bubble — the
@@ -333,7 +356,6 @@ const SelectionToolbar = forwardRef<HTMLDivElement | null, SelectionToolbarProps
       },
       [headingOpen, onDismiss]
     )
-
     if (!visible) return null
 
     const activeHeading = HEADING_OPTIONS.find((h) =>
@@ -630,6 +652,44 @@ const SelectionToolbar = forwardRef<HTMLDivElement | null, SelectionToolbarProps
               <span className="text-[10px] font-medium leading-none">{`A\u21ba`}</span>
             </TBtn>
 
+            {/* Text case */}
+            <div ref={caseRef} className="relative">
+              <TBtn
+                active={caseOpen}
+                disabled={isDisabled}
+                title="Change case"
+                onClick={() => setCaseOpen((value) => !value)}
+                mobile={isMobile}
+              >
+                <span className="text-[10px] font-semibold leading-none">Aa</span>
+              </TBtn>
+
+              {caseOpen && (
+                <div
+                  role="menu"
+                  aria-label="Change case"
+                  className="absolute bottom-full left-0 z-10 mb-1.5 min-w-[152px] overflow-hidden rounded-xl border border-border bg-surface py-1 shadow-xl"
+                  onMouseDown={(e) => e.preventDefault()}
+                >
+                  {TEXT_CASE_OPTIONS.map(({ command, label, sample }) => (
+                    <button
+                      key={command}
+                      type="button"
+                      role="menuitem"
+                      onClick={() => {
+                        fire(command)
+                        setCaseOpen(false)
+                      }}
+                      className="flex w-full items-center justify-between px-3 py-1.5 text-sm text-foreground transition-colors hover:bg-surface-hover"
+                    >
+                      <span>{label}</span>
+                      <span className="text-[10px] text-muted">{sample}</span>
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+
             <Divider />
 
             {/* Undo / Redo */}
@@ -650,6 +710,19 @@ const SelectionToolbar = forwardRef<HTMLDivElement | null, SelectionToolbarProps
               mobile={isMobile}
             >
               <Redo size={iconSize} />
+            </TBtn>
+
+            <Divider />
+
+            {/* Clear formatting */}
+            <TBtn
+              disabled={isDisabled}
+              title={tip('Clear formatting', '\u2318/Ctrl+\\')}
+              shortcut="Meta+\\ Control+\\"
+              onClick={() => fire('clear-formatting')}
+              mobile={isMobile}
+            >
+              <Eraser size={iconSize} />
             </TBtn>
           </div>
         )}
