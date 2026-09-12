@@ -16,6 +16,7 @@ import {
   ListOrdered,
   CheckSquare,
   ChevronDown,
+  Copy,
   MoreHorizontal,
   Undo,
   Redo,
@@ -32,6 +33,10 @@ interface SelectionToolbarProps {
   activeFormats: Set<string>
   onCommand: (command: RichTextCommand) => void
   isDisabled?: boolean
+  /** Touch/compact layout: dock the toolbar at the bottom edge. */
+  docked?: boolean
+  /** Escape pressed while the toolbar has focus (or is visible). */
+  onDismiss?: () => void
 }
 
 /* Static button descriptors (allocated once) */
@@ -101,6 +106,35 @@ const FONT_SIZES = [
   { key: '24', label: '24' },
 ] as const
 
+/**
+ * Convert a display shortcut such as "⌘/Ctrl+⇧+X" into the two combos that
+ * `aria-keyshortcuts` expects: "Meta+Shift+X Control+Shift+X".
+ */
+const toAriaKeyshortcuts = (display: string): string | undefined => {
+  if (!display) return undefined
+
+  const parts = display.split('+').map((part) => part.trim())
+  if (parts.length < 2) return undefined
+
+  const key = parts[parts.length - 1]
+  const modifiers = parts.slice(0, -1)
+  const hasMeta = modifiers.some((modifier) => modifier.includes('\u2318'))
+  const hasCtrl = modifiers.some((modifier) => /ctrl/i.test(modifier))
+  const hasShift = modifiers.some((modifier) => modifier.includes('\u21e7'))
+  const hasAlt = modifiers.some((modifier) => /alt/i.test(modifier))
+
+  const combos: string[] = []
+  const build = (primary: 'Meta' | 'Control') => {
+    combos.push(
+      [primary, ...(hasShift ? ['Shift'] : []), ...(hasAlt ? ['Alt'] : []), key].join('+')
+    )
+  }
+  if (hasMeta) build('Meta')
+  if (hasCtrl || !hasMeta) build('Control')
+
+  return combos.join(' ')
+}
+
 /* Sub-components */
 
 const Divider = memo(() => (
@@ -118,17 +152,20 @@ interface TBtnProps {
   onClick: () => void
   mobile?: boolean
   className?: string
+  /** Concatenated key combos for assistive tech, e.g. "Meta+B Control+B". */
+  shortcut?: string
   children: React.ReactNode
 }
 
 const TBtn = memo<TBtnProps>(
-  ({ active, disabled, title, onClick, mobile, className, children }) => (
+  ({ active, disabled, title, onClick, mobile, className, shortcut, children }) => (
     <button
       type="button"
       disabled={disabled}
       title={title}
       aria-pressed={active || undefined}
       aria-label={title}
+      aria-keyshortcuts={shortcut}
       onMouseDown={(e) => e.preventDefault()}
       onClick={onClick}
       className={[
@@ -152,13 +189,41 @@ TBtn.displayName = 'TBtn'
 
 /* Main component */
 
-const SelectionToolbar = forwardRef<HTMLDivElement, SelectionToolbarProps>(
-  ({ top, left, visible, activeFormats, onCommand, isDisabled }, ref) => {
+const SelectionToolbar = forwardRef<HTMLDivElement | null, SelectionToolbarProps>(
+  (
+    {
+      top,
+      left,
+      visible,
+      activeFormats,
+      onCommand,
+      isDisabled,
+      docked = false,
+      onDismiss,
+    },
+    ref
+  ) => {
     const [showMore, setShowMore] = useState(false)
     const [headingOpen, setHeadingOpen] = useState(false)
+    const [headingOpensUp, setHeadingOpensUp] = useState(false)
     const headingRef = useRef<HTMLDivElement>(null)
+    const containerRef = useRef<HTMLDivElement | null>(null)
     const isMobile = useIsMobile()
     const iconSize = isMobile ? 17 : 15
+
+    // Merge the forwarded (measured) ref with the internal one used for keyboard
+    // navigation and the dropdown flip decision.
+    const setContainerRef = useCallback(
+      (node: HTMLDivElement | null) => {
+        containerRef.current = node
+        if (typeof ref === 'function') {
+          ref(node)
+        } else if (ref) {
+          ref.current = node
+        }
+      },
+      [ref]
+    )
 
     // Reset dropdowns when toolbar hides
     useEffect(() => {
@@ -190,6 +255,85 @@ const SelectionToolbar = forwardRef<HTMLDivElement, SelectionToolbarProps>(
       [isDisabled, onCommand],
     )
 
+    /** Keep the text selection alive: never let presses steal focus from the editor. */
+    const keepSelection = useCallback((event: React.SyntheticEvent) => {
+      event.preventDefault()
+    }, [])
+
+    const toggleHeadingDropdown = useCallback(() => {
+      const next = !headingOpen
+      if (next) {
+        // Open towards the side with more room so the menu stays on screen.
+        const rect = containerRef.current?.getBoundingClientRect()
+        if (rect) {
+          const spaceAbove = rect.top
+          const spaceBelow = window.innerHeight - rect.bottom
+          setHeadingOpensUp(spaceAbove > spaceBelow)
+        }
+      }
+      setHeadingOpen(next)
+    }, [headingOpen])
+
+    // Keyboard support: arrows/Home/End move between buttons, Escape dismisses.
+    const handleKeyDown = useCallback(
+      (event: React.KeyboardEvent<HTMLDivElement>) => {
+        if (event.key === 'Escape') {
+          if (headingOpen) {
+            // Close only the dropdown; the toolbar stays (and keeps the selection).
+            event.stopPropagation()
+            setHeadingOpen(false)
+            return
+          }
+          // No dropdown: dismiss the toolbar but let the event bubble — the
+          // owner (useFloatingToolbar) then returns focus to the editor.
+          onDismiss?.()
+          return
+        }
+
+        if (
+          event.key !== 'ArrowRight' &&
+          event.key !== 'ArrowLeft' &&
+          event.key !== 'ArrowDown' &&
+          event.key !== 'ArrowUp' &&
+          event.key !== 'Home' &&
+          event.key !== 'End'
+        ) {
+          return
+        }
+
+        const container = containerRef.current
+        if (!container) return
+
+        const buttons = Array.from(
+          container.querySelectorAll<HTMLButtonElement>('button:not([disabled])')
+        )
+        if (buttons.length === 0) return
+
+        event.preventDefault()
+        const current = buttons.indexOf(document.activeElement as HTMLButtonElement)
+
+        let nextIndex = current
+        switch (event.key) {
+          case 'ArrowRight':
+          case 'ArrowDown':
+            nextIndex = current < 0 ? 0 : (current + 1) % buttons.length
+            break
+          case 'ArrowLeft':
+          case 'ArrowUp':
+            nextIndex = current <= 0 ? buttons.length - 1 : current - 1
+            break
+          case 'Home':
+            nextIndex = 0
+            break
+          case 'End':
+            nextIndex = buttons.length - 1
+            break
+        }
+        buttons[nextIndex]?.focus()
+      },
+      [headingOpen, onDismiss]
+    )
+
     if (!visible) return null
 
     const activeHeading = HEADING_OPTIONS.find((h) =>
@@ -202,12 +346,27 @@ const SelectionToolbar = forwardRef<HTMLDivElement, SelectionToolbarProps>(
 
     return (
       <div
-        ref={ref}
+        ref={setContainerRef}
         role="toolbar"
         aria-label="Text formatting"
-        className="fixed z-50 flex flex-col rounded-2xl border border-border bg-surface/95 backdrop-blur-xl shadow-lg"
-        style={{ top, left, maxWidth: 'calc(100vw - 32px)' }}
-        onMouseDown={(e) => e.preventDefault()}
+        aria-orientation="horizontal"
+        className="selection-toolbar-in fixed z-50 flex flex-col rounded-2xl border border-border bg-surface/95 backdrop-blur-xl shadow-lg"
+        style={
+          docked
+            ? {
+                bottom: 'calc(env(safe-area-inset-bottom, 0px) + 12px)',
+                left: 0,
+                right: 0,
+                marginLeft: 'auto',
+                marginRight: 'auto',
+                width: 'fit-content',
+                maxWidth: 'calc(100vw - 24px)',
+              }
+            : { top, left, maxWidth: 'calc(100vw - 32px)' }
+        }
+        onPointerDown={keepSelection}
+        onMouseDown={keepSelection}
+        onKeyDown={handleKeyDown}
       >
         {/* Primary row */}
         <div className="flex flex-wrap items-center gap-0.5 px-2 py-1.5">
@@ -220,7 +379,7 @@ const SelectionToolbar = forwardRef<HTMLDivElement, SelectionToolbarProps>(
               aria-haspopup="listbox"
               aria-expanded={headingOpen}
               onMouseDown={(e) => e.preventDefault()}
-              onClick={() => setHeadingOpen((v) => !v)}
+              onClick={toggleHeadingDropdown}
               className={[
                 'inline-flex items-center gap-0.5 rounded-full border px-2 text-xs font-semibold transition-colors',
                 'focus:outline-none focus-visible:ring-2 focus-visible:ring-alpine-500',
@@ -241,7 +400,11 @@ const SelectionToolbar = forwardRef<HTMLDivElement, SelectionToolbarProps>(
             {headingOpen && (
               <div
                 role="listbox"
-                className="absolute left-0 top-full z-10 mt-1.5 min-w-[160px] overflow-hidden rounded-xl border border-gray-200 bg-white py-1 shadow-xl dark:border-gray-700 dark:bg-gray-800"
+                className={`absolute left-0 z-10 min-w-[160px] overflow-y-auto overflow-x-hidden rounded-xl border border-border bg-surface py-1 shadow-xl ${
+                  headingOpensUp ? 'bottom-full mb-1.5' : 'top-full mt-1.5'
+                }`}
+                // Never taller than the space a small window/short viewport has.
+                style={{ maxHeight: 'min(320px, 50vh)' }}
                 onMouseDown={(e) => e.preventDefault()}
               >
                 <button
@@ -255,7 +418,7 @@ const SelectionToolbar = forwardRef<HTMLDivElement, SelectionToolbarProps>(
                   className={`flex w-full items-center px-3 py-1.5 text-sm transition-colors ${
                     !activeHeading
                       ? 'bg-alpine-50 font-medium text-alpine-700 dark:bg-alpine-900/40 dark:text-alpine-300'
-                      : 'text-gray-700 hover:bg-gray-100 dark:text-gray-200 dark:hover:bg-gray-700'
+                      : 'text-foreground hover:bg-surface-hover'
                   }`}
                 >
                   Paragraph
@@ -274,11 +437,11 @@ const SelectionToolbar = forwardRef<HTMLDivElement, SelectionToolbarProps>(
                     className={`flex w-full items-center justify-between px-3 py-1.5 text-sm transition-colors ${
                       activeFormats.has(command)
                         ? 'bg-alpine-50 font-medium text-alpine-700 dark:bg-alpine-900/40 dark:text-alpine-300'
-                        : 'text-gray-700 hover:bg-gray-100 dark:text-gray-200 dark:hover:bg-gray-700'
+                        : 'text-foreground hover:bg-surface-hover'
                     }`}
                   >
                     <span>{label}</span>
-                    <kbd className="text-[10px] text-gray-400 dark:text-gray-500">
+                    <kbd className="text-[10px] text-muted">
                       {shortcut}
                     </kbd>
                   </button>
@@ -296,6 +459,7 @@ const SelectionToolbar = forwardRef<HTMLDivElement, SelectionToolbarProps>(
               active={activeFormats.has(command)}
               disabled={isDisabled}
               title={tip(label, shortcut)}
+              shortcut={toAriaKeyshortcuts(shortcut)}
               onClick={() => fire(command)}
               mobile={isMobile}
             >
@@ -309,10 +473,22 @@ const SelectionToolbar = forwardRef<HTMLDivElement, SelectionToolbarProps>(
           <TBtn
             disabled={isDisabled}
             title={tip('Link', '\u2318/Ctrl+K')}
+            shortcut="Meta+K Control+K"
             onClick={() => fire('link')}
             mobile={isMobile}
           >
             <LinkIcon size={iconSize} />
+          </TBtn>
+
+          {/* Copy selection */}
+          <TBtn
+            disabled={isDisabled}
+            title={tip('Copy', '\u2318/Ctrl+C')}
+            shortcut="Meta+C Control+C"
+            onClick={() => fire('copy')}
+            mobile={isMobile}
+          >
+            <Copy size={iconSize} />
           </TBtn>
 
           <Divider />
@@ -324,6 +500,7 @@ const SelectionToolbar = forwardRef<HTMLDivElement, SelectionToolbarProps>(
               active={activeFormats.has(command)}
               disabled={isDisabled}
               title={tip(label, shortcut)}
+              shortcut={toAriaKeyshortcuts(shortcut)}
               onClick={() => fire(command)}
               mobile={isMobile}
             >
@@ -338,6 +515,7 @@ const SelectionToolbar = forwardRef<HTMLDivElement, SelectionToolbarProps>(
             active={activeFormats.has('blockquote')}
             disabled={isDisabled}
             title={tip('Blockquote', '\u2318/Ctrl+\u21e7+B')}
+            shortcut="Meta+Shift+B Control+Shift+B"
             onClick={() => fire('blockquote')}
             mobile={isMobile}
           >
@@ -361,7 +539,7 @@ const SelectionToolbar = forwardRef<HTMLDivElement, SelectionToolbarProps>(
         {/* Expanded panel */}
         {showMore && (
           <div
-            className="flex flex-wrap items-center gap-0.5 border-t border-gray-200 px-2 py-1.5 dark:border-gray-700"
+            className="flex flex-wrap items-center gap-0.5 border-t border-border px-2 py-1.5"
             onMouseDown={(e) => e.preventDefault()}
           >
             {/* Lists */}
@@ -371,6 +549,7 @@ const SelectionToolbar = forwardRef<HTMLDivElement, SelectionToolbarProps>(
                 active={activeFormats.has(command)}
                 disabled={isDisabled}
                 title={tip(label, shortcut)}
+                shortcut={toAriaKeyshortcuts(shortcut)}
                 onClick={() => fire(command)}
                 mobile={isMobile}
               >
@@ -457,6 +636,7 @@ const SelectionToolbar = forwardRef<HTMLDivElement, SelectionToolbarProps>(
             <TBtn
               disabled={isDisabled}
               title={tip('Undo', '\u2318/Ctrl+Z')}
+              shortcut="Meta+Z Control+Z"
               onClick={() => fire('undo')}
               mobile={isMobile}
             >
@@ -465,6 +645,7 @@ const SelectionToolbar = forwardRef<HTMLDivElement, SelectionToolbarProps>(
             <TBtn
               disabled={isDisabled}
               title={tip('Redo', '\u2318/Ctrl+\u21e7+Z')}
+              shortcut="Meta+Shift+Z Control+Shift+Z"
               onClick={() => fire('redo')}
               mobile={isMobile}
             >

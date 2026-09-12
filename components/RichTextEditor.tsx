@@ -111,6 +111,7 @@ export type RichTextCommand =
   | 'undo'
   | 'redo'
   | 'link'
+  | 'copy'
   | 'horizontal-rule'
   | 'align-left'
   | 'align-center'

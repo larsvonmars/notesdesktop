@@ -318,7 +318,7 @@ function clampRangeOffset(node: Node, offset: number): number {
 }
 
 /** Resolve a character offset inside a block to a concrete DOM position. */
-function positionFromTextOffset(
+export function positionFromTextOffset(
   block: HTMLElement,
   offset: number
 ): { node: Node; offset: number } {

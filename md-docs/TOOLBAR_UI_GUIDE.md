@@ -31,6 +31,28 @@ The floating toolbar appears when you select text and includes:
 - **Strikethrough** (`Cmd/Ctrl+Shift+X`) - Strike through text
 - **Code** (`Cmd/Ctrl+\``) - Inline code formatting
 - **Link** (`Cmd/Ctrl+K`) - Insert hyperlink
+- **Copy** (`Cmd/Ctrl+C`) - Copy the selected text to the clipboard
+
+### Selection Toolbar Behaviour
+
+The selection toolbar is designed to be dependable rather than clever. Full
+details live in [SELECTION_TOOLBAR_RELIABILITY.md](./SELECTION_TOOLBAR_RELIABILITY.md);
+the short version:
+
+| Situation | Behaviour |
+|-----------|-----------|
+| Dragging a selection | Toolbar stays hidden (it never blocks the drag) |
+| Selection finished (mouse/touch/keyboard) | Toolbar appears above the first selected line |
+| No room above | Toolbar flips below the last selected line |
+| Selection near a screen edge | Toolbar is clamped inside the viewport |
+| Selection scrolled out of view | Toolbar hides (re-appears when the selection is visible again) |
+| "More" panel / long selections | Toolbar re-measures and repositions itself |
+| Pressing a toolbar button | Selection is kept (and restored first if the WebView dropped it) |
+| Clicking outside the editor | Toolbar dismisses until the text is touched again |
+| `Escape` | Closes the heading dropdown, or dismisses the toolbar and refocuses the editor |
+| `Tab` / `Arrow` keys | Toolbar is fully keyboard operable (Arrows/Home/End move between buttons) |
+| Touch/compact layout | Toolbar docks at the bottom edge, centred above the safe area |
+
 
 #### Headings
 - **H1** (`Cmd/Ctrl+Alt+1`) - Large heading
@@ -88,6 +110,7 @@ All formatting commands have keyboard shortcuts for power users:
 | Strikethrough | `Cmd/Ctrl+Shift+X` |
 | Code | `Cmd/Ctrl+\`` |
 | Link | `Cmd/Ctrl+K` |
+| Copy selection | `Cmd/Ctrl+C` |
 | Heading 1 | `Cmd/Ctrl+Alt+1` |
 | Heading 2 | `Cmd/Ctrl+Alt+2` |
 | Heading 3 | `Cmd/Ctrl+Alt+3` |

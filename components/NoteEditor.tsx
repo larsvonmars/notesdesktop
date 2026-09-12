@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect, useCallback, useMemo, useRef, useDeferredValue, useLayoutEffect } from 'react'
+import { useState, useEffect, useCallback, useMemo, useRef, useDeferredValue } from 'react'
 import DOMPurify from 'dompurify'
 import {
   List,
@@ -68,6 +68,7 @@ import DataSheetPickerDialog from './DataSheetPickerDialog'
 import { ErrorBoundary } from './ErrorBoundary'
 import KnowledgeGraphModal from './KnowledgeGraphModal'
 import { useIsMobile } from '@/lib/useIsMobile'
+import { useFloatingToolbar } from '@/lib/editor/useFloatingToolbar'
 import SelectionToolbar from './SelectionToolbar'
 import { noteLinkBlock } from '../lib/editor/noteLinkBlock'
 import { imageBlock } from '../lib/editor/imageBlock'
@@ -551,9 +552,19 @@ export default function NoteEditor({
   const migratedNotesRef = useRef<Set<string>>(new Set())
   const activeFormatsFrameRef = useRef<number | null>(null)
   const noteLoadingRef = useRef(false) // Suppress hasChanges flicker during note load
-  const floatingToolbarRef = useRef<HTMLDivElement | null>(null)
-  const floatingToolbarSizeRef = useRef({ width: 0, height: 0 })
-  const [floatingToolbar, setFloatingToolbar] = useState({ visible: false, top: 0, left: 0 })
+  const getEditorElement = useCallback(() => editorRef.current?.getRootElement() ?? null, [])
+  const {
+    state: floatingToolbarState,
+    toolbarRef: floatingToolbarRef,
+    refresh: updateFloatingToolbar,
+    hide: hideFloatingToolbar,
+    reset: resetFloatingToolbar,
+    ensureEditorSelection,
+  } = useFloatingToolbar({
+    getEditorElement,
+    enabled: !isSaving && !isDeleting,
+    docked: isMobile,
+  })
   const deferredContent = useDeferredValue(content)
   const plainContent = useMemo(() => stripHtml(deferredContent), [deferredContent])
 
@@ -1063,89 +1074,8 @@ export default function NoteEditor({
     })
   }, [updateActiveFormats])
 
-  const hideFloatingToolbar = useCallback(() => {
-    floatingToolbarSizeRef.current = { width: 0, height: 0 }
-    setFloatingToolbar((previous) =>
-      previous.visible ? { ...previous, visible: false } : previous
-    )
-  }, [])
-
-  const updateFloatingToolbar = useCallback(() => {
-    const selection = window.getSelection()
-    const editorElement = editorRef.current?.getRootElement()
-
-    if (!selection || selection.rangeCount === 0 || selection.isCollapsed || !editorElement) {
-      hideFloatingToolbar()
-      return
-    }
-
-    const anchorNode = selection.anchorNode
-    const focusNode = selection.focusNode
-
-    if (
-      !anchorNode ||
-      !focusNode ||
-      !editorElement.contains(anchorNode) ||
-      !editorElement.contains(focusNode)
-    ) {
-      hideFloatingToolbar()
-      return
-    }
-
-    const range = selection.getRangeAt(0)
-    const selectedText = selection.toString()
-    if (!selectedText || selectedText.trim().length === 0) {
-      hideFloatingToolbar()
-      return
-    }
-
-    const rect = range.getBoundingClientRect()
-
-    if ((rect.width === 0 && rect.height === 0) || Number.isNaN(rect.top) || Number.isNaN(rect.left)) {
-      hideFloatingToolbar()
-      return
-    }
-
-    const MIN_MARGIN = 16
-    const SELECTION_GAP = 12
-    const selectionTop = rect.top
-    const selectionBottom = rect.bottom
-    const selectionCenterX = rect.left + rect.width / 2
-
-    const { width, height } = floatingToolbarSizeRef.current
-    const availableWidth = Math.max(window.innerWidth - MIN_MARGIN * 2, 0)
-    const fallbackWidth = Math.min(availableWidth, 280)
-    const measuredWidth = width > 0 ? width : fallbackWidth
-    const effectiveWidth = Math.min(measuredWidth, availableWidth)
-    const halfWidth = effectiveWidth / 2
-
-    let left = selectionCenterX - halfWidth
-    const minLeft = MIN_MARGIN
-    const maxLeft = window.innerWidth - MIN_MARGIN - effectiveWidth
-    left = Math.min(Math.max(left, minLeft), Math.max(minLeft, maxLeft))
-
-    const measuredHeight = height > 0 ? height : 44
-    let top = selectionTop - measuredHeight - SELECTION_GAP
-    const minTop = MIN_MARGIN
-
-    if (top < minTop) {
-      top = selectionBottom + SELECTION_GAP
-      const maxTop = window.innerHeight - MIN_MARGIN - measuredHeight
-      top = Math.min(Math.max(top, minTop), Math.max(minTop, maxTop))
-    }
-
-    setFloatingToolbar((previous) => {
-      const next = { visible: true, top, left }
-      if (
-        previous.visible === next.visible &&
-        Math.abs(previous.top - next.top) < 0.5 &&
-        Math.abs(previous.left - next.left) < 0.5
-      ) {
-        return previous
-      }
-      return next
-    })
-  }, [hideFloatingToolbar])
+  // The floating toolbar (visibility, placement, selection preservation) is
+  // owned by `useFloatingToolbar` — see lib/editor/useFloatingToolbar.ts.
 
   const handleContentChange = useCallback(
     (html: string) => {
@@ -1174,8 +1104,64 @@ export default function NoteEditor({
     return cleanup
   }, [handleContentChange])
 
+  const copySelectionToClipboard = useCallback(async () => {
+    const text = window.getSelection()?.toString() ?? ''
+    if (!text) return
+
+    let ok = false
+    try {
+      if (navigator.clipboard?.writeText) {
+        await navigator.clipboard.writeText(text)
+        ok = true
+      }
+    } catch {
+      ok = false
+    }
+
+    if (!ok) {
+      // Fallback for webviews that block the async clipboard API
+      try {
+        const textarea = document.createElement('textarea')
+        textarea.value = text
+        textarea.setAttribute('readonly', '')
+        textarea.style.position = 'fixed'
+        textarea.style.top = '-1000px'
+        textarea.style.opacity = '0'
+        document.body.appendChild(textarea)
+        textarea.select()
+        ok = document.execCommand('copy')
+        textarea.remove()
+      } catch {
+        ok = false
+      }
+    }
+
+    if (ok) {
+      toast.push({
+        title: 'Copied',
+        description: `${text.length} character${text.length === 1 ? '' : 's'} copied to clipboard.`,
+      })
+    } else {
+      toast.push({ title: 'Copy failed', description: 'The clipboard could not be accessed.' })
+    }
+  }, [toast])
+
   const handleCommand = useCallback(
     (command: RichTextCommand) => {
+      // A toolbar press can move focus away from the editor (touch, WebView
+      // quirks) and collapse the selection. Restore it first so the command
+      // always applies to the text the user had selected — and skip the
+      // command entirely when no usable selection can be established
+      // (running e.g. "bold" on a collapsed caret would insert placeholder
+      // text instead of formatting anything).
+      const hasSelection = ensureEditorSelection()
+      if (!hasSelection) return
+
+      if (command === 'copy') {
+        void copySelectionToClipboard()
+        return
+      }
+
       editorRef.current?.exec(command)
       window.requestAnimationFrame(() => {
         scheduleActiveFormatsUpdate()
@@ -1197,7 +1183,13 @@ export default function NoteEditor({
         }, 200)
       }
     },
-    [scheduleActiveFormatsUpdate, updateActiveFormats, updateFloatingToolbar]
+    [
+      copySelectionToClipboard,
+      ensureEditorSelection,
+      scheduleActiveFormatsUpdate,
+      updateActiveFormats,
+      updateFloatingToolbar,
+    ]
   )
 
   // Save current selection before opening note link dialog
@@ -2256,8 +2248,7 @@ export default function NoteEditor({
   useEffect(() => {
     const handleSelectionChange = () => {
       scheduleActiveFormatsUpdate()
-      updateFloatingToolbar()
-      
+
       // Track selected text for AI assistant (debounced to avoid excessive updates)
       if (noteType === 'rich-text' && editorRef.current) {
         // Clear any pending update
@@ -2299,44 +2290,11 @@ export default function NoteEditor({
         window.clearTimeout(selectedTextUpdateTimeoutRef.current)
       }
     }
-  }, [scheduleActiveFormatsUpdate, updateFloatingToolbar, noteType])
+  }, [scheduleActiveFormatsUpdate, noteType])
 
   useEffect(() => {
-    const handleWindowChange = () => updateFloatingToolbar()
-
-    window.addEventListener('scroll', handleWindowChange, true)
-    window.addEventListener('resize', handleWindowChange)
-    return () => {
-      window.removeEventListener('scroll', handleWindowChange, true)
-      window.removeEventListener('resize', handleWindowChange)
-    }
-  }, [updateFloatingToolbar])
-
-  useLayoutEffect(() => {
-    if (!floatingToolbar.visible || !floatingToolbarRef.current) {
-      return
-    }
-
-    const { offsetWidth, offsetHeight } = floatingToolbarRef.current
-    const previous = floatingToolbarSizeRef.current
-    if (
-      Math.abs(previous.width - offsetWidth) > 0.5 ||
-      Math.abs(previous.height - offsetHeight) > 0.5
-    ) {
-      floatingToolbarSizeRef.current = { width: offsetWidth, height: offsetHeight }
-      updateFloatingToolbar()
-    }
-  }, [floatingToolbar.visible, floatingToolbar.left, floatingToolbar.top, updateFloatingToolbar])
-
-  useEffect(() => {
-    if (isSaving || isDeleting) {
-      hideFloatingToolbar()
-    }
-  }, [hideFloatingToolbar, isDeleting, isSaving])
-
-  useEffect(() => {
-    hideFloatingToolbar()
-  }, [hideFloatingToolbar, note])
+    resetFloatingToolbar()
+  }, [resetFloatingToolbar, note])
 
   useEffect(() => {
     if (showTOC) {
@@ -3770,11 +3728,13 @@ export default function NoteEditor({
       {/* Floating Toolbar - Only show for rich text notes */}
       <SelectionToolbar
         ref={floatingToolbarRef}
-        top={floatingToolbar.top}
-        left={floatingToolbar.left}
-        visible={noteType === 'rich-text' && floatingToolbar.visible}
+        top={floatingToolbarState.top}
+        left={floatingToolbarState.left}
+        docked={isMobile}
+        visible={noteType === 'rich-text' && floatingToolbarState.visible}
         activeFormats={activeFormats}
         onCommand={handleCommand}
+        onDismiss={hideFloatingToolbar}
         isDisabled={isSaving || isDeleting}
       />
 
