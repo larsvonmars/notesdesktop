@@ -226,6 +226,100 @@ export function groupSlashCommands(
   return groups
 }
 
+// ── Sub-steps ("pick a note", "pick a data sheet", table size, …) ─────────
+
+export interface SlashInlineOption {
+  id: string
+  label: string
+  /** Secondary line — folder name, sheet size, … */
+  description?: string
+  keywords?: string[]
+}
+
+/**
+ * A picker the host app supplies for one command. Choosing the command opens a
+ * second palette view with `load()`'s rows instead of running the command;
+ * `apply()` is called with the picked row id (the palette deletes the trigger
+ * text first, exactly like a command from the first view).
+ */
+export interface SlashInlinePicker {
+  /** Header above the rows, e.g. "Pick a note". */
+  title: string
+  load: () => Promise<SlashInlineOption[]> | SlashInlineOption[]
+  apply: (optionId: string) => void
+}
+
+/** Command id → picker. Anything missing runs as a normal command. */
+export type SlashInlinePickers = Partial<Record<SlashCommandId, SlashInlinePicker>>
+
+/** Filter the rows of a sub-step (label, keywords and description). */
+export function filterSlashOptions(
+  query: string,
+  options: readonly SlashInlineOption[]
+): SlashInlineOption[] {
+  const trimmed = query.trim().toLowerCase()
+  if (!trimmed) return options.slice()
+
+  return options
+    .map((option, index) => ({
+      option,
+      index,
+      score: scoreCommand(trimmed, {
+        label: option.label,
+        keywords: option.keywords ?? [],
+      }),
+    }))
+    .map((entry) =>
+      entry.score > 0
+        ? entry
+        : {
+            ...entry,
+            // Matching the secondary line (folder, size, …) is still useful.
+            score: (entry.option.description ?? '').toLowerCase().includes(trimmed) ? 30 : -1,
+          }
+    )
+    .filter((entry) => entry.score > 0)
+    .sort((a, b) => b.score - a.score || a.index - b.index)
+    .map((entry) => entry.option)
+}
+
+/**
+ * Which palette row to highlight after a (re)filter of the command list.
+ *
+ * * empty query + fresh open → the command the user used last, so `Enter`
+ *   repeats it,
+ * * query changed → the first row (best match),
+ * * unchanged query (caret moved, mouse hovered) → keep what the user had.
+ */
+export function resolveCommandHighlight(options: {
+  items: readonly SlashCommandDefinition[]
+  query: string
+  previousQuery: string | null
+  previousIndex: number
+  lastUsedId: SlashCommandId | null
+}): number {
+  const { items, query, previousQuery, previousIndex, lastUsedId } = options
+  if (items.length === 0) return 0
+
+  const clamped = Math.min(Math.max(previousIndex, 0), items.length - 1)
+  if (query !== '') return query !== previousQuery ? 0 : clamped
+
+  if (previousQuery !== null && previousQuery !== '') {
+    // Just got back to the full palette — repeat-friendly highlight.
+    const preferred = lastUsedId ? items.findIndex((item) => item.id === lastUsedId) : -1
+    return preferred >= 0 ? preferred : 0
+  }
+
+  return previousQuery === null
+    ? lastUsedId
+      ? Math.max(
+          items.findIndex((item) => item.id === lastUsedId),
+          0
+        )
+      : 0
+    : clamped
+}
+
 /** Longest query the menu still reacts to (`/` + 24 characters). */
 export const SLASH_QUERY_MAX_LENGTH = 24
 

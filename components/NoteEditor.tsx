@@ -40,7 +40,7 @@ import PdfAnnotationEditor, {
 } from './PdfAnnotationEditor'
 import ProjectsWorkspaceModal from './ProjectsWorkspaceModal'
 import { useToast } from './ToastProvider'
-import { Note as LibNote, createNote, createNoteAttachment, deleteNoteAttachment, getNote, getNoteAttachments } from '../lib/notes'
+import { Note as LibNote, createNote, createNoteAttachment, deleteNoteAttachment, getNote, getNoteAttachments, getNotes } from '../lib/notes'
 import { getProjects, Project } from '../lib/projects'
 import { buildPublicShareUrl, getNoteShare, publishNoteShare, unpublishNoteShare, type NoteShareMetadata, type PublishedNoteShare } from '../lib/note-shares'
 import NoteLinkDialog from './NoteLinkDialog'
@@ -53,6 +53,9 @@ import SelectionToolbar from './SelectionToolbar'
 import { noteLinkBlock } from '../lib/editor/noteLinkBlock'
 import { imageBlock } from '../lib/editor/imageBlock'
 import { dataSheetTableBlock, type DataSheetTablePayload } from '../lib/editor/dataSheetTableBlock'
+import { buildDataSheetTablePayload } from '../lib/editor/dataSheetSnapshot'
+import type { SlashInlineOption, SlashInlinePickers } from '../lib/editor/slashCommands'
+import { getFolders } from '../lib/folders'
 import { pdfAnnotationEmbedBlock, type PdfAnnotationEmbedPayload } from '../lib/editor/pdfAnnotationEmbedBlock'
 import {
   fileBlock,
@@ -1172,6 +1175,109 @@ export default function NoteEditor({
       }, 10)
     },
     []
+  )
+
+  // ── Block inserter sub-steps ────────────────────────────────────────────
+  // The palette can pick a note or a data sheet inline instead of throwing a
+  // modal in front of the note. `load` fills the rows (and caches what `apply`
+  // needs), `apply` inserts the block at the caret the palette left behind.
+  const noteLinkIndex = useRef(new Map<string, { title: string; folderId: string | null }>())
+  const dataSheetIndex = useRef(new Map<string, { title: string; content: string }>())
+
+  const loadNoteOptions = useCallback(async (): Promise<SlashInlineOption[]> => {
+    const [notesData, foldersData] = await Promise.all([getNotes(), getFolders()])
+    const folderNames = new Map(foldersData.map((folder) => [folder.id, folder.name]))
+
+    noteLinkIndex.current = new Map()
+
+    return notesData
+      .filter((item) => item.id !== note?.id)
+      .sort((a, b) => new Date(b.updated_at).getTime() - new Date(a.updated_at).getTime())
+      .map((item) => {
+        const title = item.title || 'Untitled'
+        noteLinkIndex.current.set(item.id, { title, folderId: item.folder_id ?? null })
+        return {
+          id: item.id,
+          label: title,
+          description: (item.folder_id && folderNames.get(item.folder_id)) || undefined,
+        }
+      })
+  }, [note?.id])
+
+  const loadDataSheetOptions = useCallback(async (): Promise<SlashInlineOption[]> => {
+    const notesData = await getNotes()
+
+    dataSheetIndex.current = new Map()
+
+    return notesData
+      .filter((item) => item.note_type === 'data-sheet')
+      .sort((a, b) => new Date(b.updated_at).getTime() - new Date(a.updated_at).getTime())
+      .map((item) => {
+        const title = item.title || 'Data Sheet'
+        dataSheetIndex.current.set(item.id, { title, content: item.content || '{}' })
+
+        let description: string | undefined
+        try {
+          const parsed = JSON.parse(item.content || '{}')
+          if (Array.isArray(parsed?.rows) && Array.isArray(parsed?.columns)) {
+            description = `${parsed.columns.length} × ${parsed.rows.length}`
+          }
+        } catch {
+          description = undefined
+        }
+
+        return { id: item.id, label: title, description }
+      })
+  }, [])
+
+  const slashPickers = useMemo<SlashInlinePickers>(
+    () => ({
+      'note-link': {
+        title: 'Pick a note',
+        load: loadNoteOptions,
+        apply: (optionId) => {
+          const meta = noteLinkIndex.current.get(optionId)
+          if (!meta || !editorRef.current?.insertCustomBlock) return
+
+          // No modal was involved, so a previously saved range must not win.
+          savedNoteLinkSelection.current = null
+          editorRef.current.focus()
+          editorRef.current.insertCustomBlock('note-link', {
+            noteId: optionId,
+            noteTitle: meta.title,
+            folderId: meta.folderId,
+          })
+          setHasChanges(true)
+        },
+      },
+      'data-sheet-table': {
+        title: 'Pick a data sheet',
+        load: loadDataSheetOptions,
+        apply: (optionId) => {
+          const sheet = dataSheetIndex.current.get(optionId)
+          if (!sheet || !editorRef.current?.insertCustomBlock) return
+
+          const payload = buildDataSheetTablePayload({
+            id: optionId,
+            title: sheet.title,
+            content: sheet.content,
+          })
+          if (!payload) {
+            toast.push({
+              title: 'Data sheet is empty',
+              description: 'That data sheet has no rows to insert yet.',
+            })
+            return
+          }
+
+          savedNoteLinkSelection.current = null
+          editorRef.current.focus()
+          editorRef.current.insertCustomBlock('data-sheet-table', payload)
+          setHasChanges(true)
+        },
+      },
+    }),
+    [loadDataSheetOptions, loadNoteOptions, toast]
   )
 
   const uploadAndBuildImagePayload = useCallback(async (
@@ -3512,6 +3618,7 @@ export default function NoteEditor({
                     onImageDrop={handleImageDrop}
                     onCustomCommand={handleEditorCustomCommand}
                     customBlocks={editorCustomBlocks}
+                    slashPickers={slashPickers}
                   />
                 </ErrorBoundary>
               )}

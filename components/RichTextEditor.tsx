@@ -21,7 +21,7 @@ import LinkPopover from './editor/LinkPopover'
 import SearchReplaceBar from './editor/SearchReplaceBar'
 import BlockControls, { type BlockActionId } from './editor/BlockControls'
 import SlashMenu, { type SlashMenuHandle } from './editor/SlashMenu'
-import type { SlashCommandId } from '@/lib/editor/slashCommands'
+import type { SlashCommandId, SlashInlinePickers } from '@/lib/editor/slashCommands'
 import { findTextPosition } from '@/lib/editor/textOffsets'
 import TableInsertDialog from './editor/TableInsertDialog'
 import TableToolbar from './editor/TableToolbar'
@@ -179,6 +179,15 @@ export interface RichTextEditorHandle {
   scrollToHeading: (headingId: string) => void
 }
 
+/** Island types that render as their own block (not inline like note links). */
+const BLOCK_LEVEL_ISLAND_TYPES = new Set([
+  'table',
+  'image',
+  'file',
+  'data-sheet-table',
+  'pdf-annotation-embed',
+])
+
 interface RichTextEditorProps {
   value: string
   onChange: (html: string) => void
@@ -190,6 +199,12 @@ interface RichTextEditorProps {
   onImagePaste?: (file: File) => Promise<{ src: string; alt: string } | null>
   /** Called when an image file is dropped into the editor. Falls back to onImagePaste when omitted. */
   onImageDrop?: (file: File) => Promise<{ src: string; alt: string } | null>
+  /**
+   * Sub-step pickers for the block inserter. Commands with a picker (note link,
+   * data sheet table, …) open a second palette view with the host's rows
+   * instead of leaving the editor immediately.
+   */
+  slashPickers?: SlashInlinePickers
 }
 
 const SANITIZE_CONFIG: Config = {
@@ -415,7 +430,20 @@ const ensureEditorHasContent = (editor: HTMLDivElement) => {
 }
 
 const RichTextEditorImpl = forwardRef<RichTextEditorHandle, RichTextEditorProps>(
-  ({ value, onChange, disabled, placeholder, customBlocks, onCustomCommand, onImagePaste, onImageDrop }, ref) => {
+  (
+    {
+      value,
+      onChange,
+      disabled,
+      placeholder,
+      customBlocks,
+      onCustomCommand,
+      onImagePaste,
+      onImageDrop,
+      slashPickers,
+    },
+    ref
+  ) => {
     const customBlocksRef = useRef<CustomBlockDescriptor[] | undefined>(undefined)
       const editorRef = useRef<HTMLDivElement | null>(null)
     const historyManagerRef = useRef<HistoryManager | null>(null)
@@ -634,20 +662,58 @@ const RichTextEditorImpl = forwardRef<RichTextEditorHandle, RichTextEditorProps>
     )
 
     const insertCustomBlockAtSelection = useCallback(
-      (html: string) => {
+      (html: string, blockLevel = false) => {
         const temp = document.createElement('div')
         temp.innerHTML = html
         const firstChild = temp.firstChild as HTMLElement
 
-        if (firstChild && firstChild.getAttribute && firstChild.getAttribute('data-block') === 'true') {
-          return insertFragmentAtSelection(document.createRange().createContextualFragment(html))
+        const wrapped =
+          !!firstChild?.getAttribute && firstChild.getAttribute('data-block') === 'true'
+            ? html
+            : (() => {
+                const wrapper = document.createElement('div')
+                wrapper.setAttribute('data-block', 'true')
+                wrapper.innerHTML = html
+                return wrapper.outerHTML
+              })()
+
+        // Block-level islands (table, image, file, …) must not end up *inside*
+        // a paragraph — browsers cannot represent that and the serialized HTML
+        // would differ from what is on screen. When the caret sits in an empty
+        // block (e.g. the block inserter just removed its `/query`), the island
+        // takes that block's place instead.
+        const editor = editorRef.current
+        const selection = window.getSelection()
+        const range = selection?.rangeCount ? selection.getRangeAt(0) : null
+        const caretBlock =
+          blockLevel && range && editor && editor.contains(range.startContainer)
+            ? getTopLevelBlock(range.startContainer, editor)
+            : null
+        const replaceable =
+          caretBlock &&
+          caretBlock.parentElement === editor &&
+          !(caretBlock.textContent ?? '').trim() &&
+          !caretBlock.querySelector('[data-block]')
+            ? caretBlock
+            : null
+
+        if (replaceable && selection && editor) {
+          const before = document.createRange()
+          before.setStartBefore(replaceable)
+          before.collapse(true)
+          selection.removeAllRanges()
+          selection.addRange(before)
         }
 
-        const wrapper = document.createElement('div')
-        wrapper.setAttribute('data-block', 'true')
-        wrapper.innerHTML = html
+        const inserted = insertFragmentAtSelection(
+          document.createRange().createContextualFragment(wrapped)
+        )
 
-        return insertFragmentAtSelection(document.createRange().createContextualFragment(wrapper.outerHTML))
+        if (inserted && replaceable?.isConnected) {
+          replaceable.remove()
+        }
+
+        return inserted
       },
       [insertFragmentAtSelection]
     )
@@ -787,7 +853,7 @@ const RichTextEditorImpl = forwardRef<RichTextEditorHandle, RichTextEditorProps>
 
         try {
           const html = desc.render(payload)
-          const ok = insertCustomBlockAtSelection(html)
+          const ok = insertCustomBlockAtSelection(html, BLOCK_LEVEL_ISLAND_TYPES.has(type))
           if (ok) {
             setTimeout(() => {
               if (!editorRef.current) return
@@ -822,8 +888,7 @@ const RichTextEditorImpl = forwardRef<RichTextEditorHandle, RichTextEditorProps>
                 }
 
                 if (blockElement && blockElement.getAttribute('data-block-type') === type) {
-                  const blockLevelTypes = ['image', 'table', 'file', 'pdf-annotation-embed']
-                  const isBlockLevel = blockLevelTypes.includes(type)
+                  const isBlockLevel = BLOCK_LEVEL_ISLAND_TYPES.has(type)
                   const hasNextSibling = blockElement.nextElementSibling
 
                   if (isBlockLevel && !hasNextSibling) {
@@ -2142,6 +2207,61 @@ const RichTextEditorImpl = forwardRef<RichTextEditorHandle, RichTextEditorProps>
     )
 
     /**
+     * Delete the trigger/filter run of the block inserter and leave the caret
+     * where the text was. Used both when a command runs and when a picker row
+     * is applied (the host inserts the block itself in that case).
+     */
+    const clearSlashRange = useCallback(
+      (trigger: { block: HTMLElement; start: number; end: number }): HTMLElement | null => {
+        const editor = editorRef.current
+        if (!editor || !trigger.block.isConnected) return null
+        if (trigger.block.parentElement !== editor) return null
+
+        // A manual open (the "+" button) passes an empty range: nothing to delete.
+        if (trigger.end <= trigger.start) return trigger.block
+
+        // Offsets are resolved to fresh caret positions: the text nodes a menu
+        // was opened on may already have been replaced by the browser.
+        const startPos = findTextPosition(trigger.block, trigger.start)
+        const endPos = findTextPosition(trigger.block, trigger.end)
+        if (!startPos || !endPos) return null
+
+        const range = document.createRange()
+        range.setStart(startPos.node, startPos.offset)
+        range.setEnd(endPos.node, endPos.offset)
+
+        const selection = window.getSelection()
+        if (!selection) return null
+
+        historyManagerRef.current?.push(true)
+        range.deleteContents()
+        selection.removeAllRanges()
+        // deleteContents() collapses the range to the start of what it removed.
+        selection.addRange(range)
+        editor.focus({ preventScroll: true })
+
+        return trigger.block
+      },
+      []
+    )
+
+    /** Picker row applied — the host inserts the block, we only tidy the block. */
+    const handleSlashQueryRemoved = useCallback(
+      (trigger: { block: HTMLElement; start: number; end: number }) => {
+        const editor = editorRef.current
+        if (disabled || !editor) return
+
+        const block = clearSlashRange(trigger)
+        if (!block) return
+
+        ensureBlockPlaceholder(block)
+        normalizeEditorContent(editor)
+        emitChange()
+      },
+      [clearSlashRange, disabled, emitChange]
+    )
+
+    /**
      * Slash menu (`components/editor/SlashMenu.tsx`): the single block
      * inserter. The typed `/query` is removed first, then the regular command
      * runs on the emptied block so all of its bookkeeping (heading ids, list
@@ -2149,43 +2269,17 @@ const RichTextEditorImpl = forwardRef<RichTextEditorHandle, RichTextEditorProps>
      *
      * App-level entries (note link, data sheet table, image, file) are
      * forwarded to the host through `onCustomCommand`, which is the same hook
-     * the old toolbar button used.
+     * the old toolbar button used. `optionId` carries the choice of an inline
+     * sub-step (table size grid, host pickers).
      */
     const handleSlashCommand = useCallback(
-      (id: SlashCommandId, trigger: { block: HTMLElement; start: number; end: number }) => {
+      (id: SlashCommandId, trigger: { block: HTMLElement; start: number; end: number }, optionId?: string) => {
         const editor = editorRef.current
         if (disabled || !editor || !trigger.block.isConnected) return
         if (trigger.block.parentElement !== editor) return
 
-        // A manual open (the "+" button) passes an empty range: nothing to delete.
-        const removesText = trigger.end > trigger.start
-
-        if (removesText) {
-          // Offsets are resolved to fresh caret positions: the text nodes a
-          // menu was opened on may already have been replaced by the browser.
-          const startPos = findTextPosition(trigger.block, trigger.start)
-          const endPos = findTextPosition(trigger.block, trigger.end)
-          if (!startPos || !endPos) return
-
-          const range = document.createRange()
-          range.setStart(startPos.node, startPos.offset)
-          range.setEnd(endPos.node, endPos.offset)
-
-          const selection = window.getSelection()
-          if (!selection) return
-
-          historyManagerRef.current?.push(true)
-          range.deleteContents()
-          selection.removeAllRanges()
-          // deleteContents() collapses the range to the start of what it removed.
-          selection.addRange(range)
-        } else {
-          historyManagerRef.current?.push(true)
-        }
-
-        editor.focus({ preventScroll: true })
-
-        const block = trigger.block
+        const block = clearSlashRange(trigger)
+        if (!block) return
 
         switch (id) {
           case 'paragraph':
@@ -2230,10 +2324,20 @@ const RichTextEditorImpl = forwardRef<RichTextEditorHandle, RichTextEditorProps>
           case 'hyperlink':
             insertLink()
             break
-          case 'table':
-            saveSelection()
-            openTableDialog(3, 3)
+          case 'table': {
+            // The palette's size grid passes "<rows>x<cols>"; without it fall
+            // back to the toolbar dialog.
+            const size = /^(\d{1,2})x(\d{1,2})$/.exec(optionId ?? '')
+            if (size) {
+              saveSelection()
+              insertCustomBlock('table', { rows: Number(size[1]), cols: Number(size[2]) })
+              forceWebViewFocus()
+            } else {
+              saveSelection()
+              openTableDialog(3, 3)
+            }
             break
+          }
           case 'note-link':
           case 'data-sheet-table':
           case 'image':
@@ -2252,9 +2356,11 @@ const RichTextEditorImpl = forwardRef<RichTextEditorHandle, RichTextEditorProps>
       },
       [
         applyHeading,
+        clearSlashRange,
         disabled,
         emitChange,
         execCommand,
+        forceWebViewFocus,
         insertHorizontalRule,
         insertLink,
         onCustomCommand,
@@ -3626,6 +3732,8 @@ const RichTextEditorImpl = forwardRef<RichTextEditorHandle, RichTextEditorProps>
             editorRef={editorRef}
             disabled={disabled}
             onSelect={handleSlashCommand}
+            pickers={slashPickers}
+            onRemoveQuery={handleSlashQueryRemoved}
           />
         </div>
 

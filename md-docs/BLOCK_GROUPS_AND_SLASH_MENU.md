@@ -75,6 +75,43 @@ block menu (heading ids, list normalisation, caret restoration); app-level ones
 are forwarded to the host through the existing `onCustomCommand` hook, so
 `NoteEditor` keeps owning uploads, pickers and dialogs.
 
+### Sub-steps (pick a note / sheet / table size inline)
+
+Some entries are not an immediate action but a **second view of the same
+palette** — the note keeps its place, no modal opens:
+
+| Command | Step |
+|---------|------|
+| Table | 6 × 6 size grid with a `3 × 3` readout, `↑↓←→` move the cell, `Enter` inserts the picked size |
+| Note link | Host picker: every other note (newest first, folder as secondary line) |
+| Data sheet table | Host picker: every data-sheet note with a `columns × rows` hint |
+
+* The host registers steps through `RichTextEditor`'s `slashPickers` prop
+  (`load()` returns rows, `apply(optionId)` performs the insert).
+  `NoteEditor` fills it with `getNotes()` / `getFolders()` and reuses
+  `buildDataSheetTablePayload()` (`lib/editor/dataSheetSnapshot.ts`) so the
+  dialog and the inline step insert the exact same payload. Commands without a
+  picker still go through `onCustomCommand` (image/file open OS dialogs).
+* **Typing inside a step never reaches the document** — those keys are captured
+  as an internal filter (spaces allowed), so nothing is written into the note
+  while searching. Backspace edits the filter, `Escape` steps back to the
+  command list, and applying deletes the original `/query` through
+  `onRemoveQuery` before the host inserts.
+* Rows are loaded once per step and filtered locally (`filterSlashOptions`:
+  label → keywords → secondary line).
+* Block-level islands now insert **as siblings**: when the caret sits in the
+  emptied paragraphs of the inserter, the table/image/file block takes its place
+  instead of nesting inside `<p>` (which browsers cannot represent and which
+  left stray empty paragraphs behind).
+
+### Repeat the last block
+
+The command you used last is remembered (`localStorage:
+notesdesktop:last-block-command`) and **pre-highlighted** when the palette
+opens with an empty filter, so `/` + `Enter` (or `+` + `Enter`) repeats your
+last block. Typing still jumps to the best match; walking with `↑↓` keeps the
+row you are on (`resolveCommandHighlight`).
+
 Implementation notes:
 
 * The menu is an overlay **next to** the editor, so it can never be serialised.
@@ -96,8 +133,9 @@ Implementation notes:
 
 Pure helpers (`tests/slashCommands.test.ts`): `matchSlashTrigger` (line-scoped,
 no spaces, max 24 characters), `filterSlashCommands` (exact label → label
-prefix → keyword prefix → substring, catalogue order as tie-break) and
-`groupSlashCommands` (ordered category sections).
+prefix → keyword prefix → substring, catalogue order as tie-break),
+`groupSlashCommands` (ordered category sections), `filterSlashOptions` and
+`resolveCommandHighlight`.
 
 ## 3. Block indentation (`Tab` / `Shift+Tab`)
 
@@ -122,6 +160,9 @@ prefix → keyword prefix → substring, catalogue order as tie-break) and
 * `tests/slashCommands.test.ts` — trigger matching (line scope, whitespace
   neighbourhood, second slash, query length), filter ranking for every command
   (including `nl`, `dst`, `img`, `attach`) and category grouping.
+* `tests/slashSteps.test.ts` — inline option filtering (label/keyword/secondary
+  line), the last-used highlight rules and the data sheet snapshot builder
+  (formula resolution, out-of-range/circular references, broken payloads).
 * `tests/textOffsets.test.ts` — offset ⇄ caret round-trips, `<br>` handling,
   nested text nodes, out-of-block guards.
 * Browser harness (real editor, Playwright): `Tab`/`Shift+Tab` with computed

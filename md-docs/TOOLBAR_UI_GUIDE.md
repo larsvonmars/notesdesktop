@@ -127,6 +127,10 @@ old "Insert Content Block" menu offered: Text, Headings 1–6, bulleted/numbered
 lists, checklist, quote, code block, divider, hyperlink, table, note link, data
 sheet table, image and file. Filter by label or keyword (`h2`, `todo`, `img`,
 `---` …), `↑`/`↓` to pick, `Enter` to apply, `Escape` to keep the text.
+The last block you inserted is pre-highlighted, so `Enter` repeats it.
+Table, note link and data sheet table open a **second step inside the same
+palette** (size grid, note list, sheet list) — typing there searches the list
+instead of writing into the note, `Escape` steps back, `Enter` inserts.
 `Tab` / `Shift+Tab` indent and outdent plain blocks by up to three levels —
 inside lists they nest the list item as before.
 

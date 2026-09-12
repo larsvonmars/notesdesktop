@@ -8,6 +8,7 @@ import type { Note } from '@/lib/notes'
 import type { Folder as FolderType } from '@/lib/folders'
 import type { DataSheetData } from './DataSheetEditor'
 import type { DataSheetTablePayload } from '@/lib/editor/dataSheetTableBlock'
+import { buildDataSheetTablePayload, resolveSheetData } from '@/lib/editor/dataSheetSnapshot'
 import BaseModal, { ModalHeader, ModalFooter, ModalTitle } from './BaseModal'
 
 interface DataSheetPickerDialogProps {
@@ -15,55 +16,6 @@ interface DataSheetPickerDialogProps {
   onClose: () => void
   onSelect: (payload: DataSheetTablePayload) => void
   currentNoteId?: string
-}
-
-/** Column letter helper (same as DataSheetEditor) */
-function columnIndexToLetter(index: number): string {
-  let result = ''
-  let n = index
-  while (n >= 0) {
-    result = String.fromCharCode((n % 26) + 65) + result
-    n = Math.floor(n / 26) - 1
-  }
-  return result
-}
-
-/** Simple formula resolver for snapshot — evaluates formulas to display values */
-function resolveCell(raw: string, rows: string[][], visited = new Set<string>()): string {
-  if (!raw || !raw.startsWith('=')) return raw
-  try {
-    const expr = raw.slice(1).trim()
-    // Very simple: resolve cell references and do basic math
-    const resolved = expr.replace(/([A-Z]+)(\d+)/gi, (_, letters, rowNumStr) => {
-      const colNum = letters.toUpperCase().split('').reduce((acc: number, ch: string) => acc * 26 + ch.charCodeAt(0) - 64, 0) - 1
-      const rowNum = parseInt(rowNumStr, 10) - 1
-      const key = `${rowNum},${colNum}`
-      if (visited.has(key)) return '0'
-      if (rowNum < 0 || rowNum >= rows.length || colNum < 0 || colNum >= (rows[0]?.length ?? 0)) return '0'
-      const v = rows[rowNum][colNum]
-      if (v.startsWith('=')) {
-        const next = new Set(visited)
-        next.add(key)
-        return resolveCell(v, rows, next)
-      }
-      return v || '0'
-    })
-    // Try basic arithmetic eval via Function (safe enough for number-only expressions)
-    const num = Number(resolved)
-    if (!isNaN(num)) return String(num)
-    return raw // Can't resolve, show raw
-  } catch {
-    return raw
-  }
-}
-
-/** Parse a DataSheetData JSON and produce resolved display rows */
-function resolveSheetData(sheetData: DataSheetData): { columns: string[]; rows: string[][]; headerRows?: number[] } {
-  const columns = sheetData.columns.map(c => c.name)
-  const resolvedRows = sheetData.rows.map(row =>
-    row.map((cell, ci) => resolveCell(cell, sheetData.rows))
-  )
-  return { columns, rows: resolvedRows, headerRows: sheetData.headerRows }
 }
 
 export default function DataSheetPickerDialog({
@@ -141,14 +93,9 @@ export default function DataSheetPickerDialog({
   const handleInsert = () => {
     if (!selectedSheet || !previewData) return
 
-    const payload: DataSheetTablePayload = {
-      sourceNoteId: selectedSheet.id,
-      sourceNoteTitle: selectedSheet.title || 'Data Sheet',
-      columns: previewData.columns,
-      rows: previewData.rows,
-      headerRows: previewData.headerRows,
-      snapshotAt: new Date().toISOString(),
-    }
+    // Same builder the block inserter's inline step uses — one payload shape.
+    const payload = buildDataSheetTablePayload(selectedSheet)
+    if (!payload) return
 
     onSelect(payload)
     setSearchQuery('')
