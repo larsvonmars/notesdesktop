@@ -67,6 +67,14 @@ import {
 } from '@/lib/editor/blockTools'
 import { handleParagraphEnter } from '@/lib/editor/enterHandler'
 import {
+  getSubtree,
+  hasChildBlocks,
+  isCollapsed,
+  isHiddenBlock,
+  setCollapsed,
+  updateCollapsedVisibility,
+} from '@/lib/editor/blockTree'
+import {
   toggleListType,
   toggleChecklistState,
   getClosestListItem,
@@ -2105,7 +2113,30 @@ const RichTextEditorImpl = forwardRef<RichTextEditorHandle, RichTextEditorProps>
         // otherwise a quick Cmd/Ctrl+Z right after the action does nothing.
         historyManagerRef.current?.push(true)
 
-        // Indentation is stored per block, so a selection just moves together.
+        // Collapse / expand (headings with child blocks). The children stay in
+        // the document — `updateCollapsedVisibility` hides them via CSS.
+        if (action === 'toggle-collapse') {
+          const target = single
+          if (!target || !hasChildBlocks(editor, target)) return
+
+          setCollapsed(target, !isCollapsed(target))
+          updateCollapsedVisibility(editor)
+
+          // Never leave the caret inside a block that just became invisible.
+          const caretBlock = getTopLevelBlock(window.getSelection()?.anchorNode ?? null, editor)
+          if (caretBlock && isHiddenBlock(caretBlock)) {
+            placeCaretInBlock(target)
+          }
+
+          editor.focus({ preventScroll: true })
+          keepCaretVisibleInEditor(editor)
+          normalizeEditorContent(editor)
+          emitChange()
+          return
+        }
+
+        // Indentation is stored per block, and a block takes its children along
+        // (indenting only the parent would orphan them).
         if (action === 'indent' || action === 'outdent') {
           const delta = action === 'indent' ? 1 : -1
           if (live.some((block) => indentBlock(block, delta))) {
@@ -2122,9 +2153,14 @@ const RichTextEditorImpl = forwardRef<RichTextEditorHandle, RichTextEditorProps>
           action === 'move-up' ||
           action === 'move-down'
         ) {
+          // A single block acts as its whole subtree: children follow their
+          // parent when duplicating or moving. Deleting keeps the children
+          // (they simply stay where they are) — nothing vanishes silently.
+          const range = single && action !== 'delete' ? getSubtree(editor, single) : live
+
           let changed = false
           if (action === 'duplicate') {
-            const clones = duplicateBlocks(editor, live)
+            const clones = duplicateBlocks(editor, range)
             if (clones.length > 0) {
               placeCaretInBlock(clones[0])
               changed = true
@@ -2132,7 +2168,7 @@ const RichTextEditorImpl = forwardRef<RichTextEditorHandle, RichTextEditorProps>
           } else if (action === 'delete') {
             changed = removeBlocks(editor, live)
           } else {
-            changed = moveBlocks(editor, live, action === 'move-up' ? 'up' : 'down')
+            changed = moveBlocks(editor, range, action === 'move-up' ? 'up' : 'down')
           }
 
           if (changed) {
@@ -2380,6 +2416,11 @@ const RichTextEditorImpl = forwardRef<RichTextEditorHandle, RichTextEditorProps>
           historyManagerRef.current.redo()
         }
 
+        // The restored HTML carries its own `data-collapsed` markers — make the
+        // hidden subtrees match them again.
+        const editor = editorRef.current
+        if (editor) updateCollapsedVisibility(editor)
+
         emitChange()
       },
       [emitChange]
@@ -2560,6 +2601,7 @@ const RichTextEditorImpl = forwardRef<RichTextEditorHandle, RichTextEditorProps>
             editorEl.innerHTML = sanitize(html)
             ensureEditorHasContent(editorEl)
             rehydrateExistingBlocks()
+            updateCollapsedVisibility(editorEl)
             emitChange()
           } catch (error) {
             console.error('Error in setHTML:', error)
@@ -2758,6 +2800,9 @@ const RichTextEditorImpl = forwardRef<RichTextEditorHandle, RichTextEditorProps>
           lastSyncedValueRef.current = sanitizedValue
           pendingExternalValueRef.current = null
 
+          // Collapsed headings carry their hidden children in the saved HTML.
+          updateCollapsedVisibility(editorEl)
+
           if (savedCursorPos) {
             try {
               restoreCursorPosition(savedCursorPos, editorEl)
@@ -2780,6 +2825,7 @@ const RichTextEditorImpl = forwardRef<RichTextEditorHandle, RichTextEditorProps>
           rehydrateExistingBlocks()
         }
 
+        updateCollapsedVisibility(editorEl)
         ensureEditorHasContent(editorEl)
       } catch (error) {
         console.error('Error synchronizing editor value:', error)
@@ -2939,7 +2985,8 @@ const RichTextEditorImpl = forwardRef<RichTextEditorHandle, RichTextEditorProps>
             if (editor && block) {
               event.preventDefault()
               historyManagerRef.current?.push(true)
-              if (moveBlock(editor, block, event.key === 'ArrowUp' ? 'up' : 'down')) {
+              // Child blocks travel with their parent.
+              if (moveBlocks(editor, getSubtree(editor, block), event.key === 'ArrowUp' ? 'up' : 'down')) {
                 keepCaretVisibleInEditor(editor)
                 emitChange()
               }

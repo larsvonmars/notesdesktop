@@ -6,8 +6,12 @@
  * Rendered as an overlay **next to** the editor (never inside it, so it can
  * never end up in the saved HTML). Hovering a block shows a small label button
  * in the left gutter:
- *   - click  → block menu (turn into / duplicate / move / delete)
+ *   - click  → block menu (turn into / collapse / duplicate / move / delete)
  *   - drag   → reorder blocks with a drop indicator
+ *
+ * Child blocks (anything indentend under another block) belong to their parent:
+ * dragging a parent takes its whole subtree along, and a child block cannot be
+ * dragged on its own.
  *
  * Reordering is also available from the keyboard (Alt+↑/↓), handled by the
  * editor itself — that is the path used on touch devices where hover does not
@@ -19,6 +23,8 @@ import {
   ArrowDown,
   ArrowUp,
   CheckSquare,
+  ChevronDown,
+  ChevronRight,
   Code2,
   Copy,
   Heading1,
@@ -46,6 +52,13 @@ import {
   isStructuralBlock,
   type BlockKind,
 } from '@/lib/editor/blockTools'
+import {
+  getDescendants,
+  getParentBlock,
+  getSubtree,
+  hasChildBlocks,
+  isCollapsed,
+} from '@/lib/editor/blockTree'
 
 export type BlockActionId =
   | 'paragraph'
@@ -63,6 +76,7 @@ export type BlockActionId =
   | 'move-down'
   | 'indent'
   | 'outdent'
+  | 'toggle-collapse'
   | 'clear-selection'
 
 interface BlockControlsProps {
@@ -159,6 +173,9 @@ export default function BlockControls({
     kind: BlockKind
     blocks: HTMLElement[]
     canIndent: boolean
+    /** Heading with children: the menu offers Collapse / Expand. */
+    canCollapse: boolean
+    collapsed: boolean
   } | null>(null)
   const [dropTop, setDropTop] = useState<number | null>(null)
 
@@ -200,6 +217,44 @@ export default function BlockControls({
       }
     }
     return null
+  })()
+
+  // Child blocks belong to their parent: the handle follows the whole
+  // subtree when dragging, and refuses to detach a single child.
+  const handleEditor = editorRef.current
+  const draggedHandleBlocks: HTMLElement[] = (() => {
+    if (!activeHandle) return []
+    if (activeHandle.blocks.length > 1) return activeHandle.blocks
+    const block = activeHandle.blocks[0]
+    if (!handleEditor || !block.isConnected) return [block]
+    return getSubtree(handleEditor, block)
+  })()
+  const handleDragBlocked =
+    !!handleEditor &&
+    draggedHandleBlocks.length > 0 &&
+    !!getParentBlock(handleEditor, draggedHandleBlocks[0])
+  const handleIsChild = handleDragBlocked && activeHandle?.blocks.length === 1
+  const handleHasChildren =
+    !!handleEditor &&
+    !!activeHandle &&
+    activeHandle.blocks.length === 1 &&
+    hasChildBlocks(handleEditor, activeHandle.blocks[0])
+  const handleCollapsed =
+    !!activeHandle && activeHandle.blocks.length === 1 && isCollapsed(activeHandle.blocks[0])
+  const handleTitle = (() => {
+    if (!activeHandle) return ''
+    if (activeHandle.blocks.length > 1) return activeHandle.title
+
+    const childCount =
+      handleEditor && activeHandle.blocks[0].isConnected
+        ? getDescendants(handleEditor, activeHandle.blocks[0]).length
+        : 0
+    const parts = [activeHandle.title]
+    if (childCount > 0) {
+      parts.push(handleCollapsed ? `${childCount} hidden` : `${childCount} child` + (childCount === 1 ? '' : 'ren'))
+    }
+    if (handleIsChild) parts.push('child block — moves with its parent')
+    return parts.join(' · ')
   })()
 
   const clearSelection = useCallback(() => {
@@ -551,12 +606,18 @@ export default function BlockControls({
       const left = Math.max(4, Math.min(30, editorRect.width - MENU_WIDTH - 4))
 
       cancelHide()
+      const menuBlock = nextBlocks[0]
       setMenu({
         top,
         left,
-        kind: blockKind(nextBlocks[0]),
+        kind: blockKind(menuBlock),
         blocks: nextBlocks,
         canIndent: nextBlocks.some((block) => canIndentBlock(block)),
+        canCollapse:
+          nextBlocks.length === 1 &&
+          /^h[1-6]$/.test(menuBlock.tagName.toLowerCase()) &&
+          hasChildBlocks(editor, menuBlock),
+        collapsed: isCollapsed(menuBlock),
       })
     },
     [cancelHide, clearSelection, editorRef, handle, syncSelectionRect]
@@ -645,11 +706,13 @@ export default function BlockControls({
           ref={handleRef}
           type="button"
           tabIndex={-1}
-          title={activeHandle.title}
-          aria-label={activeHandle.title}
-          className="pointer-events-auto absolute left-0 flex h-7 w-7 cursor-grab items-center justify-center rounded-md border border-transparent text-[10px] font-semibold text-muted opacity-70 transition-colors hover:border-border hover:bg-surface-hover hover:text-foreground hover:opacity-100 active:cursor-grabbing"
+          title={handleTitle}
+          aria-label={handleTitle}
+          className={`pointer-events-auto absolute left-0 flex h-7 w-7 items-center justify-center gap-0.5 rounded-md border border-transparent text-[10px] font-semibold text-muted opacity-70 transition-colors hover:border-border hover:bg-surface-hover hover:text-foreground hover:opacity-100 ${
+            handleDragBlocked ? 'cursor-pointer' : 'cursor-grab active:cursor-grabbing'
+          }`}
           style={{ top: activeHandle.top }}
-          draggable
+          draggable={!handleDragBlocked}
           onPointerEnter={cancelHide}
           onPointerOver={cancelHide}
           onPointerMove={cancelHide}
@@ -669,7 +732,13 @@ export default function BlockControls({
             openMenu({ extend: event.shiftKey, blocks: activeHandle.blocks })
           }}
           onDragStart={(event) => {
-            const live = activeHandle.blocks.filter((block) => block.isConnected)
+            // A child block always moves with its parent — never on its own.
+            if (handleDragBlocked) {
+              event.preventDefault()
+              return
+            }
+
+            const live = draggedHandleBlocks.filter((block) => block.isConnected)
             if (live.length === 0) {
               event.preventDefault()
               return
@@ -690,10 +759,16 @@ export default function BlockControls({
           }}
         >
           <span aria-hidden="true">{activeHandle.label}</span>
+          {handleHasChildren &&
+            (handleCollapsed ? (
+              <ChevronRight size={8} strokeWidth={3} aria-hidden="true" />
+            ) : (
+              <ChevronDown size={8} strokeWidth={3} aria-hidden="true" />
+            ))}
         </button>
       )}
 
-      {activeHandle && !menu && <div className="sr-only">{activeHandle.title}</div>}
+      {activeHandle && !menu && <div className="sr-only">{handleTitle}</div>}
 
       {menu && (
         <div
@@ -708,6 +783,26 @@ export default function BlockControls({
             <div className="px-2 pb-1 pt-1.5 text-[10px] font-semibold uppercase tracking-wide text-muted">
               {menu.blocks.length} blocks selected
             </div>
+          )}
+
+          {menu.canCollapse && (
+            <>
+              <button
+                type="button"
+                role="menuitem"
+                data-testid="block-menu-collapse"
+                onClick={() => runAction('toggle-collapse')}
+                className="flex w-full items-center gap-2 rounded-lg px-2 py-1.5 text-left text-sm text-foreground transition-colors hover:bg-surface-hover"
+              >
+                {menu.collapsed ? (
+                  <ChevronRight size={15} strokeWidth={2} />
+                ) : (
+                  <ChevronDown size={15} strokeWidth={2} />
+                )}
+                <span className="flex-1 truncate">{menu.collapsed ? 'Expand' : 'Collapse'}</span>
+              </button>
+              <div className="my-1 h-px bg-border" />
+            </>
           )}
 
           {showTurnInto && (

@@ -127,6 +127,17 @@ gutter or between blocks (resolved by the pointer's height, not by the element
 under it), it survives scrolling the note, and it hides only after a short
 grace period once the pointer leaves the editor entirely.
 
+Indented blocks form a **block tree**: a block below a shallower one is its
+child, and children always travel with their parent — drag, **Duplicate**,
+**Indent**/**Outdent** and `Alt+↑`/`Alt+↓` move the whole subtree, so a parent
+can never be separated from its children. A child block has no grab handle: its
+menu still opens, but dragging is refused (move the parent instead). The handle
+tooltip names the role: “N child(ren)”, “N hidden” while the subtree is
+collapsed, or “child block — moves with its parent”. Headings with children get
+**Collapse**/**Expand** as the first entry of the menu; collapsed children stay
+in the note (marked with `data-hidden`, hidden by CSS, `⋯` behind the heading)
+and reappear when you expand, delete the heading or undo.
+
 Typing **`/`** at the start of a line opens the block inserter — the same
 palette as the floating **+** button and the `+` key. It covers everything the
 old "Insert Content Block" menu offered: Text, Headings 1–6, bulleted/numbered
@@ -146,6 +157,8 @@ Title Case / UPPERCASE / lowercase) and the eraser (**Clear formatting**,
 font-size from the selection while splitting partially selected formatting.
 Typing a bare `https://…`, `http://…` or `www.…` followed by a space turns it
 into a link automatically.
+
+### Keyboard Shortcuts
 
 ### Keyboard Shortcuts
 

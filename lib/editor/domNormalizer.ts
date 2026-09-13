@@ -4,6 +4,7 @@
  */
 
 import { captureBlockCursorPath, restoreBlockCursorPath } from './cursorPosition'
+import { updateCollapsedVisibility } from './blockTree'
 
 /**
  * Map of semantically equivalent tag names. For example, <b> and <strong> are equivalent.
@@ -229,6 +230,10 @@ export function normalizeEditorContent(editorElement: HTMLElement): void {
     p.appendChild(document.createElement('br'))
     editorElement.appendChild(p)
   }
+
+  // Re-derive which blocks a collapsed parent hides (cheap, and keeps the
+  // markers correct after merges/removals elsewhere in the tree).
+  updateCollapsedVisibility(editorElement)
 
   // Restore selection after normalization
   if (savedRange && selection) {

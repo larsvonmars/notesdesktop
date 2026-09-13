@@ -9,6 +9,13 @@
 
 import { generateHeadingId } from './commandDispatcher'
 import { setCursorAtStart } from './cursorPosition'
+import {
+  getBlockLevel,
+  isHiddenBlock,
+  setBlockLevel,
+  shiftSubtreeLevel,
+  MAX_BLOCK_LEVEL,
+} from './blockTree'
 
 export type BlockKind =
   | 'paragraph'
@@ -197,6 +204,7 @@ export function blockAtPoint(
   for (const block of getElementChildren(editor)) {
     const rect = block.getBoundingClientRect()
     if (rect.height <= 0) continue
+    if (isHiddenBlock(block)) continue
 
     if (clientY >= rect.top && clientY <= rect.bottom) return block
 
@@ -225,7 +233,10 @@ export function findDropReference(
 
   for (const block of getElementChildren(editor)) {
     if (ignored.includes(block)) continue
+    // Blocks inside a collapsed subtree are not valid drop targets.
+    if (isHiddenBlock(block)) continue
     const rect = block.getBoundingClientRect()
+    if (rect.height <= 0) continue
     if (clientY < rect.top + rect.height / 2) return block
   }
   return null
@@ -315,16 +326,11 @@ export function convertBlockToCode(
 // ── Indentation ───────────────────────────────────────────────────────────
 
 /** Furthest a block can be pushed in with Tab. */
-export const MAX_BLOCK_INDENT = 3
+export const MAX_BLOCK_INDENT = MAX_BLOCK_LEVEL
 
 /** Current indentation level of a block (0 when unset, clamped to the max). */
 export function getBlockIndent(block: HTMLElement | null | undefined): number {
-  if (!block) return 0
-
-  const parsed = Number.parseInt(block.getAttribute('data-indent') ?? '', 10)
-  if (!Number.isFinite(parsed) || parsed <= 0) return 0
-
-  return Math.min(parsed, MAX_BLOCK_INDENT)
+  return getBlockLevel(block)
 }
 
 /**
@@ -342,25 +348,21 @@ export function canIndentBlock(block: HTMLElement | null | undefined): boolean {
 
 /** Write an indentation level, dropping the attribute entirely at 0. */
 export function setBlockIndent(block: HTMLElement, level: number): boolean {
-  const clamped = Math.max(0, Math.min(MAX_BLOCK_INDENT, Math.floor(level)))
-  if (clamped === getBlockIndent(block)) return false
-
-  if (clamped === 0) {
-    block.removeAttribute('data-indent')
-  } else {
-    block.setAttribute('data-indent', String(clamped))
-  }
-
-  return true
+  return setBlockLevel(block, level)
 }
 
 /**
- * Tab / Shift+Tab entry point: move a block one step further in or out.
+ * Tab / Shift+Tab entry point: move a block **and its child blocks** one step
+ * further in or out, so the nesting under it survives the move.
  * Returns false when the block cannot be indented or nothing would change.
  */
 export function indentBlock(block: HTMLElement, delta: number): boolean {
   if (!canIndentBlock(block)) return false
-  return setBlockIndent(block, getBlockIndent(block) + delta)
+
+  const editor = block.parentElement
+  if (!editor) return false
+
+  return shiftSubtreeLevel(editor, block, delta)
 }
 
 /**

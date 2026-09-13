@@ -18,6 +18,7 @@
 
 import { setCursorAtStart, positionCursorInElement } from './cursorPosition'
 import { getClosestListItem } from './listHandler'
+import { getBlockLevel, setBlockLevel, shiftSubtreeLevel } from './blockTree'
 
 /** Block-level tags that participate in the normal paragraph flow */
 const BLOCK_TAGS = new Set(['P', 'DIV', 'H1', 'H2', 'H3', 'H4', 'H5', 'H6', 'BLOCKQUOTE'])
@@ -64,6 +65,16 @@ function createParagraph(content: DocumentFragment | null): HTMLParagraphElement
     p.appendChild(document.createElement('br'))
   }
   return p
+}
+
+/**
+ * New blocks stay on the level of the block they were split from, so pressing
+ * Enter inside a child block keeps writing children instead of jumping back
+ * out of the parent.
+ */
+function inheritBlockLevel(source: HTMLElement, target: HTMLElement): void {
+  const level = getBlockLevel(source)
+  if (level > 0) setBlockLevel(target, level)
 }
 
 /** True when there is no text before the caret inside the block. */
@@ -155,6 +166,14 @@ export function handleParagraphEnter(editorEl: HTMLElement | null): boolean {
   const parent = block.parentNode
   if (!parent) return false
 
+  // ── Enter on an empty indented block steps back out one level ──
+  // (Outliner habit: it ends the child list instead of stacking empty blocks.)
+  if (isVisuallyEmpty(block) && getBlockLevel(block) > 0) {
+    shiftSubtreeLevel(editorEl, block, -1)
+    placeCaret(block, editorEl)
+    return true
+  }
+
   // ── Paragraph: split into two paragraphs ──
   if (block.tagName === 'P') {
     const p = createParagraph(extractContentAfterCaret(block, range))
@@ -163,6 +182,7 @@ export function handleParagraphEnter(editorEl: HTMLElement | null): boolean {
       block.appendChild(document.createElement('br'))
     }
     parent.insertBefore(p, block.nextSibling)
+    inheritBlockLevel(block, p)
     placeCaret(p, editorEl)
     return true
   }
@@ -172,6 +192,7 @@ export function handleParagraphEnter(editorEl: HTMLElement | null): boolean {
     const p = document.createElement('p')
     while (block.firstChild) p.appendChild(block.firstChild)
     if (!hasRenderableContent(p)) p.appendChild(document.createElement('br'))
+    inheritBlockLevel(block, p)
     parent.replaceChild(p, block)
     placeCaret(p, editorEl)
     return true
@@ -180,6 +201,7 @@ export function handleParagraphEnter(editorEl: HTMLElement | null): boolean {
   // ── Enter at the very start → new empty paragraph above, block stays intact ──
   if (isCaretAtBlockStart(block, range)) {
     const p = createParagraph(null)
+    inheritBlockLevel(block, p)
     parent.insertBefore(p, block)
     placeCaret(p, editorEl)
     return true
@@ -187,6 +209,7 @@ export function handleParagraphEnter(editorEl: HTMLElement | null): boolean {
 
   // ── Split: the remainder after the caret becomes the new paragraph ──
   const p = createParagraph(extractContentAfterCaret(block, range))
+  inheritBlockLevel(block, p)
   parent.insertBefore(p, block.nextSibling)
   placeCaret(p, editorEl)
   return true

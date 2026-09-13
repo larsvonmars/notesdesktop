@@ -310,6 +310,18 @@
   [contenteditable='true'] > [data-indent='1'] { margin-left: 1.75rem !important; }
   [contenteditable='true'] > [data-indent='2'] { margin-left: 3.5rem !important; }
   [contenteditable='true'] > [data-indent='3'] { margin-left: 5.25rem !important; }
+
+  /* Child blocks hidden by a collapsed parent (see lib/editor/blockTree.ts). */
+  [contenteditable='true'] > [data-hidden='true'] {
+    display: none !important;
+  }
+
+  /* Collapsed parent: a subtle marker so the hidden children are discoverable. */
+  [contenteditable='true'] > [data-collapsed='true']::after {
+    content: '\00a0⋯';
+    opacity: 0.45;
+    font-size: 0.85em;
+  }
 }
 
 /* ─── Mobile-specific overrides ─── */

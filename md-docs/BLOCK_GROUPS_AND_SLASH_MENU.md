@@ -178,7 +178,40 @@ prefix → keyword prefix → substring, catalogue order as tie-break),
 * Also reachable from the block menu (**Indent** / **Outdent**) for every block
   that supports it — including whole selections.
 
-## 4. Tests
+## 4. The block tree (children, drag, collapse)
+
+The note stays a flat list in the DOM — nesting is *derived* from `data-indent`
+by `lib/editor/blockTree.ts`. A block directly *below* a shallower block is its
+child, which gives every feature a single source of truth and keeps existing
+notes working without a migration.
+
+* `getSubtree` / `getDescendants` / `getParentBlock` / `hasChildBlocks` walk the
+  derived tree; `canShiftSubtreeLevel` / `shiftSubtreeLevel` move a block and
+  its children together (clamped so nothing dips below `MAX_BLOCK_LEVEL = 3`).
+* **Children travel with their parent.** `Tab`/`Shift+Tab`, the menu's
+  **Indent**/**Outdent**, `Alt+↑`/`Alt+↓`, **Duplicate** and handle drags all
+  operate on `getSubtree(block)`, so a parent can never be separated from its
+  children. A child block's handle refuses to start a drag at all
+  (`draggable="false"`, no `dragstart`) — moving it would orphan it.
+* **`Enter` inherits the level** of the block you were writing in, so typing
+  inside a child keeps creating children. Pressing `Enter` on an *empty*
+  indented block steps the block one level back out first.
+* **Collapse / expand** is offered for headings (`h1`–`h6`) that have children:
+  the first entry of the handle menu toggles it. The subtree is hidden — not
+  removed — via `data-collapsed` on the heading plus `data-hidden` on each
+  hidden block (CSS `display: none`, with a small `⋯` marker behind the heading).
+  `updateCollapsedVisibility` recomputes the markers from scratch, so deleting a
+  collapsed heading, undoing/redoing, or loading a note always leaves the right
+  blocks visible — children of a deleted heading simply reappear.
+* The state is **persistent**: `data-collapsed`/`data-hidden` are part of the
+  saved HTML, so a note reopens collapsed. `updateCollapsedVisibility` runs
+  after every load/sync, history change and structural edit.
+* Hidden blocks are skipped everywhere it matters: the handle ignores them
+  (`blockAtPoint`), drop targets never resolve to them (a drop next to a
+  collapsed heading lands beside the heading, never inside it), and the caret is
+  pushed out of a block that just became invisible.
+
+## 5. Tests
 
 * `tests/blockTools.test.ts` — indentation clamping/junk values/list guards,
   contiguous ranges, run moves (both directions + boundaries), gap-filling
@@ -192,6 +225,10 @@ prefix → keyword prefix → substring, catalogue order as tie-break),
   (formula resolution, out-of-range/circular references, broken payloads).
 * `tests/textOffsets.test.ts` — offset ⇄ caret round-trips, `<br>` handling,
   nested text nodes, out-of-block guards.
+* `tests/blockTree.test.ts` — subtree/descendant/parent discovery, level
+  clamping and attribute cleanup, subtree level shifts (including the limit),
+  collapse/expand with nested collapses, stale-marker cleanup and blocks
+  without children.
 * Browser harness (real editor, Playwright): `Tab`/`Shift+Tab` with computed
   margins, shift+click ranges with the "3 blocks selected" menu, group
   duplicate/delete/move/indent + undo, pinned handle with count, group drag with
@@ -201,3 +238,10 @@ prefix → keyword prefix → substring, catalogue order as tie-break),
   `onCustomCommand`), the "+" button and `+` key opening the same palette with
   typed filtering, `Escape` leaving the text untouched, the empty
   "No matching blocks" state and undo after every apply.
+* Browser harness (round 8, real editor, Playwright): handle titles with child
+  and hidden counts, `Tab`/`Alt+↓` on a parent with computed subtree levels,
+  the menu's **Collapse**/**Expand** on a heading (children `display: none`,
+  `⋯` marker), reopen-from-saved-HTML restoring the collapsed state, undo/redo
+  round-trips of the collapse, deleting a collapsed heading (children reappear),
+  a child handle refusing `dragstart`, the drop indicator skipping hidden
+  blocks, and `Enter` inheriting/stepping out of a level.
