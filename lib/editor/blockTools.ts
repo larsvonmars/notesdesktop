@@ -179,6 +179,38 @@ export function moveBlockBefore(
 }
 
 /**
+ * Top-level block at a viewport height, used when the pointer is not over any
+ * text — the block handle lives in the editor's left gutter, where the element
+ * under the cursor is the editor itself. Blocks whose box is at most
+ * `tolerance` px away also count, so the tiny gaps and margins between blocks
+ * (and the editor's own padding) never turn into dead zones where the handle
+ * would disappear just as the user reaches for it.
+ */
+export function blockAtPoint(
+  editor: HTMLElement,
+  clientY: number,
+  tolerance = 14
+): HTMLElement | null {
+  let nearest: HTMLElement | null = null
+  let nearestDistance = Number.POSITIVE_INFINITY
+
+  for (const block of getElementChildren(editor)) {
+    const rect = block.getBoundingClientRect()
+    if (rect.height <= 0) continue
+
+    if (clientY >= rect.top && clientY <= rect.bottom) return block
+
+    const distance = clientY < rect.top ? rect.top - clientY : clientY - rect.bottom
+    if (distance < nearestDistance) {
+      nearestDistance = distance
+      nearest = block
+    }
+  }
+
+  return nearestDistance <= tolerance ? nearest : null
+}
+
+/**
  * Block that a drop at `clientY` would be inserted before (null = append).
  * Dragged blocks are ignored so the calculation is stable mid-drag — pass the
  * whole run when a multi-block selection is being dragged.

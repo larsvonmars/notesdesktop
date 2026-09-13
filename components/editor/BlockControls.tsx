@@ -35,6 +35,7 @@ import {
   type LucideIcon,
 } from 'lucide-react'
 import {
+  blockAtPoint,
   blockKind,
   blockLabel,
   canIndentBlock,
@@ -119,8 +120,9 @@ const ACTION_ENTRIES: MenuEntry[] = [
 /** Menu width/height are used for clamping; the multi-selection menu is taller. */
 const MENU_WIDTH = 208
 const MENU_MAX_HEIGHT = 336
-const HANDLE_HEIGHT = 24
-const HIDE_DELAY = 140
+const HANDLE_HEIGHT = 28
+/** Grace period before the handle hides when the pointer leaves the editor. */
+const HIDE_DELAY = 300
 
 export default function BlockControls({
   editorRef,
@@ -134,6 +136,8 @@ export default function BlockControls({
   const frameRef = useRef<number | null>(null)
   const hideTimerRef = useRef<number | null>(null)
   const hoveredBlockRef = useRef<HTMLElement | null>(null)
+  /** Last pointer position seen over the editor (kept for scroll handling). */
+  const pointerRef = useRef<{ x: number; y: number } | null>(null)
   const draggedBlocksRef = useRef<HTMLElement[]>([])
   const dropReferenceRef = useRef<HTMLElement | null>(null)
   const menuOpenRef = useRef(false)
@@ -333,14 +337,23 @@ export default function BlockControls({
     // changes (e.g. the menu closes) — without it the handle would stay hidden.
     const onPointerActivity = (event: PointerEvent) => {
       if (disabledRef.current || menuOpenRef.current || handleDisabledRef.current) return
+      pointerRef.current = { x: event.clientX, y: event.clientY }
+      // While dragging a block the handle belongs to the dragged run.
+      if (draggedBlocksRef.current.length > 0) return
+
       const target = event.target as Node | null
+      const clientY = event.clientY
 
       if (frameRef.current !== null) return
       frameRef.current = window.requestAnimationFrame(() => {
         frameRef.current = null
         if (disabledRef.current || handleDisabledRef.current) return
+        if (draggedBlocksRef.current.length > 0) return
 
-        const block = getTopLevelBlock(target, editor)
+        // The handle lives in the left gutter, where there is no text under the
+        // pointer — fall back to the block at the pointer's height so reaching
+        // for the handle does not make it disappear.
+        const block = getTopLevelBlock(target, editor) ?? blockAtPoint(editor, clientY)
         if (!block) {
           setHandle(null)
           return
@@ -351,13 +364,12 @@ export default function BlockControls({
 
     const onPointerLeave = (event: PointerEvent) => {
       if (menuOpenRef.current) return
-      const related = event.relatedTarget as Node | null
-      if (
-        related &&
-        (handleRef.current?.contains(related) || menuRef.current?.contains(related))
-      ) {
+      // `relatedTarget` is not always a Node (React can hand over `window`).
+      const related = event.relatedTarget instanceof Node ? event.relatedTarget : null
+      if (related && (handleRef.current?.contains(related) || menuRef.current?.contains(related))) {
         return
       }
+      pointerRef.current = null
       scheduleHide()
     }
 
@@ -366,7 +378,25 @@ export default function BlockControls({
         setMenu(null)
         menuOpenRef.current = false
       }
-      hideHandle()
+
+      // Scrolling must not make the handle vanish — the content moves, the
+      // pointer does not, so re-derive the block from the pointer position.
+      const pointer = pointerRef.current
+      if (!pointer) {
+        hideHandle()
+        return
+      }
+
+      if (frameRef.current !== null) return
+      frameRef.current = window.requestAnimationFrame(() => {
+        frameRef.current = null
+        const block = blockAtPoint(editor, pointer.y)
+        if (!block) {
+          hideHandle()
+          return
+        }
+        positionHandle(block)
+      })
     }
 
     // Clicking into the text ends a block selection — the overlay sits outside
@@ -617,14 +647,22 @@ export default function BlockControls({
           tabIndex={-1}
           title={activeHandle.title}
           aria-label={activeHandle.title}
-          className="pointer-events-auto absolute left-0.5 flex h-6 min-w-6 items-center justify-center rounded-md border border-transparent px-1 text-[10px] font-semibold text-muted opacity-70 transition-colors hover:border-border hover:bg-surface-hover hover:text-foreground hover:opacity-100"
+          className="pointer-events-auto absolute left-0 flex h-7 w-7 cursor-grab items-center justify-center rounded-md border border-transparent text-[10px] font-semibold text-muted opacity-70 transition-colors hover:border-border hover:bg-surface-hover hover:text-foreground hover:opacity-100 active:cursor-grabbing"
           style={{ top: activeHandle.top }}
           draggable
           onPointerEnter={cancelHide}
+          onPointerOver={cancelHide}
+          onPointerMove={cancelHide}
           onPointerLeave={(event) => {
             if (menuOpenRef.current) return
-            const related = event.relatedTarget as Node | null
+            // `relatedTarget` is not always a Node — React can hand over the
+            // `window` (e.g. leaving towards the browser chrome), and calling
+            // `contains()` with it would throw inside the event dispatch.
+            const related = event.relatedTarget instanceof Node ? event.relatedTarget : null
             if (related && menuRef.current?.contains(related)) return
+            // Leaving into the editor keeps the handle (the editor's hover
+            // handler re-arms it); leaving anywhere else hides it.
+            if (related && editorRef.current?.contains(related)) return
             scheduleHide()
           }}
           onClick={(event) => {

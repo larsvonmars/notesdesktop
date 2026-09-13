@@ -121,6 +121,12 @@ range and act on it as a group (the handle then shows the block count), and
 drag the pinned handle to move the selection. `Alt+↑` / `Alt+↓` move the block
 under the caret without the mouse. Structural changes are single undo steps.
 
+The handle is deliberately easy to grab: it is a 28 × 28 px target flush with
+the text inset, it stays visible while the pointer is anywhere in the left
+gutter or between blocks (resolved by the pointer's height, not by the element
+under it), it survives scrolling the note, and it hides only after a short
+grace period once the pointer leaves the editor entirely.
+
 Typing **`/`** at the start of a line opens the block inserter — the same
 palette as the floating **+** button and the `+` key. It covers everything the
 old "Insert Content Block" menu offered: Text, Headings 1–6, bulleted/numbered

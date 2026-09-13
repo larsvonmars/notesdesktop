@@ -1,5 +1,6 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest'
 import {
+  blockAtPoint,
   blockKind,
   blockLabel,
   canMoveBlocks,
@@ -282,6 +283,48 @@ describe('blockTools', () => {
       expect(indentBlock(paragraph, -1)).toBe(true)
       expect(indentBlock(paragraph, -1)).toBe(false)
       expect(getBlockIndent(paragraph)).toBe(0)
+    })
+  })
+
+  describe('blockAtPoint', () => {
+    it('returns the block whose vertical band contains the height', () => {
+      editor.innerHTML = '<p>one</p><p>two</p><p>three</p>'
+      const [one, two, three] = getElementChildren(editor)
+      withRect(one, 0, 20)
+      withRect(two, 20, 20)
+      withRect(three, 40, 20)
+
+      expect(blockAtPoint(editor, 0)).toBe(one)
+      expect(blockAtPoint(editor, 10)).toBe(one)
+      // Touching edges belong to the first block of the pair.
+      expect(blockAtPoint(editor, 20)).toBe(one)
+      expect(blockAtPoint(editor, 30)).toBe(two)
+      expect(blockAtPoint(editor, 50)).toBe(three)
+    })
+
+    it('snaps to the nearest block within the tolerance (gaps, padding)', () => {
+      editor.innerHTML = '<p>one</p><p>two</p>'
+      const [one, two] = getElementChildren(editor)
+      withRect(one, 10, 20)
+      withRect(two, 50, 20)
+
+      expect(blockAtPoint(editor, 5)).toBe(one) // 5 px above the first block
+      expect(blockAtPoint(editor, 75)).toBe(two) // 5 px below the last block
+      expect(blockAtPoint(editor, 40)).toBe(one) // gap between them
+      expect(blockAtPoint(editor, 5, 2)).toBeNull() // outside a small tolerance
+      expect(blockAtPoint(editor, 400)).toBeNull() // far away
+    })
+
+    it('skips blocks without a box and handles an empty editor', () => {
+      editor.innerHTML = '<p>one</p><p>two</p>'
+      const [one, two] = getElementChildren(editor)
+      withRect(one, 0, 0)
+      withRect(two, 0, 20)
+
+      expect(blockAtPoint(editor, 10)).toBe(two)
+
+      editor.innerHTML = ''
+      expect(blockAtPoint(editor, 10)).toBeNull()
     })
   })
 

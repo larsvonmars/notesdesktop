@@ -33,7 +33,34 @@ sense for a single block.
 Pure helpers (`tests/blockTools.test.ts`): `getBlockRange`, `canMoveBlocks`,
 `moveBlocks`, `canMoveBlocksBefore`, `moveBlocksBefore`, `duplicateBlocks`
 (unique heading anchors), `removeBlocks` (leaves one empty paragraph when
-everything goes) and `findDropReference` (ignores a whole dragged run).
+everything goes), `findDropReference` (ignores a whole dragged run) and
+`blockAtPoint` (the block at a viewport height — see "catching the handle").
+
+### Catching the handle
+
+The handle sits in the editor's left gutter, where there is no text under the
+cursor — so anything that resolved "which block is hovered" from the element
+under the pointer switched it off exactly when the user reached for it. Fixes:
+
+* **Height fallback**: `blockAtPoint(editor, clientY)` resolves the block from
+  the pointer's *height* (with a 14 px tolerance for the gaps between blocks and
+  for the editor's own padding) whenever the element under the pointer is not a
+  block. The gutter, the 4 px sliver between the handle and the text and the
+  1 px seams between blocks are no longer dead zones.
+* **Bigger target**: the handle is a full **28 × 28 px** (it used `min-w-6/7`,
+  which does not exist in this Tailwind 3.3 config, so it used to shrink to the
+  ~17 px label width) starting at `left-0`, i.e. flush with the text inset.
+* **More grace**: leaving the editor keeps the handle for 300 ms, and leaving
+  into the editor never hides it at all.
+* **Scroll glue**: scrolling the note re-derives the block from the pointer
+  position instead of hiding the handle, so it stays put while the content moves
+  and disappears only when the pointer really is over no block.
+* **Crash fix**: React can hand `window` (not a `Node`) to `onPointerLeave`'s
+  `relatedTarget`; calling `contains()` with it threw inside the event dispatch
+  and left the handle state half-updated. Both handlers now guard with
+  `instanceof Node`.
+* Hover updates are skipped while a block is being dragged, so the pinned handle
+  of a dragged run can't jump to another block mid-drag.
 
 ## 2. Block inserter (the slash menu)
 
