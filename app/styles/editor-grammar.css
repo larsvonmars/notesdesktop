@@ -1,0 +1,28 @@
+/* ─── Grammar squiggles ───────────────────────────────────────────────────
+   Painted through the CSS Custom Highlight API (see
+   lib/editor/grammar/highlight.ts). Highlights never touch the DOM, so the
+   saved note cannot contain any trace of them.
+
+   Both rules paint over text independently of the theme, so they bring their
+   own colours. `note-grammar-active` is the issue whose suggestion card is
+   open — it stacks on top of the wavy underline. */
+
+::highlight(note-grammar-issue) {
+  text-decoration-line: underline;
+  text-decoration-style: wavy;
+  text-decoration-color: var(--danger, #ef4444);
+  text-decoration-thickness: 1.5px;
+  text-decoration-skip-ink: none;
+}
+
+.dark ::highlight(note-grammar-issue) {
+  text-decoration-color: #f87171;
+}
+
+::highlight(note-grammar-active) {
+  background-color: rgba(239, 68, 68, 0.16);
+}
+
+.dark ::highlight(note-grammar-active) {
+  background-color: rgba(248, 113, 113, 0.24);
+}

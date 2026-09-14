@@ -23,6 +23,7 @@
 @import './styles/file-blocks.css';
 @import './styles/pdf-text-layer.css';
 @import './styles/editor-search.css';
+@import './styles/editor-grammar.css';
 
 @tailwind base;
 @tailwind components;

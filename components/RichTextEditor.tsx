@@ -131,6 +131,12 @@ import {
   FILE_BLOCK_PREVIEW_PDF_EVENT,
   type FileBlockPreviewPdfEventDetail,
 } from '@/lib/editor/fileBlock'
+import {
+  readGrammarEnabledPreference,
+  useGrammarCheck,
+  writeGrammarEnabledPreference,
+} from '@/lib/editor/grammar/useGrammarCheck'
+import GrammarPopover from './editor/GrammarPopover'
 import PdfPreviewModal from './PdfPreviewModal'
 
 
@@ -185,6 +191,8 @@ export interface RichTextEditorHandle {
   openSlashMenu: () => void
   getRootElement: () => HTMLDivElement | null
   scrollToHeading: (headingId: string) => void
+  /** Enable/disable on-device grammar checking (remembered across sessions). */
+  setGrammarCheckEnabled: (enabled: boolean) => void
 }
 
 /** Island types that render as their own block (not inline like note links). */
@@ -817,6 +825,27 @@ const RichTextEditorImpl = forwardRef<RichTextEditorHandle, RichTextEditorProps>
         console.error('Error emitting change:', error)
       }
     }, [onChange, sanitize])
+
+    // On-device grammar checking (Harper, WebAssembly). Runs debounced lint
+    // passes over the changed blocks, paints squiggles through the Custom
+    // Highlight API (nothing is written into the DOM) and applies fixes via
+    // the same history/normalise pipeline as the explicit commands.
+    const [grammarEnabled, setGrammarEnabled] = useState(() => readGrammarEnabledPreference())
+    const grammarCheck = useGrammarCheck({
+      editorRef,
+      enabled: grammarEnabled && !disabled,
+      onBeforeApply: () => {
+        historyManagerRef.current?.push(true)
+      },
+      onAfterApply: () => {
+        const editor = editorRef.current
+        if (!editor) return
+        normalizeEditorContent(editor)
+        mergeAdjacentLists(editor)
+        scheduleChecklistNormalization()
+        emitChange()
+      },
+    })
 
     // Make the engine's native Enter split into <p> instead of <div> wherever
     // the custom Enter handler defers to the browser (e.g. table cells).
@@ -2750,6 +2779,10 @@ const RichTextEditorImpl = forwardRef<RichTextEditorHandle, RichTextEditorProps>
         insertCustomBlock: (type: string, payload?: any) => {
           return insertCustomBlock(type, payload)
         },
+        setGrammarCheckEnabled: (enabled: boolean) => {
+          writeGrammarEnabledPreference(enabled)
+          setGrammarEnabled(enabled)
+        },
         exec: (command: RichTextCommand) => {
           executeRichTextCommand(command)
         }
@@ -3816,6 +3849,14 @@ const RichTextEditorImpl = forwardRef<RichTextEditorHandle, RichTextEditorProps>
           onEdit={editLink}
           onCopy={copyLinkUrl}
           onRemove={removeLink}
+        />
+
+        <GrammarPopover
+          state={grammarCheck.popover}
+          onApply={grammarCheck.applySuggestion}
+          onIgnore={grammarCheck.ignoreIssue}
+          onAddWord={grammarCheck.addWord}
+          onDismiss={grammarCheck.dismiss}
         />
 
         {showSearchDialog && (
