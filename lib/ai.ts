@@ -10,6 +10,7 @@
  */
 
 import type { NoteType } from './notes'
+import { AI_MODEL, AI_REASONING_EFFORT, AI_THINKING } from './ai-model'
 
 // ============================================================================
 // TYPES
@@ -23,17 +24,9 @@ export interface AIMessage {
   tool_call_id?: string
 }
 
-export type DeepSeekModel = 'deepseek-v4-flash' | 'deepseek-v4-pro'
-
 export type AIResponseFormat = {
   type: 'text' | 'json_object'
 }
-
-export type AIThinkingConfig = {
-  type: 'enabled' | 'disabled'
-}
-
-export type AIReasoningEffort = 'high' | 'max'
 
 export type AIContextLimits = {
   maxCharsPerNote: number
@@ -54,11 +47,7 @@ export interface AIStreamCallbacks {
 }
 
 export interface AIRequestOptions {
-  model?: DeepSeekModel
   responseFormat?: AIResponseFormat
-  thinking?: AIThinkingConfig
-  reasoningEffort?: AIReasoningEffort
-  temperature?: number
   maxTokens?: number
   stream?: boolean
   signal?: AbortSignal
@@ -207,9 +196,7 @@ export type ToolCallHandler = (name: string, args: Record<string, unknown>) => P
 // CONFIGURATION
 // ============================================================================
 
-const DEFAULT_MODEL = 'deepseek-v4-flash'
-const DEFAULT_TEMPERATURE = 0.7
-const DEFAULT_MAX_TOKENS = 4096
+const DEFAULT_MAX_TOKENS = 16384
 const DEFAULT_RETRY_COUNT = 2
 const RETRY_BASE_DELAY_MS = 500
 const RETRYABLE_STATUS_CODES = new Set([408, 409, 425, 429, 500, 502, 503, 504])
@@ -217,58 +204,31 @@ const RETRYABLE_STATUS_CODES = new Set([408, 409, 425, 429, 500, 502, 503, 504])
 type AIModelProfile = {
   defaultMaxTokens: number
   maxToolIterations: number
-  thinking: AIThinkingConfig
-  reasoningEffort?: AIReasoningEffort
   contextLimits: AIContextLimits
 }
 
-const AI_MODEL_PROFILES: Record<DeepSeekModel, AIModelProfile> = {
-  'deepseek-v4-flash': {
-    defaultMaxTokens: 4096,
-    maxToolIterations: 5,
-    thinking: { type: 'disabled' },
-    contextLimits: {
-      maxCharsPerNote: 32000,
-      maxTotalInjectedChars: 320000,
-      maxSelectedNotes: 12,
-      selectedTextContextChars: 4000,
-      readNoteToolChars: 32000,
-      searchExcerptChars: 900,
-      searchMaxResultsDefault: 8,
-      searchMaxResultsHard: 15,
-    },
-  },
-  'deepseek-v4-pro': {
-    defaultMaxTokens: 16384,
-    maxToolIterations: 8,
-    thinking: { type: 'enabled' },
-    reasoningEffort: 'max',
-    contextLimits: {
-      maxCharsPerNote: 120000,
-      maxTotalInjectedChars: 1200000,
-      maxSelectedNotes: 24,
-      selectedTextContextChars: 12000,
-      readNoteToolChars: 120000,
-      searchExcerptChars: 1800,
-      searchMaxResultsDefault: 12,
-      searchMaxResultsHard: 24,
-    },
+/**
+ * There is exactly one model profile: the latest DeepSeek Flash with thinking
+ * mode always on. Model selection has been removed from the app by design.
+ */
+const AI_MODEL_PROFILE: AIModelProfile = {
+  defaultMaxTokens: DEFAULT_MAX_TOKENS,
+  maxToolIterations: 5,
+  contextLimits: {
+    maxCharsPerNote: 32000,
+    maxTotalInjectedChars: 320000,
+    maxSelectedNotes: 12,
+    selectedTextContextChars: 4000,
+    readNoteToolChars: 32000,
+    searchExcerptChars: 900,
+    searchMaxResultsDefault: 8,
+    searchMaxResultsHard: 15,
   },
 }
 
-export const AI_NOTE_CONTEXT_LIMITS = AI_MODEL_PROFILES[DEFAULT_MODEL].contextLimits
+export const AI_NOTE_CONTEXT_LIMITS = AI_MODEL_PROFILE.contextLimits
 
-const AI_TOOL_SEARCH_MAX_RESULTS_HARD = Math.max(
-  ...Object.values(AI_MODEL_PROFILES).map(profile => profile.contextLimits.searchMaxResultsHard),
-)
-
-export function getAIModelProfile(model: DeepSeekModel = DEFAULT_MODEL): AIModelProfile {
-  return AI_MODEL_PROFILES[model]
-}
-
-export function getAIContextLimits(model: DeepSeekModel = DEFAULT_MODEL): AIContextLimits {
-  return getAIModelProfile(model).contextLimits
-}
+const AI_TOOL_SEARCH_MAX_RESULTS_HARD = AI_NOTE_CONTEXT_LIMITS.searchMaxResultsHard
 
 type AIKeyStatus = {
   available: boolean
@@ -532,32 +492,19 @@ function buildAIChatPayload(
   messages: AIMessage[],
   options: AIRequestOptions = {},
 ): Record<string, unknown> {
-  const resolvedModel = options.model || DEFAULT_MODEL
-  const profile = getAIModelProfile(resolvedModel)
-  const thinking = options.thinking ?? profile.thinking
-  const reasoningEffort = options.reasoningEffort ?? profile.reasoningEffort
-
+  // Model, thinking mode and effort are pinned here and enforced server-side,
+  // so no caller can change what the assistant runs on.
   const payload: Record<string, unknown> = {
-    model: resolvedModel,
+    model: AI_MODEL,
     messages,
-    max_tokens: options.maxTokens ?? profile.defaultMaxTokens,
+    max_tokens: options.maxTokens ?? AI_MODEL_PROFILE.defaultMaxTokens,
     stream: options.stream ?? false,
+    thinking: AI_THINKING,
+    reasoning_effort: AI_REASONING_EFFORT,
   }
 
   if (options.responseFormat) {
     payload.response_format = options.responseFormat
-  }
-
-  if (thinking) {
-    payload.thinking = thinking
-  }
-
-  if (thinking.type === 'enabled' && reasoningEffort) {
-    payload.reasoning_effort = reasoningEffort
-  }
-
-  if (thinking.type !== 'enabled') {
-    payload.temperature = options.temperature ?? DEFAULT_TEMPERATURE
   }
 
   return payload
@@ -948,20 +895,17 @@ export async function chat(
   history: AIMessage[] = [],
   onStream?: (token: string) => void,
   toolHandler?: ToolCallHandler,
-  model?: DeepSeekModel,
   onReasoning?: (token: string) => void,
   onConversationUpdate?: (messages: AIMessage[]) => void,
 ): Promise<string> {
-  const resolvedModel = model || DEFAULT_MODEL
-  const profile = getAIModelProfile(resolvedModel)
-  const systemMessage = buildSystemMessage(context, resolvedModel)
+  const systemMessage = buildSystemMessage(context)
   const messages: AIMessage[] = [
     { role: 'system', content: systemMessage },
     ...history,
     { role: 'user', content: userMessage },
   ]
 
-  const resolvedMaxTokens = profile.defaultMaxTokens
+  const resolvedMaxTokens = AI_MODEL_PROFILE.defaultMaxTokens
 
   const shouldUseTools =
     !!toolHandler &&
@@ -972,8 +916,7 @@ export async function chat(
       messages,
       toolHandler,
       onStream,
-      profile.maxToolIterations,
-      resolvedModel,
+      AI_MODEL_PROFILE.maxToolIterations,
       resolvedMaxTokens,
       onReasoning,
       onConversationUpdate,
@@ -995,7 +938,7 @@ export async function chat(
       onError: (error) => {
         throw error
       },
-    }, { model: resolvedModel, maxTokens: resolvedMaxTokens })
+    }, { maxTokens: resolvedMaxTokens })
     onConversationUpdate?.([
       ...messages.slice(1),
       {
@@ -1007,7 +950,7 @@ export async function chat(
     return response
   }
 
-  const response = await sendAIRequest(messages, { model: resolvedModel, maxTokens: resolvedMaxTokens })
+  const response = await sendAIRequest(messages, { maxTokens: resolvedMaxTokens })
   onConversationUpdate?.([
     ...messages.slice(1),
     { role: 'assistant', content: response },
@@ -1022,17 +965,15 @@ async function chatWithTools(
   messages: AIMessage[],
   toolHandler: ToolCallHandler,
   onStream?: (token: string) => void,
-  maxIterations: number = 5,
-  model: DeepSeekModel = 'deepseek-v4-flash',
+  maxIterations: number = AI_MODEL_PROFILE.maxToolIterations,
   maxTokens: number = DEFAULT_MAX_TOKENS,
   onReasoning?: (token: string) => void,
   onConversationUpdate?: (messages: AIMessage[]) => void,
 ): Promise<string> {
   let currentMessages = [...messages]
-  
+
   for (let i = 0; i < maxIterations; i++) {
     const payload = buildAIChatPayload(currentMessages, {
-      model,
       maxTokens,
     })
     payload.tools = AI_TOOLS
@@ -1111,7 +1052,6 @@ async function chatWithTools(
 export async function summarizeNote(
   noteContent: string,
   noteTitle?: string,
-  model?: DeepSeekModel,
 ): Promise<NoteSummary> {
   const messages: AIMessage[] = [
     { role: 'system', content: SYSTEM_PROMPTS.summarize },
@@ -1121,7 +1061,7 @@ export async function summarizeNote(
     },
   ]
 
-  const response = await sendAIRequest(messages, { temperature: 0.5, model })
+  const response = await sendAIRequest(messages)
 
   // Strip ```json ... ``` or ``` ... ``` code fences that the model sometimes wraps around JSON
   const stripped = stripJsonCodeFence(response)
@@ -1149,7 +1089,6 @@ export async function editText(
   originalText: string,
   instruction: string,
   onStream?: (token: string) => void,
-  model?: DeepSeekModel,
 ): Promise<string> {
   const messages: AIMessage[] = [
     { role: 'system', content: SYSTEM_PROMPTS.editText },
@@ -1166,11 +1105,11 @@ export async function editText(
         response += token
         onStream(token)
       },
-    }, { model })
+    })
     return response
   }
 
-  return sendAIRequest(messages, { model })
+  return sendAIRequest(messages)
 }
 
 /**
@@ -1180,7 +1119,6 @@ export async function suggestMindmapNodes(
   currentNodeText: string,
   currentNodeDescription?: string,
   parentContext?: string,
-  model?: DeepSeekModel,
 ): Promise<MindmapSuggestion[]> {
   const contextParts: string[] = []
   if (parentContext) {
@@ -1200,7 +1138,7 @@ export async function suggestMindmapNodes(
     },
   ]
 
-  const response = await sendAIRequest(messages, { temperature: 0.8, model })
+  const response = await sendAIRequest(messages)
 
   try {
     return JSON.parse(stripJsonCodeFence(response))
@@ -1220,7 +1158,6 @@ export async function generateMindmapOutline(
   sourceText: string,
   rootTextHint?: string,
   additionalPrompt?: string,
-  model?: DeepSeekModel,
 ): Promise<MindmapOutline> {
   const trimmedSource = sourceText.trim()
   if (!trimmedSource) {
@@ -1264,9 +1201,6 @@ ${trimmedSource.slice(0, 8000)}`,
   ]
 
   const response = await sendAIRequest(messages, {
-    temperature: 0.5,
-    model,
-    maxTokens: model === 'deepseek-v4-pro' ? 8192 : DEFAULT_MAX_TOKENS,
     responseFormat: { type: 'json_object' },
   })
   const parsed = parseMindmapOutlineResponse(response)
@@ -1290,7 +1224,6 @@ ${trimmedSource.slice(0, 8000)}`,
  */
 export async function suggestTasks(
   context: AIContext,
-  model?: DeepSeekModel,
 ): Promise<TaskSuggestion[]> {
   const contextParts: string[] = []
 
@@ -1315,7 +1248,7 @@ export async function suggestTasks(
     },
   ]
 
-  const response = await sendAIRequest(messages, { temperature: 0.6, model })
+  const response = await sendAIRequest(messages)
 
   try {
     return JSON.parse(stripJsonCodeFence(response))
@@ -1333,7 +1266,6 @@ export async function suggestTasks(
  */
 export async function suggestEvents(
   context: AIContext,
-  model?: DeepSeekModel,
 ): Promise<CalendarSuggestion[]> {
   const contextParts: string[] = []
 
@@ -1368,7 +1300,7 @@ export async function suggestEvents(
     },
   ]
 
-  const response = await sendAIRequest(messages, { temperature: 0.6, model })
+  const response = await sendAIRequest(messages)
 
   try {
     return JSON.parse(stripJsonCodeFence(response))
@@ -1384,8 +1316,8 @@ export async function suggestEvents(
 /**
  * Build a system message with context
  */
-function buildSystemMessage(context?: AIContext, model: DeepSeekModel = DEFAULT_MODEL): string {
-  const contextLimits = getAIContextLimits(model)
+function buildSystemMessage(context?: AIContext): string {
+  const contextLimits = AI_NOTE_CONTEXT_LIMITS
   let message = SYSTEM_PROMPTS.general
   let remainingContextChars = contextLimits.maxTotalInjectedChars
 

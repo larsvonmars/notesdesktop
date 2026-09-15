@@ -3,6 +3,9 @@ use serde::Serialize;
 use serde_json::{json, Value};
 
 const DEEPSEEK_API_URL: &str = "https://api.deepseek.com/chat/completions";
+// The app always talks to the newest DeepSeek Flash (V4.1) with thinking enabled.
+// Keep in sync with lib/ai-model.ts.
+const DEEPSEEK_MODEL: &str = "deepseek-flash";
 const KEYRING_SERVICE: &str = "notesdesktop";
 const KEYRING_USERNAME: &str = "deepseek_api_key";
 
@@ -108,9 +111,10 @@ pub async fn ai_chat_json(payload: Value) -> Result<Value, String> {
         _ => return Err("Invalid AI payload. Expected JSON object.".to_string()),
     };
 
-    if request_body.get("model").is_none() {
-        request_body["model"] = json!("deepseek-chat");
-    }
+    // Model and thinking behaviour are pinned: clients cannot switch them.
+    request_body["model"] = json!(DEEPSEEK_MODEL);
+    request_body["thinking"] = json!({ "type": "enabled" });
+    request_body["reasoning_effort"] = json!("high");
 
     let client = create_http_client()?;
     let response = client

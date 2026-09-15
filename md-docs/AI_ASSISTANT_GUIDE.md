@@ -81,7 +81,8 @@ Simply type any question in the chat input:
 
 ### API
 - **Provider**: DeepSeek
-- **Model**: deepseek-chat
+- **Model**: `deepseek-flash` (DeepSeek V4.1 Flash, vision capable)
+- **Thinking**: Always enabled (`reasoning_effort: high`). The model and thinking settings are pinned in `lib/ai-model.ts` and enforced server-side, so the assistant has no model switcher
 - **Streaming**: Supported for real-time responses
 
 ### Files

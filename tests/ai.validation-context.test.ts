@@ -18,7 +18,7 @@ describe('AI validation and context shaping', () => {
 
   it('rejects payloads when aggregate message content is too large', () => {
     const payload = {
-      model: 'deepseek-v4-flash',
+      model: 'deepseek-flash',
       messages: [
         { role: 'user', content: 'a'.repeat(250000) },
         { role: 'assistant', content: 'b'.repeat(250000) },
@@ -35,7 +35,7 @@ describe('AI validation and context shaping', () => {
 
   it('rejects unsupported tool definitions', () => {
     const payload = {
-      model: 'deepseek-v4-flash',
+      model: 'deepseek-flash',
       messages: [{ role: 'user', content: 'hello' }],
       tools: [
         {
@@ -58,7 +58,7 @@ describe('AI validation and context shaping', () => {
 
   it('accepts supported response_format values for structured AI output', () => {
     const payload = {
-      model: 'deepseek-v4-pro',
+      model: 'deepseek-flash',
       messages: [{ role: 'user', content: 'hello' }],
       response_format: { type: 'json_object' },
     }
@@ -70,25 +70,26 @@ describe('AI validation and context shaping', () => {
     }
   })
 
-  it('accepts V4 Pro thinking controls', () => {
+  it('pins the model and thinking settings server-side', () => {
     const payload = {
       model: 'deepseek-v4-pro',
       messages: [{ role: 'user', content: 'hello' }],
-      thinking: { type: 'enabled' },
+      thinking: { type: 'disabled' },
       reasoning_effort: 'max',
     }
 
     const result = validateAndSanitizeAIPayload(payload)
     expect(result.valid).toBe(true)
     if (result.valid) {
+      expect(result.payload.model).toBe('deepseek-flash')
       expect(result.payload.thinking).toEqual({ type: 'enabled' })
-      expect(result.payload.reasoning_effort).toBe('max')
+      expect(result.payload.reasoning_effort).toBe('high')
     }
   })
 
   it('accepts the full assistant tool set used in chat mode', () => {
     const payload = {
-      model: 'deepseek-v4-pro',
+      model: 'deepseek-flash',
       messages: [{ role: 'user', content: 'Update the current note' }],
       tools: [
         {
@@ -165,7 +166,7 @@ describe('AI validation and context shaping', () => {
     ).toBe(true)
   })
 
-  it('uses the V4 Pro token budget when tool calling is enabled', async () => {
+  it('uses the fixed DeepSeek Flash model when tool calling is enabled', async () => {
     const fetchMock = vi.spyOn(globalThis, 'fetch')
       .mockResolvedValueOnce(
         new Response(
@@ -215,17 +216,16 @@ describe('AI validation and context shaping', () => {
       [],
       undefined,
       async () => '[]',
-      'deepseek-v4-pro',
     )
 
     expect(result).toBe('ok')
     expect(fetchMock).toHaveBeenCalledTimes(2)
 
     const firstRequest = JSON.parse(String((fetchMock.mock.calls[0]?.[1] as RequestInit).body))
-    expect(firstRequest.model).toBe('deepseek-v4-pro')
+    expect(firstRequest.model).toBe('deepseek-flash')
     expect(firstRequest.max_tokens).toBe(16384)
     expect(firstRequest.thinking).toEqual({ type: 'enabled' })
-    expect(firstRequest.reasoning_effort).toBe('max')
+    expect(firstRequest.reasoning_effort).toBe('high')
     expect(firstRequest.tool_choice).toBe('auto')
 
     const secondRequest = JSON.parse(String((fetchMock.mock.calls[1]?.[1] as RequestInit).body))

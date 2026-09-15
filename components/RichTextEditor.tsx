@@ -131,11 +131,12 @@ import {
   FILE_BLOCK_PREVIEW_PDF_EVENT,
   type FileBlockPreviewPdfEventDetail,
 } from '@/lib/editor/fileBlock'
+import { useGrammarCheck } from '@/lib/editor/grammar/useGrammarCheck'
 import {
   readGrammarEnabledPreference,
-  useGrammarCheck,
-  writeGrammarEnabledPreference,
-} from '@/lib/editor/grammar/useGrammarCheck'
+  setGrammarEnabledPreference,
+  subscribeToGrammarEnabledPreference,
+} from '@/lib/editor/grammar/preferences'
 import GrammarPopover from './editor/GrammarPopover'
 import PdfPreviewModal from './PdfPreviewModal'
 
@@ -846,6 +847,12 @@ const RichTextEditorImpl = forwardRef<RichTextEditorHandle, RichTextEditorProps>
         emitChange()
       },
     })
+
+    // The settings modal flips this preference — follow it without a reload.
+    useEffect(
+      () => subscribeToGrammarEnabledPreference((enabled) => setGrammarEnabled(enabled)),
+      []
+    )
 
     // Make the engine's native Enter split into <p> instead of <div> wherever
     // the custom Enter handler defers to the browser (e.g. table cells).
@@ -2780,8 +2787,7 @@ const RichTextEditorImpl = forwardRef<RichTextEditorHandle, RichTextEditorProps>
           return insertCustomBlock(type, payload)
         },
         setGrammarCheckEnabled: (enabled: boolean) => {
-          writeGrammarEnabledPreference(enabled)
-          setGrammarEnabled(enabled)
+          setGrammarEnabledPreference(enabled)
         },
         exec: (command: RichTextCommand) => {
           executeRichTextCommand(command)

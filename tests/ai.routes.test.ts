@@ -75,7 +75,7 @@ describe('AI proxy routes', () => {
     const { POST } = await import('@/app/api/ai/chat/route')
     const req = new Request('http://localhost/api/ai/chat', {
       method: 'POST',
-      body: JSON.stringify({ model: 'deepseek-v4-flash', messages: [{ role: 'invalid-role', content: 'Hi' }] }),
+      body: JSON.stringify({ model: 'deepseek-flash', messages: [{ role: 'invalid-role', content: 'Hi' }] }),
       headers: {
         'Content-Type': 'application/json',
         Authorization: 'Bearer token-1',
@@ -98,7 +98,7 @@ describe('AI proxy routes', () => {
     const { POST } = await import('@/app/api/ai/chat/route')
     const req = new Request('http://localhost/api/ai/chat', {
       method: 'POST',
-      body: JSON.stringify({ model: 'deepseek-v4-flash', messages: [{ role: 'user', content: 'Hi' }] }),
+      body: JSON.stringify({ model: 'deepseek-flash', messages: [{ role: 'user', content: 'Hi' }] }),
       headers: {
         'Content-Type': 'application/json',
         Authorization: 'Bearer token-1',
@@ -114,7 +114,7 @@ describe('AI proxy routes', () => {
     expect(fetchMock.mock.calls[0]?.[0]).toBe('https://api.deepseek.com/chat/completions')
   })
 
-  it('forwards V4 Pro thinking controls through the chat proxy', async () => {
+  it('pins the model and thinking settings through the chat proxy', async () => {
     getUserMock.mockResolvedValue({ data: { user: { id: 'user-1' } }, error: null })
 
     const upstream = new Response(
@@ -129,8 +129,9 @@ describe('AI proxy routes', () => {
       body: JSON.stringify({
         model: 'deepseek-v4-pro',
         messages: [{ role: 'user', content: 'Hi' }],
-        thinking: { type: 'enabled' },
+        thinking: { type: 'disabled' },
         reasoning_effort: 'max',
+        temperature: 1.5,
       }),
       headers: {
         'Content-Type': 'application/json',
@@ -143,8 +144,10 @@ describe('AI proxy routes', () => {
 
     const requestInit = fetchMock.mock.calls[0]?.[1] as RequestInit
     const body = JSON.parse(String(requestInit.body))
+    expect(body.model).toBe('deepseek-flash')
     expect(body.thinking).toEqual({ type: 'enabled' })
-    expect(body.reasoning_effort).toBe('max')
+    expect(body.reasoning_effort).toBe('high')
+    expect(body.temperature).toBeUndefined()
   })
 
   it('forces stream=true in stream proxy', async () => {
@@ -165,7 +168,7 @@ describe('AI proxy routes', () => {
     const { POST } = await import('@/app/api/ai/stream/route')
     const req = new Request('http://localhost/api/ai/stream', {
       method: 'POST',
-      body: JSON.stringify({ model: 'deepseek-v4-flash', stream: false, messages: [{ role: 'user', content: 'Hi' }] }),
+      body: JSON.stringify({ model: 'deepseek-flash', stream: false, messages: [{ role: 'user', content: 'Hi' }] }),
       headers: {
         'Content-Type': 'application/json',
         Authorization: 'Bearer token-1',
@@ -186,7 +189,7 @@ describe('AI proxy routes', () => {
     const { POST } = await import('@/app/api/ai/stream/route')
     const req = new Request('http://localhost/api/ai/stream', {
       method: 'POST',
-      body: JSON.stringify({ model: 'deepseek-v4-flash' }),
+      body: JSON.stringify({ model: 'deepseek-flash' }),
       headers: {
         'Content-Type': 'application/json',
         Authorization: 'Bearer token-1',
@@ -211,7 +214,7 @@ describe('AI proxy routes', () => {
     const { POST } = await import('@/app/api/ai/chat/route')
     const makeReq = () => new Request('http://localhost/api/ai/chat', {
       method: 'POST',
-      body: JSON.stringify({ model: 'deepseek-v4-flash', messages: [{ role: 'user', content: 'Hi' }] }),
+      body: JSON.stringify({ model: 'deepseek-flash', messages: [{ role: 'user', content: 'Hi' }] }),
       headers: {
         'Content-Type': 'application/json',
         Authorization: 'Bearer token-1',
@@ -234,7 +237,7 @@ describe('AI proxy routes', () => {
     const { POST } = await import('@/app/api/ai/chat/route')
     const req = new Request('http://localhost/api/ai/chat', {
       method: 'POST',
-      body: JSON.stringify({ model: 'deepseek-v4-flash', messages: [{ role: 'user', content: 'Hi' }] }),
+      body: JSON.stringify({ model: 'deepseek-flash', messages: [{ role: 'user', content: 'Hi' }] }),
       headers: {
         'Content-Type': 'application/json',
         Authorization: 'Bearer token-1',
@@ -254,7 +257,7 @@ describe('AI proxy routes', () => {
     const req = new Request('http://localhost/api/ai/chat', {
       method: 'POST',
       body: JSON.stringify({
-        model: 'deepseek-v4-flash',
+        model: 'deepseek-flash',
         messages: [{ role: 'user', content: 'x'.repeat(2000) }],
       }),
       headers: {
@@ -277,7 +280,7 @@ describe('AI proxy routes', () => {
     const req = new Request('http://localhost/api/ai/stream', {
       method: 'POST',
       body: JSON.stringify({
-        model: 'deepseek-v4-flash',
+        model: 'deepseek-flash',
         stream: true,
         messages: [{ role: 'user', content: 'x'.repeat(2000) }],
       }),

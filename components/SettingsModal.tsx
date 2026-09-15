@@ -4,6 +4,10 @@ import { useEffect, useMemo, useState } from 'react'
 import { useIsMobile } from '@/lib/useIsMobile'
 import { useAuth } from '@/lib/auth-context'
 import { supabase } from '@/lib/supabase'
+import {
+  readGrammarEnabledPreference,
+  setGrammarEnabledPreference,
+} from '@/lib/editor/grammar/preferences'
 import ThemeSelector from './ThemeSelector'
 import BaseModal, { ModalHeader, ModalBody, ModalTitle } from './BaseModal'
 
@@ -34,6 +38,7 @@ export default function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
   const [deleteConfirmationText, setDeleteConfirmationText] = useState('')
   const [errorMessage, setErrorMessage] = useState<string | null>(null)
   const [successMessage, setSuccessMessage] = useState<string | null>(null)
+  const [grammarCheckEnabled, setGrammarCheckEnabled] = useState(() => readGrammarEnabledPreference())
 
   const userEmail = user?.email ?? ''
   const displayNameFromProfile = useMemo(
@@ -50,7 +55,15 @@ export default function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
     setDeleteConfirmationText('')
     setErrorMessage(null)
     setSuccessMessage(null)
+    setGrammarCheckEnabled(readGrammarEnabledPreference())
   }, [displayNameFromProfile, isOpen, userEmail])
+
+  const handleToggleGrammarCheck = () => {
+    const next = !grammarCheckEnabled
+    setGrammarCheckEnabled(next)
+    // Persists and notifies the editor, which may be open behind this modal.
+    setGrammarEnabledPreference(next)
+  }
 
   const clearMessages = () => {
     setErrorMessage(null)
@@ -442,6 +455,36 @@ export default function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
           <section>
             <h3 className="text-sm font-semibold text-gray-500 dark:text-slate-400 uppercase tracking-wider mb-3">Appearance</h3>
             <ThemeSelector />
+          </section>
+
+          {/* ─── Editor ─── */}
+          <section>
+            <h3 className="text-sm font-semibold text-gray-500 dark:text-slate-400 uppercase tracking-wider mb-3">Editor</h3>
+
+            <div className="flex items-start justify-between gap-4 rounded-xl border border-gray-200 dark:border-slate-700 bg-gray-50/70 dark:bg-slate-800/60 p-3 sm:p-4">
+              <div className="min-w-0">
+                <p className="text-sm font-medium text-gray-900 dark:text-slate-100">Grammar &amp; spelling check</p>
+                <p className="text-xs text-gray-500 dark:text-slate-400 mt-1">
+                  Shows suggestions while you write. Runs entirely on your device (English only).
+                </p>
+              </div>
+              <button
+                type="button"
+                role="switch"
+                aria-checked={grammarCheckEnabled}
+                aria-label="Grammar and spelling check"
+                onClick={handleToggleGrammarCheck}
+                className={`relative inline-flex h-6 w-11 flex-shrink-0 items-center rounded-full transition-colors focus:outline-none focus:ring-2 focus:ring-blue-500 ${
+                  grammarCheckEnabled ? 'bg-blue-600' : 'bg-gray-300 dark:bg-slate-600'
+                }`}
+              >
+                <span
+                  className={`inline-block h-4 w-4 transform rounded-full bg-white shadow transition-transform ${
+                    grammarCheckEnabled ? 'translate-x-6' : 'translate-x-1'
+                  }`}
+                />
+              </button>
+            </div>
           </section>
         </ModalBody>
 

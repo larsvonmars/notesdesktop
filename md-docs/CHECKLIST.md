@@ -82,7 +82,7 @@ Use this checklist after AI assistant context changes to verify note access beha
 - [ ] Select multiple notes in context picker and confirm the diagnostics row updates counts and char usage.
 - [ ] Confirm diagnostics shows truncation warning when long notes are selected.
 - [ ] Confirm diagnostics shows omitted-note warning when selected notes exceed injection limits.
-- [ ] Switch between Chat and Reasoner models and verify context diagnostics remain visible and accurate.
+- [ ] Confirm the assistant always runs DeepSeek V4.1 Flash with thinking enabled (the UI exposes no model switcher).
 
 ### Tooling Behavior
 - [ ] Ask the assistant to "search notes for <keyword>" and verify results are ranked and excerpted with readable boundaries.

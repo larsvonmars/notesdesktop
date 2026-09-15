@@ -22,7 +22,6 @@ import {
   ChevronUp,
   Plus,
   Wand2,
-  History,
   MessageSquare,
   ChevronLeft,
   PenLine,
@@ -38,7 +37,6 @@ import {
   Search,
   Maximize2,
   Minimize2,
-  CornerDownLeft,
   StopCircle,
   Settings2,
   FolderOpen,
@@ -56,18 +54,18 @@ import {
   isAIAbortError,
   AIError,
   getAIRateLimitStatus,
-  getAIContextLimits,
+  AI_NOTE_CONTEXT_LIMITS,
   stripHtmlForAI,
   textToHtml,
   type AIMessage,
   type AIContext,
-  type DeepSeekModel,
   type NoteSummary,
   type MindmapSuggestion,
   type TaskSuggestion,
   type CalendarSuggestion,
   type ToolCallHandler,
 } from '@/lib/ai'
+import { AI_MODEL, AI_MODEL_LABEL, AI_MODEL_SHORT_LABEL } from '@/lib/ai-model'
 import type { NoteType } from '@/lib/notes'
 import {
   getAIChatsByNote,
@@ -146,7 +144,6 @@ interface AIAssistantProps {
     sourceType: 'selection' | 'current-note'
     targetTitle?: string
     additionalPrompt?: string
-    model?: DeepSeekModel
   }) => Promise<void> | void
   onUpdateMindmapNode?: (nodeId: string, text: string, description?: string) => void
   onClose?: () => void
@@ -331,7 +328,7 @@ function MarkdownContent({ content, className = '' }: { content: string; classNa
   )
 }
 
-/** Collapsible reasoning chain for deepseek-v4-pro responses */
+/** Collapsible reasoning chain shown for every assistant response */
 function ThinkingSection({ reasoning }: { reasoning: string }) {
   const [open, setOpen] = useState(false)
   const wordCount = Math.round(reasoning.split(/\s+/).filter(Boolean).length)
@@ -442,8 +439,7 @@ export default function AIAssistant({
   const [currentChatId, setCurrentChatId] = useState<string | null>(null)
   const [isLoadingHistory, setIsLoadingHistory] = useState(false)
 
-  // Model and context settings
-  const [model, setModel] = useState<DeepSeekModel>('deepseek-v4-flash')
+  // Context settings
   const [includeCurrentNote, setIncludeCurrentNote] = useState(true)
   const [selectedNoteIds, setSelectedNoteIds] = useState<string[]>([])
   const [notePickerSearch, setNotePickerSearch] = useState('')
@@ -462,7 +458,7 @@ export default function AIAssistant({
   const [showContextSidebar, setShowContextSidebar] = useState(isLargeWindow)
   const [showQuickActions, setShowQuickActions] = useState(false)
   const [folders, setFolders] = useState<Folder[]>([])
-  const contextLimits = useMemo(() => getAIContextLimits(model), [model])
+  const contextLimits = AI_NOTE_CONTEXT_LIMITS
 
   const messagesEndRef = useRef<HTMLDivElement>(null)
   const inputRef = useRef<HTMLTextAreaElement>(null)
@@ -1018,7 +1014,6 @@ export default function AIAssistant({
           sourceType,
           targetTitle: requestedTitle,
           additionalPrompt,
-          model,
         })
 
         return `Created a new mindmap note from ${sourceType === 'selection' ? 'selected text' : 'the current note'}.`
@@ -1026,7 +1021,7 @@ export default function AIAssistant({
       default:
         return `Unknown tool: ${name}`
     }
-  }, [allNotes, contextLimits, model, note, noteContent, onCreateMindmapNote, onReplaceText])
+  }, [allNotes, contextLimits, note, noteContent, onCreateMindmapNote, onReplaceText])
 
   const handleSend = useCallback(async (
     overrideInput?: string,
@@ -1078,7 +1073,6 @@ export default function AIAssistant({
         chatHistoryRef.current.slice(0, -1),
         (token) => { fullResponse += token; setStreamingContent(fullResponse) },
         allNotes?.length ? handleToolCall : undefined,
-        model,
         (token) => { reasoningContent += token; setStreamingReasoning(prev => prev + token) },
         (conversation) => { updatedConversation = conversation },
       )
@@ -1107,7 +1101,7 @@ export default function AIAssistant({
               content: msg.content,
               timestamp: new Date().toISOString(),
               reasoning: msg.reasoning_content || (isLastAssistant && reasoningContent ? reasoningContent : undefined),
-              model: isLastAssistant ? model : undefined,
+              model: isLastAssistant ? AI_MODEL : undefined,
             }
           })
 
@@ -1148,7 +1142,7 @@ export default function AIAssistant({
       setStreamingReasoning('')
       refreshRateLimitSnapshot()
     }
-  }, [inputValue, isLoading, aiContext, allNotes, handleToolCall, currentChatId, note?.id, model, mapAIErrorToUserMessage, refreshRateLimitSnapshot, hasNoteContextConsent])
+  }, [inputValue, isLoading, aiContext, allNotes, handleToolCall, currentChatId, note?.id, mapAIErrorToUserMessage, refreshRateLimitSnapshot, hasNoteContextConsent])
 
   const handleCancelResponse = useCallback(() => {
     cancelActiveAIRequest()
@@ -1194,7 +1188,6 @@ export default function AIAssistant({
       await onCreateMindmapNote({
         ...pendingMindmapPayload,
         additionalPrompt,
-        model,
       })
 
       setMessages(prev => [...prev, {
@@ -1250,7 +1243,7 @@ export default function AIAssistant({
       switch (action) {
         case 'summarize': {
           if (!aiContext.currentNote?.content) { setError('No note content to summarize'); break }
-          const summary = await summarizeNote(aiContext.currentNote.content, aiContext.currentNote.title, model)
+          const summary = await summarizeNote(aiContext.currentNote.content, aiContext.currentNote.title)
           setSuggestions(prev => ({ ...prev, summary }))
           setShowSuggestions(true)
           break
@@ -1266,7 +1259,7 @@ export default function AIAssistant({
             'make-concise': 'Make this text more concise while keeping the key information',
             'expand': 'Expand on this text with more detail and examples',
           }
-          const edited = await editText(aiContext.currentNote.content, instructions[action], undefined, model)
+          const edited = await editText(aiContext.currentNote.content, instructions[action])
           setMessages(prev => [...prev, {
             id: `action-${Date.now()}`, role: 'assistant',
             content: `**${action.replace('-', ' ').replace(/\b\w/g, c => c.toUpperCase())}:**\n\n${edited}`,
@@ -1277,49 +1270,49 @@ export default function AIAssistant({
         case 'continue-writing': {
           const textToUse = selectedText?.trim() || aiContext.currentNote?.content
           if (!textToUse) { setError('No content to continue from.'); break }
-          const continued = await editText(textToUse.slice(-CONTEXT_LENGTH_LIMIT), 'Continue writing from where this text ends. Maintain the same style, tone, and topic.', undefined, model)
+          const continued = await editText(textToUse.slice(-CONTEXT_LENGTH_LIMIT), 'Continue writing from where this text ends. Maintain the same style, tone, and topic.')
           setMessages(prev => [...prev, { id: `action-${Date.now()}`, role: 'assistant', content: `**Continue Writing:**\n\n${continued}`, timestamp: new Date() }])
           break
         }
         case 'explain-selection': {
           if (!selectedText?.trim()) { setError('Please select some text to explain'); break }
-          const explanation = await editText(selectedText, 'Explain this text in simple terms. Break down complex concepts and define technical terms.', undefined, model)
+          const explanation = await editText(selectedText, 'Explain this text in simple terms. Break down complex concepts and define technical terms.')
           setMessages(prev => [...prev, { id: `action-${Date.now()}`, role: 'assistant', content: `**Explanation:**\n\n${explanation}`, timestamp: new Date() }])
           break
         }
         case 'improve-selection': {
           if (!selectedText?.trim()) { setError('Please select some text to improve'); break }
-          const improved = await editText(selectedText, 'Improve this text. Enhance clarity, fix errors, and make it more engaging while preserving the meaning.', undefined, model)
+          const improved = await editText(selectedText, 'Improve this text. Enhance clarity, fix errors, and make it more engaging while preserving the meaning.')
           setMessages(prev => [...prev, { id: `action-${Date.now()}`, role: 'assistant', content: `**Improved Version:**\n\n${improved}`, timestamp: new Date() }])
           break
         }
         case 'translate-selection': {
           if (!selectedText?.trim()) { setError('Please select some text to translate'); break }
-          const translated = await editText(selectedText, 'Translate this text to English if it is in another language, or to Spanish if it is in English.', undefined, model)
+          const translated = await editText(selectedText, 'Translate this text to English if it is in another language, or to Spanish if it is in English.')
           setMessages(prev => [...prev, { id: `action-${Date.now()}`, role: 'assistant', content: `**Translation:**\n\n${translated}`, timestamp: new Date() }])
           break
         }
         case 'simplify-selection': {
           if (!selectedText?.trim()) { setError('Please select some text to simplify'); break }
-          const simplified = await editText(selectedText, 'Simplify this text. Use simpler words, shorter sentences, and clearer explanations.', undefined, model)
+          const simplified = await editText(selectedText, 'Simplify this text. Use simpler words, shorter sentences, and clearer explanations.')
           setMessages(prev => [...prev, { id: `action-${Date.now()}`, role: 'assistant', content: `**Simplified:**\n\n${simplified}`, timestamp: new Date() }])
           break
         }
         case 'suggest-tasks': {
-          const taskSuggestions = await suggestTasks(aiContext, model)
+          const taskSuggestions = await suggestTasks(aiContext)
           setSuggestions(prev => ({ ...prev, tasks: taskSuggestions }))
           setShowSuggestions(true)
           break
         }
         case 'suggest-events': {
-          const eventSuggestions = await suggestEvents(aiContext, model)
+          const eventSuggestions = await suggestEvents(aiContext)
           setSuggestions(prev => ({ ...prev, events: eventSuggestions }))
           setShowSuggestions(true)
           break
         }
         case 'mindmap-ideas': {
           if (!aiContext.mindmapData?.selectedNodeText) { setError('Please select a mindmap node first'); break }
-          const mindmapSuggestions = await suggestMindmapNodes(aiContext.mindmapData.selectedNodeText, aiContext.mindmapData.selectedNodeDescription, undefined, model)
+          const mindmapSuggestions = await suggestMindmapNodes(aiContext.mindmapData.selectedNodeText, aiContext.mindmapData.selectedNodeDescription)
           setSuggestions(prev => ({ ...prev, mindmap: mindmapSuggestions }))
           setShowSuggestions(true)
           break
@@ -1331,7 +1324,7 @@ export default function AIAssistant({
       setIsLoading(false)
       refreshRateLimitSnapshot()
     }
-  }, [aiContext, selectedText, note?.note_type, onCreateMindmapNote, mapAIErrorToUserMessage, refreshRateLimitSnapshot, model])
+  }, [aiContext, selectedText, note?.note_type, onCreateMindmapNote, mapAIErrorToUserMessage, refreshRateLimitSnapshot])
 
   const quotaInfo = useMemo(() => {
     if (!rateLimitSnapshot?.limit && rateLimitSnapshot?.limit !== 0) return null
@@ -1363,24 +1356,6 @@ export default function AIAssistant({
     return secs === 0 ? `${mins}m` : `${mins}m ${secs}s`
   }, [quotaInfo])
 
-  const modelMeta = useMemo(() => {
-    if (model === 'deepseek-v4-pro') {
-      return {
-        label: 'DeepSeek V4 Pro',
-        shortLabel: 'V4 Pro',
-        description: 'Best for deep reasoning, larger context, and multi-step tool work.',
-        badgeClassName: 'bg-alpine-600 text-white shadow-sm shadow-alpine-900/20',
-      }
-    }
-
-    return {
-      label: 'DeepSeek V4 Flash',
-      shortLabel: 'V4 Flash',
-      description: 'Best for fast drafting, lightweight rewrites, and quick note operations.',
-      badgeClassName: 'bg-surface text-foreground border border-border/60',
-    }
-  }, [model])
-
   const pendingTaskCount = useMemo(() => {
     if (taskStats) return taskStats.todo + taskStats.in_progress + taskStats.overdue
     return tasks?.filter(task => task.status !== 'completed' && task.status !== 'cancelled').length ?? 0
@@ -1388,7 +1363,6 @@ export default function AIAssistant({
 
   const upcomingEventCount = events?.length ?? 0
   const workspaceNoteCount = allNotes?.length ?? (note ? 1 : 0)
-  const attachedNoteSourceCount = (includeCurrentNote && note ? 1 : 0) + selectedAdditionalNotes.length
   const activeContextSources = (includeCurrentNote && note ? 1 : 0) + selectedAdditionalNotes.length + (selectedText?.trim() ? 1 : 0)
 
   const selectedTextPreview = useMemo(() => {
@@ -1659,65 +1633,47 @@ export default function AIAssistant({
       },
     ].filter((section): section is { title: string; description: string; highlight: boolean; items: Array<{ action: QuickAction; icon: React.ReactNode; label: string; description: string }> } => !!section && section.items.length > 0)
 
-    const actionCard = (action: QuickAction, icon: React.ReactNode, label: string, description: string, highlight = false) => (
-      <button
-        key={action}
-        onClick={() => { handleQuickAction(action); setShowQuickActions(false) }}
-        disabled={isLoading || !isConfigured}
-        className={`group rounded-2xl border px-3.5 py-3 text-left transition-all disabled:opacity-40 disabled:cursor-not-allowed active:scale-[0.99] ${
-          highlight
-            ? 'border-alpine-500/20 bg-[linear-gradient(135deg,rgba(37,112,235,0.10),rgba(20,184,166,0.06))] hover:border-alpine-500/35 hover:shadow-[0_14px_28px_rgba(37,112,235,0.10)]'
-            : 'border-border/60 bg-surface hover:border-border-strong hover:bg-surface-hover/60 hover:shadow-sm'
-        }`}
-      >
-        <div className="flex items-start gap-3">
-          <div className={`mt-0.5 rounded-xl p-2 ${highlight ? 'bg-white/70 text-alpine-700 dark:bg-white/5 dark:text-alpine-300' : 'bg-surface-hover text-alpine-600'}`}>
-            {icon}
-          </div>
-          <div className="min-w-0 flex-1">
-            <div className="flex items-center justify-between gap-2">
-              <div className="text-sm font-semibold text-foreground">{label}</div>
-              <ArrowRight size={14} className="text-muted transition-all group-hover:translate-x-0.5 group-hover:text-alpine-600" />
-            </div>
-            <p className="mt-1.5 text-xs leading-relaxed text-foreground/65">{description}</p>
-          </div>
-        </div>
-      </button>
-    )
-
     if (!showQuickActions) return null
 
     return (
-      <div className="assistant-rise-in border-b border-border/50 bg-[linear-gradient(180deg,rgba(37,112,235,0.06),transparent)] shrink-0">
-        <div className="p-3.5 space-y-4 max-h-[42vh] overflow-y-auto">
-          <div className="flex items-start justify-between gap-3">
-            <div>
-              <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-muted">Action Deck</div>
-              <p className="mt-1 text-sm text-foreground/65">Use one-tap actions for common note operations, or keep chatting normally.</p>
-            </div>
-            <button
-              onClick={() => setShowQuickActions(false)}
-              className="p-1.5 hover:bg-surface-hover rounded-xl transition-colors text-muted hover:text-foreground"
-              title="Hide quick actions"
-            >
-              <X size={14} />
-            </button>
+      <div className="assistant-rise-in shrink-0 border-b border-border/50 bg-surface/60">
+        <div className="flex items-center justify-between gap-3 px-4 pt-3">
+          <div className="flex items-center gap-2 text-[11px] font-semibold uppercase tracking-[0.18em] text-muted">
+            <Zap size={12} className="text-alpine-600" />
+            Quick actions
           </div>
+          <button
+            onClick={() => setShowQuickActions(false)}
+            className="rounded-lg p-1 text-muted transition-colors hover:bg-surface-hover hover:text-foreground"
+            title="Hide quick actions"
+          >
+            <X size={14} />
+          </button>
+        </div>
 
+        <div className="max-h-[38vh] space-y-3 overflow-y-auto px-4 pb-3.5 pt-2">
           {sections.map((section) => (
-            <div key={section.title} className="space-y-2.5">
-              <div className="flex items-center gap-2">
-                {section.highlight ? <MousePointerClick size={12} className="text-peak-600" /> : <Zap size={12} className="text-alpine-600" />}
-                <div>
-                  <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-muted">{section.title}</div>
-                  <div className="text-[11px] text-foreground/55">{section.description}</div>
-                </div>
+            <div key={section.title}>
+              <div className="flex items-center gap-1.5 text-[11px] font-medium text-foreground/60">
+                {section.highlight ? <MousePointerClick size={12} className="text-peak-600" /> : <Sparkles size={12} className="text-alpine-600" />}
+                {section.title}
               </div>
-              <div className="grid gap-2 sm:grid-cols-2">
-                {section.items.map(({ action, icon, label, description }, index) => (
-                  <div key={action} className="assistant-soft-pop" style={{ animationDelay: `${Math.min(index, 4) * 45}ms` }}>
-                    {actionCard(action, icon, label, description, section.highlight)}
-                  </div>
+              <div className="mt-1.5 flex flex-wrap gap-1.5">
+                {section.items.map(({ action, icon, label, description }) => (
+                  <button
+                    key={action}
+                    onClick={() => { handleQuickAction(action); setShowQuickActions(false) }}
+                    disabled={isLoading || !isConfigured}
+                    title={description}
+                    className={`assistant-hover-lift inline-flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-xs font-medium transition-all disabled:cursor-not-allowed disabled:opacity-40 active:scale-[0.98] ${
+                      section.highlight
+                        ? 'border-alpine-500/25 bg-alpine-600/10 text-alpine-700 dark:text-alpine-300'
+                        : 'border-border/60 bg-surface text-foreground/80 hover:border-border-strong hover:text-foreground'
+                    }`}
+                  >
+                    {icon}
+                    {label}
+                  </button>
                 ))}
               </div>
             </div>
@@ -1933,153 +1889,97 @@ export default function AIAssistant({
   // ─── WELCOME STATE ─────────────────────────────────────────────────────────
 
   const renderWelcome = () => {
-    const suggestions = [
+    const starterPrompts = [
       {
         prompt: selectedText?.trim() ? 'Explain this selection' : 'Summarize this note',
         title: selectedText?.trim() ? 'Explain the selected text' : 'Summarize the current note',
-        description: selectedText?.trim()
-          ? 'Break down the highlighted passage and clarify the key idea.'
-          : 'Get a concise brief with the main points and likely follow-ups.',
-        icon: selectedText?.trim() ? <HelpCircle size={16} className="text-peak-600" /> : <FileText size={16} className="text-alpine-600" />,
+        icon: selectedText?.trim() ? <HelpCircle size={15} className="text-peak-600" /> : <FileText size={15} className="text-alpine-600" />,
       },
       {
         prompt: 'Help me brainstorm ideas',
         title: 'Brainstorm directions',
-        description: 'Generate options, angles, and next steps from the note context.',
-        icon: <Lightbulb size={16} className="text-warning" />,
+        icon: <Lightbulb size={15} className="text-warning" />,
       },
       {
         prompt: 'Create a task list',
         title: 'Turn notes into actions',
-        description: 'Extract concrete tasks, deadlines, and likely priorities.',
-        icon: <CheckSquare size={16} className="text-accent" />,
+        icon: <CheckSquare size={15} className="text-accent" />,
       },
       {
         prompt: 'Build a mindmap from this',
         title: 'Map the structure',
-        description: 'Convert the current material into branches, themes, and clusters.',
-        icon: <Network size={16} className="text-alpine-600" />,
+        icon: <Network size={15} className="text-alpine-600" />,
       },
     ]
 
     return (
       <div className="flex-1 overflow-y-auto">
-        <div className="p-4 space-y-4">
-          <div className="assistant-rise-in relative overflow-hidden rounded-[28px] border border-alpine-500/15 bg-[linear-gradient(135deg,rgba(37,112,235,0.14),rgba(20,184,166,0.08)_55%,rgba(255,255,255,0.78))] dark:bg-[linear-gradient(135deg,rgba(37,112,235,0.18),rgba(20,184,166,0.10)_55%,rgba(28,25,23,0.94))] px-5 py-5 shadow-[0_18px_50px_rgba(37,112,235,0.12)]">
-            <div className="absolute inset-y-0 right-0 w-40 bg-[radial-gradient(circle_at_center,rgba(255,255,255,0.55),transparent_70%)] dark:bg-[radial-gradient(circle_at_center,rgba(255,255,255,0.10),transparent_70%)]" />
-            <div className="relative">
-              <div className="inline-flex items-center gap-2 rounded-full border border-white/40 bg-white/70 px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.18em] text-alpine-700 shadow-sm dark:border-white/10 dark:bg-white/5 dark:text-alpine-200">
-                <Sparkles size={12} className="assistant-idle-float" />
-                Assistant Workspace
+        <div className="space-y-3 p-4">
+          <div className="assistant-rise-in rounded-2xl border border-border/60 bg-surface px-4 py-3.5">
+            <div className="flex items-start gap-3">
+              <div className="rounded-xl bg-alpine-600/10 p-2 text-alpine-600">
+                <Sparkles size={16} />
               </div>
-              <h3 className="mt-4 text-xl font-semibold text-foreground">Ask, edit, search, and act across your notes.</h3>
-              <p className="mt-2 max-w-[36rem] text-sm leading-relaxed text-foreground/70">
-                {isConfigured
-                  ? `You are in ${modelMeta.shortLabel}. Use it to inspect note context, rewrite text, create tasks, or turn ideas into a mindmap.`
-                  : 'Add a DeepSeek API key to your environment to unlock note search, drafting, summarization, and structured AI actions.'}
-              </p>
-
-              <div className="mt-4 flex flex-wrap gap-2">
-                <span className={`assistant-soft-pop inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 text-[11px] font-medium ${modelMeta.badgeClassName}`} style={{ animationDelay: '70ms' }}>
-                  <Cpu size={12} />
-                  {modelMeta.shortLabel}
-                </span>
-                <span className="assistant-soft-pop inline-flex items-center gap-1.5 rounded-full border border-border/60 bg-surface/70 px-3 py-1.5 text-[11px] text-foreground/75 backdrop-blur" style={{ animationDelay: '110ms' }}>
-                  <BookOpen size={12} className="text-peak-600" />
-                  {workspaceNoteCount} note{workspaceNoteCount === 1 ? '' : 's'} available
-                </span>
-                <span className="assistant-soft-pop inline-flex items-center gap-1.5 rounded-full border border-border/60 bg-surface/70 px-3 py-1.5 text-[11px] text-foreground/75 backdrop-blur" style={{ animationDelay: '150ms' }}>
-                  <CheckSquare size={12} className="text-accent" />
-                  {pendingTaskCount} active task{pendingTaskCount === 1 ? '' : 's'}
-                </span>
-                <span className="assistant-soft-pop inline-flex items-center gap-1.5 rounded-full border border-border/60 bg-surface/70 px-3 py-1.5 text-[11px] text-foreground/75 backdrop-blur" style={{ animationDelay: '190ms' }}>
-                  <Calendar size={12} className="text-alpine-600" />
-                  {upcomingEventCount} upcoming event{upcomingEventCount === 1 ? '' : 's'}
-                </span>
+              <div className="min-w-0">
+                <h3 className="text-sm font-semibold text-foreground">Ask, edit, search, and act across your notes.</h3>
+                <p className="mt-1 text-xs leading-relaxed text-foreground/65">
+                  {isConfigured
+                    ? `${AI_MODEL_SHORT_LABEL} with thinking is ready — it can read note context, rewrite text, create tasks, or turn ideas into a mindmap.`
+                    : 'Add a DeepSeek API key to your environment to unlock note search, drafting, summarization, and structured AI actions.'}
+                </p>
               </div>
+            </div>
+            <div className="mt-3 flex flex-wrap gap-1.5">
+              <span className="inline-flex items-center gap-1.5 rounded-full border border-border/60 bg-surface-hover/40 px-2.5 py-1 text-[11px] text-foreground/70">
+                <BookOpen size={11} className="text-peak-600" />
+                {workspaceNoteCount} note{workspaceNoteCount === 1 ? '' : 's'}
+              </span>
+              <span className="inline-flex items-center gap-1.5 rounded-full border border-border/60 bg-surface-hover/40 px-2.5 py-1 text-[11px] text-foreground/70">
+                <CheckSquare size={11} className="text-accent" />
+                {pendingTaskCount} active task{pendingTaskCount === 1 ? '' : 's'}
+              </span>
+              <span className="inline-flex items-center gap-1.5 rounded-full border border-border/60 bg-surface-hover/40 px-2.5 py-1 text-[11px] text-foreground/70">
+                <Calendar size={11} className="text-alpine-600" />
+                {upcomingEventCount} upcoming event{upcomingEventCount === 1 ? '' : 's'}
+              </span>
+              {activeContextSources > 0 && (
+                <span className="inline-flex items-center gap-1.5 rounded-full border border-alpine-500/20 bg-alpine-600/10 px-2.5 py-1 text-[11px] text-alpine-700 dark:text-alpine-300">
+                  <MousePointerClick size={11} />
+                  {activeContextSources} attached to the next message
+                </span>
+              )}
             </div>
           </div>
 
           {!isConfigured ? (
-            <div className="assistant-soft-pop rounded-2xl border border-warning/20 bg-warning/5 px-4 py-4 shadow-sm" style={{ animationDelay: '110ms' }}>
+            <div className="assistant-soft-pop rounded-2xl border border-warning/20 bg-warning/5 px-4 py-3.5">
               <div className="flex items-start gap-3">
                 <div className="mt-0.5 rounded-xl bg-warning/10 p-2 text-warning">
                   <AlertCircle size={16} />
                 </div>
                 <div>
                   <h4 className="text-sm font-semibold text-foreground">AI is not configured yet</h4>
-                  <p className="mt-1 text-sm leading-relaxed text-foreground/70">
-                    Set DEEPSEEK_API_KEY in your app environment, then reopen the assistant to enable note-aware chat, quick actions, and structured outputs.
+                  <p className="mt-1 text-xs leading-relaxed text-foreground/70">
+                    Set DEEPSEEK_API_KEY in your app environment, then reopen the assistant.
                   </p>
                 </div>
               </div>
             </div>
           ) : (
-            <>
-              <div className="assistant-soft-pop" style={{ animationDelay: '90ms' }}>
-                <div className="flex items-center justify-between gap-3 mb-3">
-                  <div>
-                    <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-muted">Starter Prompts</div>
-                    <p className="mt-1 text-sm text-foreground/65">Launch a strong first turn instead of typing from scratch.</p>
-                  </div>
-                </div>
-                <div className="grid gap-2.5 sm:grid-cols-2">
-                  {suggestions.map((suggestion, index) => (
-                    <button
-                      key={suggestion.prompt}
-                      onClick={() => void handleSend(suggestion.prompt)}
-                      className="assistant-soft-pop assistant-hover-lift group rounded-2xl border border-border/60 bg-surface px-4 py-3.5 text-left shadow-sm transition-all hover:border-alpine-500/35 hover:shadow-[0_16px_30px_rgba(37,112,235,0.10)]"
-                      style={{ animationDelay: `${120 + Math.min(index, 5) * 45}ms` }}
-                    >
-                      <div className="flex items-start gap-3">
-                        <div className="mt-0.5 rounded-xl bg-surface-hover p-2 transition-colors group-hover:bg-alpine-600/10">
-                          {suggestion.icon}
-                        </div>
-                        <div className="min-w-0 flex-1">
-                          <div className="flex items-center justify-between gap-2">
-                            <h4 className="text-sm font-semibold text-foreground">{suggestion.title}</h4>
-                            <ArrowRight size={14} className="text-muted transition-all group-hover:translate-x-0.5 group-hover:text-alpine-600" />
-                          </div>
-                          <p className="mt-1.5 text-xs leading-relaxed text-foreground/65">{suggestion.description}</p>
-                        </div>
-                      </div>
-                    </button>
-                  ))}
-                </div>
-              </div>
-
-              <div className="assistant-soft-pop rounded-2xl border border-border/60 bg-surface/90 px-4 py-4 shadow-sm" style={{ animationDelay: '160ms' }}>
-                <div className="flex items-center gap-2 text-[11px] font-semibold uppercase tracking-[0.18em] text-muted">
-                  <Zap size={12} className="text-alpine-600" />
-                  What The Assistant Can Do Right Now
-                </div>
-                <div className="mt-3 grid gap-2 sm:grid-cols-2">
-                  {[
-                    {
-                      title: 'Read workspace context',
-                      description: `${activeContextSources} source${activeContextSources === 1 ? '' : 's'} currently attached to the next message.`,
-                    },
-                    {
-                      title: 'Search and inspect notes',
-                      description: 'Use note search, read full note content, and answer with exact source context.',
-                    },
-                    {
-                      title: 'Edit or extend text',
-                      description: 'Rewrite passages, improve clarity, continue writing, or replace selected text.',
-                    },
-                    {
-                      title: 'Create actions and maps',
-                      description: 'Extract tasks, suggest calendar events, or build mindmaps from note material.',
-                    },
-                  ].map((item, index) => (
-                    <div key={item.title} className="assistant-soft-pop rounded-2xl border border-border/50 bg-surface-hover/40 px-3.5 py-3" style={{ animationDelay: `${210 + Math.min(index, 5) * 35}ms` }}>
-                      <div className="text-sm font-semibold text-foreground">{item.title}</div>
-                      <p className="mt-1.5 text-xs leading-relaxed text-foreground/65">{item.description}</p>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            </>
+            <div className="space-y-2">
+              <div className="px-1 text-[11px] font-semibold uppercase tracking-[0.18em] text-muted">Try asking</div>
+              {starterPrompts.map((suggestion) => (
+                <button
+                  key={suggestion.prompt}
+                  onClick={() => void handleSend(suggestion.prompt)}
+                  className="assistant-hover-lift group flex w-full items-center gap-3 rounded-xl border border-border/60 bg-surface px-3.5 py-2.5 text-left transition-all hover:border-alpine-500/35"
+                >
+                  <span className="rounded-lg bg-surface-hover p-1.5">{suggestion.icon}</span>
+                  <span className="min-w-0 flex-1 truncate text-sm text-foreground">{suggestion.title}</span>
+                  <ArrowRight size={14} className="text-muted transition-all group-hover:translate-x-0.5 group-hover:text-alpine-600" />
+                </button>
+              ))}
+            </div>
           )}
         </div>
       </div>
@@ -2200,11 +2100,6 @@ export default function AIAssistant({
 
   const renderContextSidebar = (mode: 'docked' | 'overlay' = 'docked') => {
     const isOverlay = mode === 'overlay'
-    const diagnosticsTone = contextDiagnostics.exhausted
-      ? 'border-danger/20 bg-danger/10 text-danger'
-      : contextDiagnostics.nearLimit
-        ? 'border-warning/20 bg-warning/10 text-warning'
-        : 'border-accent/20 bg-accent/10 text-accent'
     const diagnosticsLabel = contextDiagnostics.exhausted
       ? 'Context full'
       : contextDiagnostics.nearLimit
@@ -2218,143 +2113,100 @@ export default function AIAssistant({
 
     const sidebarPanel = (
       <aside className={`flex h-full w-[320px] max-w-[88vw] flex-col border-l border-border/50 bg-surface/95 backdrop-blur ${isOverlay ? 'shadow-2xl' : 'shadow-[-14px_0_40px_rgba(15,23,42,0.05)]'}`}>
-        <div className="border-b border-border/50 px-4 py-4">
-          <div className="flex items-start justify-between gap-3">
-            <div>
-              <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-muted">Context Sidebar</div>
-              <h4 className="mt-1 text-sm font-semibold text-foreground">{activeContextSources} source{activeContextSources === 1 ? '' : 's'} attached</h4>
-              <p className="mt-1 text-xs leading-relaxed text-foreground/65">
-                {selectedTextPreview
-                  ? 'Selection context will be prioritized alongside any attached notes.'
-                  : attachedNoteSourceCount > 0
-                    ? 'Manage which notes are injected directly into the next assistant reply.'
-                    : 'No note content is attached yet. The assistant can still use workspace tools if needed.'}
-              </p>
+        <div className="flex items-center justify-between gap-3 border-b border-border/50 px-4 py-3">
+          <div>
+            <div className="text-sm font-semibold text-foreground">Context</div>
+            <div className="text-[11px] text-muted">
+              {activeContextSources} source{activeContextSources === 1 ? '' : 's'} attached to the next message
             </div>
-            <button
-              onClick={() => setShowContextSidebar(false)}
-              className="assistant-hover-lift rounded-xl border border-border/60 bg-surface p-2 text-muted transition-all hover:border-border-strong hover:text-foreground"
-              title="Hide context sidebar"
-            >
-              <X size={14} />
-            </button>
           </div>
-
-          <div className="mt-3 flex flex-wrap gap-2">
-            <span className="inline-flex items-center gap-1.5 rounded-full border border-border/60 bg-surface-hover/50 px-2.5 py-1 text-[10px] font-medium text-foreground/75">
-              <BookOpen size={10} className="text-peak-600" />
-              {attachedNoteSourceCount} note source{attachedNoteSourceCount === 1 ? '' : 's'}
-            </span>
-            {selectedTextPreview && (
-              <span className="inline-flex items-center gap-1.5 rounded-full border border-peak-500/20 bg-peak-500/10 px-2.5 py-1 text-[10px] font-medium text-peak-700 dark:text-peak-300">
-                <MousePointerClick size={10} />
-                Selection attached
-              </span>
-            )}
-            {aiContext.mindmapData?.selectedNodeText && (
-              <span className="inline-flex items-center gap-1.5 rounded-full border border-alpine-500/20 bg-alpine-600/10 px-2.5 py-1 text-[10px] font-medium text-alpine-700 dark:text-alpine-300">
-                <Network size={10} />
-                Mindmap node active
-              </span>
-            )}
-          </div>
+          <button
+            onClick={() => setShowContextSidebar(false)}
+            className="rounded-xl border border-border/60 bg-surface p-1.5 text-muted transition-all hover:border-border-strong hover:text-foreground"
+            title="Hide context sidebar"
+          >
+            <X size={14} />
+          </button>
         </div>
 
-        <div className="flex-1 overflow-y-auto p-4 space-y-4">
+        <div className="flex-1 space-y-3 overflow-y-auto p-4">
           {selectedTextPreview && (
-            <div className="assistant-soft-pop rounded-2xl border border-border/60 bg-surface px-4 py-3 shadow-sm" style={{ animationDelay: '40ms' }}>
-              <div className="flex items-center gap-2 text-[11px] font-semibold uppercase tracking-[0.18em] text-muted">
-                <MousePointerClick size={12} className="text-peak-600" />
-                Editor Selection
+            <div className="rounded-xl border border-border/60 bg-surface px-3 py-2.5">
+              <div className="flex items-center gap-1.5 text-[10px] font-semibold uppercase tracking-[0.16em] text-muted">
+                <MousePointerClick size={11} className="text-peak-600" />
+                Selection
               </div>
-              <p className="mt-2 text-sm leading-relaxed text-foreground/75">“{selectedTextPreview}”</p>
-              <p className="mt-2 text-[11px] leading-relaxed text-foreground/60">
-                Selection is controlled from the editor. Change or clear it there when you want the assistant to stop prioritizing it.
-              </p>
+              <p className="mt-1.5 line-clamp-3 text-xs leading-relaxed text-foreground/75">“{selectedTextPreview}”</p>
             </div>
           )}
 
           {aiContext.mindmapData?.selectedNodeText && (
-            <div className="assistant-soft-pop rounded-2xl border border-border/60 bg-surface px-4 py-3 shadow-sm" style={{ animationDelay: '70ms' }}>
-              <div className="flex items-center gap-2 text-[11px] font-semibold uppercase tracking-[0.18em] text-muted">
-                <Network size={12} className="text-alpine-600" />
-                Mindmap Focus
+            <div className="rounded-xl border border-border/60 bg-surface px-3 py-2.5">
+              <div className="flex items-center gap-1.5 text-[10px] font-semibold uppercase tracking-[0.16em] text-muted">
+                <Network size={11} className="text-alpine-600" />
+                Mindmap node
               </div>
-              <div className="mt-2 text-sm font-semibold text-foreground">{aiContext.mindmapData.selectedNodeText}</div>
-              {aiContext.mindmapData.selectedNodeDescription && (
-                <p className="mt-1 text-[11px] leading-relaxed text-foreground/65">{truncateAtBoundary(aiContext.mindmapData.selectedNodeDescription, 160)}</p>
-              )}
+              <p className="mt-1.5 truncate text-xs font-medium text-foreground">{aiContext.mindmapData.selectedNodeText}</p>
             </div>
           )}
 
-          {note && (
-            <div className="assistant-soft-pop rounded-2xl border border-border/60 bg-surface px-4 py-3 shadow-sm" style={{ animationDelay: '100ms' }}>
-              <div className="flex items-start justify-between gap-3">
-                <div>
-                  <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-muted">Current Note</div>
-                  <p className="mt-1 text-[11px] leading-relaxed text-foreground/60">
-                    Include the open note directly in the next request, or rely on tool-based lookup only.
-                  </p>
+          <div className="rounded-xl border border-border/60 bg-surface">
+            {note ? (
+              <div className="flex items-center justify-between gap-3 border-b border-border/40 px-3 py-2.5">
+                <div className="min-w-0">
+                  <div className="truncate text-xs font-medium text-foreground">{note.title || 'Untitled'}</div>
+                  <div className="text-[10px] text-muted">
+                    Current note · {currentNotePlainText.length.toLocaleString()} chars
+                  </div>
                 </div>
                 <button
                   onClick={() => setIncludeCurrentNote(value => !value)}
-                  className={`assistant-hover-lift inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-[10px] font-medium transition-all ${
+                  className={`inline-flex flex-shrink-0 items-center gap-1 rounded-full px-2 py-1 text-[10px] font-medium transition-all ${
                     includeCurrentNote
-                      ? 'bg-alpine-600 text-white shadow-sm shadow-alpine-900/20'
+                      ? 'bg-alpine-600 text-white'
                       : 'border border-border/60 bg-surface-hover text-muted hover:text-foreground'
                   }`}
                 >
                   {includeCurrentNote ? <Check size={10} /> : <Plus size={10} />}
-                  {includeCurrentNote ? 'Included' : 'Add note'}
+                  {includeCurrentNote ? 'Included' : 'Add'}
                 </button>
               </div>
+            ) : (
+              <div className="border-b border-border/40 px-3 py-2.5 text-xs text-muted">No note open</div>
+            )}
 
-              <div className="mt-3 rounded-2xl border border-border/50 bg-surface-hover/35 px-3.5 py-3">
-                <div className="text-sm font-semibold text-foreground">{note.title || 'Untitled'}</div>
-                <div className="mt-1 text-[11px] text-muted">
-                  {(note.note_type || 'rich-text')} • {currentNotePlainText.length.toLocaleString()} chars available
+            <div className="px-3 pb-3 pt-2.5">
+              <div className="flex items-center justify-between gap-2">
+                <div className="text-[10px] font-semibold uppercase tracking-[0.16em] text-muted">Additional notes</div>
+                <div className="flex items-center gap-2">
+                  <span className="text-[10px] text-muted">{selectedNoteIds.length}/{contextLimits.maxSelectedNotes}</span>
+                  {selectedNoteIds.length > 0 && (
+                    <button
+                      onClick={() => setSelectedNoteIds([])}
+                      className="rounded-full border border-border/60 px-2 py-0.5 text-[10px] font-medium text-muted transition-all hover:border-border-strong hover:text-foreground"
+                    >
+                      Clear
+                    </button>
+                  )}
                 </div>
               </div>
-            </div>
-          )}
 
-          <div className="assistant-soft-pop rounded-2xl border border-border/60 bg-surface px-4 py-3 shadow-sm" style={{ animationDelay: '130ms' }}>
-            <div className="flex items-start justify-between gap-3">
-              <div>
-                <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-muted">Additional Notes</div>
-                <p className="mt-1 text-[11px] leading-relaxed text-foreground/60">
-                  Select up to {contextLimits.maxSelectedNotes} notes to inject directly into the next reply.
-                </p>
+              <div className="relative mt-2">
+                <Search size={12} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-muted" />
+                <input
+                  value={notePickerSearch}
+                  onChange={(e) => setNotePickerSearch(e.target.value)}
+                  placeholder="Search notes, projects, or folders…"
+                  className="h-9 w-full rounded-xl border border-border bg-surface-hover/50 pl-8 pr-3 text-xs text-foreground placeholder:text-muted/60 focus:border-alpine-500/35 focus:outline-none focus:ring-2 focus:ring-alpine-500/15"
+                />
               </div>
-              {selectedNoteIds.length > 0 && (
-                <button
-                  onClick={() => setSelectedNoteIds([])}
-                  className="assistant-hover-lift rounded-full border border-border/60 px-2.5 py-1 text-[10px] font-medium text-muted transition-all hover:border-border-strong hover:text-foreground"
-                >
-                  Clear
-                </button>
-              )}
-            </div>
 
-            <div className="mt-3 relative">
-              <Search size={12} className="absolute left-3 top-1/2 -translate-y-1/2 text-muted" />
-              <input
-                value={notePickerSearch}
-                onChange={(e) => setNotePickerSearch(e.target.value)}
-                placeholder="Search notes, projects, or folders…"
-                className="h-10 w-full rounded-2xl border border-border bg-surface-hover/50 pl-9 pr-3 text-sm text-foreground placeholder:text-muted/60 focus:outline-none focus:ring-2 focus:ring-alpine-500/15 focus:border-alpine-500/35"
-              />
-            </div>
-
-            <div className="mt-2 flex items-center justify-between text-[11px] text-muted">
-              <span>{selectedNoteIds.length}/{contextLimits.maxSelectedNotes} selected</span>
               {contextDiagnostics.omittedSelectedCount > 0 && (
-                <span className="text-warning">{contextDiagnostics.omittedSelectedCount} omitted by limit</span>
+                <div className="mt-1.5 text-[10px] text-warning">{contextDiagnostics.omittedSelectedCount} omitted by limit</div>
               )}
-            </div>
 
-            <div className="mt-3 max-h-[280px] space-y-1.5 overflow-y-auto pr-1">
-              {groupedSelectableNotes.length === 0 ? (
+              <div className="mt-2 max-h-[320px] space-y-1.5 overflow-y-auto pr-0.5">
+                {groupedSelectableNotes.length === 0 ? (
                 <div className="rounded-2xl border border-dashed border-border/60 px-3 py-4 text-center text-[11px] text-muted">
                   No notes match this search.
                 </div>
@@ -2391,71 +2243,22 @@ export default function AIAssistant({
                   </div>
                 ))
               )}
-            </div>
-          </div>
-
-          <div className="assistant-soft-pop rounded-2xl border border-border/60 bg-surface px-4 py-3 shadow-sm" style={{ animationDelay: '160ms' }}>
-            <div className="flex items-start justify-between gap-3">
-              <div>
-                <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-muted">Diagnostics</div>
-                <p className="mt-1 text-[11px] leading-relaxed text-foreground/60">
-                  Track how much context is being injected for the active model profile.
-                </p>
               </div>
-              <span className={`inline-flex items-center rounded-full border px-2.5 py-1 text-[10px] font-medium ${diagnosticsTone}`}>
-                {diagnosticsLabel}
-              </span>
-            </div>
-
-            <div className="mt-4">
-              <div className="flex items-center justify-between text-[11px] text-foreground/70">
-                <span>Injected chars</span>
-                <span>{contextDiagnostics.totalIncludedChars.toLocaleString()} / {contextLimits.maxTotalInjectedChars.toLocaleString()}</span>
-              </div>
-              <div className="mt-2 h-2 overflow-hidden rounded-full bg-surface-active/60">
-                <div className={`h-full rounded-full transition-all duration-300 ${usageBarClassName}`} style={{ width: `${contextUsagePercent}%` }} />
-              </div>
-            </div>
-
-            <div className="mt-4 grid grid-cols-2 gap-2">
-              {[
-                {
-                  label: 'Original chars',
-                  value: contextDiagnostics.totalOriginalChars.toLocaleString(),
-                },
-                {
-                  label: 'Truncated',
-                  value: String(contextDiagnostics.truncatedCount),
-                },
-                {
-                  label: 'Omitted notes',
-                  value: String(contextDiagnostics.omittedSelectedCount),
-                },
-                {
-                  label: 'Per note cap',
-                  value: contextLimits.maxCharsPerNote.toLocaleString(),
-                },
-              ].map((stat) => (
-                <div key={stat.label} className="rounded-2xl border border-border/50 bg-surface-hover/35 px-3 py-2.5">
-                  <div className="text-[10px] font-semibold uppercase tracking-[0.16em] text-muted">{stat.label}</div>
-                  <div className="mt-1 text-sm font-semibold text-foreground">{stat.value}</div>
-                </div>
-              ))}
             </div>
           </div>
         </div>
 
         <div className="border-t border-border/50 px-4 py-3">
-          <div className="text-[10px] font-semibold uppercase tracking-[0.18em] text-muted">Model-aware limits</div>
-          <div className="mt-2 grid grid-cols-2 gap-2">
-            <div className="rounded-2xl border border-border/50 bg-surface-hover/35 px-3 py-2.5">
-              <div className="text-[10px] font-semibold uppercase tracking-[0.16em] text-muted">Model</div>
-              <div className="mt-1 text-sm font-semibold text-foreground">{modelMeta.shortLabel}</div>
-            </div>
-            <div className="rounded-2xl border border-border/50 bg-surface-hover/35 px-3 py-2.5">
-              <div className="text-[10px] font-semibold uppercase tracking-[0.16em] text-muted">Max notes</div>
-              <div className="mt-1 text-sm font-semibold text-foreground">{contextLimits.maxSelectedNotes}</div>
-            </div>
+          <div className="flex items-center justify-between text-[11px] text-foreground/70">
+            <span>Injected context</span>
+            <span>{contextDiagnostics.totalIncludedChars.toLocaleString()} / {contextLimits.maxTotalInjectedChars.toLocaleString()}</span>
+          </div>
+          <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-surface-active/60">
+            <div className={`h-full rounded-full transition-all duration-300 ${usageBarClassName}`} style={{ width: `${contextUsagePercent}%` }} />
+          </div>
+          <div className="mt-2 flex items-center justify-between gap-2 text-[10px] text-muted">
+            <span>{diagnosticsLabel}</span>
+            {contextDiagnostics.truncatedCount > 0 && <span>{contextDiagnostics.truncatedCount} truncated</span>}
           </div>
         </div>
       </aside>
@@ -2558,21 +2361,9 @@ export default function AIAssistant({
                   {activeContextSources}
                 </span>
               </button>
-
-              <span className="hidden sm:inline text-[11px] text-muted">
-                {selectedText?.trim()
-                  ? 'Selection and note sources are managed from the context sidebar.'
-                  : attachedNoteSourceCount > 0
-                    ? 'Attached note sources are managed from the context sidebar.'
-                    : 'Open the context sidebar to attach note sources.'}
-              </span>
             </div>
 
             <div className="flex items-center gap-2">
-              <span className="text-[10px] text-muted/50 hidden lg:inline-flex items-center gap-1.5">
-                <CornerDownLeft size={9} />
-                Enter sends · Shift+Enter adds a new line
-              </span>
               {isLoading ? (
                 <button
                   onClick={handleCancelResponse}
@@ -2711,230 +2502,155 @@ export default function AIAssistant({
   }
 
   const renderHeader = () => {
-    const headerActionButtonClassName = 'assistant-hover-lift p-2 text-muted hover:text-foreground hover:bg-surface/70 rounded-xl transition-all'
+    const headerActionButtonClassName = 'assistant-hover-lift p-2 text-muted hover:text-foreground hover:bg-surface-hover/70 rounded-xl transition-all'
 
     return (
-      <div className="assistant-rise-in shrink-0 border-b border-border/50 bg-[linear-gradient(180deg,rgba(37,112,235,0.12),rgba(20,184,166,0.05)_55%,transparent)]">
-        <div className="px-4 pb-4 pt-3 space-y-3">
-          <div className="flex items-start justify-between gap-3">
-            <div className="flex items-start gap-3 min-w-0">
-              {showChatHistory ? (
-                <button
-                  onClick={() => setShowChatHistory(false)}
-                  className="assistant-hover-lift mt-0.5 rounded-xl border border-border/60 bg-surface/80 p-2 text-muted transition-all hover:border-border-strong hover:text-foreground"
-                >
-                  <ChevronLeft size={16} />
-                </button>
-              ) : (
-                <div className="assistant-idle-float flex h-11 w-11 items-center justify-center rounded-2xl bg-[linear-gradient(145deg,#2570eb,#14b8a6)] shadow-[0_16px_35px_rgba(37,112,235,0.28)]">
-                  <Sparkles size={18} className="text-white" />
-                </div>
-              )}
-
-              <div className="min-w-0">
-                <div className="flex items-center gap-2 flex-wrap">
-                  <h3 className="text-base font-semibold text-foreground leading-tight">
-                    {showChatHistory ? 'Conversation History' : 'AI Assistant'}
-                  </h3>
-                  {!showChatHistory && (
-                    <span className={`inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.14em] ${modelMeta.badgeClassName}`}>
-                      <Cpu size={10} />
-                      {modelMeta.shortLabel}
-                    </span>
-                  )}
-                </div>
-
-                <p className="mt-1 text-xs leading-relaxed text-foreground/65 max-w-[32rem]">
-                  {showChatHistory
-                    ? `${chatHistory.length} saved conversation${chatHistory.length === 1 ? '' : 's'} available for this workspace.`
-                    : modelMeta.description}
-                </p>
-              </div>
+      <div className="assistant-rise-in shrink-0 border-b border-border/50 bg-surface/80 backdrop-blur">
+        <div className="flex items-center gap-3 px-4 py-3">
+          {showChatHistory ? (
+            <button
+              onClick={() => setShowChatHistory(false)}
+              className="assistant-hover-lift rounded-xl border border-border/60 bg-surface p-2 text-muted transition-all hover:border-border-strong hover:text-foreground"
+              title="Back to chat"
+            >
+              <ChevronLeft size={15} />
+            </button>
+          ) : (
+            <div className="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-xl bg-[linear-gradient(145deg,#2570eb,#14b8a6)]">
+              <Sparkles size={16} className="text-white" />
             </div>
+          )}
 
-            <div className="flex items-center gap-1">
+          <div className="min-w-0 flex-1">
+            <div className="flex items-center gap-2">
+              <h3 className="truncate text-sm font-semibold text-foreground">
+                {showChatHistory ? 'Conversations' : 'AI Assistant'}
+              </h3>
               {!showChatHistory && (
-                <>
-                  <button
-                    onClick={startNewChat}
-                    className={headerActionButtonClassName}
-                    title="New chat"
-                  >
-                    <Plus size={15} />
-                  </button>
-                  {messages.length > 0 && (
-                    <button
-                      onClick={handleClearChat}
-                      className={headerActionButtonClassName}
-                      title="Clear chat"
-                    >
-                      <Trash2 size={14} />
-                    </button>
-                  )}
-                </>
-              )}
-              {onToggleSize && !showChatHistory && (
-                <button
-                  onClick={onToggleSize}
-                  className={headerActionButtonClassName}
-                  title={isLargeWindow ? 'Default size' : 'Expand'}
+                <span
+                  className="inline-flex flex-shrink-0 items-center gap-1 rounded-full border border-border/60 bg-surface-hover/50 px-2 py-0.5 text-[10px] font-medium text-foreground/70"
+                  title={`${AI_MODEL_LABEL} — thinking enabled`}
                 >
-                  {isLargeWindow ? <Minimize2 size={15} /> : <Maximize2 size={15} />}
-                </button>
-              )}
-              {onClose && (
-                <button
-                  onClick={onClose}
-                  className={headerActionButtonClassName}
-                  title="Close"
-                  aria-label="Close AI Assistant"
-                >
-                  <X size={15} />
-                </button>
-              )}
-              {onToggleExpand && (
-                <button
-                  onClick={onToggleExpand}
-                  className={headerActionButtonClassName}
-                >
-                  {isExpanded ? <ChevronDown size={15} /> : <ChevronUp size={15} />}
-                </button>
+                  <Cpu size={10} className="text-alpine-600" />
+                  {AI_MODEL_SHORT_LABEL} · Thinking
+                </span>
               )}
             </div>
+            {showChatHistory && (
+              <p className="mt-0.5 truncate text-[11px] text-muted">
+                {chatHistory.length} saved conversation{chatHistory.length === 1 ? '' : 's'} for this workspace
+              </p>
+            )}
           </div>
 
-          <div className="flex items-center justify-between gap-2 flex-wrap">
-            <div className="assistant-soft-pop inline-flex items-center rounded-2xl border border-border/60 bg-surface/80 p-1 shadow-sm backdrop-blur" style={{ animationDelay: '80ms' }}>
+          <div className="flex flex-shrink-0 items-center gap-1">
+            {!showChatHistory && (
+              <>
+                <button
+                  onClick={startNewChat}
+                  className={headerActionButtonClassName}
+                  title="New chat"
+                >
+                  <Plus size={15} />
+                </button>
+                {messages.length > 0 && (
+                  <button
+                    onClick={handleClearChat}
+                    className={headerActionButtonClassName}
+                    title="Clear chat"
+                  >
+                    <Trash2 size={14} />
+                  </button>
+                )}
+              </>
+            )}
+            {onToggleSize && !showChatHistory && (
+              <button
+                onClick={onToggleSize}
+                className={headerActionButtonClassName}
+                title={isLargeWindow ? 'Default size' : 'Expand'}
+              >
+                {isLargeWindow ? <Minimize2 size={15} /> : <Maximize2 size={15} />}
+              </button>
+            )}
+            {onClose && (
+              <button
+                onClick={onClose}
+                className={headerActionButtonClassName}
+                title="Close"
+                aria-label="Close AI Assistant"
+              >
+                <X size={15} />
+              </button>
+            )}
+            {onToggleExpand && (
+              <button
+                onClick={onToggleExpand}
+                className={headerActionButtonClassName}
+              >
+                {isExpanded ? <ChevronDown size={15} /> : <ChevronUp size={15} />}
+              </button>
+            )}
+          </div>
+        </div>
+
+        {!showChatHistory && (
+          <div className="flex items-center justify-between gap-2 px-4 pb-3">
+            <div className="inline-flex items-center rounded-xl border border-border/60 bg-surface p-0.5">
               <button
                 onClick={() => setShowChatHistory(false)}
-                className={`assistant-hover-lift px-3 py-1.5 rounded-xl text-xs font-medium transition-all ${
-                  !showChatHistory ? 'bg-foreground text-background shadow-sm' : 'text-muted hover:text-foreground'
-                }`}
+                className="rounded-lg bg-foreground px-3 py-1 text-xs font-medium text-background shadow-sm"
               >
                 Chat
               </button>
               <button
                 onClick={() => setShowChatHistory(true)}
-                className={`assistant-hover-lift px-3 py-1.5 rounded-xl text-xs font-medium transition-all ${
-                  showChatHistory ? 'bg-foreground text-background shadow-sm' : 'text-muted hover:text-foreground'
-                }`}
+                className="rounded-lg px-3 py-1 text-xs font-medium text-muted transition-colors hover:text-foreground"
               >
                 History
               </button>
             </div>
 
-            {!showChatHistory && (
-              <div className="flex items-center gap-2">
-                <div className="assistant-soft-pop inline-flex items-center rounded-2xl border border-border/60 bg-surface/80 p-1 shadow-sm backdrop-blur" style={{ animationDelay: '120ms' }}>
-                  <button
-                    onClick={() => setModel('deepseek-v4-flash')}
-                    className={`assistant-hover-lift px-3 py-1.5 rounded-xl text-xs font-medium transition-all ${
-                      model === 'deepseek-v4-flash'
-                        ? 'bg-surface text-foreground shadow-sm'
-                        : 'text-muted hover:text-foreground'
-                    }`}
-                  >
-                    V4 Flash
-                  </button>
-                  <button
-                    onClick={() => setModel('deepseek-v4-pro')}
-                    className={`assistant-hover-lift px-3 py-1.5 rounded-xl text-xs font-medium transition-all flex items-center gap-1.5 ${
-                      model === 'deepseek-v4-pro'
-                        ? 'bg-alpine-600 text-white shadow-sm shadow-alpine-900/20'
-                        : 'text-muted hover:text-foreground'
-                    }`}
-                  >
-                    <Cpu size={11} />
-                    V4 Pro
-                  </button>
-                </div>
-
+            {quotaInfo && (
+              <div className="relative" ref={quotaPopoverRef}>
                 <button
-                  onClick={() => setShowContextSidebar(v => !v)}
-                  className={`assistant-soft-pop assistant-hover-lift inline-flex items-center gap-1.5 rounded-2xl border px-3 py-2 text-xs font-medium shadow-sm backdrop-blur transition-all ${
-                    showContextSidebar
-                      ? 'border-alpine-500/20 bg-alpine-600/10 text-alpine-600 dark:text-alpine-300'
-                      : 'border-border/60 bg-surface/80 text-muted hover:border-border-strong hover:text-foreground'
-                  }`}
-                  style={{ animationDelay: '150ms' }}
+                  onClick={() => setShowQuotaPopover(value => !value)}
+                  className="assistant-hover-lift inline-flex items-center gap-1.5 rounded-xl border border-border/60 bg-surface px-2.5 py-1 text-[11px] font-medium text-muted transition-all hover:border-border-strong hover:text-foreground"
+                  title="Usage quota"
                 >
-                  <BookOpen size={11} />
-                  Context
-                  <span className="rounded-full bg-surface-active/70 px-1.5 py-0.5 text-[10px] text-foreground/70">
-                    {activeContextSources}
-                  </span>
+                  <Zap size={11} className={quotaInfo.low ? 'text-warning' : 'text-alpine-600'} />
+                  {quotaInfo.remaining}/{quotaInfo.limit}
                 </button>
-              </div>
-            )}
-          </div>
 
-          {!showChatHistory && (
-            <div className="toolbar-scroll -mx-1 px-1">
-              <div className="flex min-w-max gap-2 pb-1">
-                <div className="assistant-soft-pop assistant-hover-lift min-w-[168px] rounded-2xl border border-border/60 bg-surface/85 px-3.5 py-3 shadow-sm backdrop-blur" style={{ animationDelay: '150ms' }}>
-                  <div className="flex items-center gap-2 text-[10px] font-semibold uppercase tracking-[0.18em] text-muted">
-                    <Cpu size={12} className="text-alpine-600" />
-                    Model
-                  </div>
-                  <div className="mt-2 text-sm font-semibold text-foreground">{modelMeta.shortLabel}</div>
-                  <p className="mt-1 text-[11px] leading-relaxed text-foreground/65">{model === 'deepseek-v4-pro' ? 'Longer context and deep tool work.' : 'Fast turns and lightweight drafting.'}</p>
-                </div>
-
-                <div className="assistant-soft-pop assistant-hover-lift min-w-[168px] rounded-2xl border border-border/60 bg-surface/85 px-3.5 py-3 shadow-sm backdrop-blur" style={{ animationDelay: '230ms' }}>
-                  <div className="flex items-center gap-2 text-[10px] font-semibold uppercase tracking-[0.18em] text-muted">
-                    <CheckSquare size={12} className="text-accent" />
-                    Workspace
-                  </div>
-                  <div className="mt-2 text-sm font-semibold text-foreground">{pendingTaskCount} active tasks</div>
-                  <p className="mt-1 text-[11px] leading-relaxed text-foreground/65">{workspaceNoteCount} notes and {upcomingEventCount} upcoming events available to reference.</p>
-                </div>
-
-                {quotaInfo && (
-                  <div className="relative" ref={quotaPopoverRef}>
-                    <button
-                      onClick={() => setShowQuotaPopover(value => !value)}
-                      className="assistant-soft-pop assistant-hover-lift min-w-[170px] rounded-2xl border border-border/60 bg-surface/85 px-3.5 py-3 text-left shadow-sm backdrop-blur transition-all hover:border-border-strong"
-                      style={{ animationDelay: '270ms' }}
-                    >
-                      <div className="flex items-center gap-2 text-[10px] font-semibold uppercase tracking-[0.18em] text-muted">
-                        <Zap size={12} className={quotaInfo.low ? 'text-warning' : 'text-alpine-600'} />
-                        Quota
+                {showQuotaPopover && (
+                  <div className="assistant-rise-in absolute right-0 top-full z-20 mt-1.5 w-56 rounded-xl border border-border-strong bg-surface p-3 shadow-2xl">
+                    <div className="text-xs font-semibold text-foreground">Usage snapshot</div>
+                    <div className="mt-2 space-y-2 text-xs text-foreground/75">
+                      <div className="flex items-center justify-between gap-3">
+                        <span className="text-muted">Remaining</span>
+                        <span>{quotaInfo.remaining}</span>
                       </div>
-                      <div className="mt-2 text-sm font-semibold text-foreground">{quotaInfo.remaining} / {quotaInfo.limit} remaining</div>
-                      <p className="mt-1 text-[11px] leading-relaxed text-foreground/65">Refresh window: {quotaWindowLabel}{quotaInfo.low ? ' • running low' : ''}</p>
-                    </button>
-
-                    {showQuotaPopover && (
-                      <div className="assistant-rise-in absolute right-0 top-full z-20 mt-2 w-60 rounded-2xl border border-border-strong bg-surface p-3 shadow-2xl">
-                        <div className="text-xs font-semibold text-foreground">Usage snapshot</div>
-                        <div className="mt-2 space-y-2 text-xs text-foreground/75">
-                          <div className="flex items-center justify-between gap-3">
-                            <span className="text-muted">Remaining</span>
-                            <span>{quotaInfo.remaining}</span>
-                          </div>
-                          <div className="flex items-center justify-between gap-3">
-                            <span className="text-muted">Limit</span>
-                            <span>{quotaInfo.limit}</span>
-                          </div>
-                          <div className="flex items-center justify-between gap-3">
-                            <span className="text-muted">Window</span>
-                            <span>{quotaWindowLabel}</span>
-                          </div>
-                          {quotaInfo.resetInSeconds !== null && (
-                            <div className="flex items-center justify-between gap-3">
-                              <span className="text-muted">Resets in</span>
-                              <span>{quotaInfo.resetInSeconds}s</span>
-                            </div>
-                          )}
+                      <div className="flex items-center justify-between gap-3">
+                        <span className="text-muted">Limit</span>
+                        <span>{quotaInfo.limit}</span>
+                      </div>
+                      <div className="flex items-center justify-between gap-3">
+                        <span className="text-muted">Window</span>
+                        <span>{quotaWindowLabel}</span>
+                      </div>
+                      {quotaInfo.resetInSeconds !== null && (
+                        <div className="flex items-center justify-between gap-3">
+                          <span className="text-muted">Resets in</span>
+                          <span>{quotaInfo.resetInSeconds}s</span>
                         </div>
-                      </div>
-                    )}
+                      )}
+                    </div>
                   </div>
                 )}
               </div>
-            </div>
-          )}
-        </div>
+            )}
+          </div>
+        )}
       </div>
     )
   }

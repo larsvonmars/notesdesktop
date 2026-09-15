@@ -93,9 +93,17 @@ sanitizer see the fix exactly like a manual edit.
 
 ## Toggling & preferences
 
-- `notesdesktop:grammar-check-enabled` (`'off'` disables) is read on mount.
-- `RichTextEditorHandle.setGrammarCheckEnabled(enabled)` updates and persists it —
-  ready to be wired to a settings UI / toolbar button.
+- **Settings → Editor → “Grammar & spelling check”** is the user-facing switch
+  (`components/SettingsModal.tsx`). It flips the preference, which persists it and
+  broadcasts a window event; the editor subscribes to that event, so a note that is
+  already open turns squiggles on/off (and re-lints) without a reload.
+- The plumbing lives in `lib/editor/grammar/preferences.ts`:
+  `readGrammarEnabledPreference` / `writeGrammarEnabledPreference` (silent) /
+  `setGrammarEnabledPreference` (persist + broadcast) /
+  `subscribeToGrammarEnabledPreference` (returns the unsubscribe). Storage key:
+  `notesdesktop:grammar-check-enabled` (`'off'` disables, anything else enables).
+- `RichTextEditorHandle.setGrammarCheckEnabled(enabled)` is still available for
+  programmatic control and goes through the same helper.
 - Harper’s `Dialect` (US/UK/…) and additional config live behind
   `lintPlainText(text, options)` in `engine.ts`.
 

@@ -43,9 +43,6 @@ import {
   type UnitText,
 } from './units'
 
-/** `off` disables the checker; anything else (or unset) leaves it enabled. */
-export const GRAMMAR_ENABLED_STORAGE_KEY = 'notesdesktop:grammar-check-enabled'
-
 /** Wait for a typing pause before linting. */
 const LINT_DEBOUNCE_MS = 700
 /** Re-lint quickly right after a fix has been applied. */
@@ -103,23 +100,6 @@ export interface UseGrammarCheckOptions {
   onBeforeApply?: () => void
   /** Runs after the DOM was mutated (normalise + emit change). */
   onAfterApply?: () => void
-}
-
-export function readGrammarEnabledPreference(): boolean {
-  if (typeof window === 'undefined') return true
-  try {
-    return window.localStorage.getItem(GRAMMAR_ENABLED_STORAGE_KEY) !== 'off'
-  } catch {
-    return true
-  }
-}
-
-export function writeGrammarEnabledPreference(enabled: boolean): void {
-  try {
-    window.localStorage.setItem(GRAMMAR_ENABLED_STORAGE_KEY, enabled ? 'on' : 'off')
-  } catch {
-    /* storage unavailable — preference stays session-only */
-  }
 }
 
 interface LintUnitResult {

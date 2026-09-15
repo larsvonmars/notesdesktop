@@ -1,6 +1,11 @@
 const DEEPSEEK_API_URL = 'https://api.deepseek.com/chat/completions'
 
-const ALLOWED_MODELS = new Set(['deepseek-v4-flash', 'deepseek-v4-pro'])
+// The app always talks to the newest DeepSeek Flash (V4.1) with thinking enabled.
+// These values are pinned server-side so clients cannot override them.
+// Keep in sync with lib/ai-model.ts.
+const DEEPSEEK_MODEL = 'deepseek-flash'
+const DEEPSEEK_THINKING = { type: 'enabled' }
+const DEEPSEEK_REASONING_EFFORT = 'high'
 const ALLOWED_ROLES = new Set(['system', 'user', 'assistant', 'tool'])
 
 function jsonResponse(body, status = 200, headers = {}) {
@@ -61,23 +66,9 @@ function validateAndSanitizeAIPayload(input, options = {}) {
 
   const payload = {
     messages,
-    model: 'deepseek-v4-flash',
-  }
-
-  const model = input.model
-  if (typeof model === 'string') {
-    if (!ALLOWED_MODELS.has(model)) {
-      return { valid: false, message: 'Invalid payload: unsupported model.' }
-    }
-    payload.model = model
-  }
-
-  const temperature = input.temperature
-  if (temperature !== undefined) {
-    if (typeof temperature !== 'number' || !Number.isFinite(temperature) || temperature < 0 || temperature > 2) {
-      return { valid: false, message: 'Invalid payload: temperature must be between 0 and 2.' }
-    }
-    payload.temperature = temperature
+    model: DEEPSEEK_MODEL,
+    thinking: DEEPSEEK_THINKING,
+    reasoning_effort: DEEPSEEK_REASONING_EFFORT,
   }
 
   const maxTokens = input.max_tokens
@@ -107,28 +98,6 @@ function validateAndSanitizeAIPayload(input, options = {}) {
     }
 
     payload.response_format = input.response_format
-  }
-
-  if (input.thinking !== undefined) {
-    if (!isRecord(input.thinking)) {
-      return { valid: false, message: 'Invalid payload: thinking is not supported.' }
-    }
-
-    const thinkingType = input.thinking.type
-    if (thinkingType !== 'enabled' && thinkingType !== 'disabled') {
-      return { valid: false, message: 'Invalid payload: thinking is not supported.' }
-    }
-
-    payload.thinking = input.thinking
-  }
-
-  if (input.reasoning_effort !== undefined) {
-    const reasoningEffort = input.reasoning_effort
-    if (reasoningEffort !== 'high' && reasoningEffort !== 'max') {
-      return { valid: false, message: 'Invalid payload: reasoning_effort is not supported.' }
-    }
-
-    payload.reasoning_effort = reasoningEffort
   }
 
   const stream = options.forceStream ? true : input.stream

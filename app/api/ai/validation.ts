@@ -1,4 +1,5 @@
-const ALLOWED_MODELS = new Set(['deepseek-v4-flash', 'deepseek-v4-pro'])
+import { AI_MODEL, AI_REASONING_EFFORT, AI_THINKING } from '@/lib/ai-model'
+
 const ALLOWED_ROLES = new Set(['system', 'user', 'assistant', 'tool'])
 const ALLOWED_TOOL_NAMES = new Set([
   'list_notes',
@@ -87,15 +88,6 @@ function validateResponseFormat(responseFormat: unknown): boolean {
   return responseFormat.type === 'text' || responseFormat.type === 'json_object'
 }
 
-function validateThinking(thinking: unknown): boolean {
-  if (!isRecord(thinking)) return false
-  return thinking.type === 'enabled' || thinking.type === 'disabled'
-}
-
-function validateReasoningEffort(reasoningEffort: unknown): boolean {
-  return reasoningEffort === 'high' || reasoningEffort === 'max'
-}
-
 export function validateAndSanitizeAIPayload(
   input: unknown,
   options?: { forceStream?: boolean },
@@ -120,25 +112,15 @@ export function validateAndSanitizeAIPayload(
     }
   }
 
+  // The app always talks to the newest DeepSeek Flash with thinking enabled.
+  // Model, thinking and sampling controls are pinned server-side; any
+  // client-supplied model/thinking/temperature fields are intentionally ignored
+  // so the assistant cannot be pointed anywhere else.
   const payload: Record<string, unknown> = {
     messages,
-    model: 'deepseek-v4-flash',
-  }
-
-  const model = input.model
-  if (typeof model === 'string') {
-    if (!ALLOWED_MODELS.has(model)) {
-      return { valid: false, message: 'Invalid payload: unsupported model.' }
-    }
-    payload.model = model
-  }
-
-  const temperature = input.temperature
-  if (temperature !== undefined) {
-    if (typeof temperature !== 'number' || !Number.isFinite(temperature) || temperature < 0 || temperature > 2) {
-      return { valid: false, message: 'Invalid payload: temperature must be between 0 and 2.' }
-    }
-    payload.temperature = temperature
+    model: AI_MODEL,
+    thinking: AI_THINKING,
+    reasoning_effort: AI_REASONING_EFFORT,
   }
 
   const maxTokens = input.max_tokens
@@ -177,26 +159,6 @@ export function validateAndSanitizeAIPayload(
       }
     }
     payload.response_format = input.response_format
-  }
-
-  if (input.thinking !== undefined) {
-    if (!validateThinking(input.thinking)) {
-      return {
-        valid: false,
-        message: 'Invalid payload: thinking is not supported.',
-      }
-    }
-    payload.thinking = input.thinking
-  }
-
-  if (input.reasoning_effort !== undefined) {
-    if (!validateReasoningEffort(input.reasoning_effort)) {
-      return {
-        valid: false,
-        message: 'Invalid payload: reasoning_effort is not supported.',
-      }
-    }
-    payload.reasoning_effort = input.reasoning_effort
   }
 
   const stream = options?.forceStream ? true : input.stream
