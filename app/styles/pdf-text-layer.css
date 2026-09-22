@@ -62,3 +62,53 @@
 .pdf-text-layer br::selection {
   background: transparent;
 }
+
+/* ===== Touch / tablet surface behaviour =====
+   The annotation canvas implements its own single-finger drawing and
+   two-finger pan/pinch gestures, so the WebView must never pan, zoom, scroll
+   or open a callout menu on top of it. */
+.pdf-touch-surface {
+  touch-action: none;
+  overscroll-behavior: none;
+  -webkit-touch-callout: none;
+  -webkit-user-select: none;
+  user-select: none;
+  -webkit-tap-highlight-color: transparent;
+}
+
+/* Scroll viewport: never chain scrolling up to the app shell, keep momentum. */
+.pdf-scroll-area {
+  overscroll-behavior: contain;
+  -webkit-overflow-scrolling: touch;
+  touch-action: pan-x pan-y;
+}
+
+/* The text layer stays natively selectable (one finger = selection). Two-finger
+   gestures are intercepted by the container listener in PdfAnnotationEditor. */
+.pdf-text-layer {
+  touch-action: pan-x pan-y;
+}
+
+.pdf-text-layer span,
+.pdf-text-layer br {
+  -webkit-touch-callout: none;
+}
+
+@media (pointer: coarse) {
+  /* A 1px selection is impossible to see/evaluate with a finger */
+  .pdf-text-layer ::selection {
+    background: rgba(59, 130, 246, 0.45);
+  }
+}
+
+/* Slightly stronger match highlight so hits are visible on tablet screens */
+@media (pointer: coarse) {
+  .pdf-text-layer .pdfannot-match {
+    background: rgba(255, 213, 79, 0.65);
+  }
+
+  .pdf-text-layer .pdfannot-match-active {
+    background: rgba(255, 152, 0, 0.85);
+    box-shadow: 0 0 0 2px rgba(234, 88, 12, 0.9);
+  }
+}

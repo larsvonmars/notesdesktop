@@ -74,6 +74,41 @@ export function useIsTablet(): boolean {
 }
 
 /**
+ * Detects a touch-first input device (finger/stylus driven).
+ *
+ * Unlike `useIsMobile` this deliberately ignores viewport width, so it stays
+ * `true` on large tablets and touch laptops where the UI still needs
+ * finger-sized targets and gesture-based navigation.
+ */
+export function useTouchMode(): boolean {
+  const [isTouch, setIsTouch] = useState(false)
+
+  useEffect(() => {
+    const check = () => {
+      const coarse = window.matchMedia('(pointer: coarse)').matches
+      const touchPoints =
+        typeof navigator !== 'undefined' && (navigator.maxTouchPoints ?? 0) > 0
+      setIsTouch(coarse || touchPoints)
+    }
+
+    check()
+
+    // Pointer capabilities change when a stylus/mouse is connected or removed
+    const mql = window.matchMedia('(pointer: coarse)')
+    const handler = () => check()
+    mql.addEventListener('change', handler)
+    window.addEventListener('resize', handler)
+
+    return () => {
+      mql.removeEventListener('change', handler)
+      window.removeEventListener('resize', handler)
+    }
+  }, [])
+
+  return isTouch
+}
+
+/**
  * Detects compact screens (phone or tablet, < 1024px).
  * Useful when you need a single boolean for "not a full desktop".
  */

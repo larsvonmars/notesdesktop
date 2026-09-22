@@ -51,10 +51,27 @@ import {
   ChevronUp,
   ChevronDown,
   FolderOpen,
+  Hand,
+  Check,
+  GripHorizontal,
 } from 'lucide-react'
 import FileExplorerModal from '@/components/FileExplorerModal'
 import { uploadFile, getFileSignedUrl, downloadFile } from '@/lib/file-storage'
 import { useToast } from '@/components/ToastProvider'
+import { useIsCompact, useTouchMode } from '@/lib/useIsMobile'
+import {
+  computeAnchoredScroll,
+  hitSlop,
+  isDoubleTap,
+  isPalmTouch,
+  normalizePressure,
+  pinchDistance,
+  pinchMidpoint,
+  pinchZoom,
+  toPointerKind,
+  type PointerKind,
+  type TapRecord,
+} from '@/lib/editor/pdf-touch'
 
 const PDF_ANNOTATION_MAX_FILE_SIZE_BYTES = 50 * 1024 * 1024
 
@@ -62,7 +79,7 @@ const PDF_ANNOTATION_MAX_FILE_SIZE_BYTES = 50 * 1024 * 1024
 // TYPES
 // ============================================================================
 
-type PdfTool = 'select' | 'pen' | 'highlighter' | 'eraser' | 'text' | 'rectangle' | 'circle' | 'arrow' | 'line' | 'sticky' | 'textselect'
+type PdfTool = 'select' | 'pan' | 'pen' | 'highlighter' | 'eraser' | 'text' | 'rectangle' | 'circle' | 'arrow' | 'line' | 'sticky' | 'textselect'
 type StickyColor = 'yellow' | 'blue' | 'green' | 'pink'
 
 export interface PdfPoint {
@@ -173,18 +190,43 @@ const ZOOM_STEP = 0.1
 const DEFAULT_FONT_SIZE = 16
 const HIGHLIGHTER_OPACITY = 0.35
 
+// ── Touch gesture tuning ────────────────────────────────────────────────────
+/** Ignore accidental micro-movements below this distance (px) while stroke capturing. */
+const TOUCH_MOVE_DEADZONE_PX = 1.5
+/** Eraser brush radius in CSS px — wide enough to catch a fingertip. */
+const ERASER_RADIUS_TOUCH_PX = 22
+const ERASER_RADIUS_MOUSE_PX = 12
+
+/**
+ * Short haptic tick on interaction confirmations. Silently ignored on devices
+ * without vibration support (desktop, iOS WebViews).
+ */
+function haptic(ms = 8): void {
+  try {
+    navigator.vibrate?.(ms)
+  } catch {
+    /* unsupported — never fail an interaction because of haptics */
+  }
+}
+
 function uid(): string {
   return Math.random().toString(36).slice(2, 10) + Date.now().toString(36)
 }
 
-/** True if a point (unscaled page coords) lies inside a text annotation's box. */
-function textAnnotationContains(ta: TextAnnotation, x: number, y: number): boolean {
+/** Hit slop (CSS px) added to text annotations so fingers can tap them reliably. */
+const TEXT_HIT_SLOP_TOUCH_PX = 10
+
+/**
+ * True if a point (unscaled page coords) lies inside a text annotation's box.
+ * `slop` (page units) widens the target — fingers cannot hit a 1px edge.
+ */
+function textAnnotationContains(ta: TextAnnotation, x: number, y: number, slop = 0): boolean {
   // Use the measured (wrapped) box so the hit area always matches what is drawn —
   // including annotations committed before wrapping was introduced
   const box = measureTextAnnotationBox(ta)
   return (
-    x >= ta.x && x <= ta.x + box.width &&
-    y >= ta.y && y <= ta.y + box.height
+    x >= ta.x - slop && x <= ta.x + box.width + slop &&
+    y >= ta.y - slop && y <= ta.y + box.height + slop
   )
 }
 
@@ -515,6 +557,14 @@ const PdfAnnotationEditor = forwardRef<PdfAnnotationEditorHandle, PdfAnnotationE
   function PdfAnnotationEditor({ value, onChange, disabled, noteId, onTextExtracted }, ref) {
     const toast = useToast()
 
+    // ── Input device detection ──────────────────────────────────────────────
+    // `isTouch` follows the *hardware* (coarse pointer + touch points), so it is
+    // also true on a large tablet in landscape. `touchUI` additionally collapses
+    // to true on narrow viewports, which need the same big-target treatment.
+    const isTouch = useTouchMode()
+    const isCompact = useIsCompact()
+    const touchUI = isTouch || isCompact
+
     // PDF doc state
     const [pdfDoc, setPdfDoc] = useState<PDFDocumentProxy | null>(null)
     const [pdfLoading, setPdfLoading] = useState(false)
@@ -538,6 +588,8 @@ const PdfAnnotationEditor = forwardRef<PdfAnnotationEditorHandle, PdfAnnotationE
     const [resizeHandle, setResizeHandle] = useState<string | null>(null)
     const [shapeFilled, setShapeFilled] = useState(false)
     const [doubleEndedArrow, setDoubleEndedArrow] = useState(false)
+    // True while the view is being dragged with the Pan tool (drives the cursor)
+    const [isPanning, setIsPanning] = useState(false)
 
     // Undo/redo
     const [history, setHistory] = useState<PdfAnnotationPage[][]>([])
@@ -548,12 +600,41 @@ const PdfAnnotationEditor = forwardRef<PdfAnnotationEditorHandle, PdfAnnotationE
     const annotCanvasRef = useRef<HTMLCanvasElement>(null)
     const containerRef = useRef<HTMLDivElement>(null)
     const scrollAreaRef = useRef<HTMLDivElement>(null)
+    // Outer page element (reserves the bounding box) — used as the zoom anchor
+    const pageRef = useRef<HTMLDivElement>(null)
     const fileInputRef = useRef<HTMLInputElement>(null)
     const textAreaRef = useRef<HTMLTextAreaElement>(null)
     const renderTaskRef = useRef<import('pdfjs-dist').RenderTask | null>(null)
-    // Last canvas pointerdown — used for manual double-click detection (browser dblclick is
-    // unreliable after preventDefault() on pointerdown)
-    const lastCanvasClickRef = useRef<{ time: number; x: number; y: number } | null>(null)
+    // Last canvas pointerdown — used for manual double-tap detection (the browser's
+    // own dblclick is unreliable after preventDefault() on pointerdown)
+    const lastCanvasClickRef = useRef<TapRecord | null>(null)
+
+    // ── Multi-pointer / gesture bookkeeping ─────────────────────────────────
+    /** Every currently-down pointer, keyed by pointerId (client coordinates). */
+    const pointersRef = useRef<Map<number, { x: number; y: number }>>(new Map())
+    /** Pointer currently owning the drawing gesture (all others are ignored). */
+    const activePointerIdRef = useRef<number | null>(null)
+    /** Kind of the pointer owning the drawing gesture (used for palm rejection). */
+    const activePointerKindRef = useRef<PointerKind | null>(null)
+    /** True while a two-finger navigation gesture owns the input. */
+    const gestureActiveRef = useRef(false)
+    /** Two-finger pinch/pan state (mutated in place — never triggers re-renders). */
+    const pinchRef = useRef<{
+      startDist: number
+      startZoom: number
+      lastMidX: number
+      lastMidY: number
+      lastZoom: number
+    } | null>(null)
+    /** Pan-tool drag state. */
+    const panDragRef = useRef<{ pointerId: number; lastX: number; lastY: number } | null>(null)
+    /** Last zoom applied by a gesture — scroll anchoring is computed against this. */
+    const gestureZoomRef = useRef(zoom)
+    /**
+     * Stable handle to `emitChange`. Gesture listeners must not be torn down and
+     * re-registered on every zoom/page change (which is every frame of a pinch).
+     */
+    const emitChangeRef = useRef<(next: PdfAnnotationPage[], pg?: number, z?: number) => void>(() => {})
     // Editing UI wrapper (textarea + formatting toolbar) — keeps the edit session alive
     // while the user interacts with its own toolbar
     const editingWrapperRef = useRef<HTMLDivElement>(null)
@@ -591,8 +672,60 @@ const PdfAnnotationEditor = forwardRef<PdfAnnotationEditorHandle, PdfAnnotationE
     const totalPagesRef = useRef(totalPages)
     useEffect(() => { pagesRef.current = pages }, [pages])
     useEffect(() => { currentPageRef.current = currentPage }, [currentPage])
-    useEffect(() => { zoomRef.current = zoom }, [zoom])
+    useEffect(() => { zoomRef.current = zoom; gestureZoomRef.current = zoom }, [zoom])
     useEffect(() => { totalPagesRef.current = totalPages }, [totalPages])
+
+    // ────────────────────────────────────────────────────────
+    // Touch interaction helpers
+    // ────────────────────────────────────────────────────────
+    /**
+     * Abort any in-progress drawing/selection interaction without committing it.
+     * Called when a second finger lands — a two-finger gesture must never leave
+     * a half-drawn stroke behind.
+     */
+    const abortInteraction = useCallback(() => {
+      setIsDrawing(false)
+      setCurrentStrokePoints([])
+      setShapeStart(null)
+      setShapePreview(null)
+      setResizeHandle(null)
+      setDragOffset(null)
+      panDragRef.current = null
+      setIsPanning(false)
+      activePointerIdRef.current = null
+      activePointerKindRef.current = null
+    }, [])
+
+    /**
+     * Zoom while keeping a screen point visually anchored to the same content.
+     *
+     * The page surface is a single scaled element, so zooming by `k` scales its
+     * content coordinates by `k`. We therefore shift the scroll offset towards
+     * the anchor point proportionally, which stays correct even though the exact
+     * canvas size only lands one frame later (pdf.js renders asynchronously).
+     */
+    const zoomAtPoint = useCallback(
+      (nextZoom: number, clientX: number, clientY: number, k: number) => {
+        const el = scrollAreaRef.current
+        if (!el || k === 1) return
+        const rect = el.getBoundingClientRect()
+        const next = computeAnchoredScroll({
+          scrollLeft: el.scrollLeft,
+          scrollTop: el.scrollTop,
+          viewportWidth: rect.width,
+          viewportHeight: rect.height,
+          anchorX: clientX,
+          anchorY: clientY,
+          viewportLeft: rect.left,
+          viewportTop: rect.top,
+          scaleRatio: k,
+        })
+        el.scrollLeft = next.scrollLeft
+        el.scrollTop = next.scrollTop
+        gestureZoomRef.current = nextZoom
+      },
+      []
+    )
 
     // Keep the wrap width in state while the user drags the textarea's horizontal resize
     // handle, so the wrapped line count (and thus the box height) updates live.
@@ -681,6 +814,11 @@ const PdfAnnotationEditor = forwardRef<PdfAnnotationEditorHandle, PdfAnnotationE
       },
       [value?.pdfStoragePath, currentPage, totalPages, zoom, onChange]
     )
+
+    // Keep the stable gesture-facing handle in sync with the latest closure
+    useEffect(() => {
+      emitChangeRef.current = emitChange
+    }, [emitChange])
 
     // ────────────────────────────────────────────────────────
     // Ensure page entry exists
@@ -998,7 +1136,8 @@ const PdfAnnotationEditor = forwardRef<PdfAnnotationEditorHandle, PdfAnnotationE
     const eraseAtPoint = useCallback(
       (pos: PdfPoint) => {
         const pageAnnot = getPageAnnotations(currentPage)
-        const hitRadius = 12 / zoom
+        // Erasing is drag-driven, so the radius has to cover a fingertip
+        const hitRadius = (touchUI ? ERASER_RADIUS_TOUCH_PX : ERASER_RADIUS_MOUSE_PX) / zoom
 
         const newStrokes = pageAnnot.strokes.filter(s =>
           !s.points.some(p =>
@@ -1013,7 +1152,7 @@ const PdfAnnotationEditor = forwardRef<PdfAnnotationEditorHandle, PdfAnnotationE
           return !(pos.x >= minX && pos.x <= maxX && pos.y >= minY && pos.y <= maxY)
         })
         const newTexts = pageAnnot.textAnnotations.filter(t =>
-          !textAnnotationContains(t, pos.x, pos.y)
+          !textAnnotationContains(t, pos.x, pos.y, hitRadius)
         )
         const newStickies = (pageAnnot.stickyNotes ?? []).filter(sn =>
           !(pos.x >= sn.x && pos.x <= sn.x + sn.width &&
@@ -1038,7 +1177,7 @@ const PdfAnnotationEditor = forwardRef<PdfAnnotationEditorHandle, PdfAnnotationE
           emitChange(newPages)
         }
       },
-      [currentPage, zoom, getPageAnnotations, updatePageAnnotations, emitChange]
+      [currentPage, zoom, getPageAnnotations, updatePageAnnotations, emitChange, touchUI]
     )
 
     // ────────────────────────────────────────────────────────
@@ -1070,6 +1209,22 @@ const PdfAnnotationEditor = forwardRef<PdfAnnotationEditorHandle, PdfAnnotationE
         setPages(newPages)
         pushHistory(newPages)
         emitChange(newPages)
+      },
+      [currentPage, updatePageAnnotations, pushHistory, emitChange]
+    )
+
+    /** Remove a text annotation entirely (used by the touch trash button). */
+    const deleteTextAnnotation = useCallback(
+      (id: string) => {
+        const newPages = updatePageAnnotations(currentPage, page => ({
+          ...page,
+          textAnnotations: page.textAnnotations.filter(t => t.id !== id),
+        }))
+        setPages(newPages)
+        pushHistory(newPages)
+        emitChange(newPages)
+        setEditingText(null)
+        setSelectedId(null)
       },
       [currentPage, updatePageAnnotations, pushHistory, emitChange]
     )
@@ -1398,9 +1553,11 @@ const PdfAnnotationEditor = forwardRef<PdfAnnotationEditorHandle, PdfAnnotationE
           ctx.strokeStyle = '#ffffff'
           ctx.lineWidth = 1.5
           ctx.setLineDash([])
+          // Fat-finger friendly grab handles on touch devices
+          const hs = touchUI ? 9 : 5
           for (const h of handles) {
             ctx.beginPath()
-            ctx.rect(h.x - 5, h.y - 5, 10, 10)
+            ctx.rect(h.x - hs, h.y - hs, hs * 2, hs * 2)
             ctx.fill()
             ctx.stroke()
           }
@@ -1437,7 +1594,7 @@ const PdfAnnotationEditor = forwardRef<PdfAnnotationEditorHandle, PdfAnnotationE
         }
         ctx.restore()
       }
-    }, [canvasWidth, canvasHeight, currentPage, zoom, pages, isDrawing, currentStrokePoints, tool, color, strokeSize, shapePreview, selectedId, editingText, getPageAnnotations])
+    }, [canvasWidth, canvasHeight, currentPage, zoom, pages, isDrawing, currentStrokePoints, tool, color, strokeSize, shapePreview, selectedId, editingText, getPageAnnotations, touchUI])
 
     useEffect(() => {
       renderAnnotations()
@@ -1534,10 +1691,24 @@ const PdfAnnotationEditor = forwardRef<PdfAnnotationEditorHandle, PdfAnnotationE
     // ────────────────────────────────────────────────────────
     // Pointer helpers (convert to unscaled coords)
     // ────────────────────────────────────────────────────────
-    function getPointerPos(e: ReactPointerEvent<HTMLCanvasElement>): PdfPoint {
+
+    /**
+     * Maps a client-space point onto unscaled page coordinates.
+     *
+     * `pointerType`/`pressure` are used for stylus support: touchscreens report
+     * 0 (or a flat 1) for every touch, and perfect-freehand renders a
+     * zero-pressure point as an invisible dot, so non-stylus input is pinned to
+     * the neutral 0.5 and only real pens contribute pressure data.
+     */
+    function getPointerPos(
+      clientX: number,
+      clientY: number,
+      pointerType?: string,
+      pressure?: number,
+    ): PdfPoint {
       const rect = annotCanvasRef.current!.getBoundingClientRect()
-      const vx = e.clientX - rect.left
-      const vy = e.clientY - rect.top
+      const vx = clientX - rect.left
+      const vy = clientY - rect.top
       let cx: number, cy: number
       // Undo CSS rotation to map visual pointer coords back to canvas logical coords
       switch (viewRotation) {
@@ -1557,7 +1728,7 @@ const PdfAnnotationEditor = forwardRef<PdfAnnotationEditorHandle, PdfAnnotationE
           cx = vx / zoom
           cy = vy / zoom
       }
-      return { x: cx, y: cy, pressure: e.pressure }
+      return { x: cx, y: cy, pressure: normalizePressure(pointerType, pressure) }
     }
 
     // ────────────────────────────────────────────────────────
@@ -1566,28 +1737,67 @@ const PdfAnnotationEditor = forwardRef<PdfAnnotationEditorHandle, PdfAnnotationE
     const handlePointerDown = useCallback(
       (e: ReactPointerEvent<HTMLCanvasElement>) => {
         if (disabled) return
+        // Secondary mouse buttons are never drawing actions
+        if (e.pointerType === 'mouse' && e.button !== 0) return
+
+        const kind = toPointerKind(e.pointerType)
+
+        // ── Palm rejection (checked before tracking — a resting hand must not be
+        //    mistaken for the second finger of a gesture) ─────────────────────
+        if (isPalmTouch({
+          pointerType: e.pointerType,
+          width: e.width,
+          height: e.height,
+          activePointerKind: activePointerKindRef.current,
+        })) return
+
+        pointersRef.current.set(e.pointerId, { x: e.clientX, y: e.clientY })
+
+        // ── Second finger ⇒ this is a navigation gesture, not a drawing one ──
+        if (pointersRef.current.size >= 2) {
+          gestureActiveRef.current = true
+          abortInteraction()
+          return
+        }
+
         e.preventDefault()
-        const pos = getPointerPos(e)
 
-        // Manual double-click detection (preventDefault above can suppress the browser's dblclick)
-        const now = Date.now()
-        const prevClick = lastCanvasClickRef.current
-        const isDoubleClick =
-          !!prevClick &&
-          now - prevClick.time < 500 &&
-          Math.hypot(e.clientX - prevClick.x, e.clientY - prevClick.y) < 10
-        lastCanvasClickRef.current = { time: now, x: e.clientX, y: e.clientY }
+        // Manual double-tap / double-click detection. `preventDefault()` above
+        // suppresses the browser's own dblclick, and fingers need far more slop
+        // than a mouse cursor.
+        const tapRecord: TapRecord = { time: Date.now(), x: e.clientX, y: e.clientY }
+        const isDoubleClick = isDoubleTap(lastCanvasClickRef.current, tapRecord, kind)
+        lastCanvasClickRef.current = tapRecord
 
-        // Finish any in-progress text edit first — this click only commits it
+        const pos = getPointerPos(e.clientX, e.clientY, e.pointerType, e.pressure)
+
+        // ── Pan tool: single-finger view navigation ─────────────────────────
+        if (tool === 'pan') {
+          panDragRef.current = { pointerId: e.pointerId, lastX: e.clientX, lastY: e.clientY }
+          setIsPanning(true)
+          try { e.currentTarget.setPointerCapture(e.pointerId) } catch { /* not capturable */ }
+          return
+        }
+
+        // Finish any in-progress text edit first — this tap only commits it
         if (editingText) {
           commitText()
           return
         }
 
-        // Double-clicking a committed text annotation re-opens it for editing
+        // Take ownership of the gesture so stray pointers can't corrupt it, and
+        // keep receiving moves even when the finger leaves the page bounds.
+        activePointerIdRef.current = e.pointerId
+        activePointerKindRef.current = kind
+        try { e.currentTarget.setPointerCapture(e.pointerId) } catch { /* not capturable */ }
+
+        // Text annotations get a wider tap target than their visual box
+        const textSlop = touchUI ? TEXT_HIT_SLOP_TOUCH_PX / zoom : 0
+
+        // Double-tap a committed text annotation to re-open it for editing
         if (isDoubleClick && tool !== 'eraser') {
           const hitText = getPageAnnotations(currentPage).textAnnotations.find(ta =>
-            textAnnotationContains(ta, pos.x, pos.y)
+            textAnnotationContains(ta, pos.x, pos.y, textSlop)
           )
           if (hitText) {
             startEditingText(hitText)
@@ -1604,7 +1814,7 @@ const PdfAnnotationEditor = forwardRef<PdfAnnotationEditorHandle, PdfAnnotationE
         } else if (tool === 'text') {
           // Clicking an existing annotation edits it instead of stacking a new one on top
           const existingText = getPageAnnotations(currentPage).textAnnotations.find(ta =>
-            textAnnotationContains(ta, pos.x, pos.y)
+            textAnnotationContains(ta, pos.x, pos.y, textSlop)
           )
           if (existingText) {
             startEditingText(existingText)
@@ -1653,7 +1863,8 @@ const PdfAnnotationEditor = forwardRef<PdfAnnotationEditorHandle, PdfAnnotationE
           // Hit-test shapes and text
           const pageAnnot = getPageAnnotations(currentPage)
           let hit = false
-          const HANDLE_RADIUS = 8 / zoom
+          // Fingers need a much larger grab radius than a mouse cursor
+          const HANDLE_RADIUS = (touchUI ? 18 : 8) / zoom
 
           // Check resize handles on the currently selected shape first
           if (selectedId && !hit) {
@@ -1678,7 +1889,7 @@ const PdfAnnotationEditor = forwardRef<PdfAnnotationEditorHandle, PdfAnnotationE
           // Check text annotations
           if (!hit) {
             for (const ta of pageAnnot.textAnnotations) {
-              if (textAnnotationContains(ta, pos.x, pos.y)) {
+              if (textAnnotationContains(ta, pos.x, pos.y, touchUI ? TEXT_HIT_SLOP_TOUCH_PX / zoom : 0)) {
                 setSelectedId(ta.id)
                 setDragOffset({ x: pos.x - ta.x, y: pos.y - ta.y })
                 hit = true
@@ -1705,7 +1916,7 @@ const PdfAnnotationEditor = forwardRef<PdfAnnotationEditorHandle, PdfAnnotationE
 
           // Check strokes (distance-to-path)
           if (!hit) {
-            const hitR = Math.max(6, strokeSize) / zoom
+            const hitR = hitSlop(strokeSize, touchUI) / zoom
             for (let si = pageAnnot.strokes.length - 1; si >= 0; si--) {
               const stroke = pageAnnot.strokes[si]
               const pts = stroke.points
@@ -1727,22 +1938,73 @@ const PdfAnnotationEditor = forwardRef<PdfAnnotationEditorHandle, PdfAnnotationE
             setSelectedId(null)
             setDragOffset(null)
             setResizeHandle(null)
+            // Dragging empty space is how tablets navigate: a finger drag pans
+            // the page, a plain tap just clears the selection. Mouse users keep
+            // the click-to-deselect behaviour they are used to.
+            if (kind !== 'mouse') {
+              panDragRef.current = { pointerId: e.pointerId, lastX: e.clientX, lastY: e.clientY }
+              setIsPanning(true)
+              return
+            }
           }
           setIsDrawing(hit)
         }
       },
       // eslint-disable-next-line react-hooks/exhaustive-deps
-      [disabled, tool, color, currentPage, zoom, pages, selectedId, strokeSize, editingText, commitText, startEditingText, getPageAnnotations]
+      [disabled, tool, color, currentPage, zoom, pages, selectedId, strokeSize, editingText, commitText, startEditingText, getPageAnnotations, abortInteraction, touchUI]
     )
 
     const handlePointerMove = useCallback(
       (e: ReactPointerEvent<HTMLCanvasElement>) => {
+        // Keep the pointer map fresh so gesture detection stays accurate
+        if (pointersRef.current.has(e.pointerId)) {
+          pointersRef.current.set(e.pointerId, { x: e.clientX, y: e.clientY })
+        }
+
+        // ── Pan-tool drag (single finger on touch, click-drag with a mouse) ──
+        const pan = panDragRef.current
+        if (pan && pan.pointerId === e.pointerId) {
+          const el = scrollAreaRef.current
+          if (el) {
+            el.scrollLeft -= e.clientX - pan.lastX
+            el.scrollTop -= e.clientY - pan.lastY
+          }
+          pan.lastX = e.clientX
+          pan.lastY = e.clientY
+          e.preventDefault()
+          return
+        }
+
+        // A two-finger gesture owns the input stream — never draw under it
+        if (gestureActiveRef.current || pinchRef.current) return
         if (!isDrawing) return
+        // Ignore any pointer that doesn't own the current drawing gesture
+        if (activePointerIdRef.current !== null && e.pointerId !== activePointerIdRef.current) return
+
         e.preventDefault()
-        const pos = getPointerPos(e)
+
+        // Stylus input arrives in bursts — replay every coalesced sample so the
+        // stroke keeps its full fidelity instead of being resampled at frame rate.
+        const strokePoints: PdfPoint[] = []
+        if (e.pointerType === 'pen') {
+          const coalesced = e.nativeEvent.getCoalescedEvents?.() ?? []
+          for (const ce of coalesced) {
+            strokePoints.push(getPointerPos(ce.clientX, ce.clientY, 'pen', ce.pressure))
+          }
+        }
+        const pos = getPointerPos(e.clientX, e.clientY, e.pointerType, e.pressure)
 
         if (tool === 'pen' || tool === 'highlighter') {
-          setCurrentStrokePoints(prev => [...prev, pos])
+          const batch = strokePoints.length > 0 ? strokePoints : [pos]
+          setCurrentStrokePoints(prev => {
+            // Drop samples that carry no movement (jitter on touch screens)
+            const last = prev[prev.length - 1]
+            const minStep = TOUCH_MOVE_DEADZONE_PX / zoom
+            const filtered = batch.filter(
+              p => !last || Math.hypot(p.x - last.x, p.y - last.y) > minStep
+            )
+            return filtered.length > 0 ? [...prev, ...filtered] : prev
+          })
         } else if (tool === 'eraser') {
           eraseAtPoint(pos)
         } else if ((tool === 'rectangle' || tool === 'circle' || tool === 'arrow' || tool === 'line') && shapeStart) {
@@ -1814,12 +2076,40 @@ const PdfAnnotationEditor = forwardRef<PdfAnnotationEditorHandle, PdfAnnotationE
         }
       },
       // eslint-disable-next-line react-hooks/exhaustive-deps
-      [isDrawing, tool, shapeStart, color, strokeSize, selectedId, dragOffset, currentPage, pages, eraseAtPoint, resizeHandle, getPageAnnotations, updatePageAnnotations]
+      [isDrawing, tool, shapeStart, color, strokeSize, selectedId, dragOffset, currentPage, pages, eraseAtPoint, resizeHandle, getPageAnnotations, updatePageAnnotations, zoom]
     )
 
     const handlePointerUp = useCallback(
       (e: ReactPointerEvent<HTMLCanvasElement>) => {
-        if (!isDrawing && tool !== 'eraser') return
+        pointersRef.current.delete(e.pointerId)
+
+        // Safety net: the touch listeners own gesture teardown, but a gesture
+        // that started from pointer events alone (no touch events, e.g. two
+        // styluses) must not leave drawing permanently disabled.
+        if (pointersRef.current.size < 2 && !pinchRef.current) {
+          gestureActiveRef.current = false
+        }
+
+        // ── End a pan-tool drag ─────────────────────────────────────────────
+        const pan = panDragRef.current
+        if (pan && pan.pointerId === e.pointerId) {
+          panDragRef.current = null
+          setIsPanning(false)
+          activePointerIdRef.current = null
+          activePointerKindRef.current = null
+          // A drag is not a tap — forget any pending tap so the next one can't
+          // be mistaken for a double-tap.
+          lastCanvasClickRef.current = null
+          try { e.currentTarget.releasePointerCapture(e.pointerId) } catch { /* already released */ }
+          return
+        }
+
+        if (activePointerIdRef.current !== null && e.pointerId !== activePointerIdRef.current) return
+        if (!isDrawing && tool !== 'eraser') {
+          activePointerIdRef.current = null
+          activePointerKindRef.current = null
+          return
+        }
         e.preventDefault()
 
         if (tool === 'pen' || tool === 'highlighter') {
@@ -1841,8 +2131,9 @@ const PdfAnnotationEditor = forwardRef<PdfAnnotationEditorHandle, PdfAnnotationE
           }
           setCurrentStrokePoints([])
         } else if ((tool === 'rectangle' || tool === 'circle' || tool === 'arrow' || tool === 'line') && shapeStart) {
-          const pos = getPointerPos(e)
-          const minDist = 5 / zoom
+          const pos = getPointerPos(e.clientX, e.clientY, e.pointerType, e.pressure)
+          // Fingers wobble — require a slightly larger pull before a shape commits
+          const minDist = (touchUI ? 10 : 5) / zoom
           if (Math.abs(pos.x - shapeStart.x) > minDist || Math.abs(pos.y - shapeStart.y) > minDist) {
             const newShape: ShapeAnnotation = {
               id: uid(),
@@ -1876,9 +2167,26 @@ const PdfAnnotationEditor = forwardRef<PdfAnnotationEditorHandle, PdfAnnotationE
 
         setIsDrawing(false)
         setResizeHandle(null)
+        activePointerIdRef.current = null
+        activePointerKindRef.current = null
+        try { e.currentTarget.releasePointerCapture(e.pointerId) } catch { /* already released */ }
       },
       // eslint-disable-next-line react-hooks/exhaustive-deps
-      [isDrawing, tool, currentStrokePoints, color, strokeSize, currentPage, shapeStart, selectedId, pages, zoom, shapeFilled, doubleEndedArrow]
+      [isDrawing, tool, currentStrokePoints, color, strokeSize, currentPage, shapeStart, selectedId, pages, zoom, shapeFilled, doubleEndedArrow, touchUI]
+    )
+
+    /**
+     * Pointer cancelled (system gesture, palm rejection, app switch…).
+     * Discard the in-flight interaction instead of committing a partial stroke.
+     */
+    const handlePointerCancel = useCallback(
+      (e: ReactPointerEvent<HTMLCanvasElement>) => {
+        pointersRef.current.delete(e.pointerId)
+        panDragRef.current = null
+        setIsPanning(false)
+        abortInteraction()
+      },
+      [abortInteraction]
     )
 
     // ────────────────────────────────────────────────────────
@@ -1961,7 +2269,7 @@ const PdfAnnotationEditor = forwardRef<PdfAnnotationEditorHandle, PdfAnnotationE
         // Tool switching shortcuts (only when not editing text/textarea)
         if (!editingText && !e.metaKey && !e.ctrlKey && !e.altKey) {
           const keyToTool: Record<string, PdfTool> = {
-            's': 'select', 'p': 'pen', 'h': 'highlighter', 'e': 'eraser',
+            's': 'select', 'g': 'pan', 'p': 'pen', 'h': 'highlighter', 'e': 'eraser',
             't': 'text', 'r': 'rectangle', 'c': 'circle', 'a': 'arrow',
             'l': 'line', 'n': 'sticky', 'i': 'textselect',
           }
@@ -2131,7 +2439,106 @@ const PdfAnnotationEditor = forwardRef<PdfAnnotationEditorHandle, PdfAnnotationE
       }
       el.addEventListener('wheel', onWheel, { passive: false })
       return () => el.removeEventListener('wheel', onWheel)
-    }, [clampZoom, emitChange])
+      // The scroll viewport only exists once a PDF is loaded (and not while the
+      // loading/error states are rendered), so re-attach whenever it appears.
+      // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [clampZoom, emitChange, value?.pdfStoragePath, pdfLoading, pdfError])
+
+    // ────────────────────────────────────────────────────────
+    // Two-finger pan & pinch-to-zoom
+    //
+    // Pointer Events cannot suppress the WebView's native pinch-zoom, so the
+    // gesture is driven from raw (non-passive) touch events on the scroll
+    // container — which also means it works over the PDF text layer.
+    // A single finger is left entirely alone: the browser keeps scrolling and
+    // selecting text exactly as it normally would.
+    // ────────────────────────────────────────────────────────
+    useEffect(() => {
+      const el = scrollAreaRef.current
+      if (!el) return
+
+      const beginPinch = (touches: TouchList) => {
+        const a = touches[0]
+        const b = touches[1]
+        const mid = pinchMidpoint(a, b)
+        pinchRef.current = {
+          startDist: Math.max(1, pinchDistance(a, b)),
+          startZoom: zoomRef.current,
+          lastMidX: mid.x,
+          lastMidY: mid.y,
+          lastZoom: zoomRef.current,
+        }
+        gestureActiveRef.current = true
+        // A second finger always means "navigate" — never leave a partial stroke
+        abortInteraction()
+      }
+
+      const onTouchStart = (e: TouchEvent) => {
+        if (e.touches.length >= 2) {
+          e.preventDefault()
+          beginPinch(e.touches)
+        }
+      }
+
+      const onTouchMove = (e: TouchEvent) => {
+        const pinch = pinchRef.current
+        if (!pinch || e.touches.length < 2) return
+        e.preventDefault()
+
+        const a = e.touches[0]
+        const b = e.touches[1]
+        const dist = pinchDistance(a, b)
+        const mid = pinchMidpoint(a, b)
+        const { x: midX, y: midY } = mid
+
+        // Two-finger drag pans the page, independent of any zoom change
+        el.scrollLeft += pinch.lastMidX - midX
+        el.scrollTop += pinch.lastMidY - midY
+        pinch.lastMidX = midX
+        pinch.lastMidY = midY
+
+        // Pinch distance ratio → zoom. Anchored at the fingers so the content
+        // between them stays under them while scaling.
+        const nextZoom = pinchZoom(pinch.startZoom, pinch.startDist, dist, MIN_ZOOM, MAX_ZOOM)
+        gestureZoomRef.current = nextZoom
+        const k = nextZoom / pinch.lastZoom
+        if (Math.abs(k - 1) > 0.002) {
+          zoomAtPoint(nextZoom, midX, midY, k)
+          pinch.lastZoom = nextZoom
+          setZoom(nextZoom)
+        }
+      }
+
+      const endGesture = () => {
+        const wasGesturing = gestureActiveRef.current
+        pinchRef.current = null
+        gestureActiveRef.current = false
+        // Persist the new zoom once per gesture instead of on every frame
+        if (wasGesturing) {
+          emitChangeRef.current(pagesRef.current, currentPageRef.current, gestureZoomRef.current)
+        }
+      }
+
+      const onTouchEnd = (e: TouchEvent) => {
+        if (e.touches.length < 2) endGesture()
+      }
+
+      el.addEventListener('touchstart', onTouchStart, { passive: false })
+      el.addEventListener('touchmove', onTouchMove, { passive: false })
+      el.addEventListener('touchend', onTouchEnd)
+      el.addEventListener('touchcancel', onTouchEnd)
+      return () => {
+        el.removeEventListener('touchstart', onTouchStart)
+        el.removeEventListener('touchmove', onTouchMove)
+        el.removeEventListener('touchend', onTouchEnd)
+        el.removeEventListener('touchcancel', onTouchEnd)
+        endGesture()
+      }
+      // `emitChange` is deliberately read through a ref — see emitChangeRef.
+      // The PDF-dependent deps re-attach the listeners to the scroll viewport
+      // once it is actually mounted.
+      // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [clampZoom, zoomAtPoint, abortInteraction, value?.pdfStoragePath, pdfLoading, pdfError])
 
     // ────────────────────────────────────────────────────────
     // Text layer rendering (pdfjs TextLayer class, pdfjs-dist 4.x)
@@ -2716,6 +3123,7 @@ const PdfAnnotationEditor = forwardRef<PdfAnnotationEditorHandle, PdfAnnotationE
     // ────────────────────────────────────────────────────────
     const tools: { id: PdfTool; icon: typeof Pen; label: string }[] = [
       { id: 'select', icon: MousePointer2, label: 'Select (S)' },
+      { id: 'pan', icon: Hand, label: 'Pan / move view — or drag with two fingers (G)' },
       { id: 'pen', icon: Pen, label: 'Pen (P)' },
       { id: 'highlighter', icon: Highlighter, label: 'Highlighter (H)' },
       { id: 'eraser', icon: Eraser, label: 'Eraser (E)' },
@@ -2727,6 +3135,459 @@ const PdfAnnotationEditor = forwardRef<PdfAnnotationEditorHandle, PdfAnnotationE
       { id: 'sticky', icon: StickyNoteIcon, label: 'Sticky Note (N)' },
       { id: 'textselect', icon: TextCursor, label: 'Select PDF Text (I)' },
     ]
+
+    // ────────────────────────────────────────────────────────
+    // Touch-adaptive control styling
+    // ────────────────────────────────────────────────────────
+    /** Icons are drawn larger when fingers, not cursors, do the tapping. */
+    const toolIconSize = touchUI ? 20 : 16
+
+    /** Icon-only toggle (tools, undo/redo, zoom…). 44px targets on touch. */
+    const iconButtonClass = (active: boolean) =>
+      `flex shrink-0 items-center justify-center transition-colors touch-manipulation ${
+        touchUI ? 'h-11 w-11 rounded-xl' : 'rounded p-1.5'
+      } ${
+        active
+          ? 'bg-rose-100 text-rose-600 dark:bg-rose-900/40 dark:text-rose-400'
+          : 'text-muted-foreground hover:bg-surface-hover'
+      }`
+
+    /** Labelled toggle (Export, Find, Fill…). */
+    const chipButtonClass = (active: boolean) =>
+      `flex shrink-0 items-center gap-1.5 transition-colors touch-manipulation ${
+        touchUI ? 'h-11 rounded-xl px-3 text-sm' : 'rounded px-2 py-1 text-xs'
+      } ${
+        active
+          ? 'bg-rose-100 text-rose-600 dark:bg-rose-900/40 dark:text-rose-400'
+          : 'text-muted-foreground hover:bg-surface-hover'
+      }`
+
+    /** Divider between control groups. */
+    const divider = (
+      <div className={`mx-0.5 shrink-0 bg-border ${touchUI ? 'h-7 w-px' : 'h-5 w-px'}`} />
+    )
+
+    const handleToolSelect = (next: PdfTool) => {
+      if (next !== tool) haptic(next === 'eraser' ? 12 : 6)
+      setTool(next)
+      // The text-selection tool implies the text layer is enabled
+      if (next === 'textselect') setShowTextLayer(true)
+      // Leaving the text-selection tool restores drawing input on the canvas
+      if (next !== 'textselect' && showTextLayer) setSelectedId(null)
+    }
+
+    /** Stroke/text colour swatches. */
+    const colorSwatches = (
+      <>
+        {COLORS.map(c => (
+          <button
+            key={c}
+            title={c}
+            onClick={() => setColor(c)}
+            aria-label={`Colour ${c}`}
+            className={`shrink-0 rounded-full border transition-transform touch-manipulation ${
+              touchUI ? 'h-8 w-8' : 'h-5 w-5'
+            } ${color === c ? 'scale-110 border-foreground' : 'border-border'}`}
+            style={{ backgroundColor: c }}
+          />
+        ))}
+      </>
+    )
+
+    /** Pen/shape size slider. */
+    const strokeSizeControl = (
+      <label className="flex shrink-0 items-center gap-1.5 text-xs text-muted-foreground">
+        <span className={touchUI ? 'text-sm' : ''}>Size</span>
+        <input
+          type="range" min={1} max={20} value={strokeSize}
+          onChange={e => setStrokeSize(Number(e.target.value))}
+          className={touchUI ? 'h-8 w-32' : 'w-16'}
+        />
+        <span className={`text-center ${touchUI ? 'w-6 text-sm' : 'w-4'}`}>{strokeSize}</span>
+      </label>
+    )
+
+    /** Contextual toggles that only make sense for the active tool. */
+    const toolOptions = (
+      <>
+        {(tool === 'rectangle' || tool === 'circle') && (
+          <button
+            title={shapeFilled ? 'Filled (tap to unfill)' : 'No fill (tap to fill)'}
+            onClick={() => setShapeFilled(v => !v)}
+            className={chipButtonClass(shapeFilled)}
+          >
+            Fill
+          </button>
+        )}
+        {tool === 'arrow' && (
+          <button
+            title={doubleEndedArrow ? 'Double-headed (tap for single)' : 'Single arrow (tap for double)'}
+            onClick={() => setDoubleEndedArrow(v => !v)}
+            className={`${chipButtonClass(doubleEndedArrow)} text-base`}
+          >
+            ↔
+          </button>
+        )}
+      </>
+    )
+
+    const drawingToolButtons = (
+      <>
+        {tools.map(t => {
+          const Icon = t.icon
+          return (
+            <button
+              key={t.id}
+              title={t.label}
+              aria-label={t.label}
+              aria-pressed={tool === t.id}
+              onClick={() => handleToolSelect(t.id)}
+              className={iconButtonClass(tool === t.id)}
+            >
+              <Icon size={toolIconSize} />
+            </button>
+          )
+        })}
+      </>
+    )
+
+    /**
+     * Compact square button used by the text/shape formatting bars.
+     *
+     * Every one of these uses `onPointerDown` + `preventDefault()`: a finger tap
+     * would otherwise move focus out of the textarea and end the edit session
+     * before the click was ever registered.
+     */
+    const formatButtonClass = (active: boolean) =>
+      `flex shrink-0 items-center justify-center rounded transition-colors touch-manipulation ${
+        touchUI ? 'h-11 w-11 rounded-xl' : 'p-1'
+      } ${
+        active
+          ? 'bg-rose-100 text-rose-600 dark:bg-rose-900/40 dark:text-rose-400'
+          : 'text-muted-foreground hover:bg-surface-hover'
+      }`
+
+    /** `onPointerDown` handler that keeps focus (and the edit session) in place. */
+    const tap = (action: () => void) => (e: ReactPointerEvent<HTMLButtonElement>) => {
+      e.preventDefault()
+      e.stopPropagation()
+      action()
+    }
+
+    const fontFamilyOptions: Array<{ value: string; label: string }> = [
+      { value: 'sans-serif', label: 'Sans' },
+      { value: 'serif', label: 'Serif' },
+      { value: 'monospace', label: 'Mono' },
+    ]
+
+    /** Fully-featured formatting controls for the text box being edited. */
+    const editingTextControls = editingText ? (
+      <>
+        <button
+          type="button"
+          onPointerDown={tap(() => updateEditingText({ bold: !editingText.bold }))}
+          title="Bold (Ctrl/Cmd+B)"
+          aria-label="Bold"
+          className={formatButtonClass(!!editingText.bold)}
+        >
+          <Bold size={touchUI ? 18 : 13} />
+        </button>
+        <button
+          type="button"
+          onPointerDown={tap(() => updateEditingText({ italic: !editingText.italic }))}
+          title="Italic (Ctrl/Cmd+I)"
+          aria-label="Italic"
+          className={formatButtonClass(!!editingText.italic)}
+        >
+          <Italic size={touchUI ? 18 : 13} />
+        </button>
+        {divider}
+        {(['left', 'center', 'right'] as const).map(align => {
+          const Icon = align === 'left' ? AlignLeft : align === 'center' ? AlignCenter : AlignRight
+          return (
+            <button
+              key={align}
+              type="button"
+              onPointerDown={tap(() => updateEditingText({ textAlign: align }))}
+              title={`Align ${align}`}
+              aria-label={`Align ${align}`}
+              className={formatButtonClass((editingText.textAlign ?? 'left') === align)}
+            >
+              <Icon size={touchUI ? 18 : 13} />
+            </button>
+          )
+        })}
+        {divider}
+        <button
+          type="button"
+          onPointerDown={tap(() => adjustEditingFontSize(-2))}
+          title="Decrease font size"
+          aria-label="Decrease font size"
+          className={`${formatButtonClass(false)} ${touchUI ? 'text-xl' : 'px-1.5 text-sm'}`}
+        >−</button>
+        <span className={`shrink-0 text-center text-muted-foreground ${touchUI ? 'min-w-[3rem] text-sm' : 'min-w-[2.5rem] text-[11px]'}`}>
+          {editingText.fontSize}px
+        </span>
+        <button
+          type="button"
+          onPointerDown={tap(() => adjustEditingFontSize(2))}
+          title="Increase font size"
+          aria-label="Increase font size"
+          className={`${formatButtonClass(false)} ${touchUI ? 'text-xl' : 'px-1.5 text-sm'}`}
+        >+</button>
+        {divider}
+        {COLORS.map(c => (
+          <button
+            key={c}
+            type="button"
+            title={`Text colour: ${c}`}
+            aria-label={`Text colour ${c}`}
+            onPointerDown={tap(() => updateEditingText({ color: c }))}
+            className={`shrink-0 rounded-full border transition-transform touch-manipulation ${
+              touchUI ? 'h-8 w-8' : 'h-4 w-4'
+            } ${editingText.color === c ? 'scale-110 border-foreground' : 'border-border'}`}
+            style={{ backgroundColor: c }}
+          />
+        ))}
+        {divider}
+        {fontFamilyOptions.map(f => (
+          <button
+            key={f.value}
+            type="button"
+            onPointerDown={tap(() => updateEditingText({ fontFamily: f.value }))}
+            title={`Font: ${f.label}`}
+            className={`${formatButtonClass((editingText.fontFamily ?? 'sans-serif') === f.value)} ${
+              touchUI ? 'px-3 text-sm' : 'px-1.5 text-[11px]'
+            }`}
+          >
+            {f.label}
+          </button>
+        ))}
+        {divider}
+        <button
+          type="button"
+          onPointerDown={tap(() => deleteTextAnnotation(editingText.id))}
+          title="Delete text box"
+          aria-label="Delete text box"
+          className={`${formatButtonClass(false)} shrink-0 text-red-500 hover:bg-red-50 dark:hover:bg-red-950/30`}
+        >
+          <Trash2 size={touchUI ? 18 : 13} />
+        </button>
+        {/* Explicit commit — on touch there is no reliable blur to fall back on */}
+        <button
+          type="button"
+          onPointerDown={tap(() => commitText())}
+          title="Done (Esc)"
+          aria-label="Done editing text"
+          className={`flex shrink-0 items-center gap-1 rounded-xl bg-rose-500 font-medium text-white transition-colors hover:bg-rose-600 touch-manipulation ${
+            touchUI ? 'h-11 px-4 text-sm' : 'px-2 py-1 text-xs'
+          }`}
+        >
+          <Check size={touchUI ? 18 : 13} />
+          Done
+        </button>
+      </>
+    ) : null
+
+    /** Formatting controls for the text annotation selected with the Select tool. */
+    const selectedTextControls = (ta: TextAnnotation) => (
+      <>
+        <button
+          type="button"
+          onPointerDown={tap(() => startEditingText(ta))}
+          title="Edit text"
+          aria-label="Edit text"
+          className={formatButtonClass(false)}
+        >
+          <Pencil size={touchUI ? 18 : 13} />
+        </button>
+        {divider}
+        <button
+          type="button"
+          onPointerDown={tap(() => toggleTextBold(ta.id))}
+          title="Bold"
+          aria-label="Bold"
+          className={formatButtonClass(!!ta.bold)}
+        >
+          <Bold size={touchUI ? 18 : 13} />
+        </button>
+        <button
+          type="button"
+          onPointerDown={tap(() => toggleTextItalic(ta.id))}
+          title="Italic"
+          aria-label="Italic"
+          className={formatButtonClass(!!ta.italic)}
+        >
+          <Italic size={touchUI ? 18 : 13} />
+        </button>
+        {divider}
+        {(['left', 'center', 'right'] as const).map(align => {
+          const Icon = align === 'left' ? AlignLeft : align === 'center' ? AlignCenter : AlignRight
+          return (
+            <button
+              key={align}
+              type="button"
+              onPointerDown={tap(() => changeTextAlign(ta.id, align))}
+              title={`Align ${align}`}
+              aria-label={`Align ${align}`}
+              className={formatButtonClass((ta.textAlign ?? 'left') === align)}
+            >
+              <Icon size={touchUI ? 18 : 13} />
+            </button>
+          )
+        })}
+        {divider}
+        <button
+          type="button"
+          onPointerDown={tap(() => changeTextFontSize(ta.id, -2))}
+          title="Decrease font size"
+          aria-label="Decrease font size"
+          className={`${formatButtonClass(false)} ${touchUI ? 'text-xl' : 'px-1.5 text-sm'}`}
+        >−</button>
+        <span className={`shrink-0 text-center text-muted-foreground ${touchUI ? 'min-w-[3rem] text-sm' : 'min-w-[2.5rem] text-[11px]'}`}>
+          {ta.fontSize}px
+        </span>
+        <button
+          type="button"
+          onPointerDown={tap(() => changeTextFontSize(ta.id, 2))}
+          title="Increase font size"
+          aria-label="Increase font size"
+          className={`${formatButtonClass(false)} ${touchUI ? 'text-xl' : 'px-1.5 text-sm'}`}
+        >+</button>
+        {divider}
+        {COLORS.map(c => (
+          <button
+            key={c}
+            type="button"
+            title={`Text colour: ${c}`}
+            aria-label={`Text colour ${c}`}
+            onPointerDown={tap(() => changeTextColor(ta.id, c))}
+            className={`shrink-0 rounded-full border transition-transform touch-manipulation ${
+              touchUI ? 'h-8 w-8' : 'h-4 w-4'
+            } ${ta.color === c ? 'scale-110 border-foreground' : 'border-border'}`}
+            style={{ backgroundColor: c }}
+          />
+        ))}
+        {divider}
+        {fontFamilyOptions.map(f => (
+          <button
+            key={f.value}
+            type="button"
+            onPointerDown={tap(() => changeTextFontFamily(ta.id, f.value))}
+            title={`Font: ${f.label}`}
+            className={`${formatButtonClass((ta.fontFamily ?? 'sans-serif') === f.value)} ${
+              touchUI ? 'px-3 text-sm' : 'px-1.5 text-[11px]'
+            }`}
+          >
+            {f.label}
+          </button>
+        ))}
+      </>
+    )
+
+    /** Formatting controls for the shape selected with the Select tool. */
+    const selectedShapeControls = (shape: ShapeAnnotation) => (
+      <>
+        {(shape.type === 'rectangle' || shape.type === 'circle') && (
+          <button
+            type="button"
+            onPointerDown={tap(() => {
+              const newPages = updatePageAnnotations(currentPage, page => ({
+                ...page,
+                shapes: page.shapes.map(s => (s.id === shape.id ? { ...s, filled: !s.filled } : s)),
+              }))
+              setPages(newPages)
+              pushHistory(newPages)
+              emitChange(newPages)
+            })}
+            title={shape.filled ? 'Remove fill' : 'Add fill'}
+            className={chipButtonClass(!!shape.filled)}
+          >
+            Fill
+          </button>
+        )}
+        {shape.type === 'arrow' && (
+          <button
+            type="button"
+            onPointerDown={tap(() => {
+              const newPages = updatePageAnnotations(currentPage, page => ({
+                ...page,
+                shapes: page.shapes.map(s => (s.id === shape.id ? { ...s, doubleEnded: !s.doubleEnded } : s)),
+              }))
+              setPages(newPages)
+              pushHistory(newPages)
+              emitChange(newPages)
+            })}
+            title={shape.doubleEnded ? 'Single arrow' : 'Double-headed arrow'}
+            className={`${chipButtonClass(!!shape.doubleEnded)} text-base`}
+          >
+            ↔
+          </button>
+        )}
+        <button
+          type="button"
+          onPointerDown={tap(() => {
+            const newPages = updatePageAnnotations(currentPage, page => ({
+              ...page,
+              shapes: page.shapes.filter(s => s.id !== shape.id),
+            }))
+            setPages(newPages)
+            pushHistory(newPages)
+            emitChange(newPages)
+            setSelectedId(null)
+          })}
+          title="Delete shape"
+          aria-label="Delete shape"
+          className={formatButtonClass(false) + ' text-red-500 hover:bg-red-50 dark:hover:bg-red-950/30'}>
+          <Trash2 size={touchUI ? 18 : 13} />
+        </button>
+      </>
+    )
+
+    /**
+     * Content of the contextual touch dock, resolved from the current mode so it
+     * always shows exactly the controls that apply right now:
+     * text editing → selection formatting → drawing tools.
+     */
+    const touchDockContent = (() => {
+      const row = (children: React.ReactNode, extraClass = '') => (
+        <div className={`toolbar-scroll scrollbar-hide flex items-center gap-1 px-2 ${extraClass}`}>
+          {children}
+        </div>
+      )
+
+      if (editingText) return row(editingTextControls)
+
+      if (tool === 'select' && selectedId) {
+        const pageAnnot = getPageAnnotations(currentPage)
+        const ta = pageAnnot.textAnnotations.find(t => t.id === selectedId)
+        if (ta) return row(selectedTextControls(ta))
+        const shape = pageAnnot.shapes.find(s => s.id === selectedId)
+        if (shape) return row(selectedShapeControls(shape))
+      }
+
+      if (toolbarTab !== 'annotate') return null
+
+      return (
+        <>
+          {row(
+            <>
+              {drawingToolButtons}
+              {(tool === 'rectangle' || tool === 'circle' || tool === 'arrow') && divider}
+              {toolOptions}
+            </>
+          )}
+          {row(
+            <>
+              {colorSwatches}
+              {divider}
+              {strokeSizeControl}
+            </>,
+            'mt-1.5',
+          )}
+        </>
+      )
+    })()
 
     // ────────────────────────────────────────────────────────
     // RENDER: Upload prompt (no PDF yet)
@@ -2745,7 +3606,9 @@ const PdfAnnotationEditor = forwardRef<PdfAnnotationEditorHandle, PdfAnnotationE
               <button
                 onClick={() => fileInputRef.current?.click()}
                 disabled={pdfLoading || disabled}
-                className="flex items-center gap-2 rounded-lg bg-rose-500 px-6 py-2.5 text-sm font-medium text-white transition-colors hover:bg-rose-600 disabled:opacity-50"
+                className={`flex w-full items-center justify-center gap-2 rounded-xl bg-rose-500 font-medium text-white transition-colors touch-manipulation hover:bg-rose-600 disabled:opacity-50 sm:w-auto ${
+                  touchUI ? 'px-8 py-4 text-base' : 'px-6 py-2.5 text-sm'
+                }`}
               >
                 {pdfLoading ? (
                   <>
@@ -2754,7 +3617,7 @@ const PdfAnnotationEditor = forwardRef<PdfAnnotationEditorHandle, PdfAnnotationE
                   </>
                 ) : (
                   <>
-                    <Upload size={15} />
+                    <Upload size={touchUI ? 18 : 15} />
                     Upload new PDF
                   </>
                 )}
@@ -2763,9 +3626,11 @@ const PdfAnnotationEditor = forwardRef<PdfAnnotationEditorHandle, PdfAnnotationE
               <button
                 onClick={() => setShowFilePicker(true)}
                 disabled={pdfLoading || disabled}
-                className="flex items-center gap-2 rounded-lg border border-border bg-surface px-6 py-2.5 text-sm font-medium text-foreground transition-colors hover:bg-surface-hover disabled:opacity-50"
+                className={`flex w-full items-center justify-center gap-2 rounded-xl border border-border bg-surface font-medium text-foreground transition-colors touch-manipulation hover:bg-surface-hover disabled:opacity-50 sm:w-auto ${
+                  touchUI ? 'px-8 py-4 text-base' : 'px-6 py-2.5 text-sm'
+                }`}
               >
-                <FolderOpen size={15} />
+                <FolderOpen size={touchUI ? 18 : 15} />
                 Browse uploaded files
               </button>
             </div>
@@ -2808,7 +3673,7 @@ const PdfAnnotationEditor = forwardRef<PdfAnnotationEditorHandle, PdfAnnotationE
           <p className="text-red-500">{pdfError}</p>
           <button
             onClick={() => { setPdfError(null); setPdfLoading(false) }}
-            className="rounded-lg bg-surface-hover px-4 py-2 text-sm"
+            className={`rounded-xl bg-surface-hover font-medium touch-manipulation ${touchUI ? 'px-6 py-3 text-base' : 'px-4 py-2 text-sm'}`}
           >
             Retry
           </button>
@@ -2835,7 +3700,9 @@ const PdfAnnotationEditor = forwardRef<PdfAnnotationEditorHandle, PdfAnnotationE
               <button
                 key={tab.id}
                 onClick={() => setToolbarTab(tab.id)}
-                className={`rounded-t-md px-3 py-1 text-xs font-medium transition-colors ${
+                className={`shrink-0 rounded-t-md font-medium transition-colors touch-manipulation ${
+                  touchUI ? 'px-4 py-2.5 text-sm' : 'px-3 py-1 text-xs'
+                } ${
                   toolbarTab === tab.id
                     ? 'bg-surface-hover text-foreground'
                     : 'text-muted-foreground hover:text-foreground hover:bg-surface-hover/60'
@@ -2848,117 +3715,41 @@ const PdfAnnotationEditor = forwardRef<PdfAnnotationEditorHandle, PdfAnnotationE
             <div className="flex-1" />
 
             {/* Always-visible: Undo / Redo / Export */}
-            <button title="Undo (Ctrl+Z)" onClick={undo} disabled={historyIdx <= 0}
-              className="rounded p-1.5 text-muted-foreground transition-colors hover:bg-surface-hover disabled:opacity-30">
-              <Undo2 size={15} />
+            <button title="Undo (Ctrl+Z)" aria-label="Undo" onClick={undo} disabled={historyIdx <= 0}
+              className={iconButtonClass(false) + ' disabled:opacity-30'}>
+              <Undo2 size={toolIconSize} />
             </button>
-            <button title="Redo (Ctrl+Shift+Z)" onClick={redo} disabled={historyIdx >= history.length - 1}
-              className="rounded p-1.5 text-muted-foreground transition-colors hover:bg-surface-hover disabled:opacity-30">
-              <Redo2 size={15} />
+            <button title="Redo (Ctrl+Shift+Z)" aria-label="Redo" onClick={redo} disabled={historyIdx >= history.length - 1}
+              className={iconButtonClass(false) + ' disabled:opacity-30'}>
+              <Redo2 size={toolIconSize} />
             </button>
-            <div className="mx-1 h-4 w-px bg-border" />
+            <div className={`mx-0.5 shrink-0 bg-border ${touchUI ? 'h-7 w-px' : 'h-4 w-px'}`} />
             <button
               title="Export annotated PDF"
               onClick={handleExportPdf}
-              className="flex items-center gap-1 rounded px-2 py-1 text-xs text-muted-foreground transition-colors hover:bg-surface-hover"
+              className={chipButtonClass(false)}
             >
-              <Download size={14} />
+              <Download size={touchUI ? 18 : 14} />
               <span>Export</span>
             </button>
           </div>
 
-          {/* Tab content row */}
-          <div className="flex flex-wrap items-center gap-1 px-2 pb-1.5 pt-0.5">
+          {/* Tab content row — horizontally scrollable so nothing ever wraps into
+              a second row of tiny targets. The Annotate cluster lives in the
+              bottom dock on touch devices instead, so this row is hidden there. */}
+          {(toolbarTab !== 'annotate' || !touchUI) && (
+          <div className="toolbar-scroll scrollbar-hide flex items-center gap-1 px-2 pb-1.5 pt-0.5">
 
-            {/* ── ANNOTATE tab ─────────────────────────────── */}
-            {toolbarTab === 'annotate' && (
+            {/* ── ANNOTATE tab (desktop layout) ─────────────── */}
+            {toolbarTab === 'annotate' && !touchUI && (
               <>
-                {/* Drawing tools */}
-                {tools.map(t => {
-                  const Icon = t.icon
-                  return (
-                    <button
-                      key={t.id}
-                      title={t.label}
-                      onClick={() => {
-                        setTool(t.id)
-                        // The text-selection tool implies the text layer is enabled
-                        if (t.id === 'textselect') setShowTextLayer(true)
-                      }}
-                      className={`rounded p-1.5 transition-colors ${
-                        tool === t.id
-                          ? 'bg-rose-100 text-rose-600 dark:bg-rose-900/40 dark:text-rose-400'
-                          : 'text-muted-foreground hover:bg-surface-hover'
-                      }`}
-                    >
-                      <Icon size={16} />
-                    </button>
-                  )
-                })}
-
-                <div className="mx-1 h-5 w-px bg-border" />
-
-                {/* Color picker */}
-                {COLORS.map(c => (
-                  <button
-                    key={c}
-                    title={c}
-                    onClick={() => setColor(c)}
-                    className={`h-5 w-5 rounded-full border transition-transform ${
-                      color === c ? 'scale-125 border-foreground' : 'border-border'
-                    }`}
-                    style={{ backgroundColor: c }}
-                  />
-                ))}
-
-                <div className="mx-1 h-5 w-px bg-border" />
-
-                {/* Stroke size */}
-                <label className="flex items-center gap-1 text-xs text-muted-foreground">
-                  Size
-                  <input
-                    type="range" min={1} max={20} value={strokeSize}
-                    onChange={e => setStrokeSize(Number(e.target.value))}
-                    className="w-16"
-                  />
-                  <span className="w-4 text-center">{strokeSize}</span>
-                </label>
-
-                {/* Shape fill toggle — rect / circle */}
-                {(tool === 'rectangle' || tool === 'circle') && (
-                  <>
-                    <div className="mx-1 h-5 w-px bg-border" />
-                    <button
-                      title={shapeFilled ? 'Filled (click to unfill)' : 'No fill (click to fill)'}
-                      onClick={() => setShapeFilled(v => !v)}
-                      className={`rounded px-2 py-1 text-xs font-medium transition-colors ${
-                        shapeFilled
-                          ? 'bg-rose-100 text-rose-600 dark:bg-rose-900/40 dark:text-rose-400'
-                          : 'text-muted-foreground hover:bg-surface-hover'
-                      }`}
-                    >
-                      Fill
-                    </button>
-                  </>
-                )}
-
-                {/* Double-ended arrow toggle */}
-                {tool === 'arrow' && (
-                  <>
-                    <div className="mx-1 h-5 w-px bg-border" />
-                    <button
-                      title={doubleEndedArrow ? 'Double-headed (click for single)' : 'Single arrow (click for double)'}
-                      onClick={() => setDoubleEndedArrow(v => !v)}
-                      className={`rounded px-2 py-1 text-base transition-colors ${
-                        doubleEndedArrow
-                          ? 'bg-rose-100 text-rose-600 dark:bg-rose-900/40 dark:text-rose-400'
-                          : 'text-muted-foreground hover:bg-surface-hover'
-                      }`}
-                    >
-                      ↔
-                    </button>
-                  </>
-                )}
+                {drawingToolButtons}
+                {divider}
+                {colorSwatches}
+                {divider}
+                {strokeSizeControl}
+                {(tool === 'rectangle' || tool === 'circle' || tool === 'arrow') && divider}
+                {toolOptions}
               </>
             )}
 
@@ -2966,57 +3757,58 @@ const PdfAnnotationEditor = forwardRef<PdfAnnotationEditorHandle, PdfAnnotationE
             {toolbarTab === 'view' && (
               <>
                 {/* Zoom */}
-                <button title="Zoom out" onClick={handleZoomOut} disabled={zoom <= MIN_ZOOM}
-                  className="rounded p-1.5 text-muted-foreground transition-colors hover:bg-surface-hover disabled:opacity-30">
-                  <ZoomOut size={16} />
+                <button title="Zoom out" aria-label="Zoom out" onClick={handleZoomOut} disabled={zoom <= MIN_ZOOM}
+                  className={iconButtonClass(false) + ' disabled:opacity-30'}>
+                  <ZoomOut size={toolIconSize} />
                 </button>
                 <input
                   type="range" min={MIN_ZOOM} max={MAX_ZOOM} step={0.05} value={zoom}
-                  onChange={handleZoomSlider} className="w-24"
+                  onChange={handleZoomSlider}
+                  className={`shrink-0 ${touchUI ? 'h-8 w-36' : 'w-24'}`}
                   title={`Zoom: ${Math.round(zoom * 100)}%`}
                 />
-                <button title="Zoom in" onClick={handleZoomIn} disabled={zoom >= MAX_ZOOM}
-                  className="rounded p-1.5 text-muted-foreground transition-colors hover:bg-surface-hover disabled:opacity-30">
-                  <ZoomIn size={16} />
+                <button title="Zoom in" aria-label="Zoom in" onClick={handleZoomIn} disabled={zoom >= MAX_ZOOM}
+                  className={iconButtonClass(false) + ' disabled:opacity-30'}>
+                  <ZoomIn size={toolIconSize} />
                 </button>
-                <span className="min-w-[3rem] text-center text-xs text-muted-foreground">
+                <span className={`shrink-0 text-center text-muted-foreground ${touchUI ? 'min-w-[3.5rem] text-sm' : 'min-w-[3rem] text-xs'}`}>
                   {Math.round(zoom * 100)}%
                 </span>
                 <button title="Fit to width" onClick={handleFitWidth}
-                  className="rounded px-1.5 py-1 text-[10px] font-medium text-muted-foreground transition-colors hover:bg-surface-hover">
-                  W
+                  className={chipButtonClass(false)}>
+                  Fit&nbsp;width
                 </button>
-                <button title="Fit to page" onClick={handleFitPage}
-                  className="rounded p-1.5 text-muted-foreground transition-colors hover:bg-surface-hover">
-                  <Maximize size={14} />
+                <button title="Fit to page" aria-label="Fit to page" onClick={handleFitPage}
+                  className={iconButtonClass(false)}>
+                  <Maximize size={toolIconSize - 2} />
                 </button>
-
-                <div className="mx-1 h-5 w-px bg-border" />
 
                 {/* Rotate */}
-                <button title="Rotate 90° counter-clockwise"
+                <button title="Rotate 90° counter-clockwise" aria-label="Rotate counter-clockwise"
                   onClick={() => setViewRotation(r => ((r + 270) % 360) as 0 | 90 | 180 | 270)}
-                  className="rounded p-1.5 text-muted-foreground transition-colors hover:bg-surface-hover">
-                  <RotateCcw size={15} />
+                  className={iconButtonClass(false)}>
+                  <RotateCcw size={toolIconSize - 1} />
                 </button>
                 <select
                   value={viewRotation}
                   onChange={e => setViewRotation(Number(e.target.value) as 0 | 90 | 180 | 270)}
                   title="Page rotation"
-                  className="rounded border border-border bg-surface px-1 py-0.5 text-xs text-muted-foreground focus:outline-none"
+                  className={`shrink-0 rounded-lg border border-border bg-surface text-muted-foreground focus:outline-none ${
+                    touchUI ? 'h-11 px-2 text-sm' : 'px-1 py-0.5 text-xs'
+                  }`}
                 >
                   <option value={0}>0°</option>
                   <option value={90}>90° CW</option>
                   <option value={180}>180°</option>
                   <option value={270}>90° CCW</option>
                 </select>
-                <button title="Rotate 90° clockwise"
+                <button title="Rotate 90° clockwise" aria-label="Rotate clockwise"
                   onClick={() => setViewRotation(r => ((r + 90) % 360) as 0 | 90 | 180 | 270)}
-                  className="rounded p-1.5 text-muted-foreground transition-colors hover:bg-surface-hover">
-                  <RotateCw size={15} />
+                  className={iconButtonClass(false)}>
+                  <RotateCw size={toolIconSize - 1} />
                 </button>
 
-                <div className="mx-1 h-5 w-px bg-border" />
+                {divider}
 
                 {/* Text layer */}
                 <button
@@ -3038,13 +3830,9 @@ const PdfAnnotationEditor = forwardRef<PdfAnnotationEditorHandle, PdfAnnotationE
                       setSelectedId(null)
                     }
                   }}
-                  className={`flex items-center gap-1 rounded px-2 py-1 text-xs transition-colors ${
-                    showTextLayer
-                      ? 'bg-rose-100 text-rose-600 dark:bg-rose-900/40 dark:text-rose-400'
-                      : 'text-muted-foreground hover:bg-surface-hover'
-                  }`}
+                  className={chipButtonClass(showTextLayer)}
                 >
-                  <Layers size={14} />
+                  <Layers size={toolIconSize - 2} />
                   Text layer
                 </button>
 
@@ -3054,11 +3842,9 @@ const PdfAnnotationEditor = forwardRef<PdfAnnotationEditorHandle, PdfAnnotationE
                   onClick={() => {
                     setSearchVisible(v => { if (!v) setSearchQuery(''); return true })
                   }}
-                  className={`flex items-center gap-1 rounded px-2 py-1 text-xs transition-colors ${
-                    searchVisible ? 'bg-rose-100 text-rose-600 dark:bg-rose-900/40 dark:text-rose-400' : 'text-muted-foreground hover:bg-surface-hover'
-                  }`}
+                  className={chipButtonClass(searchVisible)}
                 >
-                  <Search size={14} />
+                  <Search size={toolIconSize - 2} />
                   Find
                 </button>
               </>
@@ -3071,44 +3857,39 @@ const PdfAnnotationEditor = forwardRef<PdfAnnotationEditorHandle, PdfAnnotationE
                 <button
                   title="Toggle page thumbnails"
                   onClick={() => setShowThumbnails(v => !v)}
-                  className={`flex items-center gap-1 rounded px-2 py-1 text-xs transition-colors ${
-                    showThumbnails
-                      ? 'bg-rose-100 text-rose-600 dark:bg-rose-900/40 dark:text-rose-400'
-                      : 'text-muted-foreground hover:bg-surface-hover'
-                  }`}
+                  className={chipButtonClass(showThumbnails)}
                 >
-                  <PanelLeft size={14} />
+                  <PanelLeft size={toolIconSize - 2} />
                   Thumbnails
                 </button>
 
-                <div className="mx-1 h-5 w-px bg-border" />
+                {divider}
 
                 {/* Insert before */}
                 <button
                   title="Insert blank page before current page"
                   onClick={() => insertBlankPage(currentPage - 1)}
                   disabled={disabled}
-                  className="flex items-center gap-1 rounded px-2 py-1 text-xs text-muted-foreground transition-colors hover:bg-surface-hover disabled:opacity-30"
-                >
-                  <Plus size={13} />
+                  className={chipButtonClass(false) + ' disabled:opacity-30'}>
+                  <Plus size={toolIconSize - 3} />
                   Before
                 </button>
 
                 {/* Page navigation */}
-                <button title="Previous page (←)"
+                <button title="Previous page (←)" aria-label="Previous page"
                   onClick={() => goToPage(Math.max(0, currentPage - 1))}
                   disabled={currentPage <= 0}
-                  className="rounded p-1.5 text-muted-foreground transition-colors hover:bg-surface-hover disabled:opacity-30">
-                  <ChevronLeft size={16} />
+                  className={iconButtonClass(false) + ' disabled:opacity-30'}>
+                  <ChevronLeft size={toolIconSize} />
                 </button>
-                <span className="min-w-[4rem] text-center text-xs text-muted-foreground">
+                <span className={`shrink-0 text-center text-muted-foreground ${touchUI ? 'min-w-[4.5rem] text-sm' : 'min-w-[4rem] text-xs'}`}>
                   {currentPage + 1} / {totalPages}
                 </span>
-                <button title="Next page (→)"
+                <button title="Next page (→)" aria-label="Next page"
                   onClick={() => goToPage(Math.min(totalPages - 1, currentPage + 1))}
                   disabled={currentPage >= totalPages - 1}
-                  className="rounded p-1.5 text-muted-foreground transition-colors hover:bg-surface-hover disabled:opacity-30">
-                  <ChevronRight size={16} />
+                  className={iconButtonClass(false) + ' disabled:opacity-30'}>
+                  <ChevronRight size={toolIconSize} />
                 </button>
 
                 {/* Insert after */}
@@ -3116,13 +3897,12 @@ const PdfAnnotationEditor = forwardRef<PdfAnnotationEditorHandle, PdfAnnotationE
                   title="Insert blank page after current page"
                   onClick={() => insertBlankPage(currentPage)}
                   disabled={disabled}
-                  className="flex items-center gap-1 rounded px-2 py-1 text-xs text-muted-foreground transition-colors hover:bg-surface-hover disabled:opacity-30"
-                >
-                  <Plus size={13} />
+                  className={chipButtonClass(false) + ' disabled:opacity-30'}>
+                  <Plus size={toolIconSize - 3} />
                   After
                 </button>
 
-                <div className="mx-1 h-5 w-px bg-border" />
+                {divider}
 
                 {/* Delete page */}
                 <button
@@ -3132,27 +3912,31 @@ const PdfAnnotationEditor = forwardRef<PdfAnnotationEditorHandle, PdfAnnotationE
                     if (pg?.isBlank) { deletePage(currentPage) } else { setDeleteConfirmIdx(currentPage) }
                   }}
                   disabled={disabled || pages.length <= 1}
-                  className="flex items-center gap-1 rounded px-2 py-1 text-xs text-red-500 transition-colors hover:bg-red-50 dark:hover:bg-red-950/30 disabled:opacity-30"
+                  className={`flex shrink-0 items-center gap-1.5 text-red-500 transition-colors touch-manipulation hover:bg-red-50 dark:hover:bg-red-950/30 disabled:opacity-30 ${
+                    touchUI ? 'h-11 rounded-xl px-3 text-sm' : 'rounded px-2 py-1 text-xs'
+                  }`}
                 >
-                  <Trash2 size={13} />
+                  <Trash2 size={toolIconSize - 3} />
                   Delete page
                 </button>
               </>
             )}
 
           </div>
+          )}
         </div>
 
         {/* Find/search bar */}
         {searchVisible && (
-          <div className="flex items-center gap-1.5 border-b border-border bg-surface px-3 py-1.5">
+          <div className={`flex items-center gap-1.5 border-b border-border bg-surface ${touchUI ? 'px-3 py-2' : 'px-3 py-1.5'}`}>
             {searchIndexBuilding
-              ? <Loader2 size={13} className="shrink-0 animate-spin text-muted-foreground" />
-              : <Search size={13} className="shrink-0 text-muted-foreground" />
+              ? <Loader2 size={touchUI ? 18 : 13} className="shrink-0 animate-spin text-muted-foreground" />
+              : <Search size={touchUI ? 18 : 13} className="shrink-0 text-muted-foreground" />
             }
             <input
               autoFocus
               type="text"
+              enterKeyHint="search"
               placeholder="Find in PDF…"
               value={searchQuery}
               onChange={e => setSearchQuery(e.target.value)}
@@ -3160,10 +3944,12 @@ const PdfAnnotationEditor = forwardRef<PdfAnnotationEditorHandle, PdfAnnotationE
                 if (e.key === 'Enter') navigateSearch(e.shiftKey ? -1 : 1)
                 if (e.key === 'Escape') { setSearchVisible(false); setSearchQuery('') }
               }}
-              className="min-w-0 flex-1 bg-transparent text-xs text-foreground outline-none placeholder:text-muted-foreground"
+              className={`min-w-0 flex-1 bg-transparent text-foreground outline-none placeholder:text-muted-foreground ${
+                touchUI ? 'text-base' : 'text-xs'
+              }`}
             />
             {searchQuery.trim() && (
-              <span className="shrink-0 text-[11px] text-muted-foreground">
+              <span className={`shrink-0 text-muted-foreground ${touchUI ? 'text-xs' : 'text-[11px]'}`}>
                 {searchIndexBuilding
                   ? 'Indexing…'
                   : searchMatchCount === 0
@@ -3175,38 +3961,59 @@ const PdfAnnotationEditor = forwardRef<PdfAnnotationEditorHandle, PdfAnnotationE
               onClick={() => navigateSearch(-1)}
               disabled={searchMatchCount === 0}
               title="Previous match (Shift+Enter)"
-              className="rounded p-0.5 text-muted-foreground hover:bg-surface-hover disabled:opacity-30"
-            >
-              <ChevronUp size={14} />
+              aria-label="Previous match"
+              className={iconButtonClass(false) + ' disabled:opacity-30'}>
+              <ChevronUp size={toolIconSize - 2} />
             </button>
             <button
               onClick={() => navigateSearch(1)}
               disabled={searchMatchCount === 0}
               title="Next match (Enter)"
-              className="rounded p-0.5 text-muted-foreground hover:bg-surface-hover disabled:opacity-30"
-            >
-              <ChevronDown size={14} />
+              aria-label="Next match"
+              className={iconButtonClass(false) + ' disabled:opacity-30'}>
+              <ChevronDown size={toolIconSize - 2} />
             </button>
             <button
               onClick={() => { setSearchVisible(false); setSearchQuery('') }}
               title="Close search (Escape)"
-              className="rounded p-0.5 text-muted-foreground hover:bg-surface-hover"
-            >
-              <X size={14} />
+              aria-label="Close search"
+              className={iconButtonClass(false)}>
+              <X size={toolIconSize - 2} />
             </button>
           </div>
         )}
 
         {/* Canvas area + optional thumbnail strip */}
-        <div className="flex flex-1 overflow-hidden">
-          {/* Thumbnail strip */}
+        <div className="relative flex flex-1 overflow-hidden">
+          {/* Backdrop for the touch thumbnail drawer */}
+          {showThumbnails && touchUI && (
+            <button
+              aria-label="Close thumbnails"
+              onClick={() => setShowThumbnails(false)}
+              className="absolute inset-0 z-30 cursor-default bg-black/40"
+            />
+          )}
+
+          {/* Thumbnails — inline rail on desktop, slide-over drawer on touch */}
           {showThumbnails && (
-            <div className="flex w-28 shrink-0 flex-col gap-1.5 overflow-y-auto border-r border-border bg-surface p-1.5">
+            <div
+              className={
+                touchUI
+                  ? 'absolute inset-y-0 left-0 z-40 flex w-40 flex-col gap-2 overflow-y-auto border-r border-border bg-surface p-2 shadow-2xl'
+                  : 'flex w-28 shrink-0 flex-col gap-1.5 overflow-y-auto border-r border-border bg-surface p-1.5'
+              }
+            >
               {pages.map((pg, i) => (
                 <button
                   key={i}
-                  onClick={() => goToPage(pg.pageNumber)}
-                  className={`flex flex-col items-center gap-0.5 rounded-md border p-1 transition-colors ${
+                  onClick={() => {
+                    goToPage(pg.pageNumber)
+                    // The drawer covers the page — get out of the way after picking
+                    if (touchUI) setShowThumbnails(false)
+                  }}
+                  className={`flex flex-col items-center rounded-md border transition-colors touch-manipulation ${
+                    touchUI ? 'gap-1 p-1.5' : 'gap-0.5 p-1'
+                  } ${
                     pg.pageNumber === currentPage
                       ? 'border-rose-500 bg-rose-50 dark:bg-rose-900/20'
                       : 'border-border hover:bg-surface-hover'
@@ -3218,16 +4025,16 @@ const PdfAnnotationEditor = forwardRef<PdfAnnotationEditorHandle, PdfAnnotationE
                       src={thumbnailUrls[i]}
                       alt={`Page ${i + 1}`}
                       className="w-full rounded object-contain shadow-sm"
-                      style={{ maxHeight: 90 }}
+                      style={{ maxHeight: touchUI ? 120 : 90 }}
                     />
                   ) : (
-                    <div className="flex h-16 w-full items-center justify-center rounded bg-neutral-100 dark:bg-neutral-700">
+                    <div className={`flex w-full items-center justify-center rounded bg-neutral-100 dark:bg-neutral-700 ${touchUI ? 'h-20' : 'h-16'}`}>
                       <span className="text-xs text-muted-foreground">{pg.isBlank ? '\u25A1' : '\u22EF'}</span>
                     </div>
                   )}
-                  <span className="text-[10px] text-muted-foreground">{i + 1}</span>
+                  <span className={`text-muted-foreground ${touchUI ? 'text-xs' : 'text-[10px]'}`}>{i + 1}</span>
                   {pg.isBlank && (
-                    <span className="text-[9px] italic text-rose-400">blank</span>
+                    <span className={`italic text-rose-400 ${touchUI ? 'text-[11px]' : 'text-[9px]'}`}>blank</span>
                   )}
                 </button>
               ))}
@@ -3235,7 +4042,7 @@ const PdfAnnotationEditor = forwardRef<PdfAnnotationEditorHandle, PdfAnnotationE
           )}
 
           {/* Canvas scroll area */}
-          <div ref={scrollAreaRef} className="relative flex-1 overflow-auto bg-neutral-200 dark:bg-neutral-800">
+          <div ref={scrollAreaRef} className="pdf-scroll-area relative flex-1 overflow-auto bg-neutral-200 dark:bg-neutral-800">
             {/* Delete page confirmation overlay */}
             {deleteConfirmIdx !== null && (
               <div className="absolute inset-0 z-50 flex items-center justify-center bg-black/50">
@@ -3245,13 +4052,13 @@ const PdfAnnotationEditor = forwardRef<PdfAnnotationEditorHandle, PdfAnnotationE
                   <div className="flex justify-end gap-2">
                     <button
                       onClick={() => setDeleteConfirmIdx(null)}
-                      className="rounded-lg px-3 py-1.5 text-sm hover:bg-surface-hover"
+                      className={`rounded-lg text-sm hover:bg-surface-hover touch-manipulation ${touchUI ? 'px-4 py-3' : 'px-3 py-1.5'}`}
                     >
                       Cancel
                     </button>
                     <button
                       onClick={() => deletePage(deleteConfirmIdx!)}
-                      className="rounded-lg bg-red-500 px-3 py-1.5 text-sm text-white hover:bg-red-600"
+                      className={`rounded-lg bg-red-500 text-sm text-white hover:bg-red-600 touch-manipulation ${touchUI ? 'px-4 py-3' : 'px-3 py-1.5'}`}
                     >
                       Delete
                     </button>
@@ -3262,6 +4069,7 @@ const PdfAnnotationEditor = forwardRef<PdfAnnotationEditorHandle, PdfAnnotationE
 
             {/* Outer div reserves the correct bounding-box size in the scroll area */}
             <div
+              ref={pageRef}
               className={`relative mx-auto my-4${
                 pageAnim === 'exit-up'           ? ' pdf-page-exit-up'
                 : pageAnim === 'exit-down'       ? ' pdf-page-exit-down'
@@ -3304,16 +4112,27 @@ const PdfAnnotationEditor = forwardRef<PdfAnnotationEditorHandle, PdfAnnotationE
                   pointerEvents: showTextLayer && tool === 'textselect' ? 'auto' : 'none',
                 }}
               />
-              {/* Annotation overlay layer */}
+              {/* Annotation overlay layer.
+                  `touch-action: none` hands every single-finger gesture to our
+                  own handlers (drawing, panning, erasing) and lets us recognise
+                  two-finger pan/pinch without the WebView stealing the input. */}
               <canvas
                 ref={annotCanvasRef}
-                className="absolute left-0 top-0"
+                className="pdf-touch-surface absolute left-0 top-0"
                 style={{
                   width: canvasWidth,
                   height: canvasHeight,
+                  touchAction: 'none',
+                  WebkitUserSelect: 'none',
+                  userSelect: 'none',
+                  WebkitTouchCallout: 'none',
                   pointerEvents: tool === 'textselect' ? 'none' : 'auto',
                   cursor:
-                    tool === 'pen' || tool === 'highlighter'
+                    tool === 'pan'
+                      ? isPanning
+                        ? 'grabbing'
+                        : 'grab'
+                      : tool === 'pen' || tool === 'highlighter'
                       ? 'crosshair'
                       : tool === 'eraser'
                       ? 'not-allowed'
@@ -3327,14 +4146,19 @@ const PdfAnnotationEditor = forwardRef<PdfAnnotationEditorHandle, PdfAnnotationE
                       ? 'text'
                       : 'crosshair',
                 }}
+                onContextMenu={e => e.preventDefault()}
                 onPointerDown={handlePointerDown}
                 onPointerMove={handlePointerMove}
                 onPointerUp={handlePointerUp}
+                onPointerCancel={handlePointerCancel}
+                onLostPointerCapture={handlePointerCancel}
               />
               </div>{/* end rotation wrapper */}
 
-              {/* Text formatting toolbar — rendered at 0° outside the rotation wrapper */}
-              {tool === 'select' && selectedId && (() => {
+              {/* Floating formatting bars — desktop only. Touch devices get the
+                  same controls in the thumb-reachable bottom dock instead, so
+                  they can never end up off-screen or under the on-screen keyboard. */}
+              {!touchUI && tool === 'select' && selectedId && (() => {
                 const pageAnnot = getPageAnnotations(currentPage)
                 const ta = pageAnnot.textAnnotations.find(t => t.id === selectedId)
                 if (!ta) return null
@@ -3342,99 +4166,14 @@ const PdfAnnotationEditor = forwardRef<PdfAnnotationEditorHandle, PdfAnnotationE
                 return (
                   <div
                     className="absolute z-40 flex items-center gap-0.5 rounded-lg border border-border bg-surface px-1.5 py-1 shadow-md"
-                    style={{ left: vx, top: Math.max(0, vy - 40) }}
+                    style={{ left: Math.max(0, vx), top: Math.max(0, vy - 40) }}
                   >
-                    <button
-                      onMouseDown={e => { e.preventDefault(); startEditingText(ta) }}
-                      title="Edit text"
-                      className="rounded p-1 text-muted-foreground hover:bg-surface-hover"
-                    >
-                      <Pencil size={13} />
-                    </button>
-                    <div className="mx-0.5 h-4 w-px bg-border" />
-                    <button
-                      onMouseDown={e => { e.preventDefault(); toggleTextBold(ta.id) }}
-                      title="Bold"
-                      className={`rounded p-1 ${
-                        ta.bold
-                          ? 'bg-rose-100 text-rose-600 dark:bg-rose-900/40 dark:text-rose-400'
-                          : 'text-muted-foreground hover:bg-surface-hover'
-                      }`}
-                    >
-                      <Bold size={13} />
-                    </button>
-                    <button
-                      onMouseDown={e => { e.preventDefault(); toggleTextItalic(ta.id) }}
-                      title="Italic"
-                      className={`rounded p-1 ${
-                        ta.italic
-                          ? 'bg-rose-100 text-rose-600 dark:bg-rose-900/40 dark:text-rose-400'
-                          : 'text-muted-foreground hover:bg-surface-hover'
-                      }`}
-                    >
-                      <Italic size={13} />
-                    </button>
-                    <div className="mx-0.5 h-4 w-px bg-border" />
-                    {(['left', 'center', 'right'] as const).map(align => {
-                      const Icon = align === 'left' ? AlignLeft : align === 'center' ? AlignCenter : AlignRight
-                      return (
-                        <button
-                          key={align}
-                          onMouseDown={e => { e.preventDefault(); changeTextAlign(ta.id, align) }}
-                          title={`Align ${align}`}
-                          className={`rounded p-1 ${
-                            (ta.textAlign ?? 'left') === align
-                              ? 'bg-rose-100 text-rose-600 dark:bg-rose-900/40 dark:text-rose-400'
-                              : 'text-muted-foreground hover:bg-surface-hover'
-                          }`}
-                        >
-                          <Icon size={13} />
-                        </button>
-                      )
-                    })}
-                    <div className="mx-0.5 h-4 w-px bg-border" />
-                    <button
-                      onMouseDown={e => { e.preventDefault(); changeTextFontSize(ta.id, -2) }}
-                      title="Decrease font size"
-                      className="rounded px-1.5 text-sm text-muted-foreground hover:bg-surface-hover"
-                    >−</button>
-                    <span className="min-w-[2.5rem] text-center text-[11px] text-muted-foreground">{ta.fontSize}px</span>
-                    <button
-                      onMouseDown={e => { e.preventDefault(); changeTextFontSize(ta.id, 2) }}
-                      title="Increase font size"
-                      className="rounded px-1.5 text-sm text-muted-foreground hover:bg-surface-hover"
-                    >+</button>
-                    <div className="mx-0.5 h-4 w-px bg-border" />
-                    {COLORS.map(c => (
-                      <button
-                        key={c}
-                        title={`Text color: ${c}`}
-                        onMouseDown={e => { e.preventDefault(); changeTextColor(ta.id, c) }}
-                        className={`h-4 w-4 rounded-full border transition-transform ${
-                          ta.color === c ? 'scale-125 border-foreground' : 'border-border'
-                        }`}
-                        style={{ backgroundColor: c }}
-                      />
-                    ))}
-                    <div className="mx-0.5 h-4 w-px bg-border" />
-                    <select
-                      value={ta.fontFamily ?? 'sans-serif'}
-                      onMouseDown={e => e.stopPropagation()}
-                      onChange={e => changeTextFontFamily(ta.id, e.target.value)}
-                      className="rounded border border-border bg-surface py-0.5 text-[11px] text-muted-foreground focus:outline-none"
-                      title="Font family"
-                    >
-                      <option value="sans-serif">Sans</option>
-                      <option value="serif">Serif</option>
-                      <option value="monospace">Mono</option>
-                    </select>
+                    {selectedTextControls(ta)}
                   </div>
                 )
               })()}
 
-
-              {/* Shape formatting toolbar — fill + double-ended arrow for selected shape */}
-              {tool === 'select' && selectedId && (() => {
+              {!touchUI && tool === 'select' && selectedId && (() => {
                 const pageAnnot = getPageAnnotations(currentPage)
                 const shape = pageAnnot.shapes.find(s => s.id === selectedId)
                 if (!shape) return null
@@ -3442,62 +4181,60 @@ const PdfAnnotationEditor = forwardRef<PdfAnnotationEditorHandle, PdfAnnotationE
                 return (
                   <div
                     className="absolute z-40 flex items-center gap-0.5 rounded-lg border border-border bg-surface px-1.5 py-1 shadow-md"
-                    style={{ left: vx, top: Math.max(0, vy - 40) }}
+                    style={{ left: Math.max(0, vx), top: Math.max(0, vy - 40) }}
                   >
-                    {(shape.type === 'rectangle' || shape.type === 'circle') && (
-                      <button
-                        onMouseDown={e => {
-                          e.preventDefault()
-                          const newPages = updatePageAnnotations(currentPage, page => ({
-                            ...page,
-                            shapes: page.shapes.map(s =>
-                              s.id === shape.id ? { ...s, filled: !s.filled } : s
-                            ),
-                          }))
-                          setPages(newPages)
-                          pushHistory(newPages)
-                          emitChange(newPages)
-                        }}
-                        title={shape.filled ? 'Remove fill' : 'Add fill'}
-                        className={`rounded px-1.5 py-0.5 text-[11px] font-medium transition-colors ${
-                          shape.filled
-                            ? 'bg-rose-100 text-rose-600 dark:bg-rose-900/40 dark:text-rose-400'
-                            : 'text-muted-foreground hover:bg-surface-hover'
-                        }`}
-                      >
-                        Fill
-                      </button>
-                    )}
-                    {shape.type === 'arrow' && (
-                      <button
-                        onMouseDown={e => {
-                          e.preventDefault()
-                          const newPages = updatePageAnnotations(currentPage, page => ({
-                            ...page,
-                            shapes: page.shapes.map(s =>
-                              s.id === shape.id ? { ...s, doubleEnded: !s.doubleEnded } : s
-                            ),
-                          }))
-                          setPages(newPages)
-                          pushHistory(newPages)
-                          emitChange(newPages)
-                        }}
-                        title={shape.doubleEnded ? 'Single arrow' : 'Double-headed arrow'}
-                        className={`rounded px-1.5 py-0.5 text-base transition-colors ${
-                          shape.doubleEnded
-                            ? 'bg-rose-100 text-rose-600 dark:bg-rose-900/40 dark:text-rose-400'
-                            : 'text-muted-foreground hover:bg-surface-hover'
-                        }`}
-                      >
-                        ↔
-                      </button>
-                    )}
+                    {selectedShapeControls(shape)}
                   </div>
                 )
               })()}
 
-              {/* Sticky notes overlay — rendered at 0° outside the rotation wrapper */}              {getPageAnnotations(currentPage).stickyNotes?.map(sn => {
+              {/* Sticky notes overlay — rendered at 0° outside the rotation wrapper.
+                  All interaction is Pointer Events based, so a finger, stylus and
+                  mouse all drive the same code path (setPointerCapture keeps the
+                  drag alive when the finger leaves the note). */}
+              {getPageAnnotations(currentPage).stickyNotes?.map(sn => {
                 const { vx, vy } = logicalToVisual(sn.x, sn.y)
+                /** Start a pointer drag on the sticky note (move or resize). */
+                const beginStickyDrag = (
+                  e: ReactPointerEvent<HTMLDivElement>,
+                  mode: 'move' | 'resize',
+                ) => {
+                  e.stopPropagation()
+                  e.preventDefault()
+                  const target = e.currentTarget
+                  try { target.setPointerCapture(e.pointerId) } catch { /* not capturable */ }
+                  const startX = e.clientX
+                  const startY = e.clientY
+                  const origX = sn.x
+                  const origY = sn.y
+                  const origW = sn.width
+                  const origH = sn.height
+                  const onMove = (ev: PointerEvent) => {
+                    if (ev.pointerId !== e.pointerId) return
+                    ev.preventDefault()
+                    if (mode === 'move') {
+                      const { dx, dy } = screenDeltaToLogical(ev.clientX - startX, ev.clientY - startY)
+                      updateStickyNote(sn.id, { x: origX + dx, y: origY + dy })
+                    } else {
+                      const { dx, dy } = screenDeltaToLogical(ev.clientX - startX, ev.clientY - startY)
+                      updateStickyNote(sn.id, {
+                        width: Math.max(100, origW + dx),
+                        height: Math.max(80, origH + dy),
+                      })
+                    }
+                  }
+                  const onUp = (ev: PointerEvent) => {
+                    if (ev.pointerId !== e.pointerId) return
+                    target.removeEventListener('pointermove', onMove)
+                    target.removeEventListener('pointerup', onUp)
+                    target.removeEventListener('pointercancel', onUp)
+                    commitStickyMove()
+                  }
+                  target.addEventListener('pointermove', onMove)
+                  target.addEventListener('pointerup', onUp)
+                  target.addEventListener('pointercancel', onUp)
+                }
+
                 return (
                 <div
                   key={sn.id}
@@ -3505,8 +4242,8 @@ const PdfAnnotationEditor = forwardRef<PdfAnnotationEditorHandle, PdfAnnotationE
                   style={{
                     left: vx,
                     top: vy,
-                    width: sn.collapsed ? 32 : sn.width * zoom,
-                    height: sn.collapsed ? 28 : sn.height * zoom,
+                    width: sn.collapsed ? (touchUI ? 44 : 32) : sn.width * zoom,
+                    height: sn.collapsed ? (touchUI ? 40 : 28) : sn.height * zoom,
                     backgroundColor: STICKY_COLORS[sn.color],
                     border: `1.5px solid ${
                       selectedId === sn.id ? '#3b82f6' : 'rgba(0,0,0,0.15)'
@@ -3515,100 +4252,90 @@ const PdfAnnotationEditor = forwardRef<PdfAnnotationEditorHandle, PdfAnnotationE
                 >
                   {/* Sticky header / drag handle */}
                   <div
-                    className="flex shrink-0 cursor-move select-none items-center justify-between px-1.5"
-                    style={{ backgroundColor: 'rgba(0,0,0,0.08)', minHeight: 22 }}
-                    onMouseDown={e => {
-                      e.stopPropagation()
-                      const startX = e.clientX
-                      const startY = e.clientY
-                      const origX = sn.x
-                      const origY = sn.y
-                      const onMove = (me: MouseEvent) => {
-                        const { dx, dy } = screenDeltaToLogical(me.clientX - startX, me.clientY - startY)
-                        updateStickyNote(sn.id, { x: origX + dx, y: origY + dy })
-                      }
-                      const onUp = () => {
-                        window.removeEventListener('mousemove', onMove)
-                        window.removeEventListener('mouseup', onUp)
-                        commitStickyMove()
-                      }
-                      window.addEventListener('mousemove', onMove)
-                      window.addEventListener('mouseup', onUp)
+                    className="flex shrink-0 cursor-move select-none items-center justify-between gap-1 px-1.5"
+                    style={{
+                      backgroundColor: 'rgba(0,0,0,0.08)',
+                      minHeight: touchUI ? 34 : 22,
+                      touchAction: 'none',
                     }}
+                    onPointerDown={e => beginStickyDrag(e, 'move')}
                   >
-                    {/* Color swatches (visible when expanded) */}
+                    {/* Colour swatches (visible when expanded) */}
                     {!sn.collapsed && (
                       <div className="flex gap-0.5">
                         {(Object.keys(STICKY_COLORS) as StickyColor[]).map(c => (
                           <button
                             key={c}
                             title={c}
-                            onMouseDown={e => {
+                            aria-label={`Colour ${c}`}
+                            onPointerDown={e => {
                               e.stopPropagation()
+                              e.preventDefault()
                               updateStickyNote(sn.id, { color: c }, true)
                             }}
-                            className="h-2.5 w-2.5 rounded-full border border-black/10 transition-transform hover:scale-125"
+                            className={`rounded-full border border-black/10 transition-transform touch-manipulation ${
+                              touchUI ? 'h-6 w-6' : 'h-2.5 w-2.5'
+                            }`}
                             style={{ backgroundColor: STICKY_COLORS[c] }}
                           />
                         ))}
                       </div>
                     )}
-                    <div className="ml-auto flex gap-0.5">
+                    <div className="ml-auto flex items-center gap-0.5">
                       <button
-                        onMouseDown={e => {
+                        onPointerDown={e => {
                           e.stopPropagation()
+                          e.preventDefault()
                           updateStickyNote(sn.id, { collapsed: !sn.collapsed }, true)
                         }}
                         title={sn.collapsed ? 'Expand' : 'Collapse'}
-                        className="rounded px-0.5 text-[11px] leading-none text-black/40 hover:text-black/80"
+                        aria-label={sn.collapsed ? 'Expand note' : 'Collapse note'}
+                        className={`flex items-center justify-center rounded text-black/50 hover:bg-black/5 hover:text-black/80 touch-manipulation ${
+                          touchUI ? 'h-7 w-7 text-sm' : 'px-0.5 text-[11px] leading-none'
+                        }`}
                       >{sn.collapsed ? '\u25A1' : '\u2212'}</button>
                       <button
-                        onMouseDown={e => {
+                        onPointerDown={e => {
                           e.stopPropagation()
+                          e.preventDefault()
                           deleteStickyNote(sn.id)
+                          haptic(15)
                         }}
                         title="Delete sticky note"
-                        className="rounded px-0.5 text-[11px] leading-none text-black/40 hover:text-red-600"
-                      >\u00D7</button>
+                        aria-label="Delete sticky note"
+                        className={`flex items-center justify-center rounded text-black/50 hover:bg-black/5 hover:text-red-600 touch-manipulation ${
+                          touchUI ? 'h-7 w-7 text-base' : 'px-0.5 text-[11px] leading-none'
+                        }`}
+                      >{'\u00D7'}</button>
                     </div>
                   </div>
                   {/* Sticky body */}
                   {!sn.collapsed && (
                     <textarea
-                      className="flex-1 resize-none bg-transparent p-1.5 text-xs text-black outline-none placeholder:text-black/40"
+                      className={`flex-1 resize-none bg-transparent text-black outline-none placeholder:text-black/40 ${
+                        touchUI ? 'p-2 text-sm' : 'p-1.5 text-xs'
+                      }`}
                       placeholder="Add a note..."
                       value={sn.text}
-                      onMouseDown={e => e.stopPropagation()}
-                      onClick={() => setSelectedId(sn.id)}
+                      onPointerDown={e => e.stopPropagation()}
+                      onFocus={() => setSelectedId(sn.id)}
                       onChange={e => updateStickyNote(sn.id, { text: e.target.value })}
                       onBlur={commitStickyMove}
                     />
                   )}
-                  {/* Resize handle */}
+                  {/* Resize handle — a real 24/44px grab area for fingers */}
                   {!sn.collapsed && (
                     <div
-                      className="absolute bottom-0 right-0 h-3 w-3 cursor-se-resize"
-                      style={{ background: 'rgba(0,0,0,0.15)', borderRadius: '0 0 4px 0' }}
-                      onMouseDown={e => {
-                        e.stopPropagation()
-                        const startX = e.clientX
-                        const startY = e.clientY
-                        const origW = sn.width
-                        const origH = sn.height
-                        const onMove = (me: MouseEvent) => {
-                          updateStickyNote(sn.id, {
-                            width: Math.max(100, origW + (me.clientX - startX) / zoom),
-                            height: Math.max(80, origH + (me.clientY - startY) / zoom),
-                          })
-                        }
-                        const onUp = () => {
-                          window.removeEventListener('mousemove', onMove)
-                          window.removeEventListener('mouseup', onUp)
-                          commitStickyMove()
-                        }
-                        window.addEventListener('mousemove', onMove)
-                        window.addEventListener('mouseup', onUp)
+                      className="absolute bottom-0 right-0 cursor-se-resize"
+                      style={{
+                        width: touchUI ? 28 : 12,
+                        height: touchUI ? 28 : 12,
+                        background: 'rgba(0,0,0,0.15)',
+                        borderRadius: '0 0 4px 0',
+                        touchAction: 'none',
                       }}
+                      onPointerDown={e => beginStickyDrag(e, 'resize')}
+                      title="Drag to resize"
                     />
                   )}
                 </div>
@@ -3620,6 +4347,8 @@ const PdfAnnotationEditor = forwardRef<PdfAnnotationEditorHandle, PdfAnnotationE
               {editingText && (() => {
                 const { vx, vy } = logicalToVisual(editingText.x, editingText.y)
                 const box = measureTextAnnotationBox(editingText)
+                // Keep the floating toolbar on-screen on desktop; touch devices use
+                // the bottom dock instead (see below).
                 const toolbarTop = vy - 34 >= 0 ? vy - 34 : vy + box.height * zoom + 6
                 return (
                   <div
@@ -3629,100 +4358,26 @@ const PdfAnnotationEditor = forwardRef<PdfAnnotationEditorHandle, PdfAnnotationE
                       // Interacting with the editing toolbar must not end the edit session
                       const next = e.relatedTarget as HTMLElement | null
                       if (next && editingWrapperRef.current?.contains(next)) return
+                      // On touch the dock's buttons never take focus, so only an
+                      // intentional tap elsewhere should end the session.
+                      if (touchUI) return
                       commitText()
                     }}
                   >
-                    <div
-                      className="absolute z-40 flex items-center gap-0.5 rounded-lg border border-border bg-surface px-1.5 py-1 shadow-md"
-                      style={{ left: vx, top: toolbarTop }}
-                    >
-                      <button
-                        type="button"
-                        onMouseDown={e => { e.preventDefault(); updateEditingText({ bold: !editingText.bold }) }}
-                        title="Bold (Ctrl/Cmd+B)"
-                        className={`rounded p-1 ${
-                          editingText.bold
-                            ? 'bg-rose-100 text-rose-600 dark:bg-rose-900/40 dark:text-rose-400'
-                            : 'text-muted-foreground hover:bg-surface-hover'
-                        }`}
+                    {!touchUI && (
+                      <div
+                        className="absolute z-40 flex items-center gap-0.5 rounded-lg border border-border bg-surface px-1.5 py-1 shadow-md"
+                        style={{ left: Math.max(0, vx), top: toolbarTop }}
                       >
-                        <Bold size={13} />
-                      </button>
-                      <button
-                        type="button"
-                        onMouseDown={e => { e.preventDefault(); updateEditingText({ italic: !editingText.italic }) }}
-                        title="Italic (Ctrl/Cmd+I)"
-                        className={`rounded p-1 ${
-                          editingText.italic
-                            ? 'bg-rose-100 text-rose-600 dark:bg-rose-900/40 dark:text-rose-400'
-                            : 'text-muted-foreground hover:bg-surface-hover'
-                        }`}
-                      >
-                        <Italic size={13} />
-                      </button>
-                      <div className="mx-0.5 h-4 w-px bg-border" />
-                      {(['left', 'center', 'right'] as const).map(align => {
-                        const Icon = align === 'left' ? AlignLeft : align === 'center' ? AlignCenter : AlignRight
-                        return (
-                          <button
-                            key={align}
-                            type="button"
-                            onMouseDown={e => { e.preventDefault(); updateEditingText({ textAlign: align }) }}
-                            title={`Align ${align}`}
-                            className={`rounded p-1 ${
-                              (editingText.textAlign ?? 'left') === align
-                                ? 'bg-rose-100 text-rose-600 dark:bg-rose-900/40 dark:text-rose-400'
-                                : 'text-muted-foreground hover:bg-surface-hover'
-                            }`}
-                          >
-                            <Icon size={13} />
-                          </button>
-                        )
-                      })}
-                      <div className="mx-0.5 h-4 w-px bg-border" />
-                      <button
-                        type="button"
-                        onMouseDown={e => { e.preventDefault(); adjustEditingFontSize(-2) }}
-                        title="Decrease font size"
-                        className="rounded px-1.5 text-sm text-muted-foreground hover:bg-surface-hover"
-                      >−</button>
-                      <span className="min-w-[2.5rem] text-center text-[11px] text-muted-foreground">{editingText.fontSize}px</span>
-                      <button
-                        type="button"
-                        onMouseDown={e => { e.preventDefault(); adjustEditingFontSize(2) }}
-                        title="Increase font size"
-                        className="rounded px-1.5 text-sm text-muted-foreground hover:bg-surface-hover"
-                      >+</button>
-                      <div className="mx-0.5 h-4 w-px bg-border" />
-                      {COLORS.map(c => (
-                        <button
-                          key={c}
-                          type="button"
-                          title={`Text color: ${c}`}
-                          onMouseDown={e => { e.preventDefault(); updateEditingText({ color: c }) }}
-                          className={`h-4 w-4 rounded-full border transition-transform ${
-                            editingText.color === c ? 'scale-125 border-foreground' : 'border-border'
-                          }`}
-                          style={{ backgroundColor: c }}
-                        />
-                      ))}
-                      <div className="mx-0.5 h-4 w-px bg-border" />
-                      <select
-                        value={editingText.fontFamily ?? 'sans-serif'}
-                        onChange={e => updateEditingText({ fontFamily: e.target.value })}
-                        className="rounded border border-border bg-surface py-0.5 text-[11px] text-muted-foreground focus:outline-none"
-                        title="Font family"
-                      >
-                        <option value="sans-serif">Sans</option>
-                        <option value="serif">Serif</option>
-                        <option value="monospace">Mono</option>
-                      </select>
-                    </div>
+                        {editingTextControls}
+                      </div>
+                    )}
                     <textarea
                       ref={textAreaRef}
                       autoFocus
                       spellCheck={false}
                       placeholder="Type text…"
+                      enterKeyHint="enter"
                       className="absolute border-0 bg-transparent"
                       style={{
                         left: vx,
@@ -3747,11 +4402,14 @@ const PdfAnnotationEditor = forwardRef<PdfAnnotationEditorHandle, PdfAnnotationE
                         whiteSpace: 'pre-wrap',
                         overflowWrap: 'break-word',
                         overflow: 'hidden',
-                        resize: 'horizontal',
+                        // The native grip is a ~7px hotspot — unusable with a finger.
+                        // Touch devices get an explicit resize grip below instead.
+                        resize: touchUI ? 'none' : 'horizontal',
                         transform: `rotate(${viewRotation}deg)`,
                         transformOrigin: 'top left',
                         outline: '1.5px solid #60a5fa',
                         outlineOffset: 2,
+                        touchAction: 'manipulation',
                       }}
                       value={editingText.text}
                       onChange={e =>
@@ -3775,6 +4433,55 @@ const PdfAnnotationEditor = forwardRef<PdfAnnotationEditorHandle, PdfAnnotationE
                         // Plain Enter inserts a line break (multi-line text box)
                       }}
                     />
+                    {/* Touch-only resize grip — a real 40px target that resizes the
+                        box width without relying on the native textarea corner. */}
+                    {touchUI && (
+                      <div
+                        className="absolute z-40 flex items-center justify-center rounded-full bg-rose-500 text-white shadow-lg"
+                        style={{
+                          // Sits diagonally outside the bottom-right corner so it
+                          // never covers the text being typed.
+                          left: Math.min(
+                            vx + box.width * zoom + 6,
+                            Math.max(0, canvasWidth - 44),
+                          ),
+                          top: vy + box.height * zoom + 6,
+                          width: 40,
+                          height: 40,
+                          touchAction: 'none',
+                        }}
+                        title="Drag to resize the text box"
+                        onPointerDown={e => {
+                          e.preventDefault()
+                          e.stopPropagation()
+                          const target = e.currentTarget
+                          try { target.setPointerCapture(e.pointerId) } catch { /* not capturable */ }
+                          const startX = e.clientX
+                          const startWidth = editingText.width
+                          const onMove = (ev: PointerEvent) => {
+                            if (ev.pointerId !== e.pointerId) return
+                            ev.preventDefault()
+                            const { dx } = screenDeltaToLogical(ev.clientX - startX, 0)
+                            setEditingText(prev =>
+                              prev
+                                ? { ...prev, width: Math.max(TEXT_MIN_BOX_WIDTH, startWidth + dx) }
+                                : prev
+                            )
+                          }
+                          const onUp = (ev: PointerEvent) => {
+                            if (ev.pointerId !== e.pointerId) return
+                            target.removeEventListener('pointermove', onMove)
+                            target.removeEventListener('pointerup', onUp)
+                            target.removeEventListener('pointercancel', onUp)
+                          }
+                          target.addEventListener('pointermove', onMove)
+                          target.addEventListener('pointerup', onUp)
+                          target.addEventListener('pointercancel', onUp)
+                        }}
+                      >
+                        <GripHorizontal size={18} />
+                      </div>
+                    )}
                   </div>
                 )
               })()}
@@ -3782,18 +4489,36 @@ const PdfAnnotationEditor = forwardRef<PdfAnnotationEditorHandle, PdfAnnotationE
               {/* Floating copy button — appears when text is selected in the text layer */}
               {selectedText && (
                 <button
-                  onMouseDown={e => e.preventDefault()}
+                  onPointerDown={e => e.preventDefault()}
                   onClick={handleCopySelectedText}
                   title="Copy selected text"
-                  className="absolute right-2 top-2 z-40 flex items-center gap-1 rounded-md border border-border bg-surface px-2 py-1 text-xs text-foreground shadow-md transition-colors hover:bg-surface-hover"
+                  className={`absolute right-2 top-2 z-40 flex items-center gap-1.5 rounded-md border border-border bg-surface text-foreground shadow-md transition-colors hover:bg-surface-hover touch-manipulation ${
+                    touchUI ? 'px-3 py-2 text-sm' : 'px-2 py-1 text-xs'
+                  }`}
                 >
-                  <Copy size={13} />
+                  <Copy size={touchUI ? 16 : 13} />
                   Copy
                 </button>
               )}
             </div>
           </div>
         </div>
+
+        {/* ── Contextual bottom dock (touch / compact) ──────────────
+            Puts the active controls within thumb reach while the page stays
+            full-bleed. Its content follows the current mode: text editing →
+            selection formatting → drawing tools. */}
+        {touchUI && (
+          <div
+            className="shrink-0 border-t border-border bg-surface/95 backdrop-blur"
+            style={{
+              paddingTop: 6,
+              paddingBottom: 'max(env(safe-area-inset-bottom), 6px)',
+            }}
+          >
+            {touchDockContent}
+          </div>
+        )}
       </div>
     )
   }
