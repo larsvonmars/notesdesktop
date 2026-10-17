@@ -3,7 +3,6 @@
 import { useState, useCallback, useRef, useEffect, useMemo } from 'react'
 import {
   ChevronRight,
-  ChevronsUpDown,
   ChevronDown,
   FolderTree as FolderTreeIcon,
   FileText,
@@ -25,7 +24,6 @@ import {
   Hash,
   Clock,
   Inbox,
-  PanelLeftClose,
   Archive,
   Layers,
   Settings,
@@ -431,27 +429,6 @@ export default function SidebarTree({
       else next.add(projectId)
       return next
     })
-  }, [])
-
-  const expandAll = useCallback(() => {
-    const allFolderIds = new Set<string>()
-    const allProjectIds = new Set<string>()
-    const walk = (nodes: FolderNode[]) => {
-      for (const n of nodes) {
-        allFolderIds.add(n.id)
-        walk(n.children)
-      }
-    }
-    walk(folderTree)
-    for (const p of projects) allProjectIds.add(p.id)
-    allProjectIds.add('__UNFILED__')
-    setExpandedFolders(allFolderIds)
-    setExpandedProjects(allProjectIds)
-  }, [folderTree, projects])
-
-  const collapseAll = useCallback(() => {
-    setExpandedFolders(new Set())
-    setExpandedProjects(new Set())
   }, [])
 
   // ---- CONTEXT MENU HELPERS ----
@@ -1346,16 +1323,13 @@ export default function SidebarTree({
     return (
       <>
         <div className="flex h-full w-full flex-col items-center">
-          {/* Logo — click to expand */}
+          {/* Logo */}
           <div className="px-1.5 pt-3 pb-2">
-            <button
-              onClick={onToggleCollapsed}
-              className="flex h-8 w-8 items-center justify-center rounded-lg bg-foreground text-[13px] font-bold text-background transition-all hover:opacity-80"
-              aria-label="Expand sidebar"
-              title="Expand sidebar"
-            >
-              N
-            </button>
+            <img
+              src="/icon-192.png"
+              alt="MindViz Notes"
+              className="h-8 w-8 rounded-lg object-contain"
+            />
           </div>
 
           <div className="w-8 border-t border-border/40" />
@@ -1488,38 +1462,14 @@ export default function SidebarTree({
       <div className="flex h-full w-full flex-col overflow-hidden">
         {/* ==== Workspace header ==== */}
         {showHeader && (
-          <div className="group/header flex shrink-0 items-center gap-0.5 px-2 pb-1.5 pt-2.5">
+          <div className="flex shrink-0 items-center gap-0.5 px-2 pb-1.5 pt-2.5">
             <div className="flex min-w-0 flex-1 items-center gap-2 rounded-md px-1.5 py-1">
-              <span className="flex h-[22px] w-[22px] shrink-0 items-center justify-center rounded-[6px] bg-foreground text-[11px] font-bold text-background">
-                N
-              </span>
+              <img
+                src="/icon-192.png"
+                alt="MindViz Notes"
+                className="h-[22px] w-[22px] shrink-0 rounded-[6px] object-contain"
+              />
               <span className="truncate text-[13px] font-semibold text-foreground/90">MindViz Notes</span>
-            </div>
-            <div className="flex shrink-0 items-center gap-0.5 opacity-0 transition-opacity group-hover/header:opacity-100 focus-within:opacity-100">
-              <button
-                onClick={expandAll}
-                className="flex h-6 w-6 items-center justify-center rounded-md text-muted/60 transition-colors hover:bg-surface-hover hover:text-foreground"
-                aria-label="Expand all"
-                title="Expand all"
-              >
-                <ChevronsUpDown size={14} />
-              </button>
-              <button
-                onClick={collapseAll}
-                className="flex h-6 w-6 items-center justify-center rounded-md text-muted/60 transition-colors hover:bg-surface-hover hover:text-foreground"
-                aria-label="Collapse all"
-                title="Collapse all"
-              >
-                <ChevronsUpDown size={14} className="-scale-y-100" />
-              </button>
-              <button
-                onClick={onToggleCollapsed}
-                className="flex h-6 w-6 items-center justify-center rounded-md text-muted/60 transition-colors hover:bg-surface-hover hover:text-foreground"
-                aria-label="Collapse sidebar"
-                title="Collapse sidebar (Ctrl/Cmd + \\)"
-              >
-                <PanelLeftClose size={14} />
-              </button>
             </div>
           </div>
         )}

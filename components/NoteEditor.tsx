@@ -8,12 +8,10 @@ import {
   Trash2,
   ListTree,
   PenTool,
-  Loader2,
   Target,
   Edit2,
   Network,
   Plus,
-  Check,
   PanelRight,
   MoreHorizontal,
   Share2,
@@ -55,7 +53,6 @@ import {
   sanitizeImageAltText,
 } from '@/lib/editor/noteImageHtml'
 import { ErrorBoundary } from './ErrorBoundary'
-import { Button } from '@/components/ui/Button'
 import MobileNoteActions from '@/components/editor/MobileNoteActions'
 import { useIsMobile, useIsCompact } from '@/lib/useIsMobile'
 import { useFloatingToolbar } from '@/lib/editor/useFloatingToolbar'
@@ -3464,7 +3461,7 @@ export default function NoteEditor({
         <div className="flex-1 overflow-hidden px-3 py-2 sm:px-4 sm:py-3 md:px-5 md:py-4">
           <div className="h-full w-full">
             <div className="relative flex h-full flex-col overflow-hidden rounded-xl border border-border bg-surface">
-              {/* Document header — inline title + save state (works at every width) */}
+              {/* Document header — inline title (works at every width) */}
               <div className="flex shrink-0 items-center gap-2 border-b border-border/70 px-3 py-1.5 sm:px-4 sm:py-2">
                 <input
                   type="text"
@@ -3500,36 +3497,6 @@ export default function NoteEditor({
                     >
                       <PanelRight size={16} />
                     </button>
-                  )}
-                  <span className="hidden items-center gap-1.5 text-[11px] sm:flex" aria-live="polite">
-                    {isSaving || isAutosaving ? (
-                      <>
-                        <Loader2 size={11} className="animate-spin text-accent" />
-                        <span className="text-muted">Saving…</span>
-                      </>
-                    ) : hasChanges ? (
-                      <>
-                        <span className="h-1.5 w-1.5 rounded-full bg-warning" />
-                        <span className="text-warning">Unsaved</span>
-                      </>
-                    ) : lastSaveDisplay ? (
-                      <>
-                        <Check size={11} className="text-success" />
-                        <span className="text-muted">Saved {lastSaveDisplay}</span>
-                      </>
-                    ) : null}
-                  </span>
-                  {(hasChanges || isSaving || isAutosaving) && (
-                    <Button
-                      size="sm"
-                      variant="primary"
-                      icon={Save}
-                      loading={isSaving || isAutosaving}
-                      onClick={handleManualSave}
-                      disabled={!title.trim()}
-                    >
-                      Save
-                    </Button>
                   )}
                 </div>
               </div>

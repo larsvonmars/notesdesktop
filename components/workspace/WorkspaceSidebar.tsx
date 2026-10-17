@@ -128,9 +128,11 @@ export default function WorkspaceSidebar({
         {...swipeHandlers}
       >
         <div className="flex shrink-0 items-center gap-2 px-3 pb-2 pt-3">
-          <span className="flex h-[22px] w-[22px] items-center justify-center rounded-[6px] bg-foreground text-[10px] font-bold text-background">
-            N
-          </span>
+          <img
+            src="/icon-192.png"
+            alt="MindViz Notes"
+            className="h-[22px] w-[22px] shrink-0 rounded-[6px] object-contain"
+          />
           <span className="flex-1 truncate text-[13px] font-semibold text-foreground/90">
             MindViz Notes
           </span>
