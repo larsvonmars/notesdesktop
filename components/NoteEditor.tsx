@@ -3641,10 +3641,11 @@ export default function NoteEditor({
             </div>
             
             <div className="mb-4">
-              <label className="block text-sm font-medium text-foreground/80 mb-2">
+              <label htmlFor="note-word-goal" className="block text-sm font-medium text-foreground/80 mb-2">
                 Target word count
               </label>
               <input
+                id="note-word-goal"
                 ref={wordGoalInputRef}
                 type="number"
                 min="1"

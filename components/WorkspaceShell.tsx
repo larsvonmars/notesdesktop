@@ -277,6 +277,7 @@ function WorkspaceContent() {
     handleMoveFolderToProject,
   } = useFolderActions({
     folders,
+    allNotes,
     selectedFolderId,
     loadFolders,
     loadNotesInFolder,
@@ -302,6 +303,7 @@ function WorkspaceContent() {
     selectedNote,
     selectedFolderId,
     folders,
+    notes: allNotes,
     activeView,
     setProjects,
     setArchivedProjects,

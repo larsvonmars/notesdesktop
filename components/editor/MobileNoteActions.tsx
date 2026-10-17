@@ -50,14 +50,14 @@ export default function MobileNoteActions({ isOpen, onClose, actions }: MobileNo
         className="w-full max-w-md rounded-t-2xl border-t border-border bg-surface p-3 shadow-2xl"
         style={{ paddingBottom: 'calc(0.75rem + var(--sab))' }}
       >
-        <div className="mx-auto mb-2 h-1 w-10 rounded-full bg-border-strong/60" aria-hidden />
+        <div className="mx-auto mb-2 h-1 w-10 rounded-full bg-border-strong" aria-hidden />
         <div className="flex items-center justify-between px-1 pb-2">
           <span className="text-sm font-semibold text-foreground">Note actions</span>
           <button
             type="button"
             onClick={onClose}
             aria-label="Close note actions"
-            className="rounded-md p-1 text-muted transition-colors hover:bg-surface-hover hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/50"
+            className="rounded-md p-1 text-muted transition-colors hover:bg-surface-hover hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"
           >
             <X size={16} />
           </button>

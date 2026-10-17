@@ -9,10 +9,13 @@ import {
   type Folder,
 } from '@/lib/folders'
 import { moveFolderToProject } from '@/lib/projects'
+import type { NoteSummary } from '@/lib/notes'
 import type { ToastLike } from '@/lib/workspace/types'
+import { captureDeletedFolder, restoreDeletedFolder } from '@/lib/workspace/folderSnapshot'
 
 export interface FolderActionsOptions {
   folders: Folder[]
+  allNotes: NoteSummary[]
   selectedFolderId: string | null
   loadFolders: () => Promise<void>
   loadNotesInFolder: (folderId: string | null) => Promise<void>
@@ -26,6 +29,7 @@ export interface FolderActionsOptions {
  */
 export function useFolderActions({
   folders,
+  allNotes,
   selectedFolderId,
   loadFolders,
   loadNotesInFolder,
@@ -145,12 +149,53 @@ export function useFolderActions({
 
   const handleDeleteFolder = async (folderId: string) => {
     try {
+      // Snapshot the subtree + note bodies first so the delete can be undone.
+      const snapshot = await captureDeletedFolder(folderId, folders, allNotes).catch(() => null)
+
       await deleteFolder(folderId)
       if (selectedFolderId === folderId) {
         applyFolderSelection(null)
       }
       loadFolders()
       loadNotesInFolder(selectedFolderId)
+
+      if (snapshot && snapshot.folders.length > 0) {
+        const rootName = snapshot.folders[0].name
+        const noteCount = snapshot.notes.length
+        toast.push({
+          title: 'Folder deleted',
+          description:
+            noteCount > 0
+              ? `"${rootName}" and ${noteCount} note${noteCount === 1 ? '' : 's'} were deleted.`
+              : `"${rootName}" was deleted.`,
+          variant: 'warning',
+          action: {
+            label: 'Undo',
+            onClick: () => {
+              void (async () => {
+                try {
+                  const restoredId = await restoreDeletedFolder(snapshot)
+                  await loadFolders()
+                  await loadAllNotes()
+                  if (restoredId) applyFolderSelection(restoredId)
+                  toast.push({
+                    title: 'Folder restored',
+                    description: `"${rootName}" is back in your workspace.`,
+                    variant: 'success',
+                  })
+                } catch (restoreError) {
+                  console.error('Error restoring folder:', restoreError)
+                  toast.push({
+                    title: 'Restore failed',
+                    description: 'Could not restore this folder.',
+                    variant: 'error',
+                  })
+                }
+              })()
+            },
+          },
+        })
+      }
     } catch (error) {
       console.error('Error deleting folder:', error)
       toast.push({ title: 'Delete failed', description: 'Could not delete this folder.', variant: 'error' })

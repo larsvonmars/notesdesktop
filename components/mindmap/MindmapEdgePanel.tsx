@@ -60,7 +60,7 @@ export default function MindmapEdgePanel({
 
       <div className="space-y-4 px-4 py-4">
         <div className="space-y-1.5">
-          <label className="text-xs font-medium text-slate-600 dark:text-slate-300">Title</label>
+          <div className="text-xs font-medium text-slate-600 dark:text-slate-300">Title</div>
           {readOnly ? (
             <div className="rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/70 px-3 py-2 text-sm text-slate-700 dark:text-slate-200">
               {edge.title.trim() || 'No title'}
@@ -68,6 +68,7 @@ export default function MindmapEdgePanel({
           ) : (
             <input
               type="text"
+              aria-label="Connection title"
               value={edge.title}
               onChange={(event) => onUpdateMeta({ title: event.target.value.slice(0, 80) })}
               className="w-full rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 px-3 py-2 text-sm text-slate-800 dark:text-slate-100 focus:border-alpine-500 focus:outline-none focus:ring-2 focus:ring-alpine-200"
@@ -108,7 +109,7 @@ export default function MindmapEdgePanel({
         ) : (
           <>
             <div className="space-y-1.5">
-              <label className="text-xs font-medium text-slate-600 dark:text-slate-300">Color</label>
+              <div className="text-xs font-medium text-slate-600 dark:text-slate-300">Color</div>
               <div className="flex flex-wrap gap-1.5">
                 {DEFAULT_COLORS.map((color) => {
                   const active = edge.style.color === color

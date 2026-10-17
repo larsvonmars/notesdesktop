@@ -58,7 +58,7 @@ export default function MindmapExportDialog({
         <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
           {/* Preview */}
           <div className="flex flex-col gap-2">
-            <label className="text-xs font-medium text-slate-500 dark:text-slate-400 uppercase tracking-wide">Preview</label>
+            <div className="text-xs font-medium text-slate-500 dark:text-slate-400 uppercase tracking-wide">Preview</div>
             <div className="relative aspect-video rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-100 dark:bg-slate-800 overflow-hidden">
               <div className="absolute inset-0 flex items-center justify-center text-slate-400 dark:text-slate-500 text-sm">
                 {(format === 'png' ? 'PNG' : 'JPEG')} · {scale}× · {getDimensions(scale).width}×{getDimensions(scale).height}px
@@ -73,9 +73,10 @@ export default function MindmapExportDialog({
           <div className="flex flex-col gap-4">
             {/* Filename */}
             <div className="flex flex-col gap-1.5">
-              <label className="text-xs font-medium text-slate-500 dark:text-slate-400 uppercase tracking-wide">Filename</label>
+              <label htmlFor="mindmap-export-filename" className="text-xs font-medium text-slate-500 dark:text-slate-400 uppercase tracking-wide">Filename</label>
               <div className="flex items-center gap-1">
                 <input
+                  id="mindmap-export-filename"
                   type="text"
                   value={filename}
                   onChange={(e) => onFilenameChange(e.target.value.replace(/[^a-zA-Z0-9_\-\s]/g, '').slice(0, 60))}
@@ -88,7 +89,7 @@ export default function MindmapExportDialog({
 
             {/* Format */}
             <div className="flex flex-col gap-1.5">
-              <label className="text-xs font-medium text-slate-500 dark:text-slate-400 uppercase tracking-wide">Format</label>
+              <div className="text-xs font-medium text-slate-500 dark:text-slate-400 uppercase tracking-wide">Format</div>
               <div className="flex rounded-lg border border-slate-200 dark:border-slate-600 overflow-hidden">
                 {(['png', 'jpeg'] as const).map((fmt) => (
                   <button
@@ -111,7 +112,7 @@ export default function MindmapExportDialog({
 
             {/* Scale */}
             <div className="flex flex-col gap-1.5">
-              <label className="text-xs font-medium text-slate-500 dark:text-slate-400 uppercase tracking-wide">Scale</label>
+              <div className="text-xs font-medium text-slate-500 dark:text-slate-400 uppercase tracking-wide">Scale</div>
               <div className="flex items-center gap-2">
                 {[1, 2, 3].map((s) => (
                   <button
@@ -148,10 +149,11 @@ export default function MindmapExportDialog({
             {/* JPEG Quality */}
             {format === 'jpeg' && (
               <div className="flex flex-col gap-1.5">
-                <label className="text-xs font-medium text-slate-500 dark:text-slate-400 uppercase tracking-wide">
+                <label htmlFor="mindmap-export-quality" className="text-xs font-medium text-slate-500 dark:text-slate-400 uppercase tracking-wide">
                   Quality: {Math.round(quality * 100)}%
                 </label>
                 <input
+                  id="mindmap-export-quality"
                   type="range"
                   min={0.1}
                   max={1}
@@ -165,7 +167,7 @@ export default function MindmapExportDialog({
 
             {/* Background */}
             <div className="flex flex-col gap-1.5">
-              <label className="text-xs font-medium text-slate-500 dark:text-slate-400 uppercase tracking-wide">Background</label>
+              <div className="text-xs font-medium text-slate-500 dark:text-slate-400 uppercase tracking-wide">Background</div>
               <div className="grid grid-cols-2 gap-1.5">
                 {([
                   ['canvas', 'Theme'],

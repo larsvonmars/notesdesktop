@@ -422,6 +422,7 @@ const SelectionToolbar = forwardRef<HTMLDivElement | null, SelectionToolbarProps
             {headingOpen && (
               <div
                 role="listbox"
+                tabIndex={-1}
                 className={`absolute left-0 z-10 min-w-[160px] overflow-y-auto overflow-x-hidden rounded-xl border border-border bg-surface py-1 shadow-xl ${
                   headingOpensUp ? 'bottom-full mb-1.5' : 'top-full mt-1.5'
                 }`}
@@ -667,6 +668,7 @@ const SelectionToolbar = forwardRef<HTMLDivElement | null, SelectionToolbarProps
               {caseOpen && (
                 <div
                   role="menu"
+                  tabIndex={-1}
                   aria-label="Change case"
                   className="absolute bottom-full left-0 z-10 mb-1.5 min-w-[152px] overflow-hidden rounded-xl border border-border bg-surface py-1 shadow-xl"
                   onMouseDown={(e) => e.preventDefault()}

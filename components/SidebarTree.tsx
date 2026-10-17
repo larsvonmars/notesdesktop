@@ -167,6 +167,16 @@ export default function SidebarTree({
     x: number; y: number; type: 'folder' | 'note' | 'project'; id: string; name: string; projectId?: string | null
   } | null>(null)
 
+  // Keyboard users can dismiss the context menu with Escape.
+  useEffect(() => {
+    if (!contextMenu) return
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') setContextMenu(null)
+    }
+    document.addEventListener('keydown', handleKeyDown)
+    return () => document.removeEventListener('keydown', handleKeyDown)
+  }, [contextMenu])
+
   // Inline rename state
   const [inlineRename, setInlineRename] = useState<{
     type: 'folder' | 'project'; id: string; value: string
@@ -1452,11 +1462,12 @@ export default function SidebarTree({
         {/* ========== CONTEXT MENU ========== */}
         {contextMenu && (
           <>
-            <div className="fixed inset-0 z-50" onClick={() => setContextMenu(null)} />
+            <div className="fixed inset-0 z-50" role="presentation" aria-hidden="true" onClick={() => setContextMenu(null)} />
             <div
+              role="menu"
+              tabIndex={-1}
               className="fixed z-[60] min-w-[220px] overflow-y-auto rounded-lg border border-border/70 bg-surface py-1 shadow-xl"
               style={{ left: contextMenu.x, top: contextMenu.y }}
-              onClick={(e) => e.stopPropagation()}
             >
               {renderContextMenu()}
             </div>
@@ -1790,11 +1801,12 @@ export default function SidebarTree({
       {/* ========== CONTEXT MENU ========== */}
       {contextMenu && (
         <>
-          <div className="fixed inset-0 z-50" onClick={() => setContextMenu(null)} />
+          <div className="fixed inset-0 z-50" role="presentation" aria-hidden="true" onClick={() => setContextMenu(null)} />
           <div
+            role="menu"
+            tabIndex={-1}
             className="fixed z-[60] min-w-[220px] overflow-y-auto rounded-lg border border-border/70 bg-surface py-1 shadow-xl"
             style={{ left: contextMenu.x, top: contextMenu.y }}
-            onClick={(e) => e.stopPropagation()}
           >
             {renderContextMenu()}
           </div>
@@ -1849,8 +1861,8 @@ export default function SidebarTree({
       <>
         {/* ========== MOVE PICKER MODAL ========== */}
         {showMovePicker && (
-          <div className={modalOverlay} onClick={() => setShowMovePicker(null)}>
-            <div className="flex max-h-[65vh] w-full max-w-md flex-col rounded-xl border border-border/70 bg-surface shadow-2xl" onClick={(e) => e.stopPropagation()}>
+          <div className={modalOverlay} role="presentation" onClick={(e) => { if (e.target === e.currentTarget) setShowMovePicker(null) }}>
+            <div role="dialog" aria-modal="true" aria-label="Move item" className="flex max-h-[65vh] w-full max-w-md flex-col rounded-xl border border-border/70 bg-surface shadow-2xl">
               <div className="px-4 pb-2 pt-4">
                 <h3 className="text-[15px] font-semibold text-foreground">
                   {showMovePicker.type === 'note-to-folder' && 'Move note to folder'}

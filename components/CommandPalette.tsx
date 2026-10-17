@@ -303,7 +303,7 @@ export default function CommandPalette({
             }}
             onKeyDown={handleKeyDown}
             placeholder="Search notes, folders, projects or run a command…"
-            className="h-12 min-w-0 flex-1 bg-transparent text-sm text-foreground placeholder:text-muted/60 focus:outline-none"
+            className="h-12 min-w-0 flex-1 bg-transparent text-sm text-foreground placeholder:text-muted focus:outline-none"
           />
           <kbd className="hidden shrink-0 rounded border border-border px-1.5 py-0.5 text-[10px] font-medium text-muted sm:block">
             Esc
@@ -325,7 +325,7 @@ export default function CommandPalette({
 
           {groups.map((group) => (
             <div key={group.title} className="py-1">
-              <div className="px-3.5 pb-1 pt-1 text-[10px] font-semibold uppercase tracking-wider text-muted/60">
+              <div className="px-3.5 pb-1 pt-1 text-[10px] font-semibold uppercase tracking-wider text-muted">
                 {group.title}
               </div>
               {group.items.map((item) => {
@@ -344,7 +344,7 @@ export default function CommandPalette({
                     onMouseEnter={() => setActiveIndex(index)}
                     onClick={() => runItem(item)}
                     className={`flex w-full items-center gap-2.5 px-3.5 py-2 text-left transition-colors ${
-                      isActive ? 'bg-surface-hover text-foreground' : 'text-foreground/80 hover:bg-surface-hover'
+                      isActive ? 'bg-surface-hover text-foreground' : 'text-foreground hover:bg-surface-hover'
                     }`}
                   >
                     <Icon size={15} className={`shrink-0 ${item.iconClass ?? 'text-muted'}`} aria-hidden />
@@ -361,7 +361,7 @@ export default function CommandPalette({
           ))}
         </div>
 
-        <div className="flex items-center justify-between border-t border-border bg-surface-hover/40 px-3.5 py-1.5 text-[10px] text-muted">
+        <div className="flex items-center justify-between border-t border-border bg-surface-hover px-3.5 py-1.5 text-[10px] text-muted">
           <span>{isSearchingContent ? 'Searching note text…' : '↑↓ navigate · ↵ open'}</span>
           <span className="hidden sm:inline">{formatModShortcut('K')}</span>
         </div>

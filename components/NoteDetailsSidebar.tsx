@@ -398,7 +398,7 @@ function NoteDetailsSidebar({
 
         {/* Metadata Section */}
         <div className="px-4 py-3 space-y-2.5">
-          <label className="text-[10px] font-semibold text-muted uppercase tracking-widest block">Details</label>
+          <div className="text-[10px] font-semibold text-muted uppercase tracking-widest block">Details</div>
           
           {/* Note Type */}
           <div className="flex items-center gap-2 text-xs">
@@ -427,7 +427,7 @@ function NoteDetailsSidebar({
         {/* Stats Section (rich-text only) */}
         {noteType === 'rich-text' && (
           <div className="px-4 py-3">
-            <label className="text-[10px] font-semibold text-muted uppercase tracking-widest mb-2.5 block">Statistics</label>
+            <div className="text-[10px] font-semibold text-muted uppercase tracking-widest mb-2.5 block">Statistics</div>
             
             <div className="grid grid-cols-2 gap-2 mb-2.5">
               <div className="bg-surface-hover/30 rounded-xl px-2.5 py-2.5 text-center">
@@ -685,7 +685,7 @@ function NoteDetailsSidebar({
             {/* Export / Import Section */}
             {(onExportMarkdown || onExportPdf || onExportDocx || onExportHtml || onExportPlainText || onImportDocx) && (
               <div>
-                <label className="text-[10px] font-semibold text-muted uppercase tracking-widest mb-2 block">Export &amp; Import</label>
+                <div className="text-[10px] font-semibold text-muted uppercase tracking-widest mb-2 block">Export &amp; Import</div>
                 <div className="rounded-2xl border border-border/40 bg-surface-hover/20 divide-y divide-border/30 overflow-hidden">
                   {onExportPdf && (
                     <button
@@ -778,7 +778,7 @@ function NoteDetailsSidebar({
             {/* Share Section */}
             {(onPublish || shareUrl || shareHint) && (
               <div>
-                <label className="text-[10px] font-semibold text-muted uppercase tracking-widest mb-2 block">Share</label>
+                <div className="text-[10px] font-semibold text-muted uppercase tracking-widest mb-2 block">Share</div>
                 <div className="rounded-2xl border border-border/40 bg-surface-hover/20 p-4">
                   <div className="flex items-start gap-3">
                     <div className={`flex h-9 w-9 items-center justify-center rounded-xl ${shareUrl ? 'bg-alpine-100 dark:bg-alpine-900/30' : 'bg-surface-hover/60'}`}>

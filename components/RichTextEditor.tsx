@@ -3594,6 +3594,7 @@ const RichTextEditorImpl = forwardRef<RichTextEditorHandle, RichTextEditorProps>
             suppressContentEditableWarning
             spellCheck
             role="textbox"
+            tabIndex={disabled ? -1 : 0}
             aria-label="Rich text editor"
             aria-multiline="true"
             aria-disabled={disabled}

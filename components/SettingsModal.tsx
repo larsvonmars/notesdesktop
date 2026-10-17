@@ -317,21 +317,21 @@ export default function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
         <ModalBody className="space-y-8">
           {/* ─── Account ─── */}
           <section className="space-y-4">
-            <h3 className="text-sm font-semibold text-gray-500 dark:text-slate-400 uppercase tracking-wider">Account</h3>
+            <h3 className="text-sm font-semibold text-muted uppercase tracking-wider">Account</h3>
 
-            <div className="rounded-xl border border-gray-200 dark:border-slate-700 bg-gray-50/70 dark:bg-slate-800/60 p-3 sm:p-4 space-y-2">
+            <div className="rounded-xl border border-border bg-surface-hover p-3 sm:p-4 space-y-2">
               <div className="flex items-center justify-between gap-3">
-                <span className="text-xs font-medium text-gray-500 dark:text-slate-400 uppercase tracking-wide">Current Email</span>
-                <span className="text-sm font-medium text-gray-900 dark:text-slate-100 break-all text-right">{userEmail || 'Not available'}</span>
+                <span className="text-xs font-medium text-muted uppercase tracking-wide">Current Email</span>
+                <span className="text-sm font-medium text-foreground break-all text-right">{userEmail || 'Not available'}</span>
               </div>
               <div className="flex items-center justify-between gap-3">
-                <span className="text-xs font-medium text-gray-500 dark:text-slate-400 uppercase tracking-wide">Account ID</span>
-                <span className="text-[11px] font-mono text-gray-700 dark:text-slate-300 break-all text-right">{user?.id || 'Not available'}</span>
+                <span className="text-xs font-medium text-muted uppercase tracking-wide">Account ID</span>
+                <span className="text-[11px] font-mono text-foreground break-all text-right">{user?.id || 'Not available'}</span>
               </div>
             </div>
 
             <div className="space-y-2">
-              <label htmlFor="settings-display-name" className="text-sm font-medium text-gray-700 dark:text-slate-200">Display Name</label>
+              <label htmlFor="settings-display-name" className="text-sm font-medium text-foreground">Display Name</label>
               <div className="flex gap-2">
                 <input
                   id="settings-display-name"
@@ -339,12 +339,12 @@ export default function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
                   value={displayName}
                   onChange={(e) => setDisplayName(e.target.value)}
                   placeholder="How your name appears"
-                  className="flex-1 min-w-0 px-3 py-2 rounded-lg border border-gray-300 dark:border-slate-600 bg-white dark:bg-slate-900 text-gray-900 dark:text-slate-100 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  className="flex-1 min-w-0 px-3 py-2 rounded-lg border border-border-strong bg-surface text-foreground text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
                 />
                 <button
                   onClick={handleSaveProfile}
                   disabled={isSavingProfile || !user}
-                  className="px-3 py-2 text-sm font-medium rounded-lg bg-blue-600 text-white hover:bg-blue-700 disabled:opacity-60 disabled:cursor-not-allowed transition-colors"
+                  className="px-3 py-2 text-sm font-medium rounded-lg bg-accent text-white hover:bg-blue-700 disabled:opacity-60 disabled:cursor-not-allowed transition-colors"
                 >
                   {isSavingProfile ? 'Saving...' : 'Save'}
                 </button>
@@ -352,7 +352,7 @@ export default function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
             </div>
 
             <div className="space-y-2">
-              <label htmlFor="settings-email" className="text-sm font-medium text-gray-700 dark:text-slate-200">Email Address</label>
+              <label htmlFor="settings-email" className="text-sm font-medium text-foreground">Email Address</label>
               <div className="flex gap-2">
                 <input
                   id="settings-email"
@@ -360,30 +360,30 @@ export default function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
                   value={emailDraft}
                   onChange={(e) => setEmailDraft(e.target.value)}
                   placeholder="name@example.com"
-                  className="flex-1 min-w-0 px-3 py-2 rounded-lg border border-gray-300 dark:border-slate-600 bg-white dark:bg-slate-900 text-gray-900 dark:text-slate-100 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  className="flex-1 min-w-0 px-3 py-2 rounded-lg border border-border-strong bg-surface text-foreground text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
                 />
                 <button
                   onClick={handleUpdateEmail}
                   disabled={isUpdatingEmail || !user}
-                  className="px-3 py-2 text-sm font-medium rounded-lg bg-blue-600 text-white hover:bg-blue-700 disabled:opacity-60 disabled:cursor-not-allowed transition-colors"
+                  className="px-3 py-2 text-sm font-medium rounded-lg bg-accent text-white hover:bg-blue-700 disabled:opacity-60 disabled:cursor-not-allowed transition-colors"
                 >
                   {isUpdatingEmail ? 'Updating...' : 'Update'}
                 </button>
               </div>
-              <p className="text-xs text-gray-500 dark:text-slate-400">Email updates require confirmation through your inbox.</p>
+              <p className="text-xs text-muted">Email updates require confirmation through your inbox.</p>
             </div>
 
             <div className="space-y-2">
-              <label htmlFor="settings-password" className="text-sm font-medium text-gray-700 dark:text-slate-200">New Password</label>
+              <label htmlFor="settings-password" className="text-sm font-medium text-foreground">New Password</label>
               <input
                 id="settings-password"
                 type="password"
                 value={newPassword}
                 onChange={(e) => setNewPassword(e.target.value)}
                 placeholder="At least 8 characters"
-                className="w-full px-3 py-2 rounded-lg border border-gray-300 dark:border-slate-600 bg-white dark:bg-slate-900 text-gray-900 dark:text-slate-100 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                className="w-full px-3 py-2 rounded-lg border border-border-strong bg-surface text-foreground text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
               />
-              <label htmlFor="settings-password-confirm" className="text-sm font-medium text-gray-700 dark:text-slate-200">Confirm Password</label>
+              <label htmlFor="settings-password-confirm" className="text-sm font-medium text-foreground">Confirm Password</label>
               <div className="flex gap-2">
                 <input
                   id="settings-password-confirm"
@@ -391,24 +391,24 @@ export default function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
                   value={confirmPassword}
                   onChange={(e) => setConfirmPassword(e.target.value)}
                   placeholder="Re-enter your password"
-                  className="flex-1 min-w-0 px-3 py-2 rounded-lg border border-gray-300 dark:border-slate-600 bg-white dark:bg-slate-900 text-gray-900 dark:text-slate-100 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  className="flex-1 min-w-0 px-3 py-2 rounded-lg border border-border-strong bg-surface text-foreground text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
                 />
                 <button
                   onClick={handleUpdatePassword}
                   disabled={isUpdatingPassword || !user}
-                  className="px-3 py-2 text-sm font-medium rounded-lg bg-blue-600 text-white hover:bg-blue-700 disabled:opacity-60 disabled:cursor-not-allowed transition-colors"
+                  className="px-3 py-2 text-sm font-medium rounded-lg bg-accent text-white hover:bg-blue-700 disabled:opacity-60 disabled:cursor-not-allowed transition-colors"
                 >
                   {isUpdatingPassword ? 'Updating...' : 'Set'}
                 </button>
               </div>
-              <p className="text-xs text-gray-500 dark:text-slate-400">You can also request a reset link if you prefer changing it by email.</p>
+              <p className="text-xs text-muted">You can also request a reset link if you prefer changing it by email.</p>
             </div>
 
             {(errorMessage || successMessage) && (
               <div
                 className={`rounded-lg border px-3 py-2 text-sm ${
                   errorMessage
-                    ? 'border-red-200 bg-red-50 text-red-700 dark:border-red-900/60 dark:bg-red-950/40 dark:text-red-300'
+                    ? 'border-danger bg-danger-light text-danger dark:border-red-900/60 dark:bg-red-950/40'
                     : 'border-emerald-200 bg-emerald-50 text-emerald-700 dark:border-emerald-900/60 dark:bg-emerald-950/40 dark:text-emerald-300'
                 }`}
               >
@@ -420,27 +420,27 @@ export default function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
               <button
                 onClick={handleSendPasswordReset}
                 disabled={isSendingReset || !userEmail}
-                className="w-full py-2 text-sm font-medium rounded-lg border border-gray-300 dark:border-slate-600 text-gray-700 dark:text-slate-100 bg-white dark:bg-slate-900 hover:bg-gray-100 dark:hover:bg-slate-700 disabled:opacity-60 disabled:cursor-not-allowed transition-colors"
+                className="w-full py-2 text-sm font-medium rounded-lg border border-border-strong text-foreground bg-surface hover:bg-surface-hover disabled:opacity-60 disabled:cursor-not-allowed transition-colors"
               >
                 {isSendingReset ? 'Sending...' : 'Send Reset Link'}
               </button>
               <button
                 onClick={handleSignOut}
                 disabled={isSigningOut || !user}
-                className="w-full py-2 text-sm font-medium rounded-lg border border-red-300 dark:border-red-700 text-red-700 dark:text-red-300 bg-red-50 dark:bg-red-950/30 hover:bg-red-100 dark:hover:bg-red-900/40 disabled:opacity-60 disabled:cursor-not-allowed transition-colors"
+                className="w-full py-2 text-sm font-medium rounded-lg border border-danger dark:border-red-700 text-danger bg-danger-light dark:bg-red-950/30 hover:bg-red-100 dark:hover:bg-red-900/40 disabled:opacity-60 disabled:cursor-not-allowed transition-colors"
               >
                 {isSigningOut ? 'Signing Out...' : 'Sign Out'}
               </button>
             </div>
 
-            <div className="rounded-xl border border-red-200 dark:border-red-900/60 bg-red-50/70 dark:bg-red-950/20 p-3 sm:p-4 space-y-3">
+            <div className="rounded-xl border border-danger dark:border-red-900/60 bg-red-50/70 dark:bg-red-950/20 p-3 sm:p-4 space-y-3">
               <div>
-                <p className="text-sm font-semibold text-red-700 dark:text-red-300">Delete Account</p>
+                <p className="text-sm font-semibold text-danger">Delete Account</p>
                 <p className="text-xs text-red-700/90 dark:text-red-300/90 mt-1">
                   This permanently removes your account and cannot be undone.
                 </p>
               </div>
-              <label htmlFor="settings-delete-confirm" className="text-xs font-medium text-red-700 dark:text-red-300 uppercase tracking-wide">
+              <label htmlFor="settings-delete-confirm" className="text-xs font-medium text-danger uppercase tracking-wide">
                 Type DELETE to confirm
               </label>
               <div className="flex gap-2">
@@ -450,7 +450,7 @@ export default function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
                   value={deleteConfirmationText}
                   onChange={(e) => setDeleteConfirmationText(e.target.value)}
                   placeholder="DELETE"
-                  className="flex-1 min-w-0 px-3 py-2 rounded-lg border border-red-300 dark:border-red-800 bg-white dark:bg-slate-900 text-gray-900 dark:text-slate-100 text-sm focus:outline-none focus:ring-2 focus:ring-red-500"
+                  className="flex-1 min-w-0 px-3 py-2 rounded-lg border border-danger dark:border-red-800 bg-surface text-foreground text-sm focus:outline-none focus:ring-2 focus:ring-red-500"
                 />
                 <button
                   onClick={handleDeleteAccount}
@@ -465,18 +465,18 @@ export default function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
 
           {/* ─── Appearance ─── */}
           <section>
-            <h3 className="text-sm font-semibold text-gray-500 dark:text-slate-400 uppercase tracking-wider mb-3">Appearance</h3>
+            <h3 className="text-sm font-semibold text-muted uppercase tracking-wider mb-3">Appearance</h3>
             <ThemeSelector />
           </section>
 
           {/* ─── Editor ─── */}
           <section>
-            <h3 className="text-sm font-semibold text-gray-500 dark:text-slate-400 uppercase tracking-wider mb-3">Editor</h3>
+            <h3 className="text-sm font-semibold text-muted uppercase tracking-wider mb-3">Editor</h3>
 
-            <div className="flex items-start justify-between gap-4 rounded-xl border border-gray-200 dark:border-slate-700 bg-gray-50/70 dark:bg-slate-800/60 p-3 sm:p-4">
+            <div className="flex items-start justify-between gap-4 rounded-xl border border-border bg-surface-hover p-3 sm:p-4">
               <div className="min-w-0">
-                <p className="text-sm font-medium text-gray-900 dark:text-slate-100">Grammar &amp; spelling check</p>
-                <p className="text-xs text-gray-500 dark:text-slate-400 mt-1">
+                <p className="text-sm font-medium text-foreground">Grammar &amp; spelling check</p>
+                <p className="text-xs text-muted mt-1">
                   Shows suggestions while you write. Runs entirely on your device (English only).
                 </p>
               </div>
@@ -487,7 +487,7 @@ export default function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
                 aria-label="Grammar and spelling check"
                 onClick={handleToggleGrammarCheck}
                 className={`relative inline-flex h-6 w-11 flex-shrink-0 items-center rounded-full transition-colors focus:outline-none focus:ring-2 focus:ring-blue-500 ${
-                  grammarCheckEnabled ? 'bg-blue-600' : 'bg-gray-300 dark:bg-slate-600'
+                  grammarCheckEnabled ? 'bg-accent' : 'bg-surface-active'
                 }`}
               >
                 <span
@@ -501,12 +501,12 @@ export default function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
 
           {/* ─── Startup ─── */}
           <section>
-            <h3 className="text-sm font-semibold text-gray-500 dark:text-slate-400 uppercase tracking-wider mb-3">Startup</h3>
+            <h3 className="text-sm font-semibold text-muted uppercase tracking-wider mb-3">Startup</h3>
 
-            <div className="flex items-start justify-between gap-4 rounded-xl border border-gray-200 dark:border-slate-700 bg-gray-50/70 dark:bg-slate-800/60 p-3 sm:p-4">
+            <div className="flex items-start justify-between gap-4 rounded-xl border border-border bg-surface-hover p-3 sm:p-4">
               <div className="min-w-0">
-                <p className="text-sm font-medium text-gray-900 dark:text-slate-100">Open the welcome screen on launch</p>
-                <p className="text-xs text-gray-500 dark:text-slate-400 mt-1">
+                <p className="text-sm font-medium text-foreground">Open the welcome screen on launch</p>
+                <p className="text-xs text-muted mt-1">
                   Shows recent notes and quick actions when the app starts. You can always reopen it from Home in the sidebar.
                 </p>
               </div>
@@ -517,7 +517,7 @@ export default function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
                 aria-label="Open the welcome screen on launch"
                 onClick={handleToggleWelcomeOnStartup}
                 className={`relative inline-flex h-6 w-11 flex-shrink-0 items-center rounded-full transition-colors focus:outline-none focus:ring-2 focus:ring-blue-500 ${
-                  welcomeOnStartup ? 'bg-blue-600' : 'bg-gray-300 dark:bg-slate-600'
+                  welcomeOnStartup ? 'bg-accent' : 'bg-surface-active'
                 }`}
               >
                 <span
@@ -531,10 +531,10 @@ export default function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
         </ModalBody>
 
         {/* Footer */}
-        <div className="px-4 sm:px-6 py-3.5 sm:py-4 border-t border-gray-100 dark:border-slate-700 bg-gray-50/60 dark:bg-slate-800/60">
+        <div className="px-4 sm:px-6 py-3.5 sm:py-4 border-t border-border bg-surface-hover">
           <button
             onClick={onClose}
-            className="w-full py-2 text-sm font-medium text-gray-700 dark:text-slate-100 bg-gray-100 dark:bg-slate-700 hover:bg-gray-200 dark:hover:bg-slate-600 rounded-lg transition-colors"
+            className="w-full py-2 text-sm font-medium text-foreground bg-surface-hover hover:bg-surface-active rounded-lg transition-colors"
           >
             Done
           </button>

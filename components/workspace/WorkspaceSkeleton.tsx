@@ -7,7 +7,7 @@ export default function WorkspaceSkeleton() {
     <div className="flex min-h-screen bg-background text-foreground" role="status" aria-busy="true">
       <span className="sr-only">Loading your workspace…</span>
 
-      <aside className="hidden w-[300px] shrink-0 border-r border-border/60 bg-surface p-3 md:block" aria-hidden>
+      <aside className="hidden w-[300px] shrink-0 border-r border-border bg-surface p-3 md:block" aria-hidden>
         <div className="mb-4 flex items-center gap-2 px-2">
           <div className="h-6 w-6 animate-pulse rounded-md bg-surface-active" />
           <div className="h-3.5 w-28 animate-pulse rounded bg-surface-active" />

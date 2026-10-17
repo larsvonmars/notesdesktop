@@ -52,17 +52,17 @@ const VARIANT_STYLES: Record<ToastVariant, { card: string; icon: string; Icon: t
     Icon: Info,
   },
   success: {
-    card: 'border-success/40 bg-surface text-foreground',
+    card: 'border-success bg-surface text-foreground',
     icon: 'text-success',
     Icon: CheckCircle2,
   },
   warning: {
-    card: 'border-warning/40 bg-surface text-foreground',
+    card: 'border-warning bg-surface text-foreground',
     icon: 'text-warning',
     Icon: AlertTriangle,
   },
   error: {
-    card: 'border-danger/40 bg-surface text-foreground',
+    card: 'border-danger bg-surface text-foreground',
     icon: 'text-danger',
     Icon: XCircle,
   },
@@ -102,7 +102,7 @@ function ToastCard({ toast, onDismiss }: { toast: Toast; onDismiss: (id: string)
               toast.action?.onClick()
               onDismiss(toast.id)
             }}
-            className="mt-2 rounded-lg border border-border bg-surface px-2.5 py-1 text-xs font-semibold text-foreground transition-colors hover:bg-surface-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/50"
+            className="mt-2 rounded-lg border border-border bg-surface px-2.5 py-1 text-xs font-semibold text-foreground transition-colors hover:bg-surface-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"
           >
             {toast.action.label}
           </button>
@@ -111,7 +111,7 @@ function ToastCard({ toast, onDismiss }: { toast: Toast; onDismiss: (id: string)
       <button
         type="button"
         onClick={() => onDismiss(toast.id)}
-        className="shrink-0 rounded-md p-0.5 text-muted/70 transition-colors hover:bg-surface-hover hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/50"
+        className="shrink-0 rounded-md p-0.5 text-muted transition-colors hover:bg-surface-hover hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"
         aria-label="Dismiss notification"
       >
         <X size={14} />

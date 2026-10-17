@@ -1384,7 +1384,7 @@ const DataSheetEditor = forwardRef<DataSheetEditorHandle, DataSheetEditorProps>(
 
             {/* Custom size input */}
             <div className="mb-5">
-              <label className="block text-sm font-medium text-gray-700 mb-2">Grid size</label>
+              <div className="block text-sm font-medium text-gray-700 mb-2">Grid size</div>
               <div className="flex items-center gap-2">
                 <div className="flex-1">
                   <input
@@ -1392,6 +1392,7 @@ const DataSheetEditor = forwardRef<DataSheetEditorHandle, DataSheetEditorProps>(
                     type="number"
                     min={1}
                     max={702}
+                    aria-label="Columns"
                     value={sizeColsInput}
                     onChange={(e) => setSizeColsInput(e.target.value)}
                     onKeyDown={(e) => { if (e.key === 'Enter') handleSizePickerSubmit() }}
@@ -1406,6 +1407,7 @@ const DataSheetEditor = forwardRef<DataSheetEditorHandle, DataSheetEditorProps>(
                     type="number"
                     min={1}
                     max={10000}
+                    aria-label="Rows"
                     value={sizeRowsInput}
                     onChange={(e) => setSizeRowsInput(e.target.value)}
                     onKeyDown={(e) => { if (e.key === 'Enter') handleSizePickerSubmit() }}
@@ -1426,7 +1428,7 @@ const DataSheetEditor = forwardRef<DataSheetEditorHandle, DataSheetEditorProps>(
 
             {/* Presets */}
             <div>
-              <label className="block text-xs font-medium text-gray-500 mb-2 uppercase tracking-wide">Quick presets</label>
+              <div className="block text-xs font-medium text-gray-500 mb-2 uppercase tracking-wide">Quick presets</div>
               <div className="grid grid-cols-4 gap-2">
                 {SIZE_PRESETS.map((preset) => (
                   <button
@@ -1454,6 +1456,8 @@ const DataSheetEditor = forwardRef<DataSheetEditorHandle, DataSheetEditorProps>(
         onKeyDown={handleKeyDown as any}
         onPaste={handlePaste as any}
         onCopy={handleCopy as any}
+        role="grid"
+        aria-label="Data sheet"
         tabIndex={0}
       >
         {/* Toolbar */}

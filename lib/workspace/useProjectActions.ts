@@ -2,11 +2,13 @@
 
 import { useState, type Dispatch, type SetStateAction } from 'react'
 import type { Folder } from '@/lib/folders'
-import type { Note } from '@/lib/notes'
+import type { Note, NoteSummary } from '@/lib/notes'
 import {
   archiveProject,
   createProject,
   deleteProject,
+  moveFolderToProject,
+  moveNoteToProject,
   restoreProject,
   updateProject,
   type Project,
@@ -19,6 +21,7 @@ export interface ProjectActionsOptions {
   selectedNote: Note | null
   selectedFolderId: string | null
   folders: Folder[]
+  notes: NoteSummary[]
   activeView: WorkspaceView
   setProjects: Dispatch<SetStateAction<Project[]>>
   setArchivedProjects: Dispatch<SetStateAction<Project[]>>
@@ -39,6 +42,7 @@ export function useProjectActions({
   selectedNote,
   selectedFolderId,
   folders,
+  notes,
   activeView,
   setProjects,
   setArchivedProjects,
@@ -82,6 +86,12 @@ export function useProjectActions({
   }
 
   const handleDeleteProject = async (projectId: string) => {
+    const project = projects.find((candidate) => candidate.id === projectId)
+    // Deleting a project moves its folders/notes to Unfiled, so remember them
+    // to re-associate everything if the user undoes the deletion.
+    const folderIds = folders.filter((folder) => folder.project_id === projectId).map((folder) => folder.id)
+    const noteIds = notes.filter((note) => note.project_id === projectId).map((note) => note.id)
+
     try {
       await deleteProject(projectId)
       setProjects(prev => prev.filter(p => p.id !== projectId))
@@ -92,10 +102,52 @@ export function useProjectActions({
       // Reload folders and notes since they may have been orphaned
       loadFolders()
       loadAllNotes()
-      toast.push({ title: 'Project deleted', description: 'Project and its contents were removed', duration: 3000 })
+
+      if (project) {
+        toast.push({
+          title: 'Project deleted',
+          description: `"${project.name}" and its structure were removed.`,
+          variant: 'warning',
+          action: {
+            label: 'Undo',
+            onClick: () => {
+              void (async () => {
+                try {
+                  const restored = await createProject({
+                    name: project.name,
+                    description: project.description,
+                    color: project.color,
+                  })
+                  for (const folderId of folderIds) {
+                    await moveFolderToProject(folderId, restored.id)
+                  }
+                  for (const noteId of noteIds) {
+                    await moveNoteToProject(noteId, restored.id)
+                  }
+                  setProjects(prev => [...prev.filter(p => p.id !== restored.id), restored])
+                  await loadFolders()
+                  await loadAllNotes()
+                  toast.push({
+                    title: 'Project restored',
+                    description: `"${restored.name}" is back with its folders and notes.`,
+                    variant: 'success',
+                  })
+                } catch (restoreError) {
+                  console.error('Error restoring project:', restoreError)
+                  toast.push({
+                    title: 'Restore failed',
+                    description: 'Could not restore this project.',
+                    variant: 'error',
+                  })
+                }
+              })()
+            },
+          },
+        })
+      }
     } catch (error) {
       console.error('Error deleting project:', error)
-      toast.push({ title: 'Error', description: 'Failed to delete project', duration: 5000 })
+      toast.push({ title: 'Error', description: 'Failed to delete project', variant: 'error', duration: 5000 })
     }
   }
 

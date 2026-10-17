@@ -26,6 +26,7 @@ import {
   useRef,
   useState,
 } from 'react'
+import { createPortal } from 'react-dom'
 import {
   ArrowLeft,
   CheckSquare,
@@ -154,6 +155,9 @@ interface SlashMenuState extends TriggerContext {
   anchor: Anchor
   top: number
   left: number
+  width: number
+  /** Caps the menu to the viewport so it stays usable in short windows. */
+  maxHeight: number
   view: MenuView
   /** Filtered commands (view `commands`). */
   items: SlashCommandDefinition[]
@@ -303,28 +307,45 @@ const SlashMenu = forwardRef<SlashMenuHandle, SlashMenuProps>(function SlashMenu
     setActiveIndex(index)
   }, [])
 
-  /** Geometry for a menu of `height` px, anchored at the caret line. */
+  /**
+   * Geometry for a menu of `height` px, anchored at the caret line.
+   *
+   * The menu is rendered in a portal with `position: fixed`, so coordinates are
+   * viewport-based and the menu is no longer clipped by the editor's scroll
+   * container — only the viewport (and the editor's column, horizontally) bound
+   * it.
+   */
   const position = useCallback(
     (height: number, anchor: Anchor) => {
       const editor = editorRef.current
       if (!editor) return null
 
       const editorRect = editor.getBoundingClientRect()
-      const width = Math.min(MENU_WIDTH, Math.max(editorRect.width - EDGE * 2, 120))
+      const viewportWidth = Math.max(window.innerWidth, 1)
+      const viewportHeight = Math.max(window.innerHeight, 1)
 
-      let top = anchor.bottom - editorRect.top + GAP
-      if (top + height > editorRect.height - EDGE) {
-        // Not enough room below the caret — flip above it.
-        top = anchor.top - editorRect.top - height - GAP
-      }
-      top = Math.max(EDGE, Math.min(top, Math.max(EDGE, editorRect.height - height - EDGE)))
-
-      const left = Math.max(
-        EDGE,
-        Math.min(anchor.left - editorRect.left, Math.max(EDGE, editorRect.width - width - EDGE))
+      const width = Math.min(
+        MENU_WIDTH,
+        Math.max(Math.min(editorRect.width, viewportWidth) - EDGE * 2, 120)
       )
+      const maxHeight = Math.max(viewportHeight - EDGE * 2, 96)
+      const renderedHeight = Math.min(height, maxHeight)
 
-      return { top, left }
+      let top = anchor.bottom + GAP
+      if (top + renderedHeight > viewportHeight - EDGE) {
+        // Not enough room below the caret — flip above it.
+        top = anchor.top - renderedHeight - GAP
+      }
+      top = Math.max(EDGE, Math.min(top, Math.max(EDGE, viewportHeight - renderedHeight - EDGE)))
+
+      const minLeft = Math.max(EDGE, editorRect.left + EDGE)
+      const maxLeft = Math.max(
+        minLeft,
+        Math.min(editorRect.right - width - EDGE, viewportWidth - width - EDGE)
+      )
+      const left = Math.min(Math.max(anchor.left, minLeft), maxLeft)
+
+      return { top, left, width, maxHeight }
     },
     [editorRef]
   )
@@ -394,6 +415,8 @@ const SlashMenu = forwardRef<SlashMenuHandle, SlashMenuProps>(function SlashMenu
         anchor,
         top: placed.top,
         left: placed.left,
+        width: placed.width,
+        maxHeight: placed.maxHeight,
         view,
         items,
         visibleOptions,
@@ -633,12 +656,16 @@ const SlashMenu = forwardRef<SlashMenuHandle, SlashMenuProps>(function SlashMenu
     editor.addEventListener('blur', onBlur)
     document.addEventListener('selectionchange', scheduleUpdate)
     window.addEventListener('resize', scheduleUpdate)
+    // The menu is viewport-anchored, so it must follow the caret when the
+    // editor (or any ancestor) scrolls. Capture catches non-bubbling scrolls.
+    window.addEventListener('scroll', scheduleUpdate, true)
 
     return () => {
       editor.removeEventListener('input', scheduleUpdate)
       editor.removeEventListener('blur', onBlur)
       document.removeEventListener('selectionchange', scheduleUpdate)
       window.removeEventListener('resize', scheduleUpdate)
+      window.removeEventListener('scroll', scheduleUpdate, true)
       if (frame !== null) window.cancelAnimationFrame(frame)
     }
   }, [close, editorRef, update])
@@ -839,157 +866,161 @@ const SlashMenu = forwardRef<SlashMenuHandle, SlashMenuProps>(function SlashMenu
           : Math.max(Math.min(menu.items.length, MENU_MAX_VISIBLE), 1)) * ITEM_HEIGHT +
         headerCount * HEADER_HEIGHT
 
-  return (
-    <div className="pointer-events-none absolute inset-0 z-40" aria-hidden={false}>
-      <div
-        ref={menuRef}
-        data-testid="slash-menu"
-        role="listbox"
-        aria-label="Insert block"
-        className="pointer-events-auto absolute overflow-hidden rounded-xl border border-border bg-surface/98 shadow-xl backdrop-blur-xl"
-        style={{ top: menu.top, left: menu.left, width: MENU_WIDTH }}
-      >
-        {isStep && (
-          <div
-            data-testid="slash-step-header"
-            className="flex items-center gap-1.5 border-b border-border px-2 py-1.5"
+  return createPortal(
+    <div
+      ref={menuRef}
+      data-testid="slash-menu"
+      role="listbox"
+      aria-label="Insert block"
+      className="pointer-events-auto fixed z-50 flex flex-col overflow-hidden rounded-xl border border-border bg-surface/98 shadow-xl backdrop-blur-xl"
+      style={{
+        top: menu.top,
+        left: menu.left,
+        width: menu.width,
+        maxHeight: menu.maxHeight,
+      }}
+    >
+      {isStep && (
+        <div
+          data-testid="slash-step-header"
+          className="flex shrink-0 items-center gap-1.5 border-b border-border px-2 py-1.5"
+        >
+          <button
+            type="button"
+            aria-label="Back to blocks"
+            data-testid="slash-step-back"
+            onMouseDown={(event) => event.preventDefault()}
+            onClick={goBack}
+            className="flex h-5 w-5 items-center justify-center rounded text-muted transition-colors hover:bg-surface-hover hover:text-foreground"
           >
-            <button
-              type="button"
-              aria-label="Back to blocks"
-              data-testid="slash-step-back"
-              onMouseDown={(event) => event.preventDefault()}
-              onClick={goBack}
-              className="flex h-5 w-5 items-center justify-center rounded text-muted transition-colors hover:bg-surface-hover hover:text-foreground"
-            >
-              <ArrowLeft size={13} strokeWidth={2} />
-            </button>
-            <span className="text-[11px] font-semibold uppercase tracking-wide text-muted">
-              {stepTitle}
+            <ArrowLeft size={13} strokeWidth={2} />
+          </button>
+          <span className="text-[11px] font-semibold uppercase tracking-wide text-muted">
+            {stepTitle}
+          </span>
+          {menu.stepQuery && (
+            <span className="ml-auto truncate rounded bg-surface-hover px-1.5 py-0.5 text-[10px] text-foreground">
+              {menu.stepQuery}
             </span>
-            {menu.stepQuery && (
-              <span className="ml-auto truncate rounded bg-surface-hover px-1.5 py-0.5 text-[10px] text-foreground">
-                {menu.stepQuery}
-              </span>
-            )}
-          </div>
-        )}
+          )}
+        </div>
+      )}
 
-        {menu.view === 'grid' ? (
-          <div className="p-2" data-testid="slash-grid">
-            <div
-              className="grid gap-1"
-              style={{ gridTemplateColumns: `repeat(${GRID_COLS}, minmax(0, 1fr))` }}
-            >
-              {Array.from({ length: GRID_ROWS * GRID_COLS }, (_, index) => {
-                const row = Math.floor(index / GRID_COLS) + 1
-                const col = (index % GRID_COLS) + 1
-                const active = index === activeIndex
-                return (
-                  <button
-                    key={index}
-                    type="button"
-                    data-testid="slash-grid-cell"
-                    data-index={index}
-                    aria-label={`${row} by ${col}`}
-                    onMouseDown={(event) => event.preventDefault()}
-                    onMouseEnter={() => setActive(index)}
-                    onClick={applyGrid}
-                    className={`rounded-[4px] border transition-colors ${
-                      active
-                        ? 'border-alpine-500 bg-alpine-500/25'
-                        : 'border-border bg-surface-hover/30 hover:bg-surface-hover'
-                    }`}
-                    style={{ height: GRID_CELL }}
-                  />
-                )
-              })}
-            </div>
-            <div className="mt-1.5 text-center text-[11px] font-medium text-muted">
-              {Math.floor(activeIndex / GRID_COLS) + 1} × {(activeIndex % GRID_COLS) + 1}
-            </div>
-          </div>
-        ) : (
+      {menu.view === 'grid' ? (
+        <div className="shrink-0 p-2" data-testid="slash-grid">
           <div
-            data-testid="slash-menu-items"
-            className="flex flex-col overflow-y-auto p-1"
-            style={{ maxHeight: bodyHeight }}
+            className="grid gap-1"
+            style={{ gridTemplateColumns: `repeat(${GRID_COLS}, minmax(0, 1fr))` }}
           >
-            {menu.view === 'commands' && menu.items.length === 0 && (
-              <div className="px-2 py-1.5 text-sm text-muted">No matching blocks</div>
-            )}
-
-            {menu.view === 'picker' && picker?.loading && (
-              <div className="px-2 py-1.5 text-sm text-muted">Loading…</div>
-            )}
-            {menu.view === 'picker' && picker?.failed && (
-              <div className="px-2 py-1.5 text-sm text-danger">Could not load the list</div>
-            )}
-            {menu.view === 'picker' &&
-              !picker?.loading &&
-              !picker?.failed &&
-              menu.visibleOptions.length === 0 && (
-                <div className="px-2 py-1.5 text-sm text-muted">
-                  {picker?.options.length ? 'No matches' : 'Nothing available'}
-                </div>
-              )}
-
-            {rows.map((row) => {
-              if (row.kind === 'header') {
-                return (
-                  <div
-                    key={`header-${row.label}`}
-                    className="px-2 pb-1 pt-2 text-[10px] font-semibold uppercase tracking-wide text-muted"
-                  >
-                    {row.label}
-                  </div>
-                )
-              }
-
-              const { index } = row
+            {Array.from({ length: GRID_ROWS * GRID_COLS }, (_, index) => {
+              const row = Math.floor(index / GRID_COLS) + 1
+              const col = (index % GRID_COLS) + 1
               const active = index === activeIndex
-              const Icon =
-                row.kind === 'command'
-                  ? (ICONS[row.command.id] ?? Pilcrow)
-                  : (picker ? ICONS[picker.id] ?? Pilcrow : Pilcrow)
-              const label = row.kind === 'command' ? row.command.label : row.option.label
-              const description =
-                row.kind === 'command' ? row.command.description : row.option.description
-              const key = row.kind === 'command' ? row.command.id : `${picker?.id}-${row.option.id}`
-
               return (
                 <button
-                  key={key}
+                  key={index}
                   type="button"
-                  role="option"
-                  aria-selected={active}
-                  title={description}
+                  data-testid="slash-grid-cell"
                   data-index={index}
-                  data-command={row.kind === 'command' ? row.command.id : undefined}
-                  data-option={row.kind === 'option' ? row.option.id : undefined}
+                  aria-label={`${row} by ${col}`}
                   onMouseDown={(event) => event.preventDefault()}
                   onMouseEnter={() => setActive(index)}
-                  onClick={() => (row.kind === 'command' ? chooseCommand(row.command.id) : applyOption())}
-                  className={`flex h-8 w-full items-center gap-2 rounded-lg px-2 text-left text-sm transition-colors ${
+                  onClick={applyGrid}
+                  className={`rounded-[4px] border transition-colors ${
                     active
-                      ? 'bg-alpine-50 font-medium text-alpine-700 dark:bg-alpine-900/40 dark:text-alpine-300'
-                      : 'text-foreground hover:bg-surface-hover'
+                      ? 'border-alpine-500 bg-alpine-500/25'
+                      : 'border-border bg-surface-hover/30 hover:bg-surface-hover'
                   }`}
-                >
-                  <Icon size={15} strokeWidth={2} />
-                  <span className="flex-1 truncate">{label}</span>
-                  {row.kind === 'option' && row.option.description && (
-                    <span className="max-w-[40%] truncate text-[10px] text-muted">
-                      {row.option.description}
-                    </span>
-                  )}
-                </button>
+                  style={{ height: GRID_CELL }}
+                />
               )
             })}
           </div>
-        )}
+          <div className="mt-1.5 text-center text-[11px] font-medium text-muted">
+            {Math.floor(activeIndex / GRID_COLS) + 1} × {(activeIndex % GRID_COLS) + 1}
+          </div>
+        </div>
+      ) : (
+        <div
+          data-testid="slash-menu-items"
+          className="flex min-h-0 flex-col overflow-y-auto p-1"
+          style={{ maxHeight: bodyHeight }}
+        >
+          {menu.view === 'commands' && menu.items.length === 0 && (
+            <div className="px-2 py-1.5 text-sm text-muted">No matching blocks</div>
+          )}
 
-        <div className="flex items-center justify-between border-t border-border px-2 py-1 text-[10px] text-muted">
+          {menu.view === 'picker' && picker?.loading && (
+            <div className="px-2 py-1.5 text-sm text-muted">Loading…</div>
+          )}
+          {menu.view === 'picker' && picker?.failed && (
+            <div className="px-2 py-1.5 text-sm text-danger">Could not load the list</div>
+          )}
+          {menu.view === 'picker' &&
+            !picker?.loading &&
+            !picker?.failed &&
+            menu.visibleOptions.length === 0 && (
+              <div className="px-2 py-1.5 text-sm text-muted">
+                {picker?.options.length ? 'No matches' : 'Nothing available'}
+              </div>
+            )}
+
+          {rows.map((row) => {
+            if (row.kind === 'header') {
+              return (
+                <div
+                  key={`header-${row.label}`}
+                  className="px-2 pb-1 pt-2 text-[10px] font-semibold uppercase tracking-wide text-muted"
+                >
+                  {row.label}
+                </div>
+              )
+            }
+
+            const { index } = row
+            const active = index === activeIndex
+            const Icon =
+              row.kind === 'command'
+                ? (ICONS[row.command.id] ?? Pilcrow)
+                : (picker ? ICONS[picker.id] ?? Pilcrow : Pilcrow)
+            const label = row.kind === 'command' ? row.command.label : row.option.label
+            const description =
+              row.kind === 'command' ? row.command.description : row.option.description
+            const key = row.kind === 'command' ? row.command.id : `${picker?.id}-${row.option.id}`
+
+            return (
+              <button
+                key={key}
+                type="button"
+                role="option"
+                aria-selected={active}
+                title={description}
+                data-index={index}
+                data-command={row.kind === 'command' ? row.command.id : undefined}
+                data-option={row.kind === 'option' ? row.option.id : undefined}
+                onMouseDown={(event) => event.preventDefault()}
+                onMouseEnter={() => setActive(index)}
+                onClick={() => (row.kind === 'command' ? chooseCommand(row.command.id) : applyOption())}
+                className={`flex h-8 w-full items-center gap-2 rounded-lg px-2 text-left text-sm transition-colors ${
+                  active
+                    ? 'bg-alpine-50 font-medium text-alpine-700 dark:bg-alpine-900/40 dark:text-alpine-300'
+                    : 'text-foreground hover:bg-surface-hover'
+                }`}
+              >
+                <Icon size={15} strokeWidth={2} />
+                <span className="flex-1 truncate">{label}</span>
+                {row.kind === 'option' && row.option.description && (
+                  <span className="max-w-[40%] truncate text-[10px] text-muted">
+                    {row.option.description}
+                  </span>
+                )}
+              </button>
+            )
+          })}
+        </div>
+      )}
+
+      <div className="flex shrink-0 items-center justify-between border-t border-border px-2 py-1 text-[10px] text-muted">
           <span>
             {menu.view === 'commands'
               ? 'Type to filter'
@@ -1001,8 +1032,8 @@ const SlashMenu = forwardRef<SlashMenuHandle, SlashMenuProps>(function SlashMenu
             {menu.view === 'grid' ? '↑↓←→ · ↵ · esc back' : isStep ? '↑↓ · ↵ · esc back' : '↑↓ · ↵ · esc'}
           </span>
         </div>
-      </div>
-    </div>
+    </div>,
+    document.body
   )
 })
 

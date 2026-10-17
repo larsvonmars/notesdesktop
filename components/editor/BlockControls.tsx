@@ -19,6 +19,7 @@
  */
 
 import { useCallback, useEffect, useRef, useState } from 'react'
+import { createPortal } from 'react-dom'
 import {
   ArrowDown,
   ArrowUp,
@@ -596,14 +597,20 @@ export default function BlockControls({
       const firstRect = nextBlocks[0].getBoundingClientRect()
       const editorRect = editor.getBoundingClientRect()
 
+      // The menu is portalled to the body and fixed-positioned, so it can
+      // extend past the editor's bottom edge instead of being clipped by it.
+      const viewportHeight = Math.max(window.innerHeight, 1)
+      const viewportWidth = Math.max(window.innerWidth, 1)
+
       const top = Math.max(
         4,
-        Math.min(
-          firstRect.top - editorRect.top,
-          Math.max(4, editorRect.height - MENU_MAX_HEIGHT - 4)
-        )
+        Math.min(firstRect.top, Math.max(4, viewportHeight - MENU_MAX_HEIGHT - 4))
       )
-      const left = Math.max(4, Math.min(30, editorRect.width - MENU_WIDTH - 4))
+      const gutterLeft = Math.max(4, Math.min(30, editorRect.width - MENU_WIDTH - 4))
+      const left = Math.max(
+        4,
+        Math.min(editorRect.left + gutterLeft, Math.max(4, viewportWidth - MENU_WIDTH - 4))
+      )
 
       cancelHide()
       const menuBlock = nextBlocks[0]
@@ -770,102 +777,105 @@ export default function BlockControls({
 
       {activeHandle && !menu && <div className="sr-only">{handleTitle}</div>}
 
-      {menu && (
-        <div
-          ref={menuRef}
-          role="menu"
-          aria-label="Block options"
-          className="pointer-events-auto absolute flex max-h-[336px] flex-col overflow-y-auto rounded-xl border border-border bg-surface/98 p-1 shadow-xl backdrop-blur-xl"
-          style={{ top: menu.top, left: menu.left, width: MENU_WIDTH }}
-          onKeyDown={handleMenuKeys}
-        >
-          {isMulti && (
-            <div className="px-2 pb-1 pt-1.5 text-[10px] font-semibold uppercase tracking-wide text-muted">
-              {menu.blocks.length} blocks selected
-            </div>
-          )}
-
-          {menu.canCollapse && (
-            <>
-              <button
-                type="button"
-                role="menuitem"
-                data-testid="block-menu-collapse"
-                onClick={() => runAction('toggle-collapse')}
-                className="flex w-full items-center gap-2 rounded-lg px-2 py-1.5 text-left text-sm text-foreground transition-colors hover:bg-surface-hover"
-              >
-                {menu.collapsed ? (
-                  <ChevronRight size={15} strokeWidth={2} />
-                ) : (
-                  <ChevronDown size={15} strokeWidth={2} />
-                )}
-                <span className="flex-1 truncate">{menu.collapsed ? 'Expand' : 'Collapse'}</span>
-              </button>
-              <div className="my-1 h-px bg-border" />
-            </>
-          )}
-
-          {showTurnInto && (
-            <>
+      {menu &&
+        createPortal(
+          <div
+            ref={menuRef}
+            role="menu"
+            tabIndex={-1}
+            aria-label="Block options"
+            className="pointer-events-auto fixed z-50 flex max-h-[336px] flex-col overflow-y-auto rounded-xl border border-border bg-surface/98 p-1 shadow-xl backdrop-blur-xl"
+            style={{ top: menu.top, left: menu.left, width: MENU_WIDTH }}
+            onKeyDown={handleMenuKeys}
+          >
+            {isMulti && (
               <div className="px-2 pb-1 pt-1.5 text-[10px] font-semibold uppercase tracking-wide text-muted">
-                Turn into
+                {menu.blocks.length} blocks selected
               </div>
-              {TURN_INTO_ENTRIES.map(({ id, label, Icon, matches }) => {
-                const active = matches.includes(kind)
-                return (
-                  <button
-                    key={id}
-                    type="button"
-                    role="menuitem"
-                    onClick={() => runAction(id)}
-                    className={`flex w-full items-center gap-2 rounded-lg px-2 py-1.5 text-left text-sm transition-colors ${
-                      active
-                        ? 'bg-alpine-50 font-medium text-alpine-700 dark:bg-alpine-900/40 dark:text-alpine-300'
-                        : 'text-foreground hover:bg-surface-hover'
-                    }`}
-                  >
-                    <Icon size={15} strokeWidth={2} />
-                    <span className="flex-1 truncate">{label}</span>
-                  </button>
-                )
-              })}
-              <div className="my-1 h-px bg-border" />
-            </>
-          )}
+            )}
 
-          {actionEntries.map(({ id, label, Icon }) => (
-            <button
-              key={id}
-              type="button"
-              role="menuitem"
-              onClick={() => runAction(id)}
-              className={`flex w-full items-center gap-2 rounded-lg px-2 py-1.5 text-left text-sm transition-colors ${
-                id === 'delete'
-                  ? 'text-danger hover:bg-danger-light/60'
-                  : 'text-foreground hover:bg-surface-hover'
-              }`}
-            >
-              <Icon size={15} strokeWidth={2} />
-              <span className="flex-1 truncate">{label}</span>
-            </button>
-          ))}
+            {menu.canCollapse && (
+              <>
+                <button
+                  type="button"
+                  role="menuitem"
+                  data-testid="block-menu-collapse"
+                  onClick={() => runAction('toggle-collapse')}
+                  className="flex w-full items-center gap-2 rounded-lg px-2 py-1.5 text-left text-sm text-foreground transition-colors hover:bg-surface-hover"
+                >
+                  {menu.collapsed ? (
+                    <ChevronRight size={15} strokeWidth={2} />
+                  ) : (
+                    <ChevronDown size={15} strokeWidth={2} />
+                  )}
+                  <span className="flex-1 truncate">{menu.collapsed ? 'Expand' : 'Collapse'}</span>
+                </button>
+                <div className="my-1 h-px bg-border" />
+              </>
+            )}
 
-          {isMulti && (
-            <>
-              <div className="my-1 h-px bg-border" />
+            {showTurnInto && (
+              <>
+                <div className="px-2 pb-1 pt-1.5 text-[10px] font-semibold uppercase tracking-wide text-muted">
+                  Turn into
+                </div>
+                {TURN_INTO_ENTRIES.map(({ id, label, Icon, matches }) => {
+                  const active = matches.includes(kind)
+                  return (
+                    <button
+                      key={id}
+                      type="button"
+                      role="menuitem"
+                      onClick={() => runAction(id)}
+                      className={`flex w-full items-center gap-2 rounded-lg px-2 py-1.5 text-left text-sm transition-colors ${
+                        active
+                          ? 'bg-alpine-50 font-medium text-alpine-700 dark:bg-alpine-900/40 dark:text-alpine-300'
+                          : 'text-foreground hover:bg-surface-hover'
+                      }`}
+                    >
+                      <Icon size={15} strokeWidth={2} />
+                      <span className="flex-1 truncate">{label}</span>
+                    </button>
+                  )
+                })}
+                <div className="my-1 h-px bg-border" />
+              </>
+            )}
+
+            {actionEntries.map(({ id, label, Icon }) => (
               <button
+                key={id}
                 type="button"
                 role="menuitem"
-                onClick={() => runAction('clear-selection')}
-                className="flex w-full items-center gap-2 rounded-lg px-2 py-1.5 text-left text-sm text-muted transition-colors hover:bg-surface-hover hover:text-foreground"
+                onClick={() => runAction(id)}
+                className={`flex w-full items-center gap-2 rounded-lg px-2 py-1.5 text-left text-sm transition-colors ${
+                  id === 'delete'
+                    ? 'text-danger hover:bg-danger-light/60'
+                    : 'text-foreground hover:bg-surface-hover'
+                }`}
               >
-                <X size={15} strokeWidth={2} />
-                <span className="flex-1 truncate">Clear selection</span>
+                <Icon size={15} strokeWidth={2} />
+                <span className="flex-1 truncate">{label}</span>
               </button>
-            </>
-          )}
-        </div>
-      )}
+            ))}
+
+            {isMulti && (
+              <>
+                <div className="my-1 h-px bg-border" />
+                <button
+                  type="button"
+                  role="menuitem"
+                  onClick={() => runAction('clear-selection')}
+                  className="flex w-full items-center gap-2 rounded-lg px-2 py-1.5 text-left text-sm text-muted transition-colors hover:bg-surface-hover hover:text-foreground"
+                >
+                  <X size={15} strokeWidth={2} />
+                  <span className="flex-1 truncate">Clear selection</span>
+                </button>
+              </>
+            )}
+          </div>,
+          document.body
+        )}
     </div>
   )
 }

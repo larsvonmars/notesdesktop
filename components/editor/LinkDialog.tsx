@@ -49,12 +49,13 @@ export default function LinkDialog({
 
         <div className="space-y-5">
           <div>
-            <label className="flex items-center gap-2 text-sm font-semibold text-slate-700 mb-2">
+            <label htmlFor="link-dialog-url" className="flex items-center gap-2 text-sm font-semibold text-slate-700 mb-2">
               <Globe size={16} />
               URL
             </label>
             <div className="relative">
               <input
+                id="link-dialog-url"
                 type="url"
                 value={linkUrl}
                 onChange={(e) => onUrlChange(e.target.value)}
@@ -87,11 +88,12 @@ export default function LinkDialog({
           </div>
 
           <div>
-            <label className="flex items-center gap-2 text-sm font-semibold text-slate-700 mb-2">
+            <label htmlFor="link-dialog-text" className="flex items-center gap-2 text-sm font-semibold text-slate-700 mb-2">
               <Edit2 size={16} />
               Link Text (optional)
             </label>
             <input
+              id="link-dialog-text"
               type="text"
               value={linkText}
               onChange={(e) => onTextChange(e.target.value)}
@@ -109,10 +111,10 @@ export default function LinkDialog({
 
           {recentLinks.length > 0 && (
             <div className="border-t border-slate-200 pt-4">
-              <label className="flex items-center gap-2 text-sm font-semibold text-slate-700 mb-3">
+              <div className="flex items-center gap-2 text-sm font-semibold text-slate-700 mb-3">
                 <Clock size={16} />
                 Recent Links
-              </label>
+              </div>
               <div className="space-y-2 max-h-32 overflow-y-auto">
                 {recentLinks.map((recent, index) => (
                   <button
