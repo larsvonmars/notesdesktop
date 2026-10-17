@@ -53,7 +53,7 @@ export default function MindmapSearchDropdown({
           ))}
         </ul>
       ) : query.trim() ? (
-        <p className="px-3 py-3 text-xs text-slate-400 text-center">No nodes match&nbsp;"{query}"</p>
+        <p className="px-3 py-3 text-xs text-slate-400 text-center">No nodes match&nbsp;&quot;{query}&quot;</p>
       ) : (
         <p className="px-3 py-3 text-xs text-slate-400 text-center">Type to search nodes</p>
       )}

@@ -29,7 +29,7 @@ import {
   Sparkles,
 } from 'lucide-react'
 import type { LucideIcon } from 'lucide-react'
-import type { Note, NoteType } from '@/lib/notes'
+import { getNote, getNotesWithContentByProject, type Note, type NoteSummary, type NoteType } from '@/lib/notes'
 import type { Folder } from '@/lib/folders'
 import {
   type Project,
@@ -91,7 +91,7 @@ const STATUS_COLORS: Record<string, { bg: string; text: string; ring: string }> 
 
 export interface ProjectDashboardProps {
   project: Project
-  allNotes: Note[]
+  allNotes: NoteSummary[]
   folders: Folder[]
   onSelectNote: (note: Note) => void
   onUpdateProject: (id: string, updates: Partial<Project>) => void
@@ -148,7 +148,7 @@ function generateId(): string {
 }
 
 /** Build a 7-day heatmap of note edits */
-function buildActivityHeatmap(notes: Note[]): { day: string; count: number }[] {
+function buildActivityHeatmap(notes: NoteSummary[]): { day: string; count: number }[] {
   const now = new Date()
   const days: { day: string; count: number }[] = []
   for (let i = 6; i >= 0; i--) {
@@ -181,6 +181,9 @@ export default function ProjectDashboard({
   // ── State ───────────────────────────────────────────────────────────────
   const [tasks, setTasks] = useState<Task[]>([])
   const [isLoadingTasks, setIsLoadingTasks] = useState(true)
+  // Bodies for word counts and AI summaries are loaded only while this
+  // dashboard is open, not during normal workspace startup.
+  const [contentNotes, setContentNotes] = useState<Note[]>([])
   const [quickLinks, setQuickLinks] = useState<QuickLink[]>(project.quick_links ?? [])
   const [showAddLink, setShowAddLink] = useState(false)
   const [newLinkLabel, setNewLinkLabel] = useState('')
@@ -215,8 +218,36 @@ export default function ProjectDashboard({
     [projectNotes]
   )
 
+  useEffect(() => {
+    let cancelled = false
+    setContentNotes([])
+    void getNotesWithContentByProject(project.id).then(notes => {
+      if (!cancelled) setContentNotes(notes)
+    })
+    return () => {
+      cancelled = true
+    }
+  }, [project.id])
+
+  const notesWithContent: Note[] =
+    contentNotes.length > 0
+      ? contentNotes
+      : projectNotes.map(note => ({ ...note, content: '' }))
+
+  const openNote = useCallback(async (note: NoteSummary) => {
+    try {
+      const full =
+        'content' in note && typeof (note as Note).content === 'string'
+          ? (note as Note)
+          : await getNote(note.id)
+      if (full) onSelectNote(full)
+    } catch (error) {
+      console.error('Failed to open note from project dashboard:', error)
+    }
+  }, [onSelectNote])
+
   const activityGroups = useMemo(() => {
-    const groups: { label: string; items: Note[] }[] = []
+    const groups: { label: string; items: NoteSummary[] }[] = []
     let currentLabel = ''
     for (const note of activityFeed) {
       const label = dayLabel(note.updated_at)
@@ -233,9 +264,9 @@ export default function ProjectDashboard({
     const noteCount = projectNotes.length
     const folderCount = projectFolders.length
     const openTasks = tasks.filter(t => t.status !== 'completed' && t.status !== 'cancelled').length
-    const totalWords = projectNotes.reduce((sum, n) => sum + estimateWordCount(n.content || ''), 0)
+    const totalWords = notesWithContent.reduce((sum, n) => sum + estimateWordCount(n.content || ''), 0)
     return { noteCount, folderCount, openTasks, totalWords }
-  }, [projectNotes, projectFolders, tasks])
+  }, [projectNotes, projectFolders, tasks, notesWithContent])
 
   const openTasks = useMemo(
     () => tasks.filter(t => t.status !== 'completed' && t.status !== 'cancelled'),
@@ -372,7 +403,7 @@ export default function ProjectDashboard({
     }
 
     // Build context about the project for the AI
-    const recentWithContent = [...projectNotes]
+    const recentWithContent = [...notesWithContent]
       .sort((a, b) => new Date(b.updated_at).getTime() - new Date(a.updated_at).getTime())
       .slice(0, 10)
       .map(n => {
@@ -413,7 +444,7 @@ export default function ProjectDashboard({
       setIsGeneratingSummary(false)
       summaryAbortRef.current = null
     }
-  }, [isGeneratingSummary, projectNotes, projectFolders, tasks, openTasks, completedTaskCount, stats.totalWords, project])
+  }, [isGeneratingSummary, notesWithContent, projectNotes, projectFolders, tasks, openTasks, completedTaskCount, stats.totalWords, project])
 
   // ── Render helpers ──────────────────────────────────────────────────────
   const NoteTypeIcon = ({ noteType, size = 14 }: { noteType: NoteType; size?: number }) => {
@@ -592,7 +623,7 @@ export default function ProjectDashboard({
                     return (
                       <button
                         key={note.id}
-                        onClick={() => onSelectNote(note)}
+                        onClick={() => void openNote(note)}
                         className="group flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-left transition-all hover:bg-surface-hover active:scale-[0.99]"
                       >
                         <div className={`h-8 w-8 rounded-lg flex items-center justify-center flex-shrink-0 ${pres.iconBgClassName}`}>
@@ -755,7 +786,7 @@ export default function ProjectDashboard({
                             <div
                               key={note.id}
                               className="relative flex items-center gap-2.5 group cursor-pointer rounded-lg py-1.5 px-2 -ml-2 hover:bg-surface-hover transition-colors"
-                              onClick={() => onSelectNote(note)}
+                              onClick={() => void openNote(note)}
                             >
                               <div
                                 className="absolute -left-[13px] top-1/2 -translate-y-1/2 h-2 w-2 rounded-full border-2 border-background transition-colors"
@@ -876,7 +907,7 @@ export default function ProjectDashboard({
             <NoteGraph
               notes={projectNotes}
               folders={projectFolders}
-              onSelectNote={onSelectNote}
+              onSelectNote={(note) => void openNote(note)}
             />
           </div>
         </DashboardCard>

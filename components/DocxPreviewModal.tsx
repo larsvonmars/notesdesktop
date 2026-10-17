@@ -3,7 +3,6 @@
 import React, { useEffect, useState } from 'react'
 import ModalCloseButton from './ModalCloseButton'
 import { getFileSignedUrl, getFileUrl } from '@/lib/file-storage'
-import mammoth from 'mammoth'
 import DOMPurify from 'dompurify'
 import BaseModal, { ModalHeader } from './BaseModal'
 
@@ -48,7 +47,9 @@ export default function DocxPreviewModal({
         const response = await fetch(url)
         const arrayBuffer = await response.arrayBuffer()
         
-        // Convert to HTML
+        // Convert to HTML — mammoth is ~1 MB, so it is only fetched when a
+        // DOCX preview is actually opened.
+        const { default: mammoth } = await import('mammoth')
         const result = await mammoth.convertToHtml({ arrayBuffer })
         
         if (isMounted) {

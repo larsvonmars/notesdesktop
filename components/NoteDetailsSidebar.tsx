@@ -103,6 +103,8 @@ export interface NoteDetailsSidebarProps {
   // Visibility
   collapsed: boolean
   onToggleCollapsed: () => void
+  /** Render as an overlay drawer (compact desktops/tablets) instead of a rail. */
+  overlay?: boolean
 }
 
 const NOTE_TYPE_ICON_MAP: Record<NoteTypeIconKey, LucideIcon> = {
@@ -160,6 +162,7 @@ function NoteDetailsSidebar({
   canPublish = true,
   collapsed,
   onToggleCollapsed,
+  overlay = false,
 }: NoteDetailsSidebarProps) {
   const titleInputRef = useRef<HTMLInputElement>(null)
   const [showWordGoalInput, setShowWordGoalInput] = useState(false)
@@ -178,6 +181,19 @@ function NoteDetailsSidebar({
     }
   }, [showWordGoalInput, wordGoal])
 
+  // Overlay drawers close on Escape.
+  useEffect(() => {
+    if (!overlay) return
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        event.preventDefault()
+        onToggleCollapsed()
+      }
+    }
+    window.addEventListener('keydown', handleKeyDown)
+    return () => window.removeEventListener('keydown', handleKeyDown)
+  }, [overlay, onToggleCollapsed])
+
   const handleWordGoalSubmit = useCallback(() => {
     const val = parseInt(wordGoalValue, 10)
     if (!isNaN(val) && val > 0) {
@@ -194,6 +210,8 @@ function NoteDetailsSidebar({
 
   // ---- COLLAPSED VIEW ----
   if (collapsed) {
+    if (overlay) return null
+
     return (
       <aside className="fixed inset-y-0 right-0 z-30 hidden w-12 border-l border-border/40 bg-surface  transition-all duration-300 md:flex md:flex-col" title={displayName}>
         <div className="flex items-center justify-center px-2 py-4">
@@ -291,7 +309,21 @@ function NoteDetailsSidebar({
   // ---- EXPANDED VIEW ----
   return (
     <>
-    <aside className="fixed inset-y-0 right-0 z-30 hidden w-[280px] border-l border-border/40 bg-surface  transition-all duration-300 lg:flex lg:flex-col">
+    {overlay && (
+      <div
+        className="fixed inset-0 z-40 bg-black/40 backdrop-blur-sm"
+        onClick={onToggleCollapsed}
+        aria-hidden
+      />
+    )}
+    <aside
+      className={
+        overlay
+          ? 'fixed inset-y-0 right-0 z-50 flex w-[320px] max-w-[85vw] flex-col border-l border-border/40 bg-surface shadow-2xl'
+          : 'fixed inset-y-0 right-0 z-30 hidden w-[280px] border-l border-border/40 bg-surface transition-all duration-300 md:flex md:flex-col'
+      }
+      aria-label="Note details"
+    >
       {/* Header */}
       <div className="flex items-center justify-between px-4 py-3.5">
         <div className="min-w-0">
@@ -301,10 +333,10 @@ function NoteDetailsSidebar({
         <button
           onClick={onToggleCollapsed}
           className="rounded-xl p-1.5 text-muted/70 transition-all duration-200 hover:bg-surface-hover/70 hover:text-foreground"
-          aria-label="Collapse details"
-          title="Collapse details"
+          aria-label={overlay ? 'Close details' : 'Collapse details'}
+          title={overlay ? 'Close details' : 'Collapse details'}
         >
-          <ChevronRight size={15} />
+          {overlay ? <X size={16} /> : <ChevronRight size={15} />}
         </button>
       </div>
 

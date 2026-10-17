@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useEffect, useCallback, useMemo, useRef, useDeferredValue } from 'react'
+import dynamic from 'next/dynamic'
 import DOMPurify from 'dompurify'
 import {
   Save,
@@ -12,6 +13,11 @@ import {
   Edit2,
   Network,
   Plus,
+  Check,
+  PanelRight,
+  MoreHorizontal,
+  Share2,
+  Download,
 } from 'lucide-react'
 import RichTextEditor, {
   type RichTextCommand,
@@ -38,16 +44,20 @@ import PdfAnnotationEditor, {
   type PdfAnnotationEditorHandle,
   type PdfAnnotationData
 } from './PdfAnnotationEditor'
-import ProjectsWorkspaceModal from './ProjectsWorkspaceModal'
 import { useToast } from './ToastProvider'
-import { Note as LibNote, createNote, createNoteAttachment, deleteNoteAttachment, getNote, getNoteAttachments, getNotes } from '../lib/notes'
+import { Note as LibNote, createNote, createNoteAttachment, deleteNoteAttachment, getAllNoteSummaries, getNote, getNoteAttachments, getNoteLinkIndex, getNotesWithContentByType, type NoteLinkIndexEntry, type NoteSummary as LibNoteSummary } from '../lib/notes'
 import { getProjects, Project } from '../lib/projects'
-import { buildPublicShareUrl, getNoteShare, publishNoteShare, unpublishNoteShare, type NoteShareMetadata, type PublishedNoteShare } from '../lib/note-shares'
-import NoteLinkDialog from './NoteLinkDialog'
-import DataSheetPickerDialog from './DataSheetPickerDialog'
+import { type NoteShareMetadata } from '../lib/note-shares'
+import { useNoteShare } from '@/lib/editor/useNoteShare'
+import {
+  containsLegacyImageSources,
+  extractReferencedImageAttachments,
+  sanitizeImageAltText,
+} from '@/lib/editor/noteImageHtml'
 import { ErrorBoundary } from './ErrorBoundary'
-import KnowledgeGraphModal from './KnowledgeGraphModal'
-import { useIsMobile } from '@/lib/useIsMobile'
+import { Button } from '@/components/ui/Button'
+import MobileNoteActions from '@/components/editor/MobileNoteActions'
+import { useIsMobile, useIsCompact } from '@/lib/useIsMobile'
 import { useFloatingToolbar } from '@/lib/editor/useFloatingToolbar'
 import SelectionToolbar from './SelectionToolbar'
 import { noteLinkBlock } from '../lib/editor/noteLinkBlock'
@@ -66,10 +76,6 @@ import {
   type FileBlockPreviewDocxEventDetail,
   type FileBlockAnnotatePdfEventDetail,
 } from '../lib/editor/fileBlock'
-import FileExplorerModal from './FileExplorerModal'
-import DocxPreviewModal from './DocxPreviewModal'
-import SettingsModal from './SettingsModal'
-import AIAssistant from './AIAssistant'
 import {
   extractMindmapForAI,
   extractBulletJournalForAI,
@@ -87,6 +93,44 @@ export type { Note } from '../lib/notes'
 
 // Maximum image file size in bytes (10MB)
 const MAX_IMAGE_SIZE_BYTES = 10 * 1024 * 1024
+
+// Modal-only UI (file browser, knowledge graph, AI assistant, DOCX preview…)
+// is split out of the note-editor chunk: these components pull in large
+// dependencies and none of them render until the user opens them.
+const modalLoading = () => null
+
+const ProjectsWorkspaceModal = dynamic(() => import('./ProjectsWorkspaceModal'), {
+  ssr: false,
+  loading: modalLoading,
+})
+const NoteLinkDialog = dynamic(() => import('./NoteLinkDialog'), {
+  ssr: false,
+  loading: modalLoading,
+})
+const DataSheetPickerDialog = dynamic(() => import('./DataSheetPickerDialog'), {
+  ssr: false,
+  loading: modalLoading,
+})
+const KnowledgeGraphModal = dynamic(() => import('./KnowledgeGraphModal'), {
+  ssr: false,
+  loading: modalLoading,
+})
+const FileExplorerModal = dynamic(() => import('./FileExplorerModal'), {
+  ssr: false,
+  loading: modalLoading,
+})
+const DocxPreviewModal = dynamic(() => import('./DocxPreviewModal'), {
+  ssr: false,
+  loading: modalLoading,
+})
+const SettingsModal = dynamic(() => import('./SettingsModal'), {
+  ssr: false,
+  loading: modalLoading,
+})
+const AIAssistant = dynamic(() => import('./AIAssistant'), {
+  ssr: false,
+  loading: modalLoading,
+})
 
 interface NoteEditorProps {
   note?: LibNote | null
@@ -269,62 +313,6 @@ const escapeHtml = (value: string) =>
     .replace(/"/g, '&quot;')
     .replace(/'/g, '&#39;')
 
-const sanitizeImageAltText = (value: string | null | undefined, fallback: string = 'Image') => {
-  const sanitized = (value || '')
-    .replace(/[<>"']/g, '')
-    .trim()
-  return sanitized || fallback
-}
-
-const LEGACY_IMAGE_SRC_PATTERN = /src\s*=\s*["'](?:data:|file:\/\/)/i
-
-const containsLegacyImageSources = (html: string): boolean => {
-  if (!html) return false
-  return LEGACY_IMAGE_SRC_PATTERN.test(html)
-}
-
-const extractReferencedImageAttachments = (html: string): { attachmentIds: Set<string>; storagePaths: Set<string> } => {
-  const attachmentIds = new Set<string>()
-  const storagePaths = new Set<string>()
-
-  if (!html) {
-    return { attachmentIds, storagePaths }
-  }
-
-  const parser = new DOMParser()
-  const doc = parser.parseFromString(html, 'text/html')
-  const imageBlocks = Array.from(doc.querySelectorAll('[data-block-type="image"]'))
-
-  for (const block of imageBlocks) {
-    const attachmentId = block.getAttribute('data-attachment-id')?.trim()
-    if (attachmentId) {
-      attachmentIds.add(attachmentId)
-    }
-
-    const storagePath = block.getAttribute('data-storage-path')?.trim()
-    if (storagePath) {
-      storagePaths.add(storagePath)
-    }
-
-    const encodedPayload = block.getAttribute('data-block-payload')
-    if (!encodedPayload) continue
-
-    try {
-      const parsed = JSON.parse(decodeURIComponent(encodedPayload)) as { attachmentId?: string; storagePath?: string }
-      if (parsed.attachmentId && typeof parsed.attachmentId === 'string') {
-        attachmentIds.add(parsed.attachmentId)
-      }
-      if (parsed.storagePath && typeof parsed.storagePath === 'string') {
-        storagePaths.add(parsed.storagePath)
-      }
-    } catch {
-      // ignore malformed payloads
-    }
-  }
-
-  return { attachmentIds, storagePaths }
-}
-
 const fileNameExtensionForMimeType = (mimeType: string | undefined): string => {
   const normalized = (mimeType || '').toLowerCase()
   if (normalized.includes('jpeg') || normalized.includes('jpg')) return 'jpg'
@@ -459,11 +447,11 @@ interface NoteEditorWithPanelProps extends NoteEditorProps {
   onRenameFolder?: (folderId: string, newName: string) => void
   onDeleteFolder?: (folderId: string) => void
   onMoveFolder?: (folderId: string, newParentId: string | null) => void
-  notes?: LibNote[]
-  allNotes?: LibNote[]  // All notes for AI tool calling
+  notes?: LibNoteSummary[]
+  allNotes?: LibNoteSummary[]  // Note metadata for AI tool calling; bodies are lazy-loaded
   onSelectNote?: (note: LibNote) => void
   onNewNote?: (noteType?: NoteType, folderId?: string | null, projectId?: string | null) => void
-  onDuplicateNote?: (note: LibNote) => void
+  onDuplicateNote?: (note: LibNoteSummary) => void
   onMoveNote?: (noteId: string, newFolderId: string | null) => Promise<void>
   isLoadingNotes?: boolean
   currentFolderName?: string
@@ -535,6 +523,20 @@ export default function NoteEditor({
   const migratedNotesRef = useRef<Set<string>>(new Set())
   const activeFormatsFrameRef = useRef<number | null>(null)
   const noteLoadingRef = useRef(false) // Suppress hasChanges flicker during note load
+
+  /** Hydrate a metadata-only note row before handing it to the workspace. */
+  const resolveFullNote = useCallback(async (candidate: LibNoteSummary): Promise<LibNote | null> => {
+    if ('content' in candidate && typeof (candidate as LibNote).content === 'string') {
+      return candidate as LibNote
+    }
+    try {
+      return await getNote(candidate.id)
+    } catch (error) {
+      console.error('Failed to load note body:', error)
+      return null
+    }
+  }, [])
+
   const getEditorElement = useCallback(() => editorRef.current?.getRootElement() ?? null, [])
   const {
     state: floatingToolbarState,
@@ -578,12 +580,18 @@ export default function NoteEditor({
   const [showAIAssistant, setShowAIAssistant] = useState(false)
   const [isAIAssistantLarge, setIsAIAssistantLarge] = useState(false)
   const [rightSidebarCollapsed, setRightSidebarCollapsed] = useState(false)
-  const [shareRecord, setShareRecord] = useState<PublishedNoteShare | null>(null)
-  const [isLoadingShare, setIsLoadingShare] = useState(false)
-  const [isPublishingShare, setIsPublishingShare] = useState(false)
-  const [isUnpublishingShare, setIsUnpublishingShare] = useState(false)
+  const isCompact = useIsCompact()
+  // Below 1024px the details panel would squeeze the editor, so it becomes an
+  // overlay drawer opened from the document header.
+  const compactDetails = isCompact && !isMobile
+  const [compactDetailsOpen, setCompactDetailsOpen] = useState(false)
+  const [showMobileActions, setShowMobileActions] = useState(false)
   const [projects, setProjects] = useState<Project[]>([])
-  const rightSidebarOffset = rightSidebarCollapsed ? '48px' : '280px'
+  const rightSidebarOffset = compactDetails
+    ? '0px'
+    : rightSidebarCollapsed
+      ? '48px'
+      : '280px'
   const currentProjectName = useMemo(() => {
     if (!note?.project_id) return 'inbox'
     const project = projects.find((item) => item.id === note.project_id)
@@ -615,42 +623,6 @@ export default function NoteEditor({
     }
     loadProjects()
   }, [])
-
-  useEffect(() => {
-    let cancelled = false
-
-    const loadShare = async () => {
-      if (!note?.id) {
-        setShareRecord(null)
-        setIsLoadingShare(false)
-        return
-      }
-
-      setIsLoadingShare(true)
-
-      try {
-        const existingShare = await getNoteShare(note.id)
-        if (!cancelled) {
-          setShareRecord(existingShare)
-        }
-      } catch (error) {
-        console.error('Failed to load note share:', error)
-        if (!cancelled) {
-          setShareRecord(null)
-        }
-      } finally {
-        if (!cancelled) {
-          setIsLoadingShare(false)
-        }
-      }
-    }
-
-    void loadShare()
-
-    return () => {
-      cancelled = true
-    }
-  }, [note?.id])
 
   // Set CSS variable for right sidebar offset
   useEffect(() => {
@@ -847,7 +819,6 @@ export default function NoteEditor({
     setActiveFormats(new Set())
     // Allow the hasChanges effect to run normally after state has settled
     requestAnimationFrame(() => { noteLoadingRef.current = false })
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- we intentionally
     // key on note?.id (not the full object) so same-note saves don't cause
     // a full editor reset. The note-loading effect should only run when the
     // actual note changes or when creating a new note.
@@ -1185,7 +1156,7 @@ export default function NoteEditor({
   const dataSheetIndex = useRef(new Map<string, { title: string; content: string }>())
 
   const loadNoteOptions = useCallback(async (): Promise<SlashInlineOption[]> => {
-    const [notesData, foldersData] = await Promise.all([getNotes(), getFolders()])
+    const [notesData, foldersData] = await Promise.all([getAllNoteSummaries(), getFolders()])
     const folderNames = new Map(foldersData.map((folder) => [folder.id, folder.name]))
 
     noteLinkIndex.current = new Map()
@@ -1205,7 +1176,7 @@ export default function NoteEditor({
   }, [note?.id])
 
   const loadDataSheetOptions = useCallback(async (): Promise<SlashInlineOption[]> => {
-    const notesData = await getNotes()
+    const notesData = await getNotesWithContentByType('data-sheet')
 
     dataSheetIndex.current = new Map()
 
@@ -1644,47 +1615,33 @@ export default function NoteEditor({
       const noteId = customEvent.detail?.noteId
       
       if (noteId && onSelectNote) {
-        // First check if the note is in the current notes array (already loaded)
-        if (notes) {
-          const targetNote = notes.find(n => n.id === noteId)
-          if (targetNote) {
-            onSelectNote(targetNote)
-            return
-          }
-        }
-        
-        // If not found in current notes, fetch it directly from Supabase
-        // This handles notes in other folders
+        // Rows in the sidebar are metadata only; hydrate the body on open.
+        const summary = notes?.find(n => n.id === noteId)
+        let targetNote: LibNote | null = null
         try {
-          const { getNote } = await import('../lib/notes')
-          const targetNote = await getNote(noteId)
-          if (targetNote) {
-            onSelectNote(targetNote)
-          } else {
-            toast.push({ title: 'Note not found', description: 'The linked note could not be found.' })
-          }
-        } catch (error) {
-          console.error('Failed to load note:', error)
-          toast.push({ title: 'Error loading note', description: 'Failed to load the linked note.' })
+          targetNote = summary ? await resolveFullNote(summary) : await getNote(noteId)
+        } catch {
+          targetNote = null
+        }
+
+        if (targetNote) {
+          onSelectNote(targetNote)
+        } else {
+          toast.push({ title: 'Note not found', description: 'The linked note could not be found.' })
         }
       }
     }
 
     window.addEventListener('note-link-click', handleNoteLinkClick)
     return () => window.removeEventListener('note-link-click', handleNoteLinkClick)
-  }, [notes, onSelectNote, toast])
+  }, [notes, onSelectNote, resolveFullNote, toast])
 
   // Handle "Annotate PDF" action from file attachment blocks inside the rich text editor.
   useEffect(() => {
     const openPdfAnnotationNote = async (noteId: string): Promise<boolean> => {
       const existing = (allNotes ?? notes).find((item) => item.id === noteId)
-      if (existing) {
-        onSelectNote(existing)
-        return true
-      }
-
       try {
-        const fetched = await getNote(noteId)
+        const fetched = existing ? await resolveFullNote(existing) : await getNote(noteId)
         if (fetched) {
           onSelectNote(fetched)
           return true
@@ -1859,6 +1816,7 @@ export default function NoteEditor({
     noteType,
     notes,
     onSelectNote,
+    resolveFullNote,
     selectedFolderId,
     toast,
   ])
@@ -1875,7 +1833,13 @@ export default function NoteEditor({
     // For manual save, require title. For autosave, use fallback.
     const effectiveTitle = title.trim() || (isAuto ? 'Untitled' : '')
     if (!effectiveTitle) {
-      if (!isAuto) alert('Please enter a title')
+      if (!isAuto) {
+        toast.push({
+          title: 'Title required',
+          description: 'Add a title before saving this note.',
+          variant: 'warning',
+        })
+      }
       return
     }
 
@@ -1968,9 +1932,26 @@ export default function NoteEditor({
       if (isAuto) autosaveRetryCountRef.current = 0
     } catch (error: any) {
       if (!isAuto) {
-        alert('Failed to save note: ' + error.message)
+        toast.push({
+          title: 'Save failed',
+          description: error?.message || 'Could not save this note.',
+          variant: 'error',
+        })
       } else {
         console.error('Autosave failed:', error)
+
+        // Conflicts and permanent sync errors will not succeed on retry; the
+        // local copy is already safe and the sync indicator offers resolution.
+        if (error?.name === 'NoteConflictError' || error?.name === 'NoteSyncError') {
+          autosaveRetryCountRef.current = 0
+          toast.push({
+            title: error.name === 'NoteConflictError' ? 'Sync conflict' : 'Autosave needs attention',
+            description: error.message,
+            duration: 10000,
+          })
+          return
+        }
+
         autosaveRetryCountRef.current++
 
         if (autosaveRetryCountRef.current <= MAX_AUTOSAVE_RETRIES) {
@@ -2049,17 +2030,21 @@ export default function NoteEditor({
   const handleDelete = useCallback(async () => {
     if (!note || !onDelete) return
 
-    if (!confirm('Are you sure you want to delete this note?')) return
-
+    // Deletion is undoable through the "Note deleted" toast, so no blocking
+    // confirmation dialog is needed here.
     setIsDeleting(true)
     try {
       await onDelete(note.id)
     } catch (error: any) {
-      alert('Failed to delete note: ' + error.message)
+      toast.push({
+        title: 'Delete failed',
+        description: error?.message || 'Could not delete this note.',
+        variant: 'error',
+      })
     } finally {
       setIsDeleting(false)
     }
-  }, [note, onDelete])
+  }, [note, onDelete, toast])
 
   const handleCancel = () => {
     if (hasChanges) {
@@ -2219,6 +2204,31 @@ export default function NoteEditor({
     return notes || []
   }, [allNotes, notes])
 
+  // Backlink detection needs note bodies, but loading every body at startup is
+  // exactly what we are avoiding. Fetch a projected content index lazily when
+  // the editor opens, and keep it out of the main workspace payload.
+  const [backlinkIndex, setBacklinkIndex] = useState<NoteLinkIndexEntry[] | null>(null)
+  useEffect(() => {
+    if (!note?.id || noteType !== 'rich-text') {
+      setBacklinkIndex([])
+      return
+    }
+
+    let cancelled = false
+    void getNoteLinkIndex()
+      .then((rows) => {
+        if (!cancelled) setBacklinkIndex(rows)
+      })
+      .catch((error) => {
+        console.error('Failed to load note link index:', error)
+        if (!cancelled) setBacklinkIndex([])
+      })
+
+    return () => {
+      cancelled = true
+    }
+  }, [note?.id, noteType])
+
   const folderPathMap = useMemo(() => {
     const map = new Map<string, string>()
 
@@ -2242,8 +2252,8 @@ export default function NoteEditor({
   const backlinks = useMemo(() => {
     if (!note?.id) return []
 
-    return notesForConnections
-      .filter((candidate) => candidate.id !== note.id && candidate.note_type === 'rich-text')
+    return (backlinkIndex ?? [])
+      .filter((candidate) => candidate.id !== note.id)
       .map((candidate) => {
         const links = extractNoteLinkIdsFromHtml(candidate.content)
         const relationCount = links.filter((id) => id === note.id).length
@@ -2258,7 +2268,7 @@ export default function NoteEditor({
       })
       .filter((item): item is { id: string; title: string; folderPath: string | undefined; relationCount: number } => !!item)
       .sort((a, b) => b.relationCount - a.relationCount || a.title.localeCompare(b.title))
-  }, [note?.id, notesForConnections, folderPathMap])
+  }, [note?.id, backlinkIndex, folderPathMap])
 
   // Outgoing link IDs from the current note — derived from the *deferred*
   // content so it doesn't re-parse on every keystroke (only when idle).
@@ -2429,33 +2439,25 @@ export default function NoteEditor({
     }
   }, [])
 
-  const shareUrl = useMemo(() => {
-    if (!shareRecord) return null
-    return buildPublicShareUrl(shareRecord.share_token)
-  }, [shareRecord])
-
-  const sharePublishedDisplay = useMemo(() => {
-    if (!shareRecord?.published_at) return null
-    return new Intl.DateTimeFormat(undefined, {
-      dateStyle: 'medium',
-      timeStyle: 'short',
-    }).format(new Date(shareRecord.published_at))
-  }, [shareRecord?.published_at])
-
-  const shareHint = useMemo(() => {
-    if (!note?.id) {
-      return 'Save this note once before publishing it.'
-    }
-
-    if (!process.env.NEXT_PUBLIC_SHARE_BASE_URL && typeof window !== 'undefined') {
-      const protocol = window.location.protocol
-      if (protocol === 'tauri:' || protocol === 'file:') {
-        return 'Set NEXT_PUBLIC_SHARE_BASE_URL to your public web app URL so copied links work outside the desktop app.'
-      }
-    }
-
-    return 'Publishing creates a read-only page for anyone with the link.'
-  }, [note?.id])
+  const {
+    shareRecord,
+    isLoadingShare,
+    isPublishingShare,
+    isUnpublishingShare,
+    shareUrl,
+    sharePublishedDisplay,
+    shareHint,
+    copyShareLink: handleCopyShareLink,
+    openSharePage: handleOpenSharePage,
+    publishShare: handlePublishShare,
+    unpublishShare: handleUnpublishShare,
+  } = useNoteShare({
+    noteId: note?.id,
+    hasChanges,
+    save: handleSave,
+    toast,
+    buildMetadata: buildShareMetadata,
+  })
 
   const handleExportMarkdown = useCallback(() => {
     const fileBase = sanitizePathSegment(title || note?.title || '', 'untitled-note')
@@ -2970,139 +2972,35 @@ export default function NoteEditor({
     }
   }, [title, note?.title, noteType, getStructuredExportContent, toast])
 
-  const handleCopyShareLink = useCallback(async () => {
-    if (!shareUrl) return
-
-    try {
-      if (navigator.clipboard?.writeText) {
-        await navigator.clipboard.writeText(shareUrl)
-      } else {
-        const textArea = document.createElement('textarea')
-        textArea.value = shareUrl
-        textArea.setAttribute('readonly', 'true')
-        textArea.style.position = 'absolute'
-        textArea.style.left = '-9999px'
-        document.body.appendChild(textArea)
-        textArea.select()
-        document.execCommand('copy')
-        document.body.removeChild(textArea)
-      }
-
-      toast.push({ title: 'Share link copied' })
-    } catch (error) {
-      console.error('Failed to copy share link:', error)
-      toast.push({ title: 'Copy failed', description: 'The share link could not be copied.' })
-    }
-  }, [shareUrl, toast])
-
-  const handleOpenSharePage = useCallback(() => {
-    if (!shareUrl) return
-    window.open(shareUrl, '_blank', 'noopener,noreferrer')
-  }, [shareUrl])
-
-  const handlePublishShare = useCallback(async () => {
-    if (!note?.id) {
-      toast.push({ title: 'Save required', description: 'Save the note before publishing it.' })
-      return
-    }
-
-    setIsPublishingShare(true)
-
-    try {
-      if (hasChanges) {
-        await handleSave()
-      }
-
-      const latestNote = await getNote(note.id)
-      if (!latestNote) {
-        throw new Error('Could not load the saved note for publishing.')
-      }
-
-      const metadata = await buildShareMetadata(latestNote.content, latestNote.note_type)
-      const publishedShare = await publishNoteShare(latestNote.id, {
-        title: latestNote.title,
-        content: latestNote.content,
-        note_type: latestNote.note_type,
-        metadata,
-      })
-
-      setShareRecord(publishedShare)
-      toast.push({
-        title: shareRecord ? 'Share updated' : 'Note published',
-        description: 'The read-only share page is ready.',
-      })
-    } catch (error: any) {
-      console.error('Failed to publish note share:', error)
-      toast.push({
-        title: 'Publish failed',
-        description: error?.message || 'The share page could not be published.',
-      })
-    } finally {
-      setIsPublishingShare(false)
-    }
-  }, [buildShareMetadata, handleSave, hasChanges, note?.id, shareRecord, toast])
-
-  const handleUnpublishShare = useCallback(async () => {
-    if (!note?.id) return
-
-    setIsUnpublishingShare(true)
-
-    try {
-      await unpublishNoteShare(note.id)
-      setShareRecord(null)
-      toast.push({ title: 'Share removed', description: 'The public share page is no longer available.' })
-    } catch (error: any) {
-      console.error('Failed to unpublish note share:', error)
-      toast.push({
-        title: 'Unpublish failed',
-        description: error?.message || 'The share page could not be removed.',
-      })
-    } finally {
-      setIsUnpublishingShare(false)
-    }
-  }, [note?.id, toast])
-
   const handleSelectBacklink = useCallback(async (noteId: string) => {
-    const targetNote = notesForConnections.find((item) => item.id === noteId)
+    const row = notesForConnections.find((item) => item.id === noteId)
+    let targetNote: LibNote | null = null
+    try {
+      targetNote = row ? await resolveFullNote(row) : await getNote(noteId)
+    } catch {
+      targetNote = null
+    }
     if (targetNote) {
       onSelectNote(targetNote)
-      return
+    } else {
+      toast.push({ title: 'Note not found', description: 'The related note could not be found.' })
     }
-
-    try {
-      const { getNote } = await import('../lib/notes')
-      const fetchedNote = await getNote(noteId)
-      if (fetchedNote) {
-        onSelectNote(fetchedNote)
-      } else {
-        toast.push({ title: 'Note not found', description: 'The related note could not be found.' })
-      }
-    } catch (error) {
-      console.error('Failed to load related note:', error)
-      toast.push({ title: 'Error loading note', description: 'Failed to open the related note.' })
-    }
-  }, [notesForConnections, onSelectNote, toast])
+  }, [notesForConnections, onSelectNote, resolveFullNote, toast])
 
   const handleSelectOutgoing = useCallback(async (noteId: string) => {
-    const targetNote = notesForConnections.find((item) => item.id === noteId)
+    const row = notesForConnections.find((item) => item.id === noteId)
+    let targetNote: LibNote | null = null
+    try {
+      targetNote = row ? await resolveFullNote(row) : await getNote(noteId)
+    } catch {
+      targetNote = null
+    }
     if (targetNote) {
       onSelectNote(targetNote)
-      return
+    } else {
+      toast.push({ title: 'Note not found', description: 'The linked note could not be found.' })
     }
-
-    try {
-      const { getNote } = await import('../lib/notes')
-      const fetchedNote = await getNote(noteId)
-      if (fetchedNote) {
-        onSelectNote(fetchedNote)
-      } else {
-        toast.push({ title: 'Note not found', description: 'The linked note could not be found.' })
-      }
-    } catch (error) {
-      console.error('Failed to load linked note:', error)
-      toast.push({ title: 'Error loading note', description: 'Failed to open the linked note.' })
-    }
-  }, [notesForConnections, onSelectNote, toast])
+  }, [notesForConnections, onSelectNote, resolveFullNote, toast])
 
 
 
@@ -3343,7 +3241,8 @@ export default function NoteEditor({
       textNotesForMindmap.map((item) => ({
         id: item.id,
         title: item.title || 'Untitled',
-        content: item.content || '',
+        // Bodies are resolved on demand via resolveTextNote.
+        content: '',
       })),
     [textNotesForMindmap]
   )
@@ -3380,24 +3279,36 @@ export default function NoteEditor({
 
   const handleOpenTextNoteFromMindmap = useCallback(
     async (noteId: string) => {
-      const targetNote = (allNotes ?? []).find((item) => item.id === noteId)
-      if (targetNote) {
-        onSelectNote(targetNote)
+      const row = (allNotes ?? []).find((item) => item.id === noteId)
+      let targetNote: LibNote | null = null
+      try {
+        targetNote = row ? await resolveFullNote(row) : await getNote(noteId)
+      } catch {
+        targetNote = null
+      }
+      if (!targetNote) {
+        toast.push({ title: 'Note not found', description: 'The linked note could not be opened.' })
         return
       }
+      onSelectNote(targetNote)
+    },
+    [allNotes, onSelectNote, resolveFullNote, toast]
+  )
 
+  // Mindmap note links occasionally need the note body. Load it on demand so
+  // the workspace does not fetch every note body up front.
+  const resolveMindmapTextNote = useCallback(
+    async (noteId: string) => {
+      const row = (allNotes ?? []).find((item) => item.id === noteId)
       try {
-        const fetched = await getNote(noteId)
-        if (!fetched) {
-          toast.push({ title: 'Note not found', description: 'The linked note could not be opened.' })
-          return
-        }
-        onSelectNote(fetched)
+        const full = row ? await resolveFullNote(row) : await getNote(noteId)
+        if (!full) return null
+        return { id: full.id, title: full.title || 'Untitled', content: full.content || '' }
       } catch {
-        toast.push({ title: 'Open failed', description: 'Could not open linked note.' })
+        return null
       }
     },
-    [allNotes, onSelectNote, toast]
+    [allNotes, resolveFullNote]
   )
 
   // Stabilized props for the memoized RichTextEditor so typing doesn't
@@ -3489,12 +3400,13 @@ export default function NoteEditor({
   const openAIAssistant = useCallback(() => setShowAIAssistant(true), [])
   const openConnections = useCallback(() => setShowKnowledgeGraph(true), [])
   const toggleRightSidebar = useCallback(() => setRightSidebarCollapsed((prev) => !prev), [])
+  const closeCompactDetails = useCallback(() => setCompactDetailsOpen(false), [])
   const handleManualSave = useCallback(() => { void handleSave() }, [handleSave])
 
   return (
     <>
       {/* Right Sidebar — Note Details */}
-      {!isMobile && (
+      {!isMobile && (!compactDetails || compactDetailsOpen) && (
         <NoteDetailsSidebar
           noteId={note?.id}
           isNewNote={!note}
@@ -3539,19 +3451,91 @@ export default function NoteEditor({
           isPublishing={isLoadingShare || isPublishingShare}
           isUnpublishing={isUnpublishingShare}
           canPublish={!!note?.id}
-          collapsed={rightSidebarCollapsed}
-          onToggleCollapsed={toggleRightSidebar}
+          collapsed={compactDetails ? false : rightSidebarCollapsed}
+          onToggleCollapsed={compactDetails ? closeCompactDetails : toggleRightSidebar}
+          overlay={compactDetails}
         />
       )}
 
       {/* Clean Editor Area */}
       <div
-        className="flex h-screen flex-col bg-background pt-16 text-foreground md:pt-0"
+        className="flex h-full flex-col bg-background text-foreground"
         style={!isMobile ? { paddingRight: rightSidebarOffset } : undefined}
       >
         <div className="flex-1 overflow-hidden px-3 py-2 sm:px-4 sm:py-3 md:px-5 md:py-4">
           <div className="h-full w-full">
             <div className="relative flex h-full flex-col overflow-hidden rounded-xl border border-border bg-surface">
+              {/* Document header — inline title + save state (works at every width) */}
+              <div className="flex shrink-0 items-center gap-2 border-b border-border/70 px-3 py-1.5 sm:px-4 sm:py-2">
+                <input
+                  type="text"
+                  value={title}
+                  onChange={(e) => setTitle(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') e.currentTarget.blur()
+                  }}
+                  placeholder="Untitled note"
+                  aria-label="Note title"
+                  disabled={isDeleting}
+                  className="min-w-0 flex-1 truncate border-0 bg-transparent px-0 py-1 text-base font-semibold tracking-tight text-foreground placeholder:text-muted/60 focus:outline-none sm:text-lg"
+                />
+                <div className="flex shrink-0 items-center gap-2">
+                  {isMobile && (
+                    <button
+                      type="button"
+                      onClick={() => setShowMobileActions(true)}
+                      className="flex h-7 w-7 items-center justify-center rounded-lg text-muted/70 transition-colors hover:bg-surface-hover hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/50"
+                      aria-label="Open note actions"
+                      title="Note actions"
+                    >
+                      <MoreHorizontal size={18} />
+                    </button>
+                  )}
+                  {compactDetails && (
+                    <button
+                      type="button"
+                      onClick={() => setCompactDetailsOpen(true)}
+                      className="flex h-7 w-7 items-center justify-center rounded-lg text-muted/70 transition-colors hover:bg-surface-hover hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/50"
+                      aria-label="Open note details"
+                      title="Note details"
+                    >
+                      <PanelRight size={16} />
+                    </button>
+                  )}
+                  <span className="hidden items-center gap-1.5 text-[11px] sm:flex" aria-live="polite">
+                    {isSaving || isAutosaving ? (
+                      <>
+                        <Loader2 size={11} className="animate-spin text-accent" />
+                        <span className="text-muted">Saving…</span>
+                      </>
+                    ) : hasChanges ? (
+                      <>
+                        <span className="h-1.5 w-1.5 rounded-full bg-warning" />
+                        <span className="text-warning">Unsaved</span>
+                      </>
+                    ) : lastSaveDisplay ? (
+                      <>
+                        <Check size={11} className="text-success" />
+                        <span className="text-muted">Saved {lastSaveDisplay}</span>
+                      </>
+                    ) : null}
+                  </span>
+                  {(hasChanges || isSaving || isAutosaving) && (
+                    <Button
+                      size="sm"
+                      variant="primary"
+                      icon={Save}
+                      loading={isSaving || isAutosaving}
+                      onClick={handleManualSave}
+                      disabled={!title.trim()}
+                    >
+                      Save
+                    </Button>
+                  )}
+                </div>
+              </div>
+
+              <div className="min-h-0 flex-1">
               {noteType === 'drawing' ? (
                 <ErrorBoundary label="Drawing Editor" inline>
                   <DrawingEditor
@@ -3569,6 +3553,7 @@ export default function NoteEditor({
                     onChange={setMindmapData}
                     onSelectedNodeChange={handleMindmapSelectedNodeChange}
                     textNotes={mindmapTextNotes}
+                    resolveTextNote={resolveMindmapTextNote}
                     onCreateTextNote={handleCreateTextNoteFromMindmap}
                     onOpenTextNote={handleOpenTextNoteFromMindmap}
                     readOnly={isSaving || isDeleting}
@@ -3607,6 +3592,7 @@ export default function NoteEditor({
                 </ErrorBoundary>
               ) : (
                 <ErrorBoundary label="Rich Text Editor" inline>
+                <div className="mx-auto h-full w-full max-w-3xl">
                 <RichTextEditor
                     ref={editorRef}
                     value={note?.content ?? ''}
@@ -3619,8 +3605,10 @@ export default function NoteEditor({
                     customBlocks={editorCustomBlocks}
                     slashPickers={slashPickers}
                   />
+                </div>
                 </ErrorBoundary>
               )}
+              </div>
             </div>
           </div>
         </div>
@@ -3713,48 +3701,58 @@ export default function NoteEditor({
       )}
 
       {/* Note Link Dialog */}
-      <NoteLinkDialog
-        isOpen={showNoteLinkDialog}
-        onClose={() => setShowNoteLinkDialog(false)}
-        onSelect={handleNoteLinkSelect}
-        currentNoteId={note?.id}
-      />
+      {showNoteLinkDialog && (
+        <NoteLinkDialog
+          isOpen
+          onClose={() => setShowNoteLinkDialog(false)}
+          onSelect={handleNoteLinkSelect}
+          currentNoteId={note?.id}
+        />
+      )}
 
       {/* Data Sheet Picker Dialog */}
-      <DataSheetPickerDialog
-        isOpen={showDataSheetPicker}
-        onClose={() => setShowDataSheetPicker(false)}
-        onSelect={handleDataSheetTableSelect}
-        currentNoteId={note?.id}
-      />
+      {showDataSheetPicker && (
+        <DataSheetPickerDialog
+          isOpen
+          onClose={() => setShowDataSheetPicker(false)}
+          onSelect={handleDataSheetTableSelect}
+          currentNoteId={note?.id}
+        />
+      )}
 
       {/* Knowledge Graph Modal */}
-      <KnowledgeGraphModal
-        isOpen={showKnowledgeGraph}
-        onClose={() => setShowKnowledgeGraph(false)}
-        currentNoteId={note?.id}
-        onSelectNote={onSelectNote}
-        folders={folders}
-        selectedFolderId={selectedFolderId}
-      />
+      {showKnowledgeGraph && (
+        <KnowledgeGraphModal
+          isOpen
+          onClose={() => setShowKnowledgeGraph(false)}
+          currentNoteId={note?.id}
+          onSelectNote={onSelectNote}
+          folders={folders}
+          selectedFolderId={selectedFolderId}
+        />
+      )}
 
       {/* File Picker for inserting file blocks / file references */}
-      <FileExplorerModal
-        isOpen={showFilePicker}
-        onClose={() => setShowFilePicker(false)}
-        onSelectFiles={handleFilePickerSelect}
-        title="Attach File"
-        initialPath={noteFileUploadPath}
-        uploadPath={noteFileUploadPath}
-      />
+      {showFilePicker && (
+        <FileExplorerModal
+          isOpen
+          onClose={() => setShowFilePicker(false)}
+          onSelectFiles={handleFilePickerSelect}
+          title="Attach File"
+          initialPath={noteFileUploadPath}
+          uploadPath={noteFileUploadPath}
+        />
+      )}
 
       {/* DOCX Action Previews */}
-      <DocxPreviewModal
-        isOpen={docxPreview.isOpen}
-        onClose={() => setDocxPreview({isOpen: false, filePath: null, fileName: null})}
-        filePath={docxPreview.filePath}
-        fileName={docxPreview.fileName}
-      />
+      {docxPreview.isOpen && (
+        <DocxPreviewModal
+          isOpen
+          onClose={() => setDocxPreview({isOpen: false, filePath: null, fileName: null})}
+          filePath={docxPreview.filePath}
+          fileName={docxPreview.fileName}
+        />
+      )}
 
       {/* Project Manager Modal (fallback when workspace view callback is not provided) */}
       {!onOpenProjectsView && (
@@ -3784,7 +3782,40 @@ export default function NoteEditor({
       )}
 
       {/* Settings Modal */}
-      <SettingsModal isOpen={showSettings} onClose={() => setShowSettings(false)} />
+      {showSettings && (
+        <SettingsModal isOpen onClose={() => setShowSettings(false)} />
+      )}
+
+      {/* Mobile note actions (phones have no details sidebar) */}
+      <MobileNoteActions
+        isOpen={showMobileActions}
+        onClose={() => setShowMobileActions(false)}
+        actions={[
+          {
+            label: 'Save',
+            icon: Save,
+            onClick: handleManualSave,
+            disabled: isSaving || isAutosaving || isDeleting || !title.trim(),
+          },
+          { label: 'Export .md', icon: Download, onClick: handleExportMarkdown },
+          { label: 'Export PDF', icon: Download, onClick: () => { void handleExportPdf() } },
+          { label: 'Connections', icon: Network, onClick: openConnections },
+          {
+            label: shareUrl ? 'Copy link' : 'Share',
+            icon: Share2,
+            onClick: shareUrl ? handleCopyShareLink : () => { void handlePublishShare() },
+            disabled: !note?.id || isLoadingShare || isPublishingShare,
+          },
+          { label: 'Settings', icon: Settings, onClick: openSettings },
+          {
+            label: 'Delete',
+            icon: Trash2,
+            tone: 'danger',
+            onClick: () => { void handleDelete() },
+            disabled: !note || !onDelete || isDeleting,
+          },
+        ]}
+      />
 
       {/* AI Assistant Popup */}
       {showAIAssistant && (

@@ -138,6 +138,8 @@ export interface MindmapEditorProps {
   onChange?: (data: MindmapData) => void
   onSelectedNodeChange?: (nodeId: string | null, node: MindmapNode | null) => void
   textNotes?: MindmapTextNote[]
+  /** Loads a note body on demand when a linked note's content is not cached. */
+  resolveTextNote?: (noteId: string) => Promise<MindmapTextNote | null>
   onCreateTextNote?: (input: { title: string; description: string }) => Promise<MindmapTextNote>
   onOpenTextNote?: (noteId: string) => void
   readOnly?: boolean

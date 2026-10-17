@@ -175,6 +175,7 @@ Important: do not bind this Worker to `/*` on your main app domain. If you do, b
 - ✅ **Note sorting** (by updated date, created date, or title)
 - ✅ **Delete confirmations** with safety warnings
 - ✅ **Real-time synchronization** with Supabase
+- ✅ **Offline-first notes and folders** - local IndexedDB cache, write-behind sync and conflict detection
 - ✅ **100% WebView and Tauri compatible** - Fully optimized for Windows, macOS, and Linux
 
 ## Project Structure
@@ -208,6 +209,7 @@ Important: do not bind this Worker to `/*` on your main app domain. If you do, b
 - [Folder and Notes Management Guide](./FOLDER_AND_NOTES_MANAGEMENT.md) - Complete guide to all folder and note management features
 - [Project Summary](./PROJECT_SUMMARY.md) - Overview of the entire project
 - [Database Schema](./DATABASE_SCHEMA.md) - Database structure and relationships
+- [Offline-first storage](./md-docs/OFFLINE_FIRST.md) - Local cache, outbox, conflict resolution and data-layer scaling
 - [WebView Compatibility Guide](./WEBVIEW_COMPATIBILITY.md) - Information about WebView and Tauri compatibility
 
 ## Keyboard Shortcuts

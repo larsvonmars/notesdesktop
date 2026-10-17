@@ -54,24 +54,24 @@ export default function Login() {
   }
 
   return (
-    <div className="flex items-center justify-center min-h-screen px-4 safe-bottom">
+    <div className="flex items-center justify-center min-h-screen px-4 safe-bottom bg-background text-foreground">
       <ThemeToggle />
-      <div className="w-full max-w-md p-6 sm:p-8 bg-white rounded-2xl shadow-lg border border-alpine-100">
+      <div className="w-full max-w-md p-6 sm:p-8 bg-surface rounded-2xl shadow-lg border border-border">
         <div className="flex items-center justify-center gap-3 mb-1">
           <img src="/icon-192.png" alt="MindViz Notes" className="w-8 h-8" />
-          <h1 className="text-2xl font-bold text-gray-900">MindViz Notes</h1>
+          <h1 className="text-2xl font-bold text-foreground">MindViz Notes</h1>
         </div>
-        <p className="text-sm text-center text-gray-500 mb-6">Sign in to your account</p>
+        <p className="text-sm text-center text-muted mb-6">Sign in to your account</p>
 
         {error && (
-          <div className="mb-4 p-3 bg-red-100 border border-red-400 text-red-700 rounded">
+          <div role="alert" className="mb-4 p-3 bg-danger-light border border-danger/40 text-danger rounded-lg text-sm">
             {error}
           </div>
         )}
 
         <form onSubmit={handleLogin} className="space-y-4">
           <div>
-            <label htmlFor="email" className="block text-sm font-medium text-gray-700 mb-1">
+            <label htmlFor="email" className="block text-sm font-medium text-foreground mb-1">
               Email
             </label>
             <input
@@ -80,13 +80,13 @@ export default function Login() {
               value={email}
               onChange={(e) => setEmail(e.target.value)}
               required
-              className="w-full px-4 py-3 text-base border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-alpine-500"
+              className="w-full px-4 py-3 text-base border border-border bg-surface text-foreground placeholder:text-muted/60 rounded-lg focus:outline-none focus:ring-2 focus:ring-accent/40 focus:border-accent"
               placeholder="you@example.com"
             />
           </div>
 
           <div>
-            <label htmlFor="password" className="block text-sm font-medium text-gray-700 mb-1">
+            <label htmlFor="password" className="block text-sm font-medium text-foreground mb-1">
               Password
             </label>
             <input
@@ -95,7 +95,7 @@ export default function Login() {
               value={password}
               onChange={(e) => setPassword(e.target.value)}
               required
-              className="w-full px-4 py-3 text-base border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-alpine-500"
+              className="w-full px-4 py-3 text-base border border-border bg-surface text-foreground placeholder:text-muted/60 rounded-lg focus:outline-none focus:ring-2 focus:ring-accent/40 focus:border-accent"
               placeholder="••••••••"
             />
           </div>
@@ -103,7 +103,7 @@ export default function Login() {
           <button
             type="submit"
             disabled={loading}
-            className="w-full bg-alpine-600 text-white py-3 px-4 rounded-lg text-base font-medium hover:bg-alpine-700 focus:outline-none focus:ring-2 focus:ring-alpine-500 focus:ring-offset-2 disabled:opacity-50 disabled:cursor-not-allowed touch-target"
+            className="w-full bg-accent text-accent-foreground py-3 px-4 rounded-lg text-base font-medium hover:opacity-90 focus:outline-none focus:ring-2 focus:ring-accent/50 focus:ring-offset-2 focus:ring-offset-background disabled:opacity-50 disabled:cursor-not-allowed touch-target"
           >
             {loading ? 'Signing in...' : 'Sign In'}
           </button>
@@ -111,10 +111,10 @@ export default function Login() {
 
         <div className="relative my-4">
           <div className="absolute inset-0 flex items-center">
-            <span className="w-full border-t border-gray-300" />
+            <span className="w-full border-t border-border" />
           </div>
           <div className="relative flex justify-center text-xs uppercase">
-            <span className="bg-white px-2 text-gray-500">or continue with</span>
+            <span className="bg-surface px-2 text-muted">or continue with</span>
           </div>
         </div>
 
@@ -122,7 +122,7 @@ export default function Login() {
           type="button"
           onClick={handleGoogleLogin}
           disabled={loading}
-          className="w-full py-3 px-4 rounded-lg border border-gray-300 text-base font-medium text-gray-700 hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-alpine-500 focus:ring-offset-2 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2 touch-target"
+          className="w-full py-3 px-4 rounded-lg border border-border text-base font-medium text-foreground hover:bg-surface-hover focus:outline-none focus:ring-2 focus:ring-accent/50 focus:ring-offset-2 focus:ring-offset-background disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2 touch-target"
         >
           <svg className="w-5 h-5" viewBox="0 0 24 24" fill="currentColor">
             <path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" />
@@ -133,9 +133,9 @@ export default function Login() {
           Sign in with Google
         </button>
 
-        <p className="mt-4 text-center text-sm text-gray-600">
+        <p className="mt-4 text-center text-sm text-muted">
           Don&lsquo;t have an account?{' '}
-          <Link href="/signup" className="text-alpine-600 hover:text-alpine-700 font-medium">
+          <Link href="/signup" className="text-accent hover:opacity-80 font-medium">
             Sign up
           </Link>
         </p>

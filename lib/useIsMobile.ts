@@ -9,7 +9,11 @@ const MOBILE_BREAKPOINT = 768
  * Combines viewport width detection with user-agent / Tauri platform hints.
  */
 export function useIsMobile(): boolean {
-  const [isMobile, setIsMobile] = useState(false)
+  // Initialize from the viewport so the first client paint already matches the
+  // layout (avoids a desktop→mobile flash inside the Tauri webview).
+  const [isMobile, setIsMobile] = useState(
+    () => typeof window !== 'undefined' && window.innerWidth < MOBILE_BREAKPOINT
+  )
 
   useEffect(() => {
     const check = () => {
@@ -113,7 +117,9 @@ export function useTouchMode(): boolean {
  * Useful when you need a single boolean for "not a full desktop".
  */
 export function useIsCompact(): boolean {
-  const [isCompact, setIsCompact] = useState(false)
+  const [isCompact, setIsCompact] = useState(
+    () => typeof window !== 'undefined' && window.innerWidth < 1024
+  )
 
   useEffect(() => {
     const check = () => setIsCompact(window.innerWidth < 1024)

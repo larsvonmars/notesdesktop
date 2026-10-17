@@ -49,12 +49,16 @@ export const PROJECT_COLOR_PRESETS = [
 /**
  * Fetch the current user's ACTIVE (non-archived) projects.
  */
+const PROJECT_COLUMNS =
+  'id,user_id,name,description,color,position,quick_links,created_at,updated_at,archived_at'
+
 export async function getProjects(): Promise<Project[]> {
   const { data, error } = await supabase
     .from('projects')
-    .select('*')
+    .select(PROJECT_COLUMNS)
     .is('archived_at', null)
     .order('position', { ascending: true })
+    .limit(1000)
 
   if (error) throw error
   return data || []
@@ -66,9 +70,10 @@ export async function getProjects(): Promise<Project[]> {
 export async function getArchivedProjects(): Promise<Project[]> {
   const { data, error } = await supabase
     .from('projects')
-    .select('*')
+    .select(PROJECT_COLUMNS)
     .not('archived_at', 'is', null)
     .order('archived_at', { ascending: false })
+    .limit(1000)
 
   if (error) throw error
   return data || []
@@ -80,7 +85,7 @@ export async function getArchivedProjects(): Promise<Project[]> {
 export async function getProject(id: string): Promise<Project> {
   const { data, error } = await supabase
     .from('projects')
-    .select('*')
+    .select(PROJECT_COLUMNS)
     .eq('id', id)
     .single()
 

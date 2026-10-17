@@ -17,15 +17,10 @@ import {
   Search,
   SlidersHorizontal,
   FolderPlus,
-  Edit3,
   Trash2,
-  Copy,
   Home,
   X,
-  Palette,
-  ArrowRightLeft,
   LayoutDashboard,
-  FolderInput,
   FolderOpen,
   Hash,
   Clock,
@@ -33,13 +28,15 @@ import {
   PanelLeftClose,
   Archive,
   Layers,
+  Settings,
   type LucideIcon,
 } from 'lucide-react'
-import type { Note } from './NoteEditor'
+import SidebarContextMenu from './sidebar/SidebarContextMenu'
 import type { FolderNode } from '@/lib/folders'
 import type { Project } from '@/lib/projects'
-import type { NoteType } from '@/lib/notes'
+import type { NoteSummary, NoteType } from '@/lib/notes'
 import { getNoteTypePresentation, getOrderedNoteTypePresentations, type NoteTypeIconKey } from '@/lib/note-types'
+import { formatModShortcut } from '@/lib/platform'
 
 const NOTE_TYPE_ICON_MAP: Record<NoteTypeIconKey, LucideIcon> = {
   'file-text': FileText,
@@ -58,17 +55,17 @@ const DRAG_TYPE_FOLDER = 'application/x-folder-id'
 export interface ProjectTreeNode {
   project: Project | null // null = "Unfiled"
   folders: FolderNode[]
-  notes: Note[] // notes at the project root (folder_id == null)
+  notes: NoteSummary[] // notes at the project root (folder_id == null)
 }
 
 export interface SidebarTreeProps {
   projects: Project[]
   folderTree: FolderNode[]
-  allNotes: Note[]
+  allNotes: NoteSummary[]
   selectedNoteId?: string
   selectedFolderId: string | null
   selectedProjectId: string | null
-  onSelectNote: (note: Note) => void
+  onSelectNote: (note: NoteSummary) => void
   onSelectFolder: (folderId: string | null) => void
   onNewNote: (noteType?: string, folderId?: string | null, projectId?: string | null) => void
   onCreateFolder: (parentId: string | null, projectId?: string | null) => void
@@ -76,7 +73,7 @@ export interface SidebarTreeProps {
   onDeleteFolder: (folderId: string) => void
   onMoveFolder?: (folderId: string, newParentId: string | null) => void
   onMoveFolderToProject?: (folderId: string, projectId: string | null) => void
-  onDuplicateNote?: (note: Note) => void
+  onDuplicateNote?: (note: NoteSummary) => void
   onDeleteNote?: (noteId: string) => void
   onMoveNote?: (noteId: string, newFolderId: string | null) => Promise<void>
   onRenameProject?: (projectId: string, newName: string) => void
@@ -90,6 +87,12 @@ export interface SidebarTreeProps {
   onArchiveProject?: (projectId: string) => void
   /** Open the archived-projects manager (from the footer Archive entry). */
   onOpenArchive?: () => void
+  /** Open app settings (reachable even when no note is open). */
+  onOpenSettings?: () => void
+  /** Open the welcome / home view. */
+  onOpenWelcome?: () => void
+  /** Open the command palette. */
+  onOpenCommandPalette?: () => void
   /** Number of archived projects (shown on the Archive entry). */
   archivedCount?: number
   collapsed: boolean
@@ -136,6 +139,9 @@ export default function SidebarTree({
   onOpenFileExplorer,
   onArchiveProject,
   onOpenArchive,
+  onOpenSettings,
+  onOpenWelcome,
+  onOpenCommandPalette,
   archivedCount = 0,
   collapsed,
   onToggleCollapsed,
@@ -348,7 +354,7 @@ export default function SidebarTree({
     return result
   }, [projects, folderTree, allNotes])
 
-  const getNotesForFolder = useCallback((folderId: string): Note[] => {
+  const getNotesForFolder = useCallback((folderId: string): NoteSummary[] => {
     return allNotes.filter(n => n.folder_id === folderId)
   }, [allNotes])
 
@@ -453,7 +459,7 @@ export default function SidebarTree({
     })
   }, [])
 
-  const handleNoteContextMenu = useCallback((e: React.MouseEvent, note: Note) => {
+  const handleNoteContextMenu = useCallback((e: React.MouseEvent, note: NoteSummary) => {
     e.preventDefault()
     e.stopPropagation()
     setContextMenu({
@@ -588,7 +594,7 @@ export default function SidebarTree({
     return text.toLowerCase().includes(searchQuery.toLowerCase())
   }, [searchQuery])
 
-  const noteMatchesFilters = useCallback((note: Note): boolean => {
+  const noteMatchesFilters = useCallback((note: NoteSummary): boolean => {
     if (searchQuery.trim() && !((note.title ?? 'Untitled').toLowerCase().includes(searchQuery.toLowerCase()))) return false
     if (filterNoteTypes.size > 0 && !filterNoteTypes.has((note.note_type ?? 'rich-text') as NoteType)) return false
     if (filterProjectIds.size > 0) {
@@ -634,7 +640,7 @@ export default function SidebarTree({
 
   const totalResultCount = filteredNotes.length + filteredFolders.length + filteredProjects.length
 
-  const getNoteLocationMeta = useCallback((note: Note): { projectName: string; projectColor: string; folderPath: string } => {
+  const getNoteLocationMeta = useCallback((note: NoteSummary): { projectName: string; projectColor: string; folderPath: string } => {
     const proj = projects.find(p => p.id === note.project_id)
     const projectName = proj?.name ?? 'Unfiled'
     const projectColor = proj?.color ?? NEUTRAL_DOT
@@ -727,7 +733,7 @@ export default function SidebarTree({
   // ==================================================================
   // NOTE ROW
   // ==================================================================
-  const renderNoteItem = (n: Note, indent: number = 0) => {
+  const renderNoteItem = (n: NoteSummary, indent: number = 0) => {
     if (!matchesSearch(n.title || 'Untitled')) return null
     const isActive = selectedNoteId === n.id
     const noteProject = projects.find(p => p.id === n.project_id)
@@ -854,7 +860,7 @@ export default function SidebarTree({
         {!isRenaming && (
           <>
             {totalCount > 0 && (
-              <span className={`shrink-0 text-[10px] font-medium tabular-nums text-muted/50 ${revealActionsCls}`}>
+              <span className={`shrink-0 text-[11px] font-medium tabular-nums text-muted/50 ${revealActionsCls}`}>
                 {totalCount}
               </span>
             )}
@@ -1002,7 +1008,7 @@ export default function SidebarTree({
           {!isRenaming && (
             <div className="flex shrink-0 items-center gap-0.5">
               {totalNoteCount > 0 && (
-                <span className={`text-[10px] font-medium tabular-nums text-muted/50 ${revealActionsCls}`}>
+                <span className={`text-[11px] font-medium tabular-nums text-muted/50 ${revealActionsCls}`}>
                   {totalNoteCount}
                 </span>
               )}
@@ -1122,7 +1128,7 @@ export default function SidebarTree({
             <div className={`flex items-center gap-1.5 ${sectionLabel}`}>
               <Hash size={11} className="text-muted/40" />
               <span>Projects</span>
-              <span className="text-[10px] text-muted/40">{filteredProjects.length}</span>
+              <span className="text-[11px] text-muted/40">{filteredProjects.length}</span>
             </div>
             <div className="space-y-0.5">
               {filteredProjects.map(project => {
@@ -1159,7 +1165,7 @@ export default function SidebarTree({
                     </span>
                     <div className="min-w-0 flex-1">
                       <div className="truncate text-[13px]">{project.name}</div>
-                      <div className="truncate text-[10px] text-muted/50">
+                      <div className="truncate text-[11px] text-muted/50">
                         {project.description || `${folderCount} folder${folderCount !== 1 ? 's' : ''} · ${noteCount} note${noteCount !== 1 ? 's' : ''}`}
                       </div>
                     </div>
@@ -1183,7 +1189,7 @@ export default function SidebarTree({
             <div className={`flex items-center gap-1.5 ${sectionLabel}`}>
               <FolderTreeIcon size={11} className="text-muted/40" />
               <span>Folders</span>
-              <span className="text-[10px] text-muted/40">{filteredFolders.length}</span>
+              <span className="text-[11px] text-muted/40">{filteredFolders.length}</span>
             </div>
             <div className="space-y-0.5">
               {filteredFolders.map(({ folder, depth, projectName, projectColor }) => {
@@ -1230,7 +1236,7 @@ export default function SidebarTree({
                     <FolderTreeIcon size={15} className="shrink-0 text-muted/45" />
                     <div className="min-w-0 flex-1">
                       <div className="truncate text-[13px]">{folder.name}</div>
-                      <div className="flex items-center gap-1 truncate text-[10px] text-muted/50">
+                      <div className="flex items-center gap-1 truncate text-[11px] text-muted/50">
                         <span className="shrink-0 font-medium" style={{ color: projectColor }}>{projectName}</span>
                         {depth > 0 && (
                           <>
@@ -1261,7 +1267,7 @@ export default function SidebarTree({
             <div className={`flex items-center gap-1.5 ${sectionLabel}`}>
               <FileText size={11} className="text-muted/40" />
               <span>Notes</span>
-              <span className="text-[10px] text-muted/40">{filteredNotes.length}</span>
+              <span className="text-[11px] text-muted/40">{filteredNotes.length}</span>
             </div>
             <div className="space-y-0.5">
               {filteredNotes.map(note => {
@@ -1287,7 +1293,7 @@ export default function SidebarTree({
                     <NoteIcon noteType={note.note_type} size={15} className="opacity-80" />
                     <div className="min-w-0 flex-1">
                       <div className="truncate text-[13px]">{note.title || 'Untitled'}</div>
-                      <div className="flex items-center gap-1 truncate text-[10px] text-muted/50">
+                      <div className="flex items-center gap-1 truncate text-[11px] text-muted/50">
                         <span className="shrink-0 font-medium" style={{ color: projectColor }}>{projectName}</span>
                         {folderPath && (
                           <>
@@ -1371,12 +1377,22 @@ export default function SidebarTree({
               title="Unfiled"
               className={`${railDotBtn} ${!activeNoteProject ? 'bg-surface-active/70 text-foreground' : ''}`}
             >
-              <Home size={17} />
+              <Inbox size={17} />
             </button>
           </nav>
 
           {/* Bottom actions */}
           <div className="flex flex-col items-center gap-0.5 border-t border-border/40 px-1.5 py-2">
+            {onOpenCommandPalette && (
+              <button
+                onClick={onOpenCommandPalette}
+                className={railBtn}
+                title="Search (⌘K)"
+                aria-label="Search"
+              >
+                <Search size={16} />
+              </button>
+            )}
             <button
               onClick={() => { onToggleCollapsed(); onNewNote() }}
               className="flex h-9 w-9 items-center justify-center rounded-lg text-muted/80 transition-colors hover:bg-surface-hover hover:text-foreground"
@@ -1385,6 +1401,16 @@ export default function SidebarTree({
             >
               <Plus size={17} />
             </button>
+            {onOpenWelcome && (
+              <button
+                onClick={onOpenWelcome}
+                className={railBtn}
+                title="Home"
+                aria-label="Home"
+              >
+                <Home size={16} />
+              </button>
+            )}
             {onOpenArchive && (
               <button
                 onClick={onOpenArchive}
@@ -1405,6 +1431,16 @@ export default function SidebarTree({
                 <FolderOpen size={16} />
               </button>
             )}
+            {onOpenSettings && (
+              <button
+                onClick={onOpenSettings}
+                className={railBtn}
+                title="Settings"
+                aria-label="Settings"
+              >
+                <Settings size={16} />
+              </button>
+            )}
           </div>
         </div>
 
@@ -1417,7 +1453,7 @@ export default function SidebarTree({
               style={{ left: contextMenu.x, top: contextMenu.y }}
               onClick={(e) => e.stopPropagation()}
             >
-              {renderContextMenuContent()}
+              {renderContextMenu()}
             </div>
           </>
         )}
@@ -1438,7 +1474,7 @@ export default function SidebarTree({
         {showHeader && (
           <div className="group/header flex shrink-0 items-center gap-0.5 px-2 pb-1.5 pt-2.5">
             <div className="flex min-w-0 flex-1 items-center gap-2 rounded-md px-1.5 py-1">
-              <span className="flex h-[22px] w-[22px] shrink-0 items-center justify-center rounded-[6px] bg-foreground text-[10px] font-bold text-background">
+              <span className="flex h-[22px] w-[22px] shrink-0 items-center justify-center rounded-[6px] bg-foreground text-[11px] font-bold text-background">
                 N
               </span>
               <span className="truncate text-[13px] font-semibold text-foreground/90">MindViz Notes</span>
@@ -1518,7 +1554,7 @@ export default function SidebarTree({
           {showFilterPanel && (
             <div className="absolute left-2 right-2 top-full z-30 mt-1 space-y-2.5 rounded-lg border border-border/70 bg-surface p-2.5 shadow-lg">
               <div>
-                <div className="mb-1.5 px-0.5 text-[10px] font-medium uppercase tracking-wider text-muted/60">Type</div>
+                <div className="mb-1.5 px-0.5 text-[11px] font-medium uppercase tracking-wider text-muted/60">Type</div>
                 <div className="flex flex-wrap gap-1">
                   {allNoteTypePresentations.map(tp => {
                     const Icon = NOTE_TYPE_ICON_MAP[tp.iconKey]
@@ -1544,7 +1580,7 @@ export default function SidebarTree({
 
               {projects.length > 0 && (
                 <div>
-                  <div className="mb-1.5 px-0.5 text-[10px] font-medium uppercase tracking-wider text-muted/60">Project</div>
+                  <div className="mb-1.5 px-0.5 text-[11px] font-medium uppercase tracking-wider text-muted/60">Project</div>
                   <div className="flex flex-wrap gap-1">
                     <button
                       onClick={() => toggleProjectFilter('__UNFILED__')}
@@ -1616,7 +1652,7 @@ export default function SidebarTree({
 
             {newMenuOpen && (
               <div className="absolute left-0 right-0 top-full z-40 mt-1 overflow-hidden rounded-lg border border-border/70 bg-surface py-1 shadow-xl">
-                <div className="px-3 pb-1 pt-1.5 text-[10px] font-medium uppercase tracking-wider text-muted/50">New note</div>
+                <div className="px-3 pb-1 pt-1.5 text-[11px] font-medium uppercase tracking-wider text-muted/50">New note</div>
                 {allNoteTypePresentations.map(tp => {
                   const Icon = NOTE_TYPE_ICON_MAP[tp.iconKey]
                   return (
@@ -1689,6 +1725,34 @@ export default function SidebarTree({
 
         {/* ==== Footer ==== */}
         <div className="shrink-0 border-t border-border/50 px-2 py-1.5">
+          {onOpenCommandPalette && (
+            <button
+              onClick={onOpenCommandPalette}
+              className="group flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-[13px] text-muted/80 transition-colors hover:bg-surface-hover hover:text-foreground"
+            >
+              <Search size={15} className="shrink-0 text-muted/60" />
+              <span className="flex-1 text-left">Search</span>
+              <kbd className="rounded border border-border px-1 text-[11px] font-medium text-muted/70">{formatModShortcut('K')}</kbd>
+            </button>
+          )}
+          {showHeader && onOpenWelcome && (
+            <button
+              onClick={onOpenWelcome}
+              className="group flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-[13px] text-muted/80 transition-colors hover:bg-surface-hover hover:text-foreground"
+            >
+              <Home size={15} className="shrink-0 text-muted/60" />
+              <span className="flex-1 text-left">Home</span>
+            </button>
+          )}
+          {onOpenSettings && (
+            <button
+              onClick={onOpenSettings}
+              className="group flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-[13px] text-muted/80 transition-colors hover:bg-surface-hover hover:text-foreground"
+            >
+              <Settings size={15} className="shrink-0 text-muted/60" />
+              <span className="flex-1 text-left">Settings</span>
+            </button>
+          )}
           {onOpenArchive && (
             <button
               onClick={onOpenArchive}
@@ -1697,7 +1761,7 @@ export default function SidebarTree({
               <Archive size={15} className="shrink-0 text-muted/60" />
               <span className="flex-1 text-left">Archive</span>
               {archivedCount > 0 && (
-                <span className="flex h-[18px] min-w-[18px] items-center justify-center rounded-full bg-surface-active px-1 text-[10px] font-semibold tabular-nums text-foreground/70">
+                <span className="flex h-[18px] min-w-[18px] items-center justify-center rounded-full bg-surface-active px-1 text-[11px] font-semibold tabular-nums text-foreground/70">
                   {archivedCount}
                 </span>
               )}
@@ -1713,7 +1777,7 @@ export default function SidebarTree({
             </button>
           )}
           {projects.length > 0 && !onOpenFileExplorer && (
-            <div className="px-2 py-1 text-[10px] text-muted/40">{projects.length} project{projects.length !== 1 ? 's' : ''}</div>
+            <div className="px-2 py-1 text-[11px] text-muted/40">{projects.length} project{projects.length !== 1 ? 's' : ''}</div>
           )}
         </div>
       </div>
@@ -1727,7 +1791,7 @@ export default function SidebarTree({
             style={{ left: contextMenu.x, top: contextMenu.y }}
             onClick={(e) => e.stopPropagation()}
           >
-            {renderContextMenuContent()}
+            {renderContextMenu()}
           </div>
         </>
       )}
@@ -1739,203 +1803,31 @@ export default function SidebarTree({
   // ==================================================================
   // CONTEXT MENU CONTENT (shared by expanded + collapsed)
   // ==================================================================
-  function renderContextMenuContent() {
+  function renderContextMenu() {
     if (!contextMenu) return null
-    const menuItem = 'flex w-full items-center gap-2.5 px-3 py-[7px] text-left text-[13px] transition-colors'
-    const menuItemNormal = `${menuItem} text-foreground/80 hover:bg-surface-hover`
-    const menuItemDanger = `${menuItem} text-danger hover:bg-danger-light`
-    const menuDivider = 'mx-2 my-1 border-t border-border/60'
-
     return (
-      <>
-        {/* ---- PROJECT CONTEXT MENU ---- */}
-        {contextMenu.type === 'project' && (
-          <>
-            <button
-              onClick={() => {
-                setInlineRename({ type: 'project', id: contextMenu.id, value: contextMenu.name })
-                setContextMenu(null)
-              }}
-              className={menuItemNormal}
-            >
-              <Edit3 size={14} className="shrink-0 text-muted/70" />
-              <span className="font-medium">Rename project</span>
-            </button>
-            {onUpdateProjectColor && (
-              <button
-                onClick={() => {
-                  const project = projects.find(p => p.id === contextMenu.id)
-                  setShowColorPicker({ projectId: contextMenu.id, currentColor: project?.color ?? NEUTRAL_DOT })
-                  setContextMenu(null)
-                }}
-                className={menuItemNormal}
-              >
-                <Palette size={14} className="shrink-0 text-muted/70" />
-                <span className="font-medium">Change color</span>
-              </button>
-            )}
-            {onOpenProjectDashboard && (
-              <button
-                onClick={() => {
-                  onOpenProjectDashboard(contextMenu.id)
-                  setContextMenu(null)
-                }}
-                className={menuItemNormal}
-              >
-                <LayoutDashboard size={14} className="shrink-0 text-muted/70" />
-                <span className="font-medium">Open dashboard</span>
-              </button>
-            )}
-            {onArchiveProject && (
-              <button
-                onClick={() => {
-                  onArchiveProject(contextMenu.id)
-                  setContextMenu(null)
-                }}
-                className={menuItemNormal}
-              >
-                <Archive size={14} className="shrink-0 text-muted/70" />
-                <span className="font-medium">Archive project</span>
-              </button>
-            )}
-            <div className={menuDivider} />
-            <button
-              onClick={() => { onCreateFolder(null, contextMenu.id); setContextMenu(null) }}
-              className={menuItemNormal}
-            >
-              <FolderPlus size={14} className="shrink-0 text-muted/70" />
-              <span className="font-medium">New folder</span>
-            </button>
-            <button
-              onClick={() => { onNewNote(undefined, null, contextMenu.id); setContextMenu(null) }}
-              className={menuItemNormal}
-            >
-              <FileText size={14} className="shrink-0 text-muted/70" />
-              <span className="font-medium">New note</span>
-            </button>
-            {onDeleteProject && (
-              <>
-                <div className={menuDivider} />
-                <button
-                  onClick={() => { setShowDeleteModal({ type: 'project', id: contextMenu.id, name: contextMenu.name }); setContextMenu(null) }}
-                  className={menuItemDanger}
-                >
-                  <Trash2 size={14} className="shrink-0" />
-                  <span className="font-medium">Delete project</span>
-                </button>
-              </>
-            )}
-          </>
-        )}
-
-        {/* ---- FOLDER CONTEXT MENU ---- */}
-        {contextMenu.type === 'folder' && (
-          <>
-            <button
-              onClick={() => {
-                setInlineRename({ type: 'folder', id: contextMenu.id, value: contextMenu.name })
-                setContextMenu(null)
-              }}
-              className={menuItemNormal}
-            >
-              <Edit3 size={14} className="shrink-0 text-muted/70" />
-              <span className="font-medium">Rename</span>
-            </button>
-            <button
-              onClick={() => { onCreateFolder(contextMenu.id, contextMenu.projectId); setContextMenu(null) }}
-              className={menuItemNormal}
-            >
-              <FolderPlus size={14} className="shrink-0 text-muted/70" />
-              <span className="font-medium">New subfolder</span>
-            </button>
-            <button
-              onClick={() => { onNewNote(undefined, contextMenu.id, contextMenu.projectId); setContextMenu(null) }}
-              className={menuItemNormal}
-            >
-              <FileText size={14} className="shrink-0 text-muted/70" />
-              <span className="font-medium">New note here</span>
-            </button>
-            {(onMoveFolderToProject || onMoveFolder) && projects.length > 0 && (
-              <>
-                <div className={menuDivider} />
-                <button
-                  onClick={() => {
-                    setShowMovePicker({ type: 'folder-to-project', id: contextMenu.id, name: contextMenu.name })
-                    setContextMenu(null)
-                  }}
-                  className={menuItemNormal}
-                >
-                  <FolderInput size={14} className="shrink-0 text-muted/70" />
-                  <span className="font-medium">Move to project…</span>
-                </button>
-              </>
-            )}
-            <div className={menuDivider} />
-            <button
-              onClick={() => { setShowDeleteModal({ type: 'folder', id: contextMenu.id, name: contextMenu.name }); setContextMenu(null) }}
-              className={menuItemDanger}
-            >
-              <Trash2 size={14} className="shrink-0" />
-              <span className="font-medium">Delete folder</span>
-            </button>
-          </>
-        )}
-
-        {/* ---- NOTE CONTEXT MENU ---- */}
-        {contextMenu.type === 'note' && (
-          <>
-            {onDuplicateNote && (
-              <button
-                onClick={() => {
-                  const note = allNotes.find(n => n.id === contextMenu.id)
-                  if (note) onDuplicateNote(note)
-                  setContextMenu(null)
-                }}
-                className={menuItemNormal}
-              >
-                <Copy size={14} className="shrink-0 text-muted/70" />
-                <span className="font-medium">Duplicate note</span>
-              </button>
-            )}
-            {onMoveNote && (
-              <button
-                onClick={() => {
-                  setShowMovePicker({ type: 'note-to-folder', id: contextMenu.id, name: contextMenu.name })
-                  setContextMenu(null)
-                }}
-                className={menuItemNormal}
-              >
-                <FolderInput size={14} className="shrink-0 text-muted/70" />
-                <span className="font-medium">Move to folder…</span>
-              </button>
-            )}
-            {onMoveNoteToProject && projects.length > 0 && (
-              <button
-                onClick={() => {
-                  setShowMovePicker({ type: 'note-to-project', id: contextMenu.id, name: contextMenu.name })
-                  setContextMenu(null)
-                }}
-                className={menuItemNormal}
-              >
-                <ArrowRightLeft size={14} className="shrink-0 text-muted/70" />
-                <span className="font-medium">Move to project…</span>
-              </button>
-            )}
-            {onDeleteNote && (
-              <>
-                <div className={menuDivider} />
-                <button
-                  onClick={() => { setShowDeleteModal({ type: 'note', id: contextMenu.id, name: contextMenu.name }); setContextMenu(null) }}
-                  className={menuItemDanger}
-                >
-                  <Trash2 size={14} className="shrink-0" />
-                  <span className="font-medium">Delete note</span>
-                </button>
-              </>
-            )}
-          </>
-        )}
-      </>
+      <SidebarContextMenu
+        contextMenu={contextMenu}
+        projects={projects}
+        allNotes={allNotes}
+        onUpdateProjectColor={onUpdateProjectColor}
+        onOpenProjectDashboard={onOpenProjectDashboard}
+        onArchiveProject={onArchiveProject}
+        onCreateFolder={onCreateFolder}
+        onNewNote={onNewNote}
+        onDeleteProject={onDeleteProject}
+        onMoveFolderToProject={onMoveFolderToProject}
+        onMoveFolder={onMoveFolder}
+        onDuplicateNote={onDuplicateNote}
+        onMoveNote={onMoveNote}
+        onMoveNoteToProject={onMoveNoteToProject}
+        onDeleteNote={onDeleteNote}
+        onInlineRename={(request) => setInlineRename(request)}
+        onOpenColorPicker={(projectId, currentColor) => setShowColorPicker({ projectId, currentColor })}
+        onOpenDeleteModal={(request) => setShowDeleteModal(request)}
+        onOpenMovePicker={(request) => setShowMovePicker(request)}
+        onClose={() => setContextMenu(null)}
+      />
     )
   }
 
@@ -2003,7 +1895,7 @@ export default function SidebarTree({
                         >
                           <FolderTreeIcon size={13} className="shrink-0 text-muted/50" />
                           <span className="flex-1 truncate">{folder.name}</span>
-                          <span className="shrink-0 text-[10px] font-medium" style={{ color: projectColor }}>{projectName}</span>
+                          <span className="shrink-0 text-[11px] font-medium" style={{ color: projectColor }}>{projectName}</span>
                         </button>
                       ))
                     }

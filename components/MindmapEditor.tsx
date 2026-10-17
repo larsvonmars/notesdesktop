@@ -89,6 +89,7 @@ const MindmapEditor = forwardRef<MindmapEditorHandle, MindmapEditorProps>(
     onChange,
     onSelectedNodeChange,
     textNotes = [],
+    resolveTextNote,
     onCreateTextNote,
     onOpenTextNote,
     readOnly = false,
@@ -1364,9 +1365,12 @@ const MindmapEditor = forwardRef<MindmapEditorHandle, MindmapEditorProps>(
     )
 
     const applyLinkedTextNoteToDescription = useCallback(
-      (noteId: string) => {
+      async (noteId: string) => {
         if (!detailDraft) return
-        const linkedNote = availableTextNotes.find((note) => note.id === noteId)
+        let linkedNote = availableTextNotes.find((note) => note.id === noteId)
+        if (linkedNote && !linkedNote.content && resolveTextNote) {
+          linkedNote = (await resolveTextNote(noteId)) ?? linkedNote
+        }
         if (!linkedNote) return
 
         dispatch({
@@ -1379,7 +1383,7 @@ const MindmapEditor = forwardRef<MindmapEditorHandle, MindmapEditorProps>(
         setLinkedTextNoteId(linkedNote.id)
         setTextNoteActionError(null)
       },
-      [availableTextNotes, detailDraft]
+      [availableTextNotes, detailDraft, resolveTextNote]
     )
 
     const createAndLinkTextNoteFromDraft = useCallback(async () => {

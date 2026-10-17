@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect, useRef, useState, useCallback, useMemo } from 'react'
-import type { Note } from '@/lib/notes'
+import type { NoteSummary } from '@/lib/notes'
 import type { FolderNode, Folder } from '@/lib/folders'
 import { getNoteTypePresentation } from '@/lib/note-types'
 
@@ -37,9 +37,9 @@ interface FolderCluster {
 }
 
 export interface NoteGraphProps {
-  notes: Note[]
+  notes: NoteSummary[]
   folders: Folder[]
-  onSelectNote: (note: Note) => void
+  onSelectNote: (note: NoteSummary) => void
   className?: string
 }
 
@@ -82,7 +82,7 @@ export default function NoteGraph({ notes, folders, onSelectNote, className }: N
 
   // ── Memoize note map for click handler ──────────────────────────────────
   const noteMap = useMemo(() => {
-    const m = new Map<string, Note>()
+    const m = new Map<string, NoteSummary>()
     notes.forEach(n => m.set(n.id, n))
     return m
   }, [notes])
@@ -96,7 +96,7 @@ export default function NoteGraph({ notes, folders, onSelectNote, className }: N
     const cy = h / 2
 
     // Group notes by folder
-    const byFolder = new Map<string, Note[]>()
+    const byFolder = new Map<string, NoteSummary[]>()
     for (const note of notes) {
       const key = note.folder_id ?? '__root__'
       if (!byFolder.has(key)) byFolder.set(key, [])

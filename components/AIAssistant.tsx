@@ -1,8 +1,6 @@
 'use client'
 
 import { useState, useRef, useEffect, useCallback, useMemo } from 'react'
-import { marked } from 'marked'
-import DOMPurify from 'dompurify'
 import {
   Send,
   Sparkles,
@@ -59,14 +57,21 @@ import {
   textToHtml,
   type AIMessage,
   type AIContext,
-  type NoteSummary,
+  type NoteSummary as AINoteSummary,
   type MindmapSuggestion,
   type TaskSuggestion,
   type CalendarSuggestion,
   type ToolCallHandler,
 } from '@/lib/ai'
 import { AI_MODEL, AI_MODEL_LABEL, AI_MODEL_SHORT_LABEL } from '@/lib/ai-model'
-import type { NoteType } from '@/lib/notes'
+import {
+  getNote,
+  getNotesByIds,
+  searchNotes,
+  type Note,
+  type NoteSummary,
+  type NoteType,
+} from '@/lib/notes'
 import {
   getAIChatsByNote,
   getAIChats,
@@ -79,10 +84,21 @@ import {
 } from '@/lib/ai-chats'
 import { buildFolderTree, getFolders, type Folder, type FolderNode } from '@/lib/folders'
 import type { Project } from '@/lib/projects'
-import type { Note } from './NoteEditor'
 import type { Task, TaskStats } from '@/lib/tasks'
 import type { CalendarEvent } from '@/lib/events'
 import type { MindmapData, MindmapNode } from './MindmapEditor'
+import { MarkdownContent, ThinkingSection, TypingDots } from './ai/AIMarkdown'
+import {
+  appendMapValue,
+  buildContextFolderGroups,
+  countNotesInFolderGroup,
+  countNotesInProjectGroup,
+  sortNotesByTitle,
+  truncateAtBoundary,
+  type ContextFolderGroup,
+  type ContextProjectGroup,
+} from '@/lib/ai/context-groups'
+import { parseAIResponse, type ParsedAIResponse } from '@/lib/ai/parse-response'
 
 // ============================================================================
 // CONSTANTS
@@ -92,20 +108,6 @@ const TEXT_TRUNCATION_SHORT = 50
 const TEXT_TRUNCATION_MEDIUM = 60
 const CONTEXT_LENGTH_LIMIT = 1000
 const AI_NOTE_CONTEXT_CONSENT_KEY = 'ai-note-context-consent-v1'
-
-function truncateAtBoundary(text: string, maxChars: number): string {
-  if (text.length <= maxChars) return text
-  const slice = text.slice(0, maxChars)
-  const paragraphBoundary = Math.max(slice.lastIndexOf('\n\n'), slice.lastIndexOf('. '))
-  if (paragraphBoundary >= Math.floor(maxChars * 0.65)) {
-    return slice.slice(0, paragraphBoundary + 1).trimEnd()
-  }
-  const wordBoundary = slice.lastIndexOf(' ')
-  if (wordBoundary >= Math.floor(maxChars * 0.65)) {
-    return slice.slice(0, wordBoundary).trimEnd()
-  }
-  return slice.trimEnd()
-}
 
 // ============================================================================
 // TYPES
@@ -124,7 +126,7 @@ interface AIAssistantProps {
   note?: Note | null
   noteContent?: string
   selectedText?: string
-  allNotes?: Note[]
+  allNotes?: NoteSummary[]
   projects?: Project[]
   mindmapData?: MindmapData | null
   selectedMindmapNodeId?: string | null
@@ -153,57 +155,6 @@ interface AIAssistantProps {
   onToggleExpand?: () => void
 }
 
-interface ContextFolderGroup {
-  folder: FolderNode
-  notes: Note[]
-  children: ContextFolderGroup[]
-}
-
-interface ContextProjectGroup {
-  key: string
-  label: string
-  color?: string | null
-  notes: Note[]
-  folders: ContextFolderGroup[]
-}
-
-function sortNotesByTitle(notes: Note[]): Note[] {
-  return [...notes].sort((a, b) => (a.title || 'Untitled').localeCompare(b.title || 'Untitled'))
-}
-
-function appendMapValue<K, V>(map: Map<K, V[]>, key: K, value: V) {
-  const existing = map.get(key)
-  if (existing) {
-    existing.push(value)
-    return
-  }
-
-  map.set(key, [value])
-}
-
-function buildContextFolderGroups(
-  nodes: FolderNode[],
-  notesByFolderId: Map<string, Note[]>
-): ContextFolderGroup[] {
-  return nodes.flatMap((node) => {
-    const children = buildContextFolderGroups(node.children, notesByFolderId)
-    const notes = sortNotesByTitle(notesByFolderId.get(node.id) ?? [])
-    if (notes.length === 0 && children.length === 0) {
-      return []
-    }
-
-    return [{ folder: node, notes, children }]
-  })
-}
-
-function countNotesInFolderGroup(folderGroup: ContextFolderGroup): number {
-  return folderGroup.notes.length + folderGroup.children.reduce((total, child) => total + countNotesInFolderGroup(child), 0)
-}
-
-function countNotesInProjectGroup(projectGroup: ContextProjectGroup): number {
-  return projectGroup.notes.length + projectGroup.folders.reduce((total, folder) => total + countNotesInFolderGroup(folder), 0)
-}
-
 type QuickAction =
   | 'summarize'
   | 'improve-writing'
@@ -220,171 +171,9 @@ type QuickAction =
   | 'translate-selection'
   | 'simplify-selection'
 
-interface ParsedAIResponse {
-  type: 'structured' | 'text'
-  summary?: string
-  keyPoints?: string[]
-  suggestedTasks?: string[]
-  rawText?: string
-}
-
-function parseAIResponse(content: string): ParsedAIResponse {
-  const extractBalancedJSON = (str: string, startIdx: number): string | null => {
-    if (str[startIdx] !== '{') return null
-    let braceCount = 0
-    let inString = false
-    let escape = false
-    for (let i = startIdx; i < str.length; i++) {
-      const char = str[i]
-      if (escape) { escape = false; continue }
-      if (char === '\\' && inString) { escape = true; continue }
-      if (char === '"' && !escape) { inString = !inString; continue }
-      if (!inString) {
-        if (char === '{') braceCount++
-        else if (char === '}') {
-          braceCount--
-          if (braceCount === 0) return str.substring(startIdx, i + 1)
-        }
-      }
-    }
-    return null
-  }
-
-  const codeBlockMatch = content.match(/```(?:json)?\s*/)
-  if (codeBlockMatch) {
-    const startOfJson = content.indexOf('{', codeBlockMatch.index)
-    if (startOfJson !== -1) {
-      const jsonStr = extractBalancedJSON(content, startOfJson)
-      if (jsonStr) {
-        try {
-          const parsed = JSON.parse(jsonStr)
-          if (parsed.summary || parsed.keyPoints || parsed.suggestedTasks) {
-            return { type: 'structured', summary: parsed.summary, keyPoints: parsed.keyPoints, suggestedTasks: parsed.suggestedTasks }
-          }
-        } catch { /* continue */ }
-      }
-    }
-  }
-
-  const firstBrace = content.indexOf('{')
-  if (firstBrace !== -1) {
-    const jsonStr = extractBalancedJSON(content, firstBrace)
-    if (jsonStr) {
-      try {
-        const parsed = JSON.parse(jsonStr)
-        if (parsed.summary || parsed.keyPoints || parsed.suggestedTasks) {
-          return { type: 'structured', summary: parsed.summary, keyPoints: parsed.keyPoints, suggestedTasks: parsed.suggestedTasks }
-        }
-      } catch { /* fall through */ }
-    }
-  }
-
-  return { type: 'text', rawText: content }
-}
-
 // ============================================================================
 // SUB-COMPONENTS
 // ============================================================================
-
-marked.setOptions({ gfm: true, breaks: true })
-
-function renderMarkdown(content: string): string {
-  try {
-    return marked.parse(content, { async: false }) as string
-  } catch {
-    return content
-  }
-}
-
-/** Theme-aware markdown renderer using CSS-variable utilities */
-function MarkdownContent({ content, className = '' }: { content: string; className?: string }) {
-  const html = useMemo(() => {
-    const raw = renderMarkdown(content)
-    return typeof window !== 'undefined' ? DOMPurify.sanitize(raw) : raw
-  }, [content])
-  return (
-    <div
-      className={`text-[13px] leading-[1.7] text-foreground
-        [&_p]:my-2 [&_p:first-child]:mt-0 [&_p:last-child]:mb-0
-        [&_strong]:font-semibold [&_em]:italic
-        [&_h1]:text-base [&_h1]:font-bold [&_h1]:mt-4 [&_h1]:mb-2
-        [&_h2]:text-[13px] [&_h2]:font-semibold [&_h2]:mt-3 [&_h2]:mb-1.5
-        [&_h3]:text-[13px] [&_h3]:font-medium [&_h3]:mt-2 [&_h3]:mb-1
-        [&_ul]:list-disc [&_ul]:pl-5 [&_ul]:my-2
-        [&_ol]:list-decimal [&_ol]:pl-5 [&_ol]:my-2
-        [&_li]:my-1 [&_li]:leading-relaxed
-        [&_code]:bg-surface-active/60 [&_code]:text-foreground [&_code]:px-1.5 [&_code]:py-0.5 [&_code]:rounded-md [&_code]:text-xs [&_code]:font-mono
-        [&_pre]:bg-surface-active/60 [&_pre]:rounded-xl [&_pre]:p-3.5 [&_pre]:overflow-auto [&_pre]:my-3 [&_pre]:border [&_pre]:border-border/50
-        [&_pre>code]:bg-transparent [&_pre>code]:p-0
-        [&_blockquote]:border-l-2 [&_blockquote]:border-alpine-400/40 [&_blockquote]:pl-3 [&_blockquote]:text-muted [&_blockquote]:my-2 [&_blockquote]:italic
-        [&_a]:text-alpine-500 [&_a]:underline [&_a]:underline-offset-2 hover:[&_a]:text-alpine-400
-        [&_hr]:border-border/50 [&_hr]:my-4
-        [&_table]:w-full [&_table]:text-xs [&_table]:border-collapse [&_table]:my-3
-        [&_th]:bg-surface-hover [&_th]:border [&_th]:border-border [&_th]:px-2 [&_th]:py-1.5 [&_th]:text-left [&_th]:font-medium
-        [&_td]:border [&_td]:border-border [&_td]:px-2 [&_td]:py-1.5
-        ${className}`}
-      dangerouslySetInnerHTML={{ __html: html }}
-    />
-  )
-}
-
-/** Collapsible reasoning chain shown for every assistant response */
-function ThinkingSection({ reasoning }: { reasoning: string }) {
-  const [open, setOpen] = useState(false)
-  const wordCount = Math.round(reasoning.split(/\s+/).filter(Boolean).length)
-  return (
-    <div className="assistant-soft-pop mb-3 overflow-hidden rounded-2xl border border-border/40 bg-surface-hover/50" style={{ animationDelay: '60ms' }}>
-      <button
-        onClick={() => setOpen(v => !v)}
-        className="flex w-full items-center gap-2 px-3 py-2 text-left text-xs text-muted transition-colors hover:text-foreground"
-      >
-        <Cpu size={12} className={`text-alpine-500/70 transition-transform duration-300 ${open ? 'scale-110' : ''}`} />
-        <span className="font-medium">Reasoning chain</span>
-        <span className="text-[10px] opacity-50">({wordCount} words)</span>
-        <ChevronDown size={12} className={`ml-auto transition-transform duration-200 ${open ? 'rotate-180' : ''}`} />
-      </button>
-      <div className={`grid transition-[grid-template-rows,opacity] duration-300 ease-out ${open ? 'grid-rows-[1fr] opacity-100' : 'grid-rows-[0fr] opacity-0'}`}>
-        <div className="overflow-hidden">
-          <div className="border-t border-border/30 px-3 pb-3 pt-0 text-xs leading-relaxed whitespace-pre-wrap text-muted/80">
-            <div className="pt-3">{reasoning}</div>
-          </div>
-        </div>
-      </div>
-    </div>
-  )
-}
-
-/** Animated typing dots */
-function TypingDots() {
-  return (
-    <span className="inline-flex items-center gap-1 py-1">
-      {[0, 1, 2].map(i => (
-        <span
-          key={i}
-          className="assistant-typing-dot w-1.5 h-1.5 rounded-full bg-muted/60"
-          style={{
-            animation: 'ai-typing 1.4s infinite',
-            animationDelay: `${i * 0.2}s`,
-          }}
-        />
-      ))}
-      <style>{`
-        @keyframes ai-typing {
-          0%, 60%, 100% { opacity: 0.3; transform: scale(0.8); }
-          30% { opacity: 1; transform: scale(1); }
-        }
-
-        @media (prefers-reduced-motion: reduce) {
-          .assistant-typing-dot {
-            animation: none !important;
-            opacity: 0.7;
-            transform: none !important;
-          }
-        }
-      `}</style>
-    </span>
-  )
-}
 
 // ============================================================================
 // MAIN COMPONENT
@@ -431,7 +220,7 @@ export default function AIAssistant({
     tasks?: TaskSuggestion[]
     events?: CalendarSuggestion[]
     mindmap?: MindmapSuggestion[]
-    summary?: NoteSummary
+    summary?: AINoteSummary
   }>({})
   const [showSuggestions, setShowSuggestions] = useState(false)
   const [showChatHistory, setShowChatHistory] = useState(false)
@@ -442,6 +231,7 @@ export default function AIAssistant({
   // Context settings
   const [includeCurrentNote, setIncludeCurrentNote] = useState(true)
   const [selectedNoteIds, setSelectedNoteIds] = useState<string[]>([])
+  const [selectedNoteBodies, setSelectedNoteBodies] = useState<Record<string, Note>>({})
   const [notePickerSearch, setNotePickerSearch] = useState('')
   const [streamingReasoning, setStreamingReasoning] = useState('')
   const [showMindmapPromptModal, setShowMindmapPromptModal] = useState(false)
@@ -666,8 +456,8 @@ export default function AIAssistant({
   const groupedSelectableNotes = useMemo((): ContextProjectGroup[] => {
     if (filteredSelectableNotes.length === 0) return []
 
-    const notesByFolderId = new Map<string, Note[]>()
-    const rootNotesByProjectId = new Map<string | null, Note[]>()
+    const notesByFolderId = new Map<string, NoteSummary[]>()
+    const rootNotesByProjectId = new Map<string | null, NoteSummary[]>()
 
     for (const availableNote of filteredSelectableNotes) {
       const hasKnownFolder = !!availableNote.folder_id && folderIdSet.has(availableNote.folder_id)
@@ -723,13 +513,40 @@ export default function AIAssistant({
     return groups
   }, [filteredSelectableNotes, folderIdSet, folderTree, projectLookup, projects])
 
+  // Bodies for explicitly selected context notes are fetched on demand and
+  // cached in this map; the full workspace list stays metadata-only.
+  useEffect(() => {
+    const ids = selectedNoteIds.filter(id => id !== note?.id)
+    const missing = ids.filter(id => !selectedNoteBodies[id])
+    if (missing.length === 0) return
+
+    let cancelled = false
+    void getNotesByIds(missing)
+      .then(notes => {
+        if (cancelled || notes.length === 0) return
+        setSelectedNoteBodies(prev => {
+          const next = { ...prev }
+          for (const loaded of notes) next[loaded.id] = loaded
+          return next
+        })
+      })
+      .catch(err => {
+        console.error('Failed to load selected note context:', err)
+      })
+
+    return () => {
+      cancelled = true
+    }
+  }, [selectedNoteIds, selectedNoteBodies, note?.id])
+
   const selectedAdditionalNotes = useMemo(() => {
-    if (!allNotes?.length || selectedNoteIds.length === 0) return []
-    const selectedMap = new Set(selectedNoteIds)
-    return allNotes
-      .filter(n => selectedMap.has(n.id) && n.id !== note?.id)
+    if (selectedNoteIds.length === 0) return []
+    return selectedNoteIds
+      .filter(id => id !== note?.id)
+      .map(id => selectedNoteBodies[id])
+      .filter((loaded): loaded is Note => !!loaded)
       .slice(0, contextLimits.maxSelectedNotes)
-  }, [allNotes, contextLimits.maxSelectedNotes, note?.id, selectedNoteIds])
+  }, [contextLimits.maxSelectedNotes, note?.id, selectedNoteBodies, selectedNoteIds])
 
   const contextDiagnostics = useMemo(() => {
     const noteCaps = contextLimits
@@ -885,10 +702,21 @@ export default function AIAssistant({
         const noteId = args.noteId as string | undefined
         const noteTitle = args.noteTitle as string | undefined
         if (!allNotes?.length) return 'No notes available.'
-        let targetNote: Note | undefined
-        if (noteId) targetNote = allNotes.find(n => n.id === noteId)
-        else if (noteTitle) targetNote = allNotes.find(n => n.title?.toLowerCase().includes(noteTitle.toLowerCase()))
-        if (!targetNote) return `Note not found. Available: ${allNotes.map(n => n.title || 'Untitled').join(', ')}`
+        const summary = noteId
+          ? allNotes.find(n => n.id === noteId)
+          : noteTitle
+            ? allNotes.find(n => n.title?.toLowerCase().includes(noteTitle.toLowerCase()))
+            : undefined
+        if (!summary) return `Note not found. Available: ${allNotes.map(n => n.title || 'Untitled').join(', ')}`
+
+        let targetNote: Note | null
+        try {
+          targetNote = note?.id === summary.id ? note : await getNote(summary.id)
+        } catch {
+          return `Could not load "${summary.title || 'Untitled'}". The note body is not available offline.`
+        }
+        if (!targetNote) return `Could not load the note "${summary.title || 'Untitled'}".`
+
         const fullContent = stripHtmlForAI(targetNote.content || '')
         const limited = truncateAtBoundary(fullContent, contextLimits.readNoteToolChars)
         const wasTruncated = limited.length < fullContent.length
@@ -903,26 +731,23 @@ export default function AIAssistant({
           : contextLimits.searchMaxResultsDefault
         if (!query) return 'No search query provided.'
         if (!allNotes?.length) return 'No notes available to search.'
-        const scored = allNotes
-          .map(n => {
-          const t = (n.title || '').toLowerCase()
-          const c = stripHtmlForAI(n.content || '').toLowerCase()
-          let score = 0
-          if (t === query) score += 4
-          else if (t.includes(query)) score += 2
-          if (c.includes(query)) score += 1
-          return { note: n, score }
-        })
-          .filter(item => item.score > 0)
-          .sort((a, b) => b.score - a.score)
 
-        if (!scored.length) return `No notes found matching "${query}".`
-        const excerpts = scored.slice(0, maxResults).map(({ note: n }) => {
+        // Search runs server-side (limited/projected) with an offline cache
+        // fallback, instead of scanning every note body held in memory.
+        let matches: Note[]
+        try {
+          matches = await searchNotes(rawQuery, { limit: maxResults })
+        } catch {
+          return `Search is unavailable offline and no cached notes matched "${query}".`
+        }
+        if (matches.length === 0) return `No notes found matching "${query}".`
+
+        const excerpts = matches.slice(0, maxResults).map(n => {
           const c = stripHtmlForAI(n.content || '')
           const excerpt = truncateAtBoundary(c, contextLimits.searchExcerptChars)
           return `- "${n.title || 'Untitled'}": ${excerpt}${excerpt.length < c.length ? '...' : ''}`
         })
-        return `Found ${scored.length} note(s) matching "${query}". Showing top ${Math.min(maxResults, scored.length)}:\n${excerpts.join('\n\n')}`
+        return `Found ${matches.length} note(s) matching "${query}". Showing top ${Math.min(maxResults, matches.length)}:\n${excerpts.join('\n\n')}`
       }
       case 'replace_note_content': {
         if (!onReplaceText) return 'Note content replacement is not available in this view.'
@@ -979,16 +804,19 @@ export default function AIAssistant({
           sourceText = focusText
           sourceTitle = requestedTitle || 'Selected text'
         } else {
-          let targetNote: Note | undefined
-          if (noteId && allNotes?.length) {
-            targetNote = allNotes.find(n => n.id === noteId)
-          }
-          if (!targetNote && noteTitle && allNotes?.length) {
-            const normalized = noteTitle.toLowerCase()
-            targetNote = allNotes.find(n => (n.title || '').toLowerCase().includes(normalized))
-          }
-          if (!targetNote && note) {
-            targetNote = note
+          const summary = noteId && allNotes?.length
+            ? allNotes.find(n => n.id === noteId)
+            : noteTitle && allNotes?.length
+              ? allNotes.find(n => (n.title || '').toLowerCase().includes(noteTitle.toLowerCase()))
+              : undefined
+
+          let targetNote: Note | null
+          try {
+            targetNote = summary
+              ? (note?.id === summary.id ? note : await getNote(summary.id))
+              : (note ?? null)
+          } catch {
+            return 'That note is not available offline. Open it once while connected to cache its body.'
           }
 
           if (!targetNote) {
@@ -1375,7 +1203,7 @@ export default function AIAssistant({
     return noteContent ? stripHtmlForAI(noteContent) : stripHtmlForAI(note.content || '')
   }, [note, noteContent])
 
-  function renderSelectableNote(availableNote: Note, index: number) {
+  function renderSelectableNote(availableNote: NoteSummary, index: number) {
     const isSelected = selectedNoteIds.includes(availableNote.id)
     const selectionLimitReached = !isSelected && selectedNoteIds.length >= contextLimits.maxSelectedNotes
 

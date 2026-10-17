@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect, useMemo } from 'react'
 import { Search, Table2, Folder } from 'lucide-react'
-import { getNotes } from '@/lib/notes'
+import { getNotesWithContentByType } from '@/lib/notes'
 import { getFolders } from '@/lib/folders'
 import type { Note } from '@/lib/notes'
 import type { Folder as FolderType } from '@/lib/folders'
@@ -39,11 +39,10 @@ export default function DataSheetPickerDialog({
       setLoading(true)
       try {
         const [notesData, foldersData] = await Promise.all([
-          getNotes(),
+          getNotesWithContentByType('data-sheet'),
           getFolders(),
         ])
-        // Only show data-sheet notes
-        setNotes(notesData.filter(n => n.note_type === 'data-sheet'))
+        setNotes(notesData)
         setFolders(foldersData)
       } catch (error) {
         console.error('Failed to load data sheets:', error)

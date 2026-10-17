@@ -7,13 +7,18 @@ import {
 } from 'lucide-react'
 import ModalCloseButton from './ModalCloseButton'
 import BaseModal from './BaseModal'
-import { getNotes, type Note, type NoteType } from '@/lib/notes'
+import { getAllNoteSummaries, type NoteSummary, type NoteType } from '@/lib/notes'
 import { getNoteTypePresentation, type NoteTypeIconKey } from '@/lib/note-types'
+import {
+  readWelcomeOnStartupPreference,
+  setWelcomeOnStartupPreference,
+  subscribeToWelcomeOnStartupPreference,
+} from '@/lib/workspace/preferences'
 
 interface WelcomeBackModalProps {
   isOpen: boolean
   onClose: () => void
-  onSelectNote?: (note: Note) => void
+  onSelectNote?: (note: NoteSummary) => void
   onCreateNote?: (type: NoteType) => void
   asView?: boolean
 }
@@ -71,18 +76,26 @@ export default function WelcomeBackModal({
   onCreateNote,
   asView = false,
 }: WelcomeBackModalProps) {
-  const [recentNotes, setRecentNotes] = useState<Note[]>([])
+  const [recentNotes, setRecentNotes] = useState<NoteSummary[]>([])
   const [isLoading, setIsLoading] = useState(true)
+  const [welcomeOnStartup, setWelcomeOnStartup] = useState(() => readWelcomeOnStartupPreference())
   const greeting = getGreeting()
 
   useEffect(() => {
     if (isOpen || asView) loadData()
   }, [isOpen, asView])
 
+  useEffect(() => subscribeToWelcomeOnStartupPreference(setWelcomeOnStartup), [])
+
+  const handleToggleWelcomeOnStartup = (enabled: boolean) => {
+    setWelcomeOnStartup(enabled)
+    setWelcomeOnStartupPreference(enabled)
+  }
+
   const loadData = async () => {
     setIsLoading(true)
     try {
-      const notes = await getNotes()
+      const notes = await getAllNoteSummaries(50)
       setRecentNotes(
         notes
           .sort((a, b) => new Date(b.updated_at).getTime() - new Date(a.updated_at).getTime())
@@ -237,14 +250,25 @@ export default function WelcomeBackModal({
 
               {asView && (
                 <div className="shrink-0 border-t border-border px-5 py-3 bg-surface-hover/50">
-                  <button
-                    type="button"
-                    onClick={onClose}
-                    className="w-full inline-flex items-center justify-center gap-2 rounded-lg bg-alpine-600 hover:bg-alpine-700 active:bg-alpine-800 px-4 py-2 text-sm font-semibold text-white transition-colors shadow-sm"
-                  >
-                    Open Workspace
-                    <ArrowRight size={14} />
-                  </button>
+                  <div className="flex flex-wrap items-center justify-between gap-3">
+                    <label className="flex cursor-pointer select-none items-center gap-2 text-xs text-muted">
+                      <input
+                        type="checkbox"
+                        checked={welcomeOnStartup}
+                        onChange={(e) => handleToggleWelcomeOnStartup(e.target.checked)}
+                        className="h-3.5 w-3.5 accent-[var(--accent)]"
+                      />
+                      Show this screen at startup
+                    </label>
+                    <button
+                      type="button"
+                      onClick={onClose}
+                      className="inline-flex items-center justify-center gap-2 rounded-lg bg-alpine-600 hover:bg-alpine-700 active:bg-alpine-800 px-4 py-2 text-sm font-semibold text-white transition-colors shadow-sm"
+                    >
+                      Open Workspace
+                      <ArrowRight size={14} />
+                    </button>
+                  </div>
                 </div>
               )}
             </div>
