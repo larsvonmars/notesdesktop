@@ -10,7 +10,7 @@ import FileExplorerModal from '@/components/FileExplorerModal'
 import ProjectDashboard from '@/components/ProjectDashboard'
 import ArchivedProjectsModal from '@/components/ArchivedProjectsModal'
 import NewProjectModal from '@/components/NewProjectModal'
-import { FileEdit, Sparkles, FileText, PenTool, Network, BookOpen, Table2, FilePenLine, Menu, ChevronLeft, ChevronRight, FolderOpen, Home, FileQuestion, Target, Lightbulb, Scale, LayoutGrid, Search, PanelLeftClose, PanelLeftOpen } from 'lucide-react'
+import { FileEdit, Sparkles, FileText, PenTool, Network, BookOpen, Table2, FilePenLine, Menu, ChevronLeft, ChevronRight, FolderOpen, Home, FileQuestion, Target, Lightbulb, Scale, LayoutGrid, Search } from 'lucide-react'
 import type { LucideIcon } from 'lucide-react'
 import { useIsMobile } from '@/lib/useIsMobile'
 import type { NoteSummary, NoteType } from '@/lib/notes'
@@ -888,23 +888,6 @@ function WorkspaceContent() {
         onMobileTouchStart={beginCloseSwipe}
         onMobileTouchEnd={endCloseSwipe}
       />
-
-      {/* Sidebar toggle tab (desktop only) */}
-      {!isMobile && (
-        <button
-          onClick={() => setSidebarCollapsed(prev => !prev)}
-          className={`fixed top-1/2 -translate-y-1/2 z-30 flex items-center justify-center w-5 h-14 rounded-r-lg border border-l-0 shadow-sm transition-all ${
-            sidebarCollapsed
-              ? 'bg-surface border-border text-muted/70 hover:bg-accent/10 hover:text-accent hover:border-accent/40'
-              : 'bg-accent border-accent text-accent-foreground'
-          }`}
-          style={{ left: sidebarCollapsed ? '64px' : '300px' }}
-          title={sidebarCollapsed ? 'Open sidebar' : 'Close sidebar'}
-          aria-label={sidebarCollapsed ? 'Open sidebar' : 'Close sidebar'}
-        >
-          {sidebarCollapsed ? <PanelLeftOpen size={12} /> : <PanelLeftClose size={12} />}
-        </button>
-      )}
 
       {/* Main content area */}
       <main

@@ -3,6 +3,7 @@
 import { useState, useCallback, useRef, useEffect, useMemo } from 'react'
 import {
   ChevronRight,
+  ChevronLeft,
   ChevronDown,
   FolderTree as FolderTreeIcon,
   FileText,
@@ -1324,12 +1325,20 @@ export default function SidebarTree({
       <>
         <div className="flex h-full w-full flex-col items-center">
           {/* Logo */}
-          <div className="px-1.5 pt-3 pb-2">
+          <div className="flex flex-col items-center px-1.5 pt-3 pb-2">
             <img
               src="/icon-192.png"
               alt="MindViz Notes"
               className="h-8 w-8 rounded-lg object-contain"
             />
+            <button
+              onClick={onToggleCollapsed}
+              className="mt-1 rounded-xl p-2 text-muted/70 transition-all duration-200 hover:bg-surface-hover/70 hover:text-foreground"
+              aria-label="Expand sidebar"
+              title="Expand sidebar"
+            >
+              <ChevronRight size={18} />
+            </button>
           </div>
 
           <div className="w-8 border-t border-border/40" />
@@ -1462,7 +1471,7 @@ export default function SidebarTree({
       <div className="flex h-full w-full flex-col overflow-hidden">
         {/* ==== Workspace header ==== */}
         {showHeader && (
-          <div className="flex shrink-0 items-center gap-0.5 px-2 pb-1.5 pt-2.5">
+          <div className="flex shrink-0 items-center justify-between gap-0.5 px-2 pb-1.5 pt-2.5">
             <div className="flex min-w-0 flex-1 items-center gap-2 rounded-md px-1.5 py-1">
               <img
                 src="/icon-192.png"
@@ -1471,6 +1480,14 @@ export default function SidebarTree({
               />
               <span className="truncate text-[13px] font-semibold text-foreground/90">MindViz Notes</span>
             </div>
+            <button
+              onClick={onToggleCollapsed}
+              className="shrink-0 rounded-xl p-1.5 text-muted/70 transition-all duration-200 hover:bg-surface-hover/70 hover:text-foreground"
+              aria-label="Collapse sidebar"
+              title="Collapse sidebar"
+            >
+              <ChevronLeft size={15} />
+            </button>
           </div>
         )}
 
