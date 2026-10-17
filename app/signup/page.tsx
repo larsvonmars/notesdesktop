@@ -66,7 +66,7 @@ export default function SignUp() {
   }
 
   return (
-    <div className="flex items-center justify-center min-h-screen px-4 safe-bottom bg-background text-foreground">
+    <div className="flex items-center justify-center min-h-screen px-4 pb-24 safe-bottom bg-background text-foreground">
       <ThemeToggle />
       <div className="w-full max-w-md p-6 sm:p-8 bg-surface rounded-2xl shadow-lg border border-border">
         <div className="flex items-center justify-center gap-3 mb-1">

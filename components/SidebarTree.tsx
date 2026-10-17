@@ -744,6 +744,7 @@ export default function SidebarTree({
         role="button"
         tabIndex={0}
         key={n.id}
+        aria-current={isActive ? 'page' : undefined}
         draggable
         onDragStart={(e) => handleDragStart(e, { type: 'note', id: n.id })}
         onDragEnd={handleDragEnd}
@@ -805,6 +806,7 @@ export default function SidebarTree({
         role="button"
         tabIndex={0}
         draggable={!isRenaming}
+        aria-expanded={canExpand ? isExpanded : undefined}
         onDragStart={(e) => handleDragStart(e, { type: 'folder', id: folder.id })}
         onDragEnd={handleDragEnd}
         onClick={() => { if (!isRenaming) toggleFolder(folder.id) }}
@@ -860,7 +862,7 @@ export default function SidebarTree({
         {!isRenaming && (
           <>
             {totalCount > 0 && (
-              <span className={`shrink-0 text-[11px] font-medium tabular-nums text-muted/50 ${revealActionsCls}`}>
+              <span className={`shrink-0 text-[11px] font-medium tabular-nums text-muted ${revealActionsCls}`}>
                 {totalCount}
               </span>
             )}
@@ -945,6 +947,7 @@ export default function SidebarTree({
         <div
           role="button"
           tabIndex={0}
+          aria-expanded={hasChildren ? isExpanded : undefined}
           onClick={() => { if (!isRenaming) toggleProject(projectKey) }}
           onDoubleClick={() => {
             if (node.project) {
@@ -1008,7 +1011,7 @@ export default function SidebarTree({
           {!isRenaming && (
             <div className="flex shrink-0 items-center gap-0.5">
               {totalNoteCount > 0 && (
-                <span className={`text-[11px] font-medium tabular-nums text-muted/50 ${revealActionsCls}`}>
+                <span className={`text-[11px] font-medium tabular-nums text-muted ${revealActionsCls}`}>
                   {totalNoteCount}
                 </span>
               )}
@@ -1060,7 +1063,7 @@ export default function SidebarTree({
       <section>
         <div className="flex items-center gap-1.5 px-2 pb-1 pt-2">
           <Clock size={11} className="text-muted/40" />
-          <span className="text-[11px] font-medium uppercase tracking-wider text-muted/50">Recent</span>
+          <span className="text-[11px] font-medium uppercase tracking-wider text-muted">Recent</span>
         </div>
         <div className="space-y-0.5">
           {recentNotes.map(note => {
@@ -1071,6 +1074,7 @@ export default function SidebarTree({
                 role="button"
                 tabIndex={0}
                 key={`recent-${note.id}`}
+                aria-current={isActive ? 'page' : undefined}
                 onClick={() => onSelectNote(note)}
                 onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onSelectNote(note) } }}
                 className={`group relative flex w-full cursor-pointer items-center gap-2 rounded-md pr-1.5 transition-colors ${rowHeightCls} ${
@@ -1099,15 +1103,15 @@ export default function SidebarTree({
   // ==================================================================
   // SEARCH RESULTS
   // ==================================================================
-  const sectionLabel = 'px-2 pb-1 pt-2 text-[11px] font-medium uppercase tracking-wider text-muted/50'
+  const sectionLabel = 'px-2 pb-1 pt-2 text-[11px] font-medium uppercase tracking-wider text-muted'
 
   const renderSearchResults = () => {
     if (totalResultCount === 0) {
       return (
         <div className="px-3 py-10 text-center">
           <Search size={18} className="mx-auto mb-2 text-muted/40" />
-          <div className="text-[13px] text-muted/80">No results found</div>
-          <div className="mt-0.5 text-xs text-muted/50">Try a different search or clear your filters</div>
+          <div className="text-[13px] text-muted">No results found</div>
+          <div className="mt-0.5 text-xs text-muted">Try a different search or clear your filters</div>
           {activeFilterCount > 0 && (
             <button
               onClick={clearAllFilters}
@@ -1128,7 +1132,7 @@ export default function SidebarTree({
             <div className={`flex items-center gap-1.5 ${sectionLabel}`}>
               <Hash size={11} className="text-muted/40" />
               <span>Projects</span>
-              <span className="text-[11px] text-muted/40">{filteredProjects.length}</span>
+              <span className="text-[11px] text-muted">{filteredProjects.length}</span>
             </div>
             <div className="space-y-0.5">
               {filteredProjects.map(project => {
@@ -1165,7 +1169,7 @@ export default function SidebarTree({
                     </span>
                     <div className="min-w-0 flex-1">
                       <div className="truncate text-[13px]">{project.name}</div>
-                      <div className="truncate text-[11px] text-muted/50">
+                      <div className="truncate text-[11px] text-muted">
                         {project.description || `${folderCount} folder${folderCount !== 1 ? 's' : ''} · ${noteCount} note${noteCount !== 1 ? 's' : ''}`}
                       </div>
                     </div>
@@ -1189,7 +1193,7 @@ export default function SidebarTree({
             <div className={`flex items-center gap-1.5 ${sectionLabel}`}>
               <FolderTreeIcon size={11} className="text-muted/40" />
               <span>Folders</span>
-              <span className="text-[11px] text-muted/40">{filteredFolders.length}</span>
+              <span className="text-[11px] text-muted">{filteredFolders.length}</span>
             </div>
             <div className="space-y-0.5">
               {filteredFolders.map(({ folder, depth, projectName, projectColor }) => {
@@ -1236,7 +1240,7 @@ export default function SidebarTree({
                     <FolderTreeIcon size={15} className="shrink-0 text-muted/45" />
                     <div className="min-w-0 flex-1">
                       <div className="truncate text-[13px]">{folder.name}</div>
-                      <div className="flex items-center gap-1 truncate text-[11px] text-muted/50">
+                      <div className="flex items-center gap-1 truncate text-[11px] text-muted">
                         <span className="shrink-0 font-medium" style={{ color: projectColor }}>{projectName}</span>
                         {depth > 0 && (
                           <>
@@ -1267,7 +1271,7 @@ export default function SidebarTree({
             <div className={`flex items-center gap-1.5 ${sectionLabel}`}>
               <FileText size={11} className="text-muted/40" />
               <span>Notes</span>
-              <span className="text-[11px] text-muted/40">{filteredNotes.length}</span>
+              <span className="text-[11px] text-muted">{filteredNotes.length}</span>
             </div>
             <div className="space-y-0.5">
               {filteredNotes.map(note => {
@@ -1278,6 +1282,7 @@ export default function SidebarTree({
                     role="button"
                     tabIndex={0}
                     key={note.id}
+                    aria-current={isActive ? 'page' : undefined}
                     draggable
                     onDragStart={(e) => handleDragStart(e, { type: 'note', id: note.id })}
                     onDragEnd={handleDragEnd}
@@ -1293,7 +1298,7 @@ export default function SidebarTree({
                     <NoteIcon noteType={note.note_type} size={15} className="opacity-80" />
                     <div className="min-w-0 flex-1">
                       <div className="truncate text-[13px]">{note.title || 'Untitled'}</div>
-                      <div className="flex items-center gap-1 truncate text-[11px] text-muted/50">
+                      <div className="flex items-center gap-1 truncate text-[11px] text-muted">
                         <span className="shrink-0 font-medium" style={{ color: projectColor }}>{projectName}</span>
                         {folderPath && (
                           <>
@@ -1519,7 +1524,7 @@ export default function SidebarTree({
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
                 placeholder="Search…"
-                className="h-8 w-full rounded-lg border border-transparent bg-surface-hover/80 pl-8 pr-7 text-[13px] text-foreground placeholder:text-muted/50 transition-colors focus:border-accent/30 focus:bg-surface focus:outline-none focus:ring-2 focus:ring-accent/15"
+                className="h-8 w-full rounded-lg border border-transparent bg-surface-hover/80 pl-8 pr-7 text-[13px] text-foreground placeholder:text-muted transition-colors focus:border-accent/30 focus:bg-surface focus:outline-none focus:ring-2 focus:ring-accent/15"
               />
               {searchQuery && (
                 <button
@@ -1538,7 +1543,7 @@ export default function SidebarTree({
               className={`relative flex h-8 w-8 shrink-0 items-center justify-center rounded-lg transition-colors ${
                 showFilterPanel || activeFilterCount > 0
                   ? 'bg-surface-active/60 text-foreground'
-                  : 'text-muted/50 hover:bg-surface-hover hover:text-foreground'
+                  : 'text-muted hover:bg-surface-hover hover:text-foreground'
               }`}
             >
               <SlidersHorizontal size={14} />
@@ -1554,7 +1559,7 @@ export default function SidebarTree({
           {showFilterPanel && (
             <div className="absolute left-2 right-2 top-full z-30 mt-1 space-y-2.5 rounded-lg border border-border/70 bg-surface p-2.5 shadow-lg">
               <div>
-                <div className="mb-1.5 px-0.5 text-[11px] font-medium uppercase tracking-wider text-muted/60">Type</div>
+                <div className="mb-1.5 px-0.5 text-[11px] font-medium uppercase tracking-wider text-muted">Type</div>
                 <div className="flex flex-wrap gap-1">
                   {allNoteTypePresentations.map(tp => {
                     const Icon = NOTE_TYPE_ICON_MAP[tp.iconKey]
@@ -1567,7 +1572,7 @@ export default function SidebarTree({
                         className={`flex items-center gap-1.5 rounded-md px-2 py-1 text-[11px] font-medium transition-colors ${
                           active
                             ? 'bg-accent/10 text-accent'
-                            : 'text-muted/80 hover:bg-surface-hover hover:text-foreground'
+                            : 'text-muted hover:bg-surface-hover hover:text-foreground'
                         }`}
                       >
                         <Icon size={12} className={active ? '' : 'opacity-70'} />
@@ -1580,14 +1585,14 @@ export default function SidebarTree({
 
               {projects.length > 0 && (
                 <div>
-                  <div className="mb-1.5 px-0.5 text-[11px] font-medium uppercase tracking-wider text-muted/60">Project</div>
+                  <div className="mb-1.5 px-0.5 text-[11px] font-medium uppercase tracking-wider text-muted">Project</div>
                   <div className="flex flex-wrap gap-1">
                     <button
                       onClick={() => toggleProjectFilter('__UNFILED__')}
                       className={`flex items-center gap-1.5 rounded-md px-2 py-1 text-[11px] font-medium transition-colors ${
                         filterProjectIds.has('__UNFILED__')
                           ? 'bg-accent/10 text-accent'
-                          : 'text-muted/80 hover:bg-surface-hover hover:text-foreground'
+                          : 'text-muted hover:bg-surface-hover hover:text-foreground'
                       }`}
                     >
                       <Inbox size={11} />
@@ -1603,7 +1608,7 @@ export default function SidebarTree({
                           className={`flex max-w-[110px] items-center gap-1.5 rounded-md px-2 py-1 text-[11px] font-medium transition-colors ${
                             active
                               ? 'bg-accent/10 text-accent'
-                              : 'text-muted/80 hover:bg-surface-hover hover:text-foreground'
+                              : 'text-muted hover:bg-surface-hover hover:text-foreground'
                           }`}
                         >
                           <span className="h-2 w-2 shrink-0 rounded-full" style={{ backgroundColor: p.color ?? NEUTRAL_DOT }} />
@@ -1652,7 +1657,7 @@ export default function SidebarTree({
 
             {newMenuOpen && (
               <div className="absolute left-0 right-0 top-full z-40 mt-1 overflow-hidden rounded-lg border border-border/70 bg-surface py-1 shadow-xl">
-                <div className="px-3 pb-1 pt-1.5 text-[11px] font-medium uppercase tracking-wider text-muted/50">New note</div>
+                <div className="px-3 pb-1 pt-1.5 text-[11px] font-medium uppercase tracking-wider text-muted">New note</div>
                 {allNoteTypePresentations.map(tp => {
                   const Icon = NOTE_TYPE_ICON_MAP[tp.iconKey]
                   return (
@@ -1700,7 +1705,7 @@ export default function SidebarTree({
                 <div className={`${recentNotes.length > 0 ? 'mt-3 border-t border-border/40' : ''} pt-2`}>
                   <div className="flex items-center gap-1.5 px-2 pb-1">
                     <Layers size={11} className="text-muted/40" />
-                    <span className="text-[11px] font-medium uppercase tracking-wider text-muted/50">Projects</span>
+                    <span className="text-[11px] font-medium uppercase tracking-wider text-muted">Projects</span>
                   </div>
                   <div className="space-y-0.5">
                     {projectTree.map(node => renderProject(node))}
@@ -1728,7 +1733,7 @@ export default function SidebarTree({
           {onOpenCommandPalette && (
             <button
               onClick={onOpenCommandPalette}
-              className="group flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-[13px] text-muted/80 transition-colors hover:bg-surface-hover hover:text-foreground"
+              className="group flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-[13px] text-muted transition-colors hover:bg-surface-hover hover:text-foreground"
             >
               <Search size={15} className="shrink-0 text-muted/60" />
               <span className="flex-1 text-left">Search</span>
@@ -1738,7 +1743,7 @@ export default function SidebarTree({
           {showHeader && onOpenWelcome && (
             <button
               onClick={onOpenWelcome}
-              className="group flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-[13px] text-muted/80 transition-colors hover:bg-surface-hover hover:text-foreground"
+              className="group flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-[13px] text-muted transition-colors hover:bg-surface-hover hover:text-foreground"
             >
               <Home size={15} className="shrink-0 text-muted/60" />
               <span className="flex-1 text-left">Home</span>
@@ -1747,7 +1752,7 @@ export default function SidebarTree({
           {onOpenSettings && (
             <button
               onClick={onOpenSettings}
-              className="group flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-[13px] text-muted/80 transition-colors hover:bg-surface-hover hover:text-foreground"
+              className="group flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-[13px] text-muted transition-colors hover:bg-surface-hover hover:text-foreground"
             >
               <Settings size={15} className="shrink-0 text-muted/60" />
               <span className="flex-1 text-left">Settings</span>
@@ -1756,7 +1761,7 @@ export default function SidebarTree({
           {onOpenArchive && (
             <button
               onClick={onOpenArchive}
-              className="group flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-[13px] text-muted/80 transition-colors hover:bg-surface-hover hover:text-foreground"
+              className="group flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-[13px] text-muted transition-colors hover:bg-surface-hover hover:text-foreground"
             >
               <Archive size={15} className="shrink-0 text-muted/60" />
               <span className="flex-1 text-left">Archive</span>
@@ -1770,14 +1775,14 @@ export default function SidebarTree({
           {onOpenFileExplorer && (
             <button
               onClick={onOpenFileExplorer}
-              className="group flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-[13px] text-muted/80 transition-colors hover:bg-surface-hover hover:text-foreground"
+              className="group flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-[13px] text-muted transition-colors hover:bg-surface-hover hover:text-foreground"
             >
               <FolderOpen size={15} className="shrink-0 text-muted/60" />
               <span className="flex-1 text-left">File Explorer</span>
             </button>
           )}
           {projects.length > 0 && !onOpenFileExplorer && (
-            <div className="px-2 py-1 text-[11px] text-muted/40">{projects.length} project{projects.length !== 1 ? 's' : ''}</div>
+            <div className="px-2 py-1 text-[11px] text-muted">{projects.length} project{projects.length !== 1 ? 's' : ''}</div>
           )}
         </div>
       </div>

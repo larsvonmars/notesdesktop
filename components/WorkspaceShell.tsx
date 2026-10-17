@@ -10,7 +10,7 @@ import FileExplorerModal from '@/components/FileExplorerModal'
 import ProjectDashboard from '@/components/ProjectDashboard'
 import ArchivedProjectsModal from '@/components/ArchivedProjectsModal'
 import NewProjectModal from '@/components/NewProjectModal'
-import { Loader2, FileEdit, Sparkles, FileText, PenTool, Network, BookOpen, Table2, FilePenLine, Menu, ChevronLeft, ChevronRight, FolderOpen, Home, FileQuestion, Target, Lightbulb, Scale, LayoutGrid, Search } from 'lucide-react'
+import { FileEdit, Sparkles, FileText, PenTool, Network, BookOpen, Table2, FilePenLine, Menu, ChevronLeft, ChevronRight, FolderOpen, Home, FileQuestion, Target, Lightbulb, Scale, LayoutGrid, Search } from 'lucide-react'
 import type { LucideIcon } from 'lucide-react'
 import { useIsMobile } from '@/lib/useIsMobile'
 import type { NoteSummary, NoteType } from '@/lib/notes'
@@ -26,6 +26,7 @@ import { useNoteActions } from '@/lib/workspace/useNoteActions'
 import { useFolderActions } from '@/lib/workspace/useFolderActions'
 import { useProjectActions } from '@/lib/workspace/useProjectActions'
 import WorkspaceSidebar from '@/components/workspace/WorkspaceSidebar'
+import WorkspaceSkeleton from '@/components/workspace/WorkspaceSkeleton'
 import CommandPalette from '@/components/CommandPalette'
 import OfflineStatusIndicator from '@/components/OfflineStatusIndicator'
 import type { WorkspaceView } from '@/lib/workspace/types'
@@ -688,12 +689,7 @@ function WorkspaceContent() {
 
   if (loading) {
     return (
-      <div className="flex items-center justify-center min-h-screen">
-        <div className="text-center">
-          <Loader2 className="w-12 h-12 text-alpine-600 animate-spin mx-auto mb-4" />
-          <div className="text-lg text-foreground/70 font-medium">Loading your workspace...</div>
-        </div>
-      </div>
+      <WorkspaceSkeleton />
     )
   }
 
@@ -703,12 +699,7 @@ function WorkspaceContent() {
 
   if (isLoadingFolders) {
     return (
-      <div className="flex items-center justify-center min-h-screen">
-        <div className="text-center">
-          <Loader2 className="w-12 h-12 text-alpine-600 animate-spin mx-auto mb-4" />
-          <div className="text-lg text-foreground/70 font-medium">Loading your workspace...</div>
-        </div>
-      </div>
+      <WorkspaceSkeleton />
     )
   }
 
@@ -1186,12 +1177,7 @@ export default function WorkspaceShell() {
   return (
     <ErrorBoundary label="Workspace">
       <Suspense fallback={
-        <div className="flex items-center justify-center min-h-screen">
-          <div className="text-center">
-            <Loader2 className="w-12 h-12 text-alpine-600 animate-spin mx-auto mb-4" />
-            <div className="text-lg text-foreground/70 font-medium">Loading your workspace...</div>
-          </div>
-        </div>
+        <WorkspaceSkeleton />
       }>
         <WorkspaceContent />
       </Suspense>

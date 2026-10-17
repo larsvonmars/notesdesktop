@@ -3412,7 +3412,6 @@ export default function NoteEditor({
           isNewNote={!note}
           noteType={noteType}
           title={title}
-          onTitleChange={setTitle}
           onSave={handleManualSave}
           onDelete={note && onDelete ? handleDelete : undefined}
           isSaving={isSaving || isAutosaving}

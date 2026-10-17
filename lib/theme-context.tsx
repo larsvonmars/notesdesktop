@@ -57,33 +57,51 @@ function applyTheme(resolved: 'light' | 'dark') {
 }
 
 export function ThemeProvider({ children }: { children: ReactNode }) {
-  const [theme, setThemeState] = useState<Theme>(() => {
-    if (typeof window === 'undefined') return 'system'
-    const stored = localStorage.getItem(STORAGE_KEY)
-    if (stored === 'light' || stored === 'dark' || stored === 'system') return stored
-    return 'system'
-  })
+  // First render must match the server, so start deterministic and hydrate the
+  // stored preference in an effect below.
+  const [theme, setThemeState] = useState<Theme>('system')
+  const [resolvedTheme, setResolvedTheme] = useState<'light' | 'dark'>('light')
 
-  const resolvedTheme = resolveTheme(theme)
-
-  // Apply the class whenever resolvedTheme changes
+  // Read the stored preference after hydration (keeps SSR markup deterministic).
   useEffect(() => {
-    applyTheme(resolvedTheme)
-  }, [resolvedTheme])
+    let stored: string | null = null
+    try {
+      stored = window.localStorage.getItem(STORAGE_KEY)
+    } catch {
+      /* storage unavailable */
+    }
+    const next: Theme =
+      stored === 'light' || stored === 'dark' || stored === 'system' ? stored : 'system'
+    const resolved = resolveTheme(next)
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- syncing with storage after hydration is intentional
+    setThemeState(next)
+    setResolvedTheme(resolved)
+    applyTheme(resolved)
+  }, [])
 
   // Listen for system preference changes when theme === 'system'
   useEffect(() => {
     if (theme !== 'system') return
     const mq = window.matchMedia('(prefers-color-scheme: dark)')
-    const handler = () => applyTheme(resolveTheme('system'))
+    const handler = () => {
+      const resolved = resolveTheme('system')
+      setResolvedTheme(resolved)
+      applyTheme(resolved)
+    }
     mq.addEventListener('change', handler)
     return () => mq.removeEventListener('change', handler)
   }, [theme])
 
   const setTheme = useCallback((next: Theme) => {
     setThemeState(next)
-    localStorage.setItem(STORAGE_KEY, next)
-    applyTheme(resolveTheme(next))
+    try {
+      window.localStorage.setItem(STORAGE_KEY, next)
+    } catch {
+      /* storage unavailable — preference stays session-only */
+    }
+    const resolved = resolveTheme(next)
+    setResolvedTheme(resolved)
+    applyTheme(resolved)
   }, [])
 
   const toggleTheme = useCallback(() => {

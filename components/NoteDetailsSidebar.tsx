@@ -41,7 +41,6 @@ export interface NoteDetailsSidebarProps {
   
   // Title
   title: string
-  onTitleChange: (title: string) => void
   
   // Save/Delete
   onSave: () => void
@@ -121,7 +120,6 @@ function NoteDetailsSidebar({
   isNewNote,
   noteType,
   title,
-  onTitleChange,
   onSave,
   onDelete,
   isSaving,
@@ -164,7 +162,6 @@ function NoteDetailsSidebar({
   onToggleCollapsed,
   overlay = false,
 }: NoteDetailsSidebarProps) {
-  const titleInputRef = useRef<HTMLInputElement>(null)
   const [showWordGoalInput, setShowWordGoalInput] = useState(false)
   const [wordGoalValue, setWordGoalValue] = useState('')
   const wordGoalInputRef = useRef<HTMLInputElement>(null)
@@ -174,12 +171,11 @@ function NoteDetailsSidebar({
   const hasFileActions = !!(onExportMarkdown || onExportPdf || onExportDocx || onExportHtml || onExportPlainText || onImportDocx || onPublish || shareUrl || shareHint)
 
   // Focus word goal input when it opens
-  useEffect(() => {
-    if (showWordGoalInput) {
-      setWordGoalValue(wordGoal?.toString() ?? '')
-      setTimeout(() => wordGoalInputRef.current?.focus(), 50)
-    }
-  }, [showWordGoalInput, wordGoal])
+  const openWordGoalInput = () => {
+    setWordGoalValue(wordGoal?.toString() ?? '')
+    setShowWordGoalInput(true)
+    setTimeout(() => wordGoalInputRef.current?.focus(), 50)
+  }
 
   // Overlay drawers close on Escape.
   useEffect(() => {
@@ -327,7 +323,7 @@ function NoteDetailsSidebar({
       {/* Header */}
       <div className="flex items-center justify-between px-4 py-3.5">
         <div className="min-w-0">
-          <div className="text-[10px] font-semibold text-muted/60 uppercase tracking-widest">Details</div>
+          <div className="text-[10px] font-semibold text-muted uppercase tracking-widest">Details</div>
           <div className="truncate text-[13px] font-bold text-foreground tracking-tight mt-0.5" title={displayName}>{displayName}</div>
         </div>
         <button
@@ -342,26 +338,13 @@ function NoteDetailsSidebar({
 
       {/* Scrollable Content */}
       <div className="flex-1 overflow-y-auto">
-        {/* Title Section */}
-        <div className="px-4 py-3">
-          <label className="text-[10px] font-semibold text-muted/60 uppercase tracking-widest mb-2 block">Title</label>
-          <input
-            ref={titleInputRef}
-            type="text"
-            value={title}
-            onChange={(e) => onTitleChange(e.target.value)}
-            placeholder="Note title..."
-            className="w-full px-3 py-2 text-sm border-0 rounded-xl bg-surface-hover/40 focus:outline-none focus:ring-2 focus:ring-alpine-500/25 focus:bg-surface-hover/70 text-foreground placeholder:text-muted/60 transition-all duration-200"
-          />
-        </div>
-
         {/* Save Section */}
         <div className="px-4 py-3">
           <div className="flex items-center gap-2 mb-2.5">
             <button
               onClick={onSave}
               disabled={isSaving || !title.trim()}
-              className="flex-1 flex items-center justify-center gap-1.5 px-3 py-2 text-xs font-semibold text-white bg-gradient-to-r from-alpine-600 to-alpine-500 rounded-xl hover:from-alpine-700 hover:to-alpine-600 hover:shadow-md disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-200"
+              className="flex-1 flex items-center justify-center gap-1.5 px-3 py-2 text-xs font-semibold text-white bg-gradient-to-r from-alpine-700 to-alpine-600 rounded-xl hover:from-alpine-700 hover:to-alpine-600 hover:shadow-md disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-200"
             >
               {isSaving ? (
                 <>
@@ -415,7 +398,7 @@ function NoteDetailsSidebar({
 
         {/* Metadata Section */}
         <div className="px-4 py-3 space-y-2.5">
-          <label className="text-[10px] font-semibold text-muted/60 uppercase tracking-widest block">Details</label>
+          <label className="text-[10px] font-semibold text-muted uppercase tracking-widest block">Details</label>
           
           {/* Note Type */}
           <div className="flex items-center gap-2 text-xs">
@@ -444,16 +427,16 @@ function NoteDetailsSidebar({
         {/* Stats Section (rich-text only) */}
         {noteType === 'rich-text' && (
           <div className="px-4 py-3">
-            <label className="text-[10px] font-semibold text-muted/60 uppercase tracking-widest mb-2.5 block">Statistics</label>
+            <label className="text-[10px] font-semibold text-muted uppercase tracking-widest mb-2.5 block">Statistics</label>
             
             <div className="grid grid-cols-2 gap-2 mb-2.5">
               <div className="bg-surface-hover/30 rounded-xl px-2.5 py-2.5 text-center">
                 <div className="text-sm font-bold text-foreground">{stats.words}</div>
-                <div className="text-[10px] text-muted/60">{stats.words === 1 ? 'word' : 'words'}</div>
+                <div className="text-[10px] text-muted">{stats.words === 1 ? 'word' : 'words'}</div>
               </div>
               <div className="bg-surface-hover/30 rounded-xl px-2.5 py-2.5 text-center">
                 <div className="text-sm font-bold text-foreground">{stats.characters}</div>
-                <div className="text-[10px] text-muted/60">{stats.characters === 1 ? 'char' : 'chars'}</div>
+                <div className="text-[10px] text-muted">{stats.characters === 1 ? 'char' : 'chars'}</div>
               </div>
             </div>
 
@@ -465,7 +448,7 @@ function NoteDetailsSidebar({
                     {stats.words}/{wordGoal} words
                   </span>
                   <button
-                    onClick={() => setShowWordGoalInput(true)}
+                    onClick={openWordGoalInput}
                     className="text-muted hover:text-foreground transition-colors"
                     title="Edit goal"
                   >
@@ -485,7 +468,7 @@ function NoteDetailsSidebar({
               </div>
             ) : (
               <button
-                onClick={() => setShowWordGoalInput(true)}
+                onClick={openWordGoalInput}
                 className="flex items-center gap-1.5 text-xs text-alpine-500 hover:text-alpine-600 transition-colors font-medium"
               >
                 <Target size={12} />
@@ -579,7 +562,7 @@ function NoteDetailsSidebar({
               className="mb-2.5 flex w-full items-center gap-1.5 text-left"
             >
               <Network size={13} className="text-muted/70" />
-              <span className="text-[10px] font-semibold text-muted/60 uppercase tracking-widest">Connections</span>
+              <span className="text-[10px] font-semibold text-muted uppercase tracking-widest">Connections</span>
               <span className="ml-auto text-[10px] text-muted">{connectionsCount}</span>
             </button>
 
@@ -608,7 +591,7 @@ function NoteDetailsSidebar({
 
             {/* Outgoing Links */}
             <div className="mt-4">
-              <div className="text-[10px] font-semibold text-muted/60 uppercase tracking-widest mb-1.5">Outgoing Links</div>
+              <div className="text-[10px] font-semibold text-muted uppercase tracking-widest mb-1.5">Outgoing Links</div>
               {outgoingLinks.length > 0 ? (
                 <div className="space-y-0.5">
                   {outgoingLinks.slice(0, 8).map((item) => (
@@ -641,7 +624,7 @@ function NoteDetailsSidebar({
         {hasFileActions && (
           <button
             onClick={() => setShowFileModal(true)}
-            className="group flex w-full items-center gap-2.5 rounded-xl px-2.5 py-2 text-xs font-medium text-muted/70 transition-all duration-200 hover:bg-surface-hover/60 hover:text-foreground"
+            className="group flex w-full items-center gap-2.5 rounded-xl px-2.5 py-2 text-xs font-medium text-muted transition-all duration-200 hover:bg-surface-hover/60 hover:text-foreground"
           >
             <FileOutput className="h-3.5 w-3.5 shrink-0" />
             <span>File</span>
@@ -655,7 +638,7 @@ function NoteDetailsSidebar({
         {onOpenAIAssistant && (
           <button
             onClick={onOpenAIAssistant}
-            className="group flex w-full items-center gap-2.5 rounded-xl px-2.5 py-2 text-xs font-medium text-muted/70 transition-all duration-200 hover:bg-surface-hover/60 hover:text-alpine-500"
+            className="group flex w-full items-center gap-2.5 rounded-xl px-2.5 py-2 text-xs font-medium text-muted transition-all duration-200 hover:bg-surface-hover/60 hover:text-alpine-500"
           >
             <Sparkles className="h-3.5 w-3.5 shrink-0" />
             <span>AI Assistant</span>
@@ -663,7 +646,7 @@ function NoteDetailsSidebar({
         )}
         <button
           onClick={onOpenSettings}
-          className="group flex w-full items-center gap-2.5 rounded-xl px-2.5 py-2 text-xs font-medium text-muted/70 transition-all duration-200 hover:bg-surface-hover/60 hover:text-foreground"
+          className="group flex w-full items-center gap-2.5 rounded-xl px-2.5 py-2 text-xs font-medium text-muted transition-all duration-200 hover:bg-surface-hover/60 hover:text-foreground"
         >
           <Settings className="h-3.5 w-3.5 shrink-0" />
           <span>Settings</span>
@@ -686,7 +669,7 @@ function NoteDetailsSidebar({
               </div>
               <div>
                 <h3 className="text-sm font-bold text-foreground tracking-tight">File</h3>
-                <p className="text-[11px] text-muted/70 mt-0.5 truncate max-w-[260px]">{displayName}</p>
+                <p className="text-[11px] text-muted mt-0.5 truncate max-w-[260px]">{displayName}</p>
               </div>
             </div>
             <button
@@ -702,7 +685,7 @@ function NoteDetailsSidebar({
             {/* Export / Import Section */}
             {(onExportMarkdown || onExportPdf || onExportDocx || onExportHtml || onExportPlainText || onImportDocx) && (
               <div>
-                <label className="text-[10px] font-semibold text-muted/60 uppercase tracking-widest mb-2 block">Export &amp; Import</label>
+                <label className="text-[10px] font-semibold text-muted uppercase tracking-widest mb-2 block">Export &amp; Import</label>
                 <div className="rounded-2xl border border-border/40 bg-surface-hover/20 divide-y divide-border/30 overflow-hidden">
                   {onExportPdf && (
                     <button
@@ -714,7 +697,7 @@ function NoteDetailsSidebar({
                       </div>
                       <div className="text-left">
                         <div className="font-medium">Export as PDF</div>
-                        <div className="text-[10px] text-muted/60 mt-0.5">Styled .pdf with page numbers</div>
+                        <div className="text-[10px] text-muted mt-0.5">Styled .pdf with page numbers</div>
                       </div>
                     </button>
                   )}
@@ -728,7 +711,7 @@ function NoteDetailsSidebar({
                       </div>
                       <div className="text-left">
                         <div className="font-medium">Export as DOCX</div>
-                        <div className="text-[10px] text-muted/60 mt-0.5">Word document with title &amp; date</div>
+                        <div className="text-[10px] text-muted mt-0.5">Word document with title &amp; date</div>
                       </div>
                     </button>
                   )}
@@ -742,7 +725,7 @@ function NoteDetailsSidebar({
                       </div>
                       <div className="text-left">
                         <div className="font-medium">Export as Markdown</div>
-                        <div className="text-[10px] text-muted/60 mt-0.5">.md with tables &amp; task lists</div>
+                        <div className="text-[10px] text-muted mt-0.5">.md with tables &amp; task lists</div>
                       </div>
                     </button>
                   )}
@@ -756,7 +739,7 @@ function NoteDetailsSidebar({
                       </div>
                       <div className="text-left">
                         <div className="font-medium">Export as HTML</div>
-                        <div className="text-[10px] text-muted/60 mt-0.5">Standalone web page with styles</div>
+                        <div className="text-[10px] text-muted mt-0.5">Standalone web page with styles</div>
                       </div>
                     </button>
                   )}
@@ -770,7 +753,7 @@ function NoteDetailsSidebar({
                       </div>
                       <div className="text-left">
                         <div className="font-medium">Export as Plain Text</div>
-                        <div className="text-[10px] text-muted/60 mt-0.5">.txt without formatting</div>
+                        <div className="text-[10px] text-muted mt-0.5">.txt without formatting</div>
                       </div>
                     </button>
                   )}
@@ -784,7 +767,7 @@ function NoteDetailsSidebar({
                       </div>
                       <div className="text-left">
                         <div className="font-medium">Import from DOCX</div>
-                        <div className="text-[10px] text-muted/60 mt-0.5">Replace content from Word file</div>
+                        <div className="text-[10px] text-muted mt-0.5">Replace content from Word file</div>
                       </div>
                     </button>
                   )}
@@ -795,7 +778,7 @@ function NoteDetailsSidebar({
             {/* Share Section */}
             {(onPublish || shareUrl || shareHint) && (
               <div>
-                <label className="text-[10px] font-semibold text-muted/60 uppercase tracking-widest mb-2 block">Share</label>
+                <label className="text-[10px] font-semibold text-muted uppercase tracking-widest mb-2 block">Share</label>
                 <div className="rounded-2xl border border-border/40 bg-surface-hover/20 p-4">
                   <div className="flex items-start gap-3">
                     <div className={`flex h-9 w-9 items-center justify-center rounded-xl ${shareUrl ? 'bg-alpine-100 dark:bg-alpine-900/30' : 'bg-surface-hover/60'}`}>
@@ -805,7 +788,7 @@ function NoteDetailsSidebar({
                       <div className="text-xs font-semibold text-foreground">
                         {shareUrl ? 'Published via link' : 'Private note'}
                       </div>
-                      <div className="mt-0.5 text-[11px] leading-relaxed text-muted/70">
+                      <div className="mt-0.5 text-[11px] leading-relaxed text-muted">
                         {sharePublishedDisplay
                           ? `Last published ${sharePublishedDisplay}`
                           : shareHint || 'Create a read-only share page for this note.'}
@@ -824,7 +807,7 @@ function NoteDetailsSidebar({
                       <button
                         onClick={onPublish}
                         disabled={!canPublish || isPublishing || isUnpublishing}
-                        className="inline-flex items-center gap-1.5 rounded-xl bg-gradient-to-r from-alpine-600 to-alpine-500 px-3.5 py-2 text-xs font-semibold text-white transition-all duration-200 hover:from-alpine-700 hover:to-alpine-600 hover:shadow-md disabled:cursor-not-allowed disabled:opacity-50"
+                        className="inline-flex items-center gap-1.5 rounded-xl bg-gradient-to-r from-alpine-700 to-alpine-600 px-3.5 py-2 text-xs font-semibold text-white transition-all duration-200 hover:from-alpine-700 hover:to-alpine-600 hover:shadow-md disabled:cursor-not-allowed disabled:opacity-50"
                       >
                         {isPublishing ? <Loader2 size={12} className="animate-spin" /> : <Globe size={12} />}
                         <span>{shareUrl ? 'Update share' : 'Publish note'}</span>

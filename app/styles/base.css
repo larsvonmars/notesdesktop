@@ -36,3 +36,15 @@ aside[class*="backdrop-blur"] {
     background: rgb(28 25 23 / 0.85);
   }
 }
+
+/* Respect the OS "reduce motion" setting everywhere, not just in feature CSS. */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}

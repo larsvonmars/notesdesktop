@@ -1,9 +1,15 @@
 'use client'
 
-import { useEffect, useCallback, type ReactNode } from 'react'
+import { useEffect, useCallback, useId, useRef, type ReactNode } from 'react'
 import ModalCloseButton from './ModalCloseButton'
 
 type ModalSize = 'sm' | 'md' | 'lg' | 'xl' | '2xl' | '3xl' | '4xl' | '5xl' | 'full'
+
+const FOCUSABLE_SELECTOR =
+  'a[href], button:not([disabled]), textarea:not([disabled]), input:not([disabled]), select:not([disabled]), [tabindex]:not([tabindex="-1"])'
+
+/** Open dialogs, innermost last — only the top one traps Tab. */
+const modalStack: HTMLElement[] = []
 
 interface BaseModalProps {
   isOpen: boolean
@@ -29,6 +35,8 @@ interface BaseModalProps {
   className?: string
   /** Entry animation. Default: 'fade' */
   animation?: 'fade' | 'zoom' | 'none'
+  /** Accessible name when the dialog has no heading. Default: 'Dialog' */
+  ariaLabel?: string
 }
 
 const SIZE_MAP: Record<ModalSize, string> = {
@@ -57,7 +65,11 @@ export default function BaseModal({
   backdropClassName = '',
   className = '',
   animation = 'fade',
+  ariaLabel = 'Dialog',
 }: BaseModalProps) {
+  const cardRef = useRef<HTMLDivElement>(null)
+  const titleId = useId()
+
   // Escape key handler
   useEffect(() => {
     if (!isOpen || !closeOnEscape || asView) return
@@ -70,6 +82,70 @@ export default function BaseModal({
     document.addEventListener('keydown', handleKeyDown)
     return () => document.removeEventListener('keydown', handleKeyDown)
   }, [isOpen, closeOnEscape, onClose, asView])
+
+  // Dialog semantics: label from the first heading, focus trap, scroll lock.
+  useEffect(() => {
+    if (!isOpen || asView) return
+    const card = cardRef.current
+    if (!card) return
+
+    const heading = card.querySelector<HTMLElement>('h1, h2, h3')
+    if (heading) {
+      if (!heading.id) heading.id = titleId
+      card.setAttribute('aria-labelledby', heading.id)
+      card.removeAttribute('aria-label')
+    } else {
+      card.setAttribute('aria-label', ariaLabel)
+      card.removeAttribute('aria-labelledby')
+    }
+
+    const previouslyFocused = document.activeElement as HTMLElement | null
+    const bodyOverflow = document.body.style.overflow
+    document.body.style.overflow = 'hidden'
+    modalStack.push(card)
+
+    const focusCard = () => card.focus({ preventScroll: true })
+    const raf = requestAnimationFrame(focusCard)
+
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key !== 'Tab') return
+      // Only the topmost dialog manages focus.
+      if (modalStack[modalStack.length - 1] !== card) return
+
+      const focusable = Array.from(card.querySelectorAll<HTMLElement>(FOCUSABLE_SELECTOR))
+        .filter((element) => element.getClientRects().length > 0)
+
+      if (focusable.length === 0) {
+        event.preventDefault()
+        card.focus()
+        return
+      }
+
+      const first = focusable[0]
+      const last = focusable[focusable.length - 1]
+      const active = document.activeElement as HTMLElement | null
+      const outside = !active || !card.contains(active)
+
+      if (event.shiftKey && (active === first || active === card || outside)) {
+        event.preventDefault()
+        last.focus()
+      } else if (!event.shiftKey && (active === last || outside)) {
+        event.preventDefault()
+        first.focus()
+      }
+    }
+
+    document.addEventListener('keydown', handleKeyDown)
+
+    return () => {
+      cancelAnimationFrame(raf)
+      document.removeEventListener('keydown', handleKeyDown)
+      const index = modalStack.lastIndexOf(card)
+      if (index >= 0) modalStack.splice(index, 1)
+      document.body.style.overflow = bodyOverflow
+      previouslyFocused?.focus?.({ preventScroll: true })
+    }
+  }, [isOpen, asView, ariaLabel, titleId])
 
   const handleBackdropClick = useCallback(
     (e: React.MouseEvent) => {
@@ -111,11 +187,16 @@ export default function BaseModal({
       onClick={handleBackdropClick}
     >
       <div
+        ref={cardRef}
+        role="dialog"
+        aria-modal="true"
+        tabIndex={-1}
         className={[
           'w-full',
           SIZE_MAP[size],
           'bg-surface rounded-2xl shadow-xl border border-border',
           'flex flex-col overflow-hidden',
+          'focus:outline-none',
           className,
         ].join(' ')}
         style={{ maxHeight }}

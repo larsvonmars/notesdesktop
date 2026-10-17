@@ -13,7 +13,6 @@ export default function ThemeToggle() {
   const { resolvedTheme } = useTheme()
   const [isOpen, setIsOpen] = useState(false)
   const menuRef = useRef<HTMLDivElement | null>(null)
-  const isDark = resolvedTheme === 'dark'
 
   useEffect(() => {
     if (!isOpen) return
@@ -41,17 +40,19 @@ export default function ThemeToggle() {
     <div ref={menuRef} className="fixed top-4 right-4 z-50">
       <button
         onClick={() => setIsOpen((previous) => !previous)}
-        className="p-2.5 rounded-full bg-white dark:bg-slate-800/90  border border-gray-200 dark:border-slate-700 shadow-sm text-gray-600 dark:text-slate-300 hover:text-gray-900 dark:hover:text-slate-100 hover:bg-gray-100 dark:hover:bg-slate-700 transition-all"
+        className="p-2.5 rounded-full bg-surface border border-border shadow-sm text-muted hover:text-foreground hover:bg-surface-hover transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/50"
         title="Theme settings"
-        aria-label="Theme settings"
+        aria-label={`Theme settings (${resolvedTheme})`}
+        aria-expanded={isOpen}
       >
-        {isDark ? <Moon size={18} /> : <Sun size={18} />}
+        <Sun size={18} className="dark:hidden" />
+        <Moon size={18} className="hidden dark:block" />
       </button>
 
       {isOpen && (
-        <div className="absolute top-12 right-0 w-80 bg-white dark:bg-slate-900 rounded-2xl shadow-2xl border border-gray-200 dark:border-slate-700 overflow-hidden">
-          <div className="px-4 py-3 border-b border-gray-200 dark:border-slate-700 bg-gradient-to-r from-white to-gray-50 dark:from-slate-900 dark:to-slate-800">
-            <h3 className="text-sm font-semibold text-gray-900 dark:text-slate-100">Appearance</h3>
+        <div className="absolute top-12 right-0 w-80 bg-surface rounded-2xl shadow-2xl border border-border overflow-hidden">
+          <div className="px-4 py-3 border-b border-border bg-gradient-to-r from-surface to-surface-hover/60">
+            <h3 className="text-sm font-semibold text-foreground">Appearance</h3>
           </div>
 
           <div className="p-3 space-y-2">

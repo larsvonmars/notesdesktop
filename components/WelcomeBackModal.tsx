@@ -122,16 +122,16 @@ export default function WelcomeBackModal({
     >
 
         {/* ── Hero header ──────────────────────────────────────────────── */}
-        <header className="relative overflow-hidden shrink-0 border-b border-border bg-gradient-to-br from-alpine-600 via-alpine-500 to-peak-500 dark:from-slate-900 dark:via-slate-800 dark:to-slate-900 px-6 py-6 sm:px-8 sm:py-8">
+        <header className="relative overflow-hidden shrink-0 border-b border-border bg-gradient-to-br from-alpine-700 via-alpine-600 to-peak-700 dark:from-slate-900 dark:via-slate-800 dark:to-slate-900 px-6 py-6 sm:px-8 sm:py-8">
           <div className="pointer-events-none absolute -top-8 -right-8 h-40 w-40 rounded-full bg-white blur-2xl" />
           <div className="pointer-events-none absolute bottom-0 left-1/3 h-24 w-48 rounded-full bg-peak-400/20 blur-3xl" />
           <div className="relative flex items-start justify-between gap-4">
             <div>
-              <p className="text-xs font-medium uppercase tracking-widest text-white/60 mb-1">{getDateLabel()}</p>
+              <p className="text-xs font-medium uppercase tracking-widest text-white/90 mb-1">{getDateLabel()}</p>
               <h1 className="text-2xl sm:text-3xl font-bold text-white leading-tight">
                 {greeting.text} {greeting.emoji}
               </h1>
-              <p className="mt-1.5 text-sm text-white/70">Pick up where you left off</p>
+              <p className="mt-1.5 text-sm text-white/90">Pick up where you left off</p>
             </div>
             {!asView && (
               <ModalCloseButton
