@@ -6,6 +6,7 @@ import { useEffect, useState, useRef, useCallback, Suspense } from 'react'
 import dynamic from 'next/dynamic'
 import NoteEditor, { Note } from '@/components/NoteEditor'
 import HomeDashboard from '@/components/HomeDashboard'
+import TasksView from '@/components/TasksView'
 import FileExplorerModal from '@/components/FileExplorerModal'
 import ProjectDashboard from '@/components/ProjectDashboard'
 import ArchivedProjectsModal from '@/components/ArchivedProjectsModal'
@@ -39,6 +40,7 @@ type NoteCreationContext = {
 }
 import { useToast } from '@/components/ToastProvider'
 import { getNote, searchNotes } from '@/lib/notes'
+import { recordNoteOpened } from '@/lib/note-activity'
 import { readWelcomeOnStartupPreference } from '@/lib/workspace/preferences'
 import { formatModShortcut } from '@/lib/platform'
 
@@ -227,11 +229,12 @@ function WorkspaceContent() {
     isCreatingNewSaveRef.current = false
     setSelectedNote(note)
     setIsCreatingNew(false)
+    if (user?.id) recordNoteOpened(user.id, note.id)
     applyFolderSelection(note.folder_id ?? null, {
       projectId: note.project_id ?? null,
       preserveDraftState: true,
     })
-  }, [applyFolderSelection])
+  }, [applyFolderSelection, user?.id])
 
   const {
     handleSaveNote,
@@ -477,6 +480,10 @@ function WorkspaceContent() {
 
   const openWelcomeView = useCallback(() => {
     setActiveView('welcome')
+  }, [])
+
+  const openTasksView = useCallback(() => {
+    setActiveView('tasks')
   }, [])
 
   /** Full-text note search for the command palette (stable identity). */
@@ -893,6 +900,7 @@ function WorkspaceContent() {
         onOpenSettings={() => setShowSettings(true)}
         onOpenCommandPalette={() => setCommandPaletteOpen(true)}
         onOpenWelcome={openWelcomeView}
+        onOpenTasks={openTasksView}
         onSignOut={handleSignOut}
         onMobileTouchStart={beginCloseSwipe}
         onMobileTouchEnd={endCloseSwipe}
@@ -909,6 +917,7 @@ function WorkspaceContent() {
       >
         {activeView === 'welcome' && (
           <HomeDashboard
+            userId={user.id}
             userName={homeUserName}
             notes={allNotes}
             folders={folders}
@@ -932,9 +941,25 @@ function WorkspaceContent() {
             }}
             onCreateProject={handleCreateProject}
             onOpenSearch={() => setCommandPaletteOpen(true)}
+            onOpenTasks={() => setActiveView('tasks')}
             onOpenUnfiled={() => {
               setActiveView('notes')
               handleSelectFolder(null)
+            }}
+          />
+        )}
+
+        {activeView === 'tasks' && (
+          <TasksView
+            notes={allNotes}
+            projects={projects}
+            onSelectNote={(note) => {
+              void handleSelectNote(note)
+              setActiveView('notes')
+            }}
+            onOpenProject={(projectId) => {
+              setSelectedProjectId(projectId)
+              setActiveView('projects')
             }}
           />
         )}
@@ -1044,6 +1069,7 @@ function WorkspaceContent() {
           }}
           onCreateNote={(type) => handleNewNote(type)}
           onOpenHome={openWelcomeView}
+          onOpenTasks={openTasksView}
           onOpenFiles={() => setActiveView('files')}
           onOpenSettings={() => setShowSettings(true)}
           onOpenShortcuts={() => setShowShortcuts(true)}

@@ -9,6 +9,7 @@ import {
   Home,
   Keyboard,
   LayoutDashboard,
+  ListTodo,
   Network,
   PenTool,
   Search,
@@ -63,6 +64,7 @@ export interface CommandPaletteProps {
   onOpenProject: (projectId: string) => void
   onCreateNote: (type: NoteType) => void
   onOpenHome: () => void
+  onOpenTasks: () => void
   onOpenFiles: () => void
   onOpenSettings: () => void
   onOpenShortcuts: () => void
@@ -85,6 +87,7 @@ export default function CommandPalette({
   onOpenProject,
   onCreateNote,
   onOpenHome,
+  onOpenTasks,
   onOpenFiles,
   onOpenSettings,
   onOpenShortcuts,
@@ -199,6 +202,7 @@ export default function CommandPalette({
 
     const navigateItems: PaletteItem[] = [
       { key: 'nav-home', label: 'Go to Home', hint: 'Recent notes and quick actions', icon: Home, run: onOpenHome },
+      { key: 'nav-tasks', label: 'Open Tasks & Agenda', hint: 'Plan tasks and upcoming events', icon: ListTodo, run: onOpenTasks },
       { key: 'nav-files', label: 'Open File Explorer', hint: 'Browse files', icon: FolderOpen, run: onOpenFiles },
       { key: 'nav-settings', label: 'Open Settings', hint: 'Account, appearance, startup', icon: Settings, run: onOpenSettings },
       { key: 'nav-shortcuts', label: 'Keyboard shortcuts', hint: 'Reference for formatting and navigation', icon: Keyboard, run: onOpenShortcuts },
@@ -221,6 +225,7 @@ export default function CommandPalette({
     onOpenProject,
     onCreateNote,
     onOpenHome,
+    onOpenTasks,
     onOpenFiles,
     onOpenSettings,
     onOpenShortcuts,

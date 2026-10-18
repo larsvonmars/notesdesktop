@@ -30,6 +30,7 @@ import {
 import { Button } from '@/components/ui/Button'
 import { useToast } from '@/components/ToastProvider'
 import { createNote, getNote, type NoteSummary, type NoteType } from '@/lib/notes'
+import { getLastOpenedNote } from '@/lib/note-activity'
 import type { Folder } from '@/lib/folders'
 import type { Project } from '@/lib/projects'
 import { completeTask, getTasks, uncompleteTask, type Task } from '@/lib/tasks'
@@ -86,6 +87,7 @@ const PRIORITY_DOT: Record<Task['priority'], string> = {
 type TypeFilter = 'all' | NoteType
 
 export interface HomeDashboardProps {
+  userId?: string
   userName?: string | null
   notes: NoteSummary[]
   folders: Folder[]
@@ -97,6 +99,7 @@ export interface HomeDashboardProps {
   onOpenProject: (projectId: string) => void
   onCreateProject: () => void
   onOpenSearch: () => void
+  onOpenTasks: () => void
   onOpenUnfiled: () => void
 }
 
@@ -233,6 +236,7 @@ function RecentSkeleton() {
 }
 
 export default function HomeDashboard({
+  userId,
   userName,
   notes,
   folders,
@@ -244,16 +248,18 @@ export default function HomeDashboard({
   onOpenProject,
   onCreateProject,
   onOpenSearch,
+  onOpenTasks,
   onOpenUnfiled,
 }: HomeDashboardProps) {
   const toast = useToast()
-  const [now] = useState(() => new Date())
+  const [now, setNow] = useState(() => new Date())
   const [captureText, setCaptureText] = useState('')
   const [isCapturing, setIsCapturing] = useState(false)
   const [typeFilter, setTypeFilter] = useState<TypeFilter>('all')
   const [tasks, setTasks] = useState<Task[]>([])
   const [events, setEvents] = useState<CalendarEvent[]>([])
   const [isLoadingAgenda, setIsLoadingAgenda] = useState(true)
+  const [agendaUnavailable, setAgendaUnavailable] = useState(false)
   const [preview, setPreview] = useState('')
   const [isPreviewLoading, setIsPreviewLoading] = useState(false)
 
@@ -264,8 +270,22 @@ export default function HomeDashboard({
       ),
     [notes],
   )
-  const continueNote = sortedNotes[0]
-  const recentSource = useMemo(() => sortedNotes.slice(1, 13), [sortedNotes])
+  const lastOpened = useMemo(
+    () => (userId ? getLastOpenedNote(userId) : null),
+    [userId],
+  )
+  const lastOpenedNote = lastOpened
+    ? notes.find((note) => note.id === lastOpened.noteId)
+    : undefined
+  const continueNote = lastOpenedNote ?? sortedNotes[0]
+  const continueOpenedAt =
+    lastOpenedNote && lastOpened && lastOpenedNote.id === lastOpened.noteId
+      ? lastOpened.openedAt
+      : null
+  const recentSource = useMemo(
+    () => sortedNotes.filter((note) => note.id !== continueNote?.id).slice(0, 12),
+    [sortedNotes, continueNote?.id],
+  )
 
   const folderById = useMemo(() => new Map(folders.map((folder) => [folder.id, folder])), [folders])
   const projectById = useMemo(
@@ -360,6 +380,11 @@ export default function HomeDashboard({
   const continueNoteType = continueNote?.note_type
 
   useEffect(() => {
+    const timer = window.setInterval(() => setNow(new Date()), 60_000)
+    return () => window.clearInterval(timer)
+  }, [])
+
+  useEffect(() => {
     if (!continueNoteId || !continueNoteType || !PREVIEW_TYPES.has(continueNoteType)) {
       setPreview('')
       setIsPreviewLoading(false)
@@ -399,18 +424,23 @@ export default function HomeDashboard({
     ]).then(([taskResult, eventResult]) => {
       if (cancelled) return
 
+      let unavailable = false
+
       if (taskResult.status === 'fulfilled') {
         setTasks(taskResult.value)
       } else {
         console.warn('Home: tasks could not be loaded', taskResult.reason)
+        unavailable = true
       }
 
       if (eventResult.status === 'fulfilled') {
         setEvents(eventResult.value)
       } else {
         console.warn('Home: calendar events could not be loaded', eventResult.reason)
+        unavailable = true
       }
 
+      setAgendaUnavailable(unavailable)
       setIsLoadingAgenda(false)
     })
 
@@ -661,7 +691,9 @@ export default function HomeDashboard({
               >
                 {continueNote && (
                   <span className="text-[11px] text-muted">
-                    {relativeTime(continueNote.updated_at, now.getTime())}
+                    {continueOpenedAt
+                      ? `Opened ${relativeTime(continueOpenedAt, now.getTime())}`
+                      : `Edited ${relativeTime(continueNote.updated_at, now.getTime())}`}
                   </span>
                 )}
               </SectionHeader>
@@ -889,9 +921,19 @@ export default function HomeDashboard({
                 title="Today"
                 iconClassName="bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-300"
               >
-                <span className="text-[11px] text-muted">
-                  {dueTodayCount > 0 ? `${dueTodayCount} due` : 'Nothing due'}
-                </span>
+                <div className="flex items-center gap-2">
+                  <span className="text-[11px] text-muted">
+                    {dueTodayCount > 0 ? `${dueTodayCount} due` : 'Nothing due'}
+                  </span>
+                  <button
+                    type="button"
+                    onClick={onOpenTasks}
+                    className="inline-flex items-center gap-1 rounded-lg px-2 py-1 text-[11px] font-medium text-muted transition-colors hover:bg-surface-hover hover:text-foreground"
+                  >
+                    View all
+                    <ArrowUpRight size={12} />
+                  </button>
+                </div>
               </SectionHeader>
 
               <div className="p-4 sm:p-5">
@@ -906,6 +948,17 @@ export default function HomeDashboard({
                   </div>
                 ) : (
                   <>
+                    {agendaUnavailable && (
+                      <button
+                        type="button"
+                        onClick={onOpenTasks}
+                        className="mb-3 flex w-full items-center gap-2 rounded-lg border border-warning bg-warning-light px-3 py-2 text-left text-[11px] font-medium text-warning transition-opacity hover:opacity-80"
+                      >
+                        <AlertTriangle size={12} className="shrink-0" />
+                        Some agenda data couldn&apos;t be loaded. Open Tasks to retry.
+                      </button>
+                    )}
+
                     {(overdueTasks.length > 0 || todayTasks.length > 0) && (
                       <>
                         {overdueTasks.length > 0 && (
@@ -986,7 +1039,7 @@ export default function HomeDashboard({
                       </div>
                     )}
 
-                    {!hasAgendaItems && (
+                    {!hasAgendaItems && !agendaUnavailable && (
                       <div className="mt-3 rounded-xl border border-dashed border-border px-4 py-5 text-center">
                         <p className="text-sm font-medium text-foreground">A clear day.</p>
                         <p className="mt-0.5 text-xs text-muted">

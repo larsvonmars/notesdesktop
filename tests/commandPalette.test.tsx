@@ -61,6 +61,7 @@ const baseProps: CommandPaletteProps = {
   onOpenProject: () => {},
   onCreateNote: () => {},
   onOpenHome: () => {},
+  onOpenTasks: () => {},
   onOpenFiles: () => {},
   onOpenSettings: () => {},
   onOpenShortcuts: () => {},

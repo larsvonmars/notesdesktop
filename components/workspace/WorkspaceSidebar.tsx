@@ -1,14 +1,14 @@
 'use client'
 
 import type { ComponentProps, TouchEvent } from 'react'
-import { FileText, FolderOpen, Home, LogOut, X } from 'lucide-react'
+import { FileText, FolderOpen, Home, ListTodo, LogOut, X } from 'lucide-react'
 import SidebarTree from '@/components/SidebarTree'
 import type { NoteSummary } from '@/lib/notes'
 import type { WorkspaceView } from '@/lib/workspace/types'
 
 type TreeProps = ComponentProps<typeof SidebarTree>
 type OwnedTreeProps = 'collapsed' | 'onToggleCollapsed' | 'dense' | 'showHeader'
-type InjectedTreeProps = 'onOpenProjectDashboard' | 'onOpenFileExplorer' | 'onOpenArchive' | 'onOpenSettings' | 'onOpenWelcome' | 'onOpenCommandPalette'
+type InjectedTreeProps = 'onOpenProjectDashboard' | 'onOpenFileExplorer' | 'onOpenArchive' | 'onOpenSettings' | 'onOpenWelcome' | 'onOpenTasks' | 'onOpenCommandPalette'
 
 interface WorkspaceSidebarProps {
   isMobile: boolean
@@ -29,6 +29,7 @@ interface WorkspaceSidebarProps {
   onOpenArchive: () => void
   onOpenSettings: () => void
   onOpenWelcome: () => void
+  onOpenTasks: () => void
   onOpenCommandPalette: () => void
   onSignOut: () => void
   onMobileTouchStart?: (clientX: number, clientY: number) => void
@@ -50,6 +51,7 @@ export default function WorkspaceSidebar({
   onOpenArchive,
   onOpenSettings,
   onOpenWelcome,
+  onOpenTasks,
   onOpenCommandPalette,
   onSignOut,
   onMobileTouchStart,
@@ -80,6 +82,10 @@ export default function WorkspaceSidebar({
     },
     onOpenWelcome: () => {
       onOpenWelcome()
+      onCloseMobileNav()
+    },
+    onOpenTasks: () => {
+      onOpenTasks()
       onCloseMobileNav()
     },
     onOpenCommandPalette: () => {
@@ -149,6 +155,7 @@ export default function WorkspaceSidebar({
           {([
             { key: 'welcome' as WorkspaceView, label: 'Home', icon: Home },
             { key: 'notes' as WorkspaceView, label: 'Notes', icon: FileText },
+            { key: 'tasks' as WorkspaceView, label: 'Tasks', icon: ListTodo },
             { key: 'files' as WorkspaceView, label: 'Files', icon: FolderOpen },
           ]).map(({ key, label, icon: Icon }) => (
             <button

@@ -42,6 +42,20 @@ A comprehensive task management and calendar system with sophisticated features 
 
 ## Components
 
+### TasksView (primary UI)
+
+The main Tasks & Agenda workspace, reachable from the sidebar, the mobile **Tasks** tab,
+the Home screen's **View all** action, and the command palette (`Ctrl/Cmd+K`).
+
+- **Tasks tab**: quick add, filters for Today / Next 7 days / All open / Completed,
+  grouped overdue/today/upcoming/later/no-date lists, inline complete + star, and a
+  full create/edit modal with due date, priority, status, project, and linked note.
+- **Agenda tab**: upcoming events grouped by day for the next 45 days, with create/edit
+  and delete support, all-day events, locations, and project/note links.
+- **Last-opened tracking**: opening a note records a device-local timestamp
+  (`lib/note-activity.ts`) so Home can resume the note the user actually looked at last,
+  falling back to the most recently edited note when no activity exists yet.
+
 ### TaskCalendarModal
 
 Sophisticated modal with three view modes:

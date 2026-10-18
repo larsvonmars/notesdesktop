@@ -28,6 +28,7 @@ import {
   Archive,
   Layers,
   Settings,
+  ListTodo,
   type LucideIcon,
 } from 'lucide-react'
 import SidebarContextMenu from './sidebar/SidebarContextMenu'
@@ -90,6 +91,8 @@ export interface SidebarTreeProps {
   onOpenSettings?: () => void
   /** Open the welcome / home view. */
   onOpenWelcome?: () => void
+  /** Open the tasks and agenda view. */
+  onOpenTasks?: () => void
   /** Open the command palette. */
   onOpenCommandPalette?: () => void
   /** Number of archived projects (shown on the Archive entry). */
@@ -140,6 +143,7 @@ export default function SidebarTree({
   onOpenArchive,
   onOpenSettings,
   onOpenWelcome,
+  onOpenTasks,
   onOpenCommandPalette,
   archivedCount = 0,
   collapsed,
@@ -1399,6 +1403,16 @@ export default function SidebarTree({
             >
               <Plus size={17} />
             </button>
+            {onOpenTasks && (
+              <button
+                onClick={onOpenTasks}
+                className={railBtn}
+                title="Tasks & agenda"
+                aria-label="Tasks and agenda"
+              >
+                <ListTodo size={16} />
+              </button>
+            )}
             {onOpenWelcome && (
               <button
                 onClick={onOpenWelcome}
@@ -1716,6 +1730,15 @@ export default function SidebarTree({
               <Search size={15} className="shrink-0 text-muted/60" />
               <span className="flex-1 text-left">Search</span>
               <kbd className="rounded border border-border px-1 text-[11px] font-medium text-muted/70">{formatModShortcut('K')}</kbd>
+            </button>
+          )}
+          {showHeader && onOpenTasks && (
+            <button
+              onClick={onOpenTasks}
+              className="group flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-[13px] text-muted transition-colors hover:bg-surface-hover hover:text-foreground"
+            >
+              <ListTodo size={15} className="shrink-0 text-muted/60" />
+              <span className="flex-1 text-left">Tasks</span>
             </button>
           )}
           {showHeader && onOpenWelcome && (
