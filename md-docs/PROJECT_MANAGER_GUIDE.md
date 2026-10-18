@@ -107,7 +107,7 @@ Planned features for upcoming releases:
 ## Troubleshooting
 
 ### "Projects" button not showing
-- Make sure you're viewing a note (not the welcome screen)
+- Make sure you're viewing a note (not the Home screen)
 - Check the bottom status bar on the left side
 
 ### Projects not loading

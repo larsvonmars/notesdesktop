@@ -1,10 +1,10 @@
 /**
- * Workspace-level preferences — shared by the workspace shell, the welcome
+ * Workspace-level preferences — shared by the workspace shell, the Home
  * view and the settings UI.
  *
  * A plain localStorage flag keeps this independent of the account: it works in
  * static/Tauri builds and survives sign-out. Changes are broadcast on `window`
- * so an already-mounted welcome view stays in sync with the settings modal.
+ * so an already-mounted Home view stays in sync with the settings modal.
  */
 
 export const WELCOME_ON_STARTUP_STORAGE_KEY = 'notesdesktop:welcome-on-startup'

@@ -53,6 +53,7 @@ export function useWorkspaceData({
   const [isLoadingNotes, setIsLoadingNotes] = useState(true)
   const [isLoadingFolders, setIsLoadingFolders] = useState(true)
   const [isLoadingProjects, setIsLoadingProjects] = useState(true)
+  const [isLoadingAllNotes, setIsLoadingAllNotes] = useState(true)
 
   const archivedProjectIds = useMemo(
     () => new Set(archivedProjects.map((project) => project.id)),
@@ -117,6 +118,8 @@ export function useWorkspaceData({
       setAllNotes(filterOutArchivedContent(await getAllNoteSummaries()))
     } catch (error) {
       console.error('Error loading all notes:', error)
+    } finally {
+      setIsLoadingAllNotes(false)
     }
   }, [filterOutArchivedContent])
 
@@ -291,6 +294,7 @@ export function useWorkspaceData({
     isLoadingNotes,
     isLoadingFolders,
     isLoadingProjects,
+    isLoadingAllNotes,
     filterOutArchivedContent,
     loadProjects,
     loadArchivedProjects,

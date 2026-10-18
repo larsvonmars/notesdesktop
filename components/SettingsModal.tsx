@@ -505,16 +505,16 @@ export default function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
 
             <div className="flex items-start justify-between gap-4 rounded-xl border border-border bg-surface-hover p-3 sm:p-4">
               <div className="min-w-0">
-                <p className="text-sm font-medium text-foreground">Open the welcome screen on launch</p>
+                <p className="text-sm font-medium text-foreground">Open Home on launch</p>
                 <p className="text-xs text-muted mt-1">
-                  Shows recent notes and quick actions when the app starts. You can always reopen it from Home in the sidebar.
+                  Shows your daily briefing with recent notes, tasks, and quick capture when the app starts. You can always reopen it from Home in the sidebar.
                 </p>
               </div>
               <button
                 type="button"
                 role="switch"
                 aria-checked={welcomeOnStartup}
-                aria-label="Open the welcome screen on launch"
+                aria-label="Open Home on launch"
                 onClick={handleToggleWelcomeOnStartup}
                 className={`relative inline-flex h-6 w-11 flex-shrink-0 items-center rounded-full transition-colors focus:outline-none focus:ring-2 focus:ring-blue-500 ${
                   welcomeOnStartup ? 'bg-accent' : 'bg-surface-active'

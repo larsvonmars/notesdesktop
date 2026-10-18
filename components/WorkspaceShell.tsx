@@ -5,7 +5,7 @@ import { useRouter, useSearchParams } from 'next/navigation'
 import { useEffect, useState, useRef, useCallback, Suspense } from 'react'
 import dynamic from 'next/dynamic'
 import NoteEditor, { Note } from '@/components/NoteEditor'
-import WelcomeBackModal from '@/components/WelcomeBackModal'
+import HomeDashboard from '@/components/HomeDashboard'
 import FileExplorerModal from '@/components/FileExplorerModal'
 import ProjectDashboard from '@/components/ProjectDashboard'
 import ArchivedProjectsModal from '@/components/ArchivedProjectsModal'
@@ -120,6 +120,7 @@ function WorkspaceContent() {
     isLoadingNotes,
     isLoadingFolders,
     isLoadingProjects,
+    isLoadingAllNotes,
     filterOutArchivedContent,
     loadProjects,
     loadArchivedProjects,
@@ -146,9 +147,8 @@ function WorkspaceContent() {
   const mobileSwipeStartRef = useRef<{ x: number; y: number } | null>(null)
   const mobileSwipeModeRef = useRef<'open' | 'close' | null>(null)
   
-  // Welcome Back modal state
-  const [showWelcomeBack, setShowWelcomeBack] = useState(false)
-  const hasShownWelcomeBackRef = useRef(false)
+  // Home view state
+  const hasShownHomeOnStartupRef = useRef(false)
   const [showSettings, setShowSettings] = useState(false)
   const [showShortcuts, setShowShortcuts] = useState(false)
   const [commandPaletteOpen, setCommandPaletteOpen] = useState(false)
@@ -454,24 +454,28 @@ function WorkspaceContent() {
     updateNavigationParams(selectedFolderId, noteId)
   }, [selectedFolderId, selectedNote?.id, isCreatingNew, updateNavigationParams])
 
-  // Show Welcome Back modal once when data is loaded (opt-out via settings)
+  // Open Home once when data is loaded (opt-out via settings)
   useEffect(() => {
-    if (user && !isLoadingFolders && !isLoadingNotes && !isLoadingProjects && !hasShownWelcomeBackRef.current) {
-      hasShownWelcomeBackRef.current = true
+    if (
+      user &&
+      !isLoadingFolders &&
+      !isLoadingNotes &&
+      !isLoadingProjects &&
+      !isLoadingAllNotes &&
+      !hasShownHomeOnStartupRef.current
+    ) {
+      hasShownHomeOnStartupRef.current = true
       if (readWelcomeOnStartupPreference()) {
-        setShowWelcomeBack(true)
         setActiveView('welcome')
       }
     }
-  }, [user, isLoadingFolders, isLoadingNotes, isLoadingProjects])
+  }, [user, isLoadingFolders, isLoadingNotes, isLoadingProjects, isLoadingAllNotes])
 
   const closeWelcomeView = useCallback(() => {
-    setShowWelcomeBack(false)
     setActiveView('notes')
   }, [])
 
   const openWelcomeView = useCallback(() => {
-    setShowWelcomeBack(true)
     setActiveView('welcome')
   }, [])
 
@@ -699,6 +703,11 @@ function WorkspaceContent() {
     return null
   }
 
+  const profileName = typeof user.user_metadata?.display_name === 'string'
+    ? user.user_metadata.display_name.trim()
+    : ''
+  const homeUserName = profileName || user.email?.split('@')[0]
+
   if (isLoadingFolders) {
     return (
       <WorkspaceSkeleton />
@@ -899,17 +908,33 @@ function WorkspaceContent() {
         }
       >
         {activeView === 'welcome' && (
-          <WelcomeBackModal
-            isOpen={showWelcomeBack}
-            asView
-            onClose={closeWelcomeView}
-            onCreateNote={(type) => {
-              handleNewNote(type)
-              closeWelcomeView()
-            }}
+          <HomeDashboard
+            userName={homeUserName}
+            notes={allNotes}
+            folders={folders}
+            projects={projects}
+            isLoading={isLoadingNotes || isLoadingProjects || isLoadingAllNotes}
             onSelectNote={(note) => {
               void handleSelectNote(note)
               closeWelcomeView()
+            }}
+            onCreateNote={(type) => {
+              setActiveView('notes')
+              handleNewNote(type)
+            }}
+            onNewNote={() => {
+              setActiveView('notes')
+              handleNewNote()
+            }}
+            onOpenProject={(projectId) => {
+              setSelectedProjectId(projectId)
+              setActiveView('projects')
+            }}
+            onCreateProject={handleCreateProject}
+            onOpenSearch={() => setCommandPaletteOpen(true)}
+            onOpenUnfiled={() => {
+              setActiveView('notes')
+              handleSelectFolder(null)
             }}
           />
         )}
