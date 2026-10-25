@@ -71,6 +71,7 @@ import {
   Hand,
   Check,
   GripHorizontal,
+  List,
 } from 'lucide-react'
 import FileExplorerModal from '@/components/FileExplorerModal'
 import { uploadFile, getFileSignedUrl, downloadFile } from '@/lib/file-storage'
@@ -229,6 +230,13 @@ function uid(): string {
   return Math.random().toString(36).slice(2, 10) + Date.now().toString(36)
 }
 
+/** Live accent colour for on-canvas selection chrome (falls back to glass violet). */
+function accentColor(): string {
+  if (typeof window === 'undefined') return '#6757f5'
+  const value = getComputedStyle(document.documentElement).getPropertyValue('--accent').trim()
+  return value || '#6757f5'
+}
+
 // ============================================================================
 // PDF TEXT LAYER / SEARCH HELPERS
 // ============================================================================
@@ -264,7 +272,10 @@ async function loadPdfJs() {
 // ============================================================================
 
 const PdfAnnotationEditor = forwardRef<PdfAnnotationEditorHandle, PdfAnnotationEditorProps>(
-  function PdfAnnotationEditor({ value, onChange, disabled, noteId, onTextExtracted }, ref) {
+  function PdfAnnotationEditor(
+  { value, onChange, disabled, noteId, onTextExtracted },
+  ref
+) {
     const toast = useToast()
 
     // ── Input device detection ──────────────────────────────────────────────
@@ -456,8 +467,17 @@ const PdfAnnotationEditor = forwardRef<PdfAnnotationEditorHandle, PdfAnnotationE
     const [pageAnim, setPageAnim] = useState<'exit-up' | 'exit-down' | 'enter-from-bottom' | 'enter-from-top' | null>(null)
     const pageAnimLockRef = useRef(false)
 
-    // Toolbar tab
-    const [toolbarTab, setToolbarTab] = useState<'annotate' | 'view' | 'pages'>('annotate')
+    // Right side panel (Pages / Annotations) — `showThumbnails` owns visibility so the
+    // existing thumbnail renderer keeps working unchanged.
+    const [panelTab, setPanelTab] = useState<'pages' | 'annotations'>('pages')
+    // Inline popover in the top bar ('color' | 'size'), click-away closes it
+    const [openPopover, setOpenPopover] = useState<'color' | 'size' | 'zoom' | null>(null)
+    // Page-number jump field
+    const [pageInput, setPageInput] = useState('')
+    // Fill opacity applied to newly created filled shapes
+    const [fillOpacity, setFillOpacity] = useState(0.2)
+    // Bottom-sheet style controls for the touch dock
+    const [mobileStyleOpen, setMobileStyleOpen] = useState(false)
 
     // File picker (select existing uploaded file)
     const [showFilePicker, setShowFilePicker] = useState(false)
@@ -1007,7 +1027,7 @@ const PdfAnnotationEditor = forwardRef<PdfAnnotationEditorHandle, PdfAnnotationE
             renderStrokeToCtx(thumbCtx, stroke, thumbScale)
           }
           for (const shape of pageAnnot.shapes) {
-            drawShape(thumbCtx, shape, thumbScale, false)
+            drawShape(thumbCtx, shape, thumbScale)
           }
           for (const ta of pageAnnot.textAnnotations) {
             thumbCtx.save()
@@ -1037,7 +1057,14 @@ const PdfAnnotationEditor = forwardRef<PdfAnnotationEditorHandle, PdfAnnotationE
     // Load PDF from storage
     // ────────────────────────────────────────────────────────
     useEffect(() => {
-      if (!value?.pdfStoragePath) return
+      if (!value?.pdfStoragePath) {
+        // No document (e.g. a brand-new note): a previously started load must not
+        // leave the empty state stuck showing "Loading…".
+        setPdfLoading(false)
+        setPdfError(null)
+        setPdfDoc(null)
+        return
+      }
       let cancelled = false
 
       async function loadPdf() {
@@ -1214,6 +1241,7 @@ const PdfAnnotationEditor = forwardRef<PdfAnnotationEditorHandle, PdfAnnotationE
 
       const pageAnnot = getPageAnnotations(currentPage)
       const scale = zoom
+      const selectionColor = accentColor()
 
       // Draw strokes
       for (const stroke of pageAnnot.strokes) {
@@ -1226,9 +1254,9 @@ const PdfAnnotationEditor = forwardRef<PdfAnnotationEditorHandle, PdfAnnotationE
           const maxX = Math.max(...xs) + stroke.size * scale / 2
           const maxY = Math.max(...ys) + stroke.size * scale / 2
           ctx.save()
-          ctx.strokeStyle = '#3b82f6'
+          ctx.strokeStyle = selectionColor
           ctx.lineWidth = 1.5
-          ctx.setLineDash([4, 4])
+          ctx.setLineDash([5, 4])
           ctx.strokeRect(minX - 4, minY - 4, maxX - minX + 8, maxY - minY + 8)
           ctx.restore()
         }
@@ -1248,35 +1276,48 @@ const PdfAnnotationEditor = forwardRef<PdfAnnotationEditorHandle, PdfAnnotationE
 
       // Draw shapes
       for (const shape of pageAnnot.shapes) {
-        drawShape(ctx, shape, scale, shape.id === selectedId)
-        if (shape.id === selectedId && shape.type !== 'arrow') {
-          // Draw resize handles at the 4 corners
-          const handles = [
-            { x: shape.x1 * scale, y: shape.y1 * scale },
-            { x: shape.x2 * scale, y: shape.y1 * scale },
-            { x: shape.x1 * scale, y: shape.y2 * scale },
-            { x: shape.x2 * scale, y: shape.y2 * scale },
-          ]
+        drawShape(ctx, shape, scale)
+        if (shape.id === selectedId) {
+          // Accent dashed selection box around the shape bounds
+          const minX = Math.min(shape.x1, shape.x2) * scale
+          const minY = Math.min(shape.y1, shape.y2) * scale
+          const maxX = Math.max(shape.x1, shape.x2) * scale
+          const maxY = Math.max(shape.y1, shape.y2) * scale
           ctx.save()
-          ctx.fillStyle = '#3b82f6'
-          ctx.strokeStyle = '#ffffff'
+          ctx.strokeStyle = selectionColor
           ctx.lineWidth = 1.5
-          ctx.setLineDash([])
-          // Fat-finger friendly grab handles on touch devices
-          const hs = touchUI ? 9 : 5
-          for (const h of handles) {
-            ctx.beginPath()
-            ctx.rect(h.x - hs, h.y - hs, hs * 2, hs * 2)
-            ctx.fill()
-            ctx.stroke()
-          }
+          ctx.setLineDash([5, 4])
+          ctx.strokeRect(minX - 4, minY - 4, maxX - minX + 8, maxY - minY + 8)
           ctx.restore()
+          if (shape.type !== 'arrow') {
+            // Round grab handles at the 4 corners
+            const handles = [
+              { x: shape.x1 * scale, y: shape.y1 * scale },
+              { x: shape.x2 * scale, y: shape.y1 * scale },
+              { x: shape.x1 * scale, y: shape.y2 * scale },
+              { x: shape.x2 * scale, y: shape.y2 * scale },
+            ]
+            ctx.save()
+            ctx.fillStyle = selectionColor
+            ctx.strokeStyle = '#ffffff'
+            ctx.lineWidth = 1.5
+            ctx.setLineDash([])
+            // Fat-finger friendly grab handles on touch devices
+            const hs = touchUI ? 7 : 4.5
+            for (const h of handles) {
+              ctx.beginPath()
+              ctx.arc(h.x, h.y, hs, 0, Math.PI * 2)
+              ctx.fill()
+              ctx.stroke()
+            }
+            ctx.restore()
+          }
         }
       }
 
       // Draw shape preview
       if (shapePreview) {
-        drawShape(ctx, shapePreview, scale, false)
+        drawShape(ctx, shapePreview, scale)
       }
 
       // Draw text annotations (the one being edited is shown by the textarea overlay instead)
@@ -1291,9 +1332,9 @@ const PdfAnnotationEditor = forwardRef<PdfAnnotationEditorHandle, PdfAnnotationE
           ctx.fillText(line, textLineDrawX(ctx, ta, line, scale), (ta.y + ta.fontSize + i * ta.fontSize * TEXT_LINE_HEIGHT) * scale)
         })
         if (ta.id === selectedId) {
-          ctx.strokeStyle = '#3b82f6'
-          ctx.lineWidth = 1
-          ctx.setLineDash([4, 4])
+          ctx.strokeStyle = selectionColor
+          ctx.lineWidth = 1.5
+          ctx.setLineDash([5, 4])
           ctx.strokeRect(
             ta.x * scale - 2,
             ta.y * scale - 2,
@@ -1324,15 +1365,11 @@ const PdfAnnotationEditor = forwardRef<PdfAnnotationEditorHandle, PdfAnnotationE
     function drawShape(
       ctx: CanvasRenderingContext2D,
       shape: ShapeAnnotation,
-      scale: number,
-      selected: boolean
+      scale: number
     ) {
       ctx.save()
       ctx.strokeStyle = shape.color
       ctx.lineWidth = shape.strokeWidth * scale
-      if (selected) {
-        ctx.setLineDash([6, 3])
-      }
 
       const x1 = shape.x1 * scale
       const y1 = shape.y1 * scale
@@ -1853,7 +1890,7 @@ const PdfAnnotationEditor = forwardRef<PdfAnnotationEditorHandle, PdfAnnotationE
               y2: pos.y,
               color,
               strokeWidth: strokeSize,
-              ...(tool !== 'arrow' && tool !== 'line' && shapeFilled ? { filled: true, fillOpacity: 0.2 } : {}),
+              ...(tool !== 'arrow' && tool !== 'line' && shapeFilled ? { filled: true, fillOpacity } : {}),
               ...(tool === 'arrow' && doubleEndedArrow ? { doubleEnded: true } : {}),
             }
             const newPages = updatePageAnnotations(currentPage, p => ({
@@ -1881,7 +1918,7 @@ const PdfAnnotationEditor = forwardRef<PdfAnnotationEditorHandle, PdfAnnotationE
         try { e.currentTarget.releasePointerCapture(e.pointerId) } catch { /* already released */ }
       },
       // eslint-disable-next-line react-hooks/exhaustive-deps
-      [isDrawing, tool, currentStrokePoints, color, strokeSize, currentPage, shapeStart, selectedId, pages, zoom, shapeFilled, doubleEndedArrow, touchUI]
+      [isDrawing, tool, currentStrokePoints, color, strokeSize, currentPage, shapeStart, selectedId, pages, zoom, shapeFilled, fillOpacity, doubleEndedArrow, touchUI]
     )
 
     /**
@@ -2081,6 +2118,66 @@ const PdfAnnotationEditor = forwardRef<PdfAnnotationEditorHandle, PdfAnnotationE
       setZoom(newZoom)
       emitChange(pages, currentPage, newZoom)
     }, [naturalWidth, naturalHeight, pages, currentPage, emitChange, clampZoom])
+
+    // ────────────────────────────────────────────────────────
+    // Fit the page to the viewport once a document has rendered
+    // ────────────────────────────────────────────────────────
+    const fittedDocRef = useRef<PDFDocumentProxy | null>(null)
+    useEffect(() => {
+      if (!pdfDoc || !naturalWidth || !naturalHeight || pdfError) return
+      if (fittedDocRef.current === pdfDoc) return
+      fittedDocRef.current = pdfDoc
+      // Wait one frame so the scroll viewport has its final size before measuring
+      const raf = requestAnimationFrame(() => {
+        // Narrow/touch viewports prioritise width; wide screens show the whole page
+        if (isCompact) handleFitWidth()
+        else handleFitPage()
+      })
+      return () => cancelAnimationFrame(raf)
+    }, [pdfDoc, naturalWidth, naturalHeight, pdfError, touchUI, isCompact, handleFitPage, handleFitWidth])
+
+    // Keep the page-number jump field in sync with navigation
+    useEffect(() => {
+      setPageInput(totalPages > 0 ? String(currentPage + 1) : '')
+    }, [currentPage, totalPages])
+
+    /** Reset zoom to 100% (the `100%` button in the zoom cluster). */
+    const handleZoomReset = useCallback(() => {
+      setZoom(1)
+      emitChange(pages, currentPage, 1)
+    }, [pages, currentPage, emitChange])
+
+    /** Apply a fixed zoom preset from the zoom popover. */
+    const applyZoomPreset = (value: number) => {
+      const next = clampZoom(value)
+      setZoom(next)
+      emitChange(pages, currentPage, next)
+    }
+
+    /** Commit the page-number field (Enter / blur). */
+    const commitPageInput = useCallback(() => {
+      const parsed = parseInt(pageInput, 10)
+      if (!Number.isFinite(parsed)) {
+        setPageInput(totalPages > 0 ? String(currentPage + 1) : '')
+        return
+      }
+      const clamped = Math.min(Math.max(parsed, 1), Math.max(totalPages, 1)) - 1
+      setPageInput(String(clamped + 1))
+      if (clamped !== currentPage) goToPage(clamped)
+    }, [pageInput, totalPages, currentPage, goToPage])
+
+    // Close the colour/size popover when clicking anywhere outside it
+    useEffect(() => {
+      if (!openPopover) return
+      const close = () => setOpenPopover(null)
+      const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') setOpenPopover(null) }
+      window.addEventListener('pointerdown', close)
+      window.addEventListener('keydown', onKey)
+      return () => {
+        window.removeEventListener('pointerdown', close)
+        window.removeEventListener('keydown', onKey)
+      }
+    }, [openPopover])
 
     // Ctrl/Cmd + scroll wheel zoom — plain scroll at 100% navigates pages
     // Uses refs to avoid stale closures
@@ -2353,7 +2450,12 @@ const PdfAnnotationEditor = forwardRef<PdfAnnotationEditorHandle, PdfAnnotationE
      *  is the index into searchGlobalResultsRef.current to mark as active. */
     const applyPageHighlights = useCallback((activeGlobalIdx: number) => {
       const divs = textLayerInstanceRef.current?.textDivs ?? []
-      for (const d of divs) d.classList.remove('pdfannot-match', 'pdfannot-match-active')
+      for (const d of divs) {
+        d.classList.remove('pdfannot-match', 'pdfannot-match-active')
+        d.style.backgroundColor = ''
+        d.style.boxShadow = ''
+        d.style.borderRadius = ''
+      }
       if (divs.length === 0) return
 
       const results = searchGlobalResultsRef.current
@@ -2361,10 +2463,18 @@ const PdfAnnotationEditor = forwardRef<PdfAnnotationEditorHandle, PdfAnnotationE
       for (let i = 0; i < results.length; i++) {
         const r = results[i]
         if (r.pageNumber !== pg) continue
-        const cls = i === activeGlobalIdx ? 'pdfannot-match-active' : 'pdfannot-match'
+        const isActive = i === activeGlobalIdx
+        const cls = isActive ? 'pdfannot-match-active' : 'pdfannot-match'
         const from = Math.max(0, r.itemStart)
         const to = Math.min(divs.length - 1, r.itemEnd)
-        for (let k = from; k <= to; k++) divs[k].classList.add(cls)
+        for (let k = from; k <= to; k++) {
+          const el = divs[k]
+          el.classList.add(cls)
+          // Current match: accent wash + accent underline. Other matches: soft amber.
+          el.style.backgroundColor = isActive ? 'var(--accent-light)' : 'var(--warning-light)'
+          el.style.boxShadow = isActive ? 'inset 0 0 0 1px var(--accent), inset 0 -1.5px 0 0 var(--accent)' : 'none'
+          el.style.borderRadius = '2px'
+        }
       }
 
       // Scroll the active match into view if it's on this page
@@ -2378,7 +2488,12 @@ const PdfAnnotationEditor = forwardRef<PdfAnnotationEditorHandle, PdfAnnotationE
     useEffect(() => {
       // Clear DOM highlights whenever the query changes
       const divs = textLayerInstanceRef.current?.textDivs ?? []
-      for (const d of divs) d.classList.remove('pdfannot-match', 'pdfannot-match-active')
+      for (const d of divs) {
+        d.classList.remove('pdfannot-match', 'pdfannot-match-active')
+        d.style.backgroundColor = ''
+        d.style.boxShadow = ''
+        d.style.borderRadius = ''
+      }
 
       const q = searchQuery.trim()
       if (!q || searchIndex.length === 0) {
@@ -2717,7 +2832,7 @@ const PdfAnnotationEditor = forwardRef<PdfAnnotationEditorHandle, PdfAnnotationE
           }
           // Render shapes
           for (const shape of pageAnnot.shapes) {
-            drawShape(tempCtx, shape, exportScale, false)
+            drawShape(tempCtx, shape, exportScale)
           }
           // Render text annotations
           for (const ta of pageAnnot.textAnnotations) {
@@ -2828,22 +2943,22 @@ const PdfAnnotationEditor = forwardRef<PdfAnnotationEditorHandle, PdfAnnotationE
 
     /** Icon-only toggle (tools, undo/redo, zoom…). 44px targets on touch. */
     const iconButtonClass = (active: boolean) =>
-      `flex shrink-0 items-center justify-center transition-colors touch-manipulation ${
-        touchUI ? 'h-11 w-11 rounded-xl' : 'rounded p-1.5'
+      `flex shrink-0 items-center justify-center rounded-lg transition-colors touch-manipulation focus-ring ${
+        touchUI ? 'h-10 w-10' : 'h-8 w-8'
       } ${
         active
-          ? 'bg-rose-100 text-rose-600 dark:bg-rose-900/40 dark:text-rose-400'
-          : 'text-muted-foreground hover:bg-surface-hover'
+          ? 'bg-[var(--accent-light)] text-accent shadow-[inset_0_0_0_1px_var(--accent-light)]'
+          : 'text-muted hover:bg-surface-hover hover:text-foreground'
       }`
 
     /** Labelled toggle (Export, Find, Fill…). */
     const chipButtonClass = (active: boolean) =>
-      `flex shrink-0 items-center gap-1.5 transition-colors touch-manipulation ${
-        touchUI ? 'h-11 rounded-xl px-3 text-sm' : 'rounded px-2 py-1 text-xs'
+      `flex shrink-0 items-center gap-1.5 rounded-lg transition-colors touch-manipulation focus-ring ${
+        touchUI ? 'h-10 px-3 text-sm' : 'h-8 px-2.5 text-xs'
       } ${
         active
-          ? 'bg-rose-100 text-rose-600 dark:bg-rose-900/40 dark:text-rose-400'
-          : 'text-muted-foreground hover:bg-surface-hover'
+          ? 'bg-[var(--accent-light)] text-accent shadow-[inset_0_0_0_1px_var(--accent-light)]'
+          : 'text-muted hover:bg-surface-hover hover:text-foreground'
       }`
 
     /** Divider between control groups. */
@@ -2859,37 +2974,6 @@ const PdfAnnotationEditor = forwardRef<PdfAnnotationEditorHandle, PdfAnnotationE
       // Leaving the text-selection tool restores drawing input on the canvas
       if (next !== 'textselect' && showTextLayer) setSelectedId(null)
     }
-
-    /** Stroke/text colour swatches. */
-    const colorSwatches = (
-      <>
-        {COLORS.map(c => (
-          <button
-            key={c}
-            title={c}
-            onClick={() => setColor(c)}
-            aria-label={`Colour ${c}`}
-            className={`shrink-0 rounded-full border transition-transform touch-manipulation ${
-              touchUI ? 'h-8 w-8' : 'h-5 w-5'
-            } ${color === c ? 'scale-110 border-foreground' : 'border-border'}`}
-            style={{ backgroundColor: c }}
-          />
-        ))}
-      </>
-    )
-
-    /** Pen/shape size slider. */
-    const strokeSizeControl = (
-      <label className="flex shrink-0 items-center gap-1.5 text-xs text-muted-foreground">
-        <span className={touchUI ? 'text-sm' : ''}>Size</span>
-        <input
-          type="range" min={1} max={20} value={strokeSize}
-          onChange={e => setStrokeSize(Number(e.target.value))}
-          className={touchUI ? 'h-8 w-32' : 'w-16'}
-        />
-        <span className={`text-center ${touchUI ? 'w-6 text-sm' : 'w-4'}`}>{strokeSize}</span>
-      </label>
-    )
 
     /** Contextual toggles that only make sense for the active tool. */
     const toolOptions = (
@@ -2943,12 +3027,12 @@ const PdfAnnotationEditor = forwardRef<PdfAnnotationEditorHandle, PdfAnnotationE
      * before the click was ever registered.
      */
     const formatButtonClass = (active: boolean) =>
-      `flex shrink-0 items-center justify-center rounded transition-colors touch-manipulation ${
-        touchUI ? 'h-11 w-11 rounded-xl' : 'p-1'
+      `flex shrink-0 items-center justify-center rounded-lg transition-colors touch-manipulation focus-ring ${
+        touchUI ? 'h-10 w-10' : 'h-7 w-7'
       } ${
         active
-          ? 'bg-rose-100 text-rose-600 dark:bg-rose-900/40 dark:text-rose-400'
-          : 'text-muted-foreground hover:bg-surface-hover'
+          ? 'bg-[var(--accent-light)] text-accent'
+          : 'text-muted hover:bg-surface-hover hover:text-foreground'
       }`
 
     /** `onPointerDown` handler that keeps focus (and the edit session) in place. */
@@ -3009,7 +3093,7 @@ const PdfAnnotationEditor = forwardRef<PdfAnnotationEditorHandle, PdfAnnotationE
           aria-label="Decrease font size"
           className={`${formatButtonClass(false)} ${touchUI ? 'text-xl' : 'px-1.5 text-sm'}`}
         >−</button>
-        <span className={`shrink-0 text-center text-muted-foreground ${touchUI ? 'min-w-[3rem] text-sm' : 'min-w-[2.5rem] text-[11px]'}`}>
+        <span className={`shrink-0 text-center text-muted ${touchUI ? 'min-w-[3rem] text-sm' : 'min-w-[2.5rem] text-[11px]'}`}>
           {editingText.fontSize}px
         </span>
         <button
@@ -3027,9 +3111,9 @@ const PdfAnnotationEditor = forwardRef<PdfAnnotationEditorHandle, PdfAnnotationE
             title={`Text colour: ${c}`}
             aria-label={`Text colour ${c}`}
             onPointerDown={tap(() => updateEditingText({ color: c }))}
-            className={`shrink-0 rounded-full border transition-transform touch-manipulation ${
+            className={`shrink-0 rounded-full border-2 transition-transform touch-manipulation ${
               touchUI ? 'h-8 w-8' : 'h-4 w-4'
-            } ${editingText.color === c ? 'scale-110 border-foreground' : 'border-border'}`}
+            } ${editingText.color === c ? 'scale-110 border-foreground' : 'border-transparent'}`}
             style={{ backgroundColor: c }}
           />
         ))}
@@ -3053,7 +3137,7 @@ const PdfAnnotationEditor = forwardRef<PdfAnnotationEditorHandle, PdfAnnotationE
           onPointerDown={tap(() => deleteTextAnnotation(editingText.id))}
           title="Delete text box"
           aria-label="Delete text box"
-          className={`${formatButtonClass(false)} shrink-0 text-red-500 hover:bg-red-50 dark:hover:bg-red-950/30`}
+          className={`${formatButtonClass(false)} shrink-0 text-danger hover:bg-[var(--danger-light)]`}
         >
           <Trash2 size={touchUI ? 18 : 13} />
         </button>
@@ -3063,8 +3147,8 @@ const PdfAnnotationEditor = forwardRef<PdfAnnotationEditorHandle, PdfAnnotationE
           onPointerDown={tap(() => commitText())}
           title="Done (Esc)"
           aria-label="Done editing text"
-          className={`flex shrink-0 items-center gap-1 rounded-xl bg-rose-500 font-medium text-white transition-colors hover:bg-rose-600 touch-manipulation ${
-            touchUI ? 'h-11 px-4 text-sm' : 'px-2 py-1 text-xs'
+          className={`flex shrink-0 items-center gap-1 rounded-full bg-[var(--accent)] font-medium text-[var(--accent-foreground)] shadow-glow-sm transition-all hover:brightness-110 touch-manipulation ${
+            touchUI ? 'h-10 px-4 text-sm' : 'h-7 px-2.5 text-xs'
           }`}
         >
           <Check size={touchUI ? 18 : 13} />
@@ -3128,7 +3212,7 @@ const PdfAnnotationEditor = forwardRef<PdfAnnotationEditorHandle, PdfAnnotationE
           aria-label="Decrease font size"
           className={`${formatButtonClass(false)} ${touchUI ? 'text-xl' : 'px-1.5 text-sm'}`}
         >−</button>
-        <span className={`shrink-0 text-center text-muted-foreground ${touchUI ? 'min-w-[3rem] text-sm' : 'min-w-[2.5rem] text-[11px]'}`}>
+        <span className={`shrink-0 text-center text-muted ${touchUI ? 'min-w-[3rem] text-sm' : 'min-w-[2.5rem] text-[11px]'}`}>
           {ta.fontSize}px
         </span>
         <button
@@ -3146,9 +3230,9 @@ const PdfAnnotationEditor = forwardRef<PdfAnnotationEditorHandle, PdfAnnotationE
             title={`Text colour: ${c}`}
             aria-label={`Text colour ${c}`}
             onPointerDown={tap(() => changeTextColor(ta.id, c))}
-            className={`shrink-0 rounded-full border transition-transform touch-manipulation ${
+            className={`shrink-0 rounded-full border-2 transition-transform touch-manipulation ${
               touchUI ? 'h-8 w-8' : 'h-4 w-4'
-            } ${ta.color === c ? 'scale-110 border-foreground' : 'border-border'}`}
+            } ${ta.color === c ? 'scale-110 border-foreground' : 'border-transparent'}`}
             style={{ backgroundColor: c }}
           />
         ))}
@@ -3222,7 +3306,7 @@ const PdfAnnotationEditor = forwardRef<PdfAnnotationEditorHandle, PdfAnnotationE
           })}
           title="Delete shape"
           aria-label="Delete shape"
-          className={formatButtonClass(false) + ' text-red-500 hover:bg-red-50 dark:hover:bg-red-950/30'}>
+          className={formatButtonClass(false) + ' text-danger hover:bg-[var(--danger-light)]'}>
           <Trash2 size={touchUI ? 18 : 13} />
         </button>
       </>
@@ -3234,8 +3318,8 @@ const PdfAnnotationEditor = forwardRef<PdfAnnotationEditorHandle, PdfAnnotationE
      * text editing → selection formatting → drawing tools.
      */
     const touchDockContent = (() => {
-      const row = (children: React.ReactNode, extraClass = '') => (
-        <div className={`toolbar-scroll scrollbar-hide flex items-center gap-1 px-2 ${extraClass}`}>
+      const row = (children: React.ReactNode) => (
+        <div className="toolbar-scroll scrollbar-hide flex h-full items-center gap-1.5 px-2.5">
           {children}
         </div>
       )
@@ -3250,27 +3334,373 @@ const PdfAnnotationEditor = forwardRef<PdfAnnotationEditorHandle, PdfAnnotationE
         if (shape) return row(selectedShapeControls(shape))
       }
 
-      if (toolbarTab !== 'annotate') return null
-
       return (
-        <>
-          {row(
-            <>
+        <div className="flex h-full items-center">
+          {/* Tool row scrolls under a fade; the Style chip stays pinned at the end */}
+          <div className="relative min-w-0 flex-1">
+            <div className="toolbar-scroll scrollbar-hide flex h-full items-center gap-1.5 pl-2 pr-6">
               {drawingToolButtons}
-              {(tool === 'rectangle' || tool === 'circle' || tool === 'arrow') && divider}
-              {toolOptions}
-            </>
+            </div>
+            <div
+              className="pointer-events-none absolute inset-y-0 right-0 w-7 bg-gradient-to-l from-[var(--glass-bg-strong)] to-transparent"
+              aria-hidden
+            />
+          </div>
+          {(tool === 'rectangle' || tool === 'circle' || tool === 'arrow') && (
+            <div className="flex shrink-0 items-center gap-1">{toolOptions}</div>
           )}
-          {row(
-            <>
-              {colorSwatches}
-              {divider}
-              {strokeSizeControl}
-            </>,
-            'mt-1.5',
-          )}
-        </>
+          <div className="mx-1 h-6 w-px shrink-0 bg-border" aria-hidden />
+          <button
+            type="button"
+            onClick={() => setMobileStyleOpen(v => !v)}
+            aria-expanded={mobileStyleOpen}
+            aria-haspopup="dialog"
+            title="Colour and size"
+            className={chipButtonClass(mobileStyleOpen) + ' mr-2 shrink-0 gap-1.5 px-2.5'}
+          >
+            <span className="h-4 w-4 rounded-full border border-black/10 shadow-sm" style={{ backgroundColor: color }} />
+            <span className="tabular-nums">{strokeSize}</span>
+            <span>Style</span>
+            <ChevronUp size={13} className={mobileStyleOpen ? 'rotate-180 transition-transform' : 'transition-transform'} />
+          </button>
+        </div>
       )
+    })()
+
+    // ────────────────────────────────────────────────────────
+    // Chrome: grouped tool palette, style popovers, side panel, property bar
+    // ────────────────────────────────────────────────────────
+    /** Compact top-bar controls (the touch dock keeps the 44px variants). */
+    const barIconButtonClass = (active: boolean) =>
+      [
+        'flex h-8 w-8 shrink-0 items-center justify-center rounded-lg transition-colors focus-ring max-sm:h-7 max-sm:w-7',
+        active
+          ? 'bg-[var(--accent-light)] text-accent'
+          : 'text-muted hover:bg-surface-hover hover:text-foreground',
+      ].join(' ')
+
+    const barChipClass = (active: boolean) =>
+      [
+        'flex h-8 shrink-0 items-center gap-1.5 rounded-lg px-2.5 text-xs font-medium transition-colors focus-ring',
+        active
+          ? 'bg-[var(--accent-light)] text-accent'
+          : 'text-muted hover:bg-surface-hover hover:text-foreground',
+      ].join(' ')
+
+    const metaLabel = 'text-[11px] font-medium uppercase tracking-[0.08em] text-muted'
+    const barDivider = <div className="mx-1 h-5 w-px shrink-0 bg-border" aria-hidden />
+
+    /** Tool palette groups: navigate · ink · mark-up · PDF text. */
+    const toolGroupIds: PdfTool[][] = [
+      ['select', 'pan'],
+      ['pen', 'highlighter', 'eraser'],
+      ['text', 'rectangle', 'circle', 'arrow', 'line', 'sticky'],
+      ['textselect'],
+    ]
+
+    const renderBarToolButton = (t: { id: PdfTool; icon: typeof Pen; label: string }) => {
+      const Icon = t.icon
+      return (
+        <button
+          key={t.id}
+          type="button"
+          title={t.label}
+          aria-label={t.label}
+          aria-pressed={tool === t.id}
+          onClick={() => handleToolSelect(t.id)}
+          className={barIconButtonClass(tool === t.id)}
+        >
+          <Icon size={16} />
+        </button>
+      )
+    }
+
+    const groupedToolButtons = toolGroupIds.map((group, gi) => (
+      <React.Fragment key={gi}>
+        {gi > 0 && <div className="mx-0.5 h-5 w-px shrink-0 bg-border" aria-hidden />}
+        <div className="flex items-center gap-0.5">
+          {group.map(id => renderBarToolButton(tools.find(t => t.id === id)!))}
+        </div>
+      </React.Fragment>
+    ))
+
+    const toolLabel = (tools.find(t => t.id === tool)?.label ?? tool).replace(/\s*\(.*\)$/, '')
+
+    type SelectedAnnotation =
+      | { kind: 'text'; text: TextAnnotation }
+      | { kind: 'shape'; shape: ShapeAnnotation }
+      | { kind: 'sticky'; sticky: StickyNoteAnnotation }
+      | { kind: 'stroke'; stroke: PdfStroke }
+
+    const selectedAnnotation: SelectedAnnotation | null = (() => {
+      if (!selectedId) return null
+      const pageAnnot = getPageAnnotations(currentPage)
+      const text = pageAnnot.textAnnotations.find(t => t.id === selectedId)
+      if (text) return { kind: 'text', text }
+      const shape = pageAnnot.shapes.find(s => s.id === selectedId)
+      if (shape) return { kind: 'shape', shape }
+      const sticky = (pageAnnot.stickyNotes ?? []).find(sn => sn.id === selectedId)
+      if (sticky) return { kind: 'sticky', sticky }
+      const stroke = pageAnnot.strokes.find(s => s.id === selectedId)
+      if (stroke) return { kind: 'stroke', stroke }
+      return null
+    })()
+
+    type AnnotationListKind = 'stroke' | 'text' | 'shape' | 'sticky'
+    type AnnotationListItem = {
+      id: string
+      kind: AnnotationListKind
+      label: string
+      meta: string
+      icon: typeof Pen
+    }
+
+    /** Every annotation across all pages, grouped by page, for the side panel. */
+    const annotationGroups = pages
+      .map(pg => {
+        const items: AnnotationListItem[] = [
+          ...pg.strokes.map(stroke => ({
+            id: stroke.id,
+            kind: 'stroke' as const,
+            label: (stroke.tool === 'pen' ? 'Pen' : 'Highlighter') + ' stroke',
+            meta: Math.round(stroke.size) + ' px',
+            icon: stroke.tool === 'pen' ? Pen : Highlighter,
+          })),
+          ...pg.textAnnotations.map(ta => ({
+            id: ta.id,
+            kind: 'text' as const,
+            label: (ta.text || 'Empty text box').replace(/\s+/g, ' ').trim().slice(0, 80) || 'Empty text box',
+            meta: ta.fontSize + 'px',
+            icon: Type,
+          })),
+          ...pg.shapes.map(shape => ({
+            id: shape.id,
+            kind: 'shape' as const,
+            label: shape.type.charAt(0).toUpperCase() + shape.type.slice(1),
+            meta:
+              shape.strokeWidth.toFixed(1) +
+              'px' +
+              (shape.filled ? ' · ' + Math.round((shape.fillOpacity ?? 0.2) * 100) + '% fill' : ''),
+            icon:
+              shape.type === 'circle'
+                ? Circle
+                : shape.type === 'arrow'
+                ? ArrowUpRight
+                : shape.type === 'line'
+                ? Minus
+                : Square,
+          })),
+          ...(pg.stickyNotes ?? []).map(note => ({
+            id: note.id,
+            kind: 'sticky' as const,
+            label: (note.text || 'Sticky note').replace(/\s+/g, ' ').trim().slice(0, 80) || 'Sticky note',
+            meta: note.color,
+            icon: StickyNoteIcon,
+          })),
+        ]
+        return { page: pg, items }
+      })
+      .filter(group => group.items.length > 0)
+
+    const annotationCount = annotationGroups.reduce((total, group) => total + group.items.length, 0)
+
+    /** Jump to an annotation from the panel and select it. */
+    const jumpToAnnotation = (pageNumber: number, item: AnnotationListItem) => {
+      if (pageNumber !== currentPage) goToPage(pageNumber)
+      if (item.kind !== 'stroke') setTool('select')
+      setSelectedId(item.id)
+    }
+
+    /** Delete one annotation from any page (used by the panel and the status bar). */
+    const deleteAnnotationOnPage = (pageNumber: number, kind: AnnotationListKind, id: string) => {
+      const newPages = updatePageAnnotations(pageNumber, page => {
+        switch (kind) {
+          case 'text':
+            return { ...page, textAnnotations: page.textAnnotations.filter(t => t.id !== id) }
+          case 'shape':
+            return { ...page, shapes: page.shapes.filter(s => s.id !== id) }
+          case 'sticky':
+            return { ...page, stickyNotes: (page.stickyNotes ?? []).filter(sn => sn.id !== id) }
+          default:
+            return { ...page, strokes: page.strokes.filter(s => s.id !== id) }
+        }
+      })
+      setPages(newPages)
+      pushHistory(newPages)
+      emitChange(newPages)
+      if (selectedId === id) setSelectedId(null)
+    }
+
+    /** Live shape updates from the property bar (commit pushes one history entry). */
+    const updateShapeAnnotation = (id: string, updates: Partial<ShapeAnnotation>, commit = false) => {
+      const newPages = updatePageAnnotations(currentPage, page => ({
+        ...page,
+        shapes: page.shapes.map(s => (s.id === id ? { ...s, ...updates } : s)),
+      }))
+      setPages(newPages)
+      if (commit) pushHistory(newPages)
+      emitChange(newPages)
+    }
+
+    /** Live stroke updates (colour / width) from the property bar. */
+    const updateStrokeAnnotation = (id: string, updates: Partial<PdfStroke>, commit = false) => {
+      const newPages = updatePageAnnotations(currentPage, page => ({
+        ...page,
+        strokes: page.strokes.map(s => (s.id === id ? { ...s, ...updates } : s)),
+      }))
+      setPages(newPages)
+      if (commit) pushHistory(newPages)
+      emitChange(newPages)
+    }
+
+    const toolHints: Partial<Record<PdfTool, string>> = {
+      select: 'Select an annotation to edit it · drag to move · Delete to remove',
+      pan: 'Drag to pan the page · two fingers to pan & pinch',
+      text: 'Click the page to place a text box',
+      sticky: 'Click the page to drop a sticky note',
+      textselect: 'Drag across PDF text to select and copy it',
+    }
+
+    /** Second toolbar row: only the contextual extras the popovers don't cover. */
+    const propertyBar = (() => {
+      const selection = selectedAnnotation
+
+      if (editingText) {
+        return (
+          <div className="flex flex-wrap items-center gap-2 border-t border-border bg-[var(--surface-sunken)] px-3 py-1.5">
+            <span className={metaLabel + ' shrink-0'}>Text box</span>
+            <span className="text-xs text-muted">Editing — Esc to finish</span>
+            <span className="flex-1" />
+            <button
+              type="button"
+              onPointerDown={tap(() => commitText())}
+              className="flex h-7 shrink-0 items-center gap-1.5 rounded-full bg-[var(--accent)] px-3 text-xs font-medium text-[var(--accent-foreground)] transition-all hover:brightness-110"
+            >
+              <Check size={13} />
+              Done
+            </button>
+          </div>
+        )
+      }
+
+      if (selection?.kind === 'text') {
+        const ta = selection.text
+        return (
+          <div className="toolbar-scroll scrollbar-hide flex items-center gap-1 border-t border-border bg-[var(--surface-sunken)] px-3 py-1.5">
+            <button type="button" title="Edit text" aria-label="Edit text" onPointerDown={tap(() => startEditingText(ta))} className={formatButtonClass(false)}>
+              <Pencil size={14} />
+            </button>
+            {divider}
+            {(['left', 'center', 'right'] as const).map(align => {
+              const Icon = align === 'left' ? AlignLeft : align === 'center' ? AlignCenter : AlignRight
+              return (
+                <button key={align} type="button" title={'Align ' + align} aria-label={'Align ' + align} onPointerDown={tap(() => changeTextAlign(ta.id, align))} className={formatButtonClass((ta.textAlign ?? 'left') === align)}>
+                  <Icon size={14} />
+                </button>
+              )
+            })}
+            {divider}
+            <button type="button" title="Decrease font size" aria-label="Decrease font size" onPointerDown={tap(() => changeTextFontSize(ta.id, -2))} className={formatButtonClass(false) + ' text-base'}>−</button>
+            <span className="w-10 shrink-0 text-center text-xs tabular-nums text-foreground">{ta.fontSize}px</span>
+            <button type="button" title="Increase font size" aria-label="Increase font size" onPointerDown={tap(() => changeTextFontSize(ta.id, 2))} className={formatButtonClass(false) + ' text-base'}>+</button>
+            {divider}
+            <button type="button" title="Delete text box" aria-label="Delete text box" onPointerDown={tap(() => deleteTextAnnotation(ta.id))} className={formatButtonClass(false) + ' text-danger hover:bg-[var(--danger-light)]'}>
+              <Trash2 size={14} />
+            </button>
+          </div>
+        )
+      }
+
+      if (selection?.kind === 'shape') {
+        const shape = selection.shape
+        const supportsFill = shape.type === 'rectangle' || shape.type === 'circle'
+        return (
+          <div className="toolbar-scroll scrollbar-hide flex items-center gap-1 border-t border-border bg-[var(--surface-sunken)] px-3 py-1.5">
+            {supportsFill && (
+              <button type="button" title={shape.filled ? 'Remove fill' : 'Add fill'} onPointerDown={tap(() => updateShapeAnnotation(shape.id, { filled: !shape.filled, fillOpacity: shape.fillOpacity ?? fillOpacity }, true))} className={chipButtonClass(!!shape.filled)}>
+                Fill
+              </button>
+            )}
+            {supportsFill && shape.filled && (
+              <label className="flex shrink-0 items-center gap-1.5 text-xs text-muted">
+                <span>Opacity</span>
+                <input type="range" min={0.05} max={1} step={0.05} value={shape.fillOpacity ?? fillOpacity} onChange={e => updateShapeAnnotation(shape.id, { fillOpacity: Number(e.target.value) })} onPointerUp={() => updateShapeAnnotation(shape.id, {}, true)} className="h-1.5 w-24 accent-[var(--accent)]" aria-label="Fill opacity" />
+                <span className="w-9 text-center tabular-nums text-foreground">{Math.round((shape.fillOpacity ?? fillOpacity) * 100)}%</span>
+              </label>
+            )}
+            {shape.type === 'arrow' && (
+              <button type="button" title={shape.doubleEnded ? 'Single arrow' : 'Double-headed arrow'} onPointerDown={tap(() => updateShapeAnnotation(shape.id, { doubleEnded: !shape.doubleEnded }, true))} className={chipButtonClass(!!shape.doubleEnded) + ' text-base'}>
+                ↔
+              </button>
+            )}
+            {divider}
+            <button type="button" title="Delete shape" aria-label="Delete shape" onPointerDown={tap(() => deleteAnnotationOnPage(currentPage, 'shape', shape.id))} className={formatButtonClass(false) + ' text-danger hover:bg-[var(--danger-light)]'}>
+              <Trash2 size={14} />
+            </button>
+          </div>
+        )
+      }
+
+      if (selection?.kind === 'sticky') {
+        const note = selection.sticky
+        return (
+          <div className="toolbar-scroll scrollbar-hide flex items-center gap-1 border-t border-border bg-[var(--surface-sunken)] px-3 py-1.5">
+            <span className={metaLabel + ' shrink-0'}>Sticky colour</span>
+            {(Object.keys(STICKY_COLORS) as StickyColor[]).map(c => (
+              <button key={c} type="button" title={'Sticky colour: ' + c} aria-label={'Sticky colour ' + c} onPointerDown={tap(() => updateStickyNote(note.id, { color: c }, true))} className={['h-6 w-6 shrink-0 rounded-full border-2 transition-transform hover:scale-110', note.color === c ? 'scale-110 border-foreground' : 'border-transparent'].join(' ')} style={{ backgroundColor: STICKY_COLORS[c] }} />
+            ))}
+            {divider}
+            <button type="button" title="Delete sticky note" aria-label="Delete sticky note" onPointerDown={tap(() => deleteStickyNote(note.id))} className={formatButtonClass(false) + ' text-danger hover:bg-[var(--danger-light)]'}>
+              <Trash2 size={14} />
+            </button>
+          </div>
+        )
+      }
+
+      if (selection?.kind === 'stroke') {
+        return (
+          <div className="flex items-center gap-1 border-t border-border bg-[var(--surface-sunken)] px-3 py-1.5">
+            <span className={metaLabel + ' shrink-0'}>{selection.stroke.tool} stroke</span>
+            <span className="text-xs tabular-nums text-muted">{Math.round(selection.stroke.size)} px</span>
+            <div className="flex-1" />
+            <button type="button" title="Delete stroke" aria-label="Delete stroke" onPointerDown={tap(() => deleteAnnotationOnPage(currentPage, 'stroke', selection.stroke.id))} className={formatButtonClass(false) + ' text-danger hover:bg-[var(--danger-light)]'}>
+              <Trash2 size={14} />
+            </button>
+          </div>
+        )
+      }
+
+      // Active shape tools expose their own extras (Fill / arrow heads)
+      if (tool === 'rectangle' || tool === 'circle') {
+        return (
+          <div className="flex items-center gap-2 border-t border-border bg-[var(--surface-sunken)] px-3 py-1.5">
+            <button type="button" title={shapeFilled ? 'Filled (tap to unfill)' : 'No fill (tap to fill)'} onClick={() => setShapeFilled(v => !v)} className={chipButtonClass(shapeFilled)}>
+              Fill
+            </button>
+            {shapeFilled && (
+              <label className="flex shrink-0 items-center gap-1.5 text-xs text-muted">
+                <span>Opacity</span>
+                <input type="range" min={0.05} max={1} step={0.05} value={fillOpacity} onChange={e => setFillOpacity(Number(e.target.value))} className="h-1.5 w-24 accent-[var(--accent)]" aria-label="Fill opacity" />
+                <span className="w-9 text-center tabular-nums text-foreground">{Math.round(fillOpacity * 100)}%</span>
+              </label>
+            )}
+          </div>
+        )
+      }
+
+      if (tool === 'arrow') {
+        return (
+          <div className="flex items-center gap-2 border-t border-border bg-[var(--surface-sunken)] px-3 py-1.5">
+            <button type="button" title={doubleEndedArrow ? 'Double-headed (tap for single)' : 'Single arrow (tap for double)'} onClick={() => setDoubleEndedArrow(v => !v)} className={chipButtonClass(doubleEndedArrow) + ' text-base'}>
+              ↔ Heads
+            </button>
+          </div>
+        )
+      }
+
+      // Pen / highlighter / eraser / text / select / pan: the popovers and the
+      // status bar carry everything, so the contextual row stays out of the way.
+      return null
     })()
 
     // ────────────────────────────────────────────────────────
@@ -3278,54 +3708,64 @@ const PdfAnnotationEditor = forwardRef<PdfAnnotationEditorHandle, PdfAnnotationE
     // ────────────────────────────────────────────────────────
     if (!value?.pdfStoragePath) {
       return (
-        <div className="flex h-full flex-col items-center justify-center gap-4 p-8">
-          <div className="rounded-xl border-2 border-dashed border-border p-12 text-center">
-            <Upload className="mx-auto mb-4 h-12 w-12 text-muted-foreground" />
-            <h3 className="mb-2 text-lg font-semibold text-foreground">Add a PDF to annotate</h3>
-            <p className="mb-6 text-sm text-muted-foreground">Upload a new file or pick one you&apos;ve already uploaded</p>
-            {pdfError && (
-              <p className="mb-4 text-sm text-red-500">{pdfError}</p>
-            )}
-            <div className="flex flex-col items-center gap-3 sm:flex-row sm:justify-center">
-              <button
-                onClick={() => fileInputRef.current?.click()}
-                disabled={pdfLoading || disabled}
-                className={`flex w-full items-center justify-center gap-2 rounded-xl bg-rose-500 font-medium text-white transition-colors touch-manipulation hover:bg-rose-600 disabled:opacity-50 sm:w-auto ${
-                  touchUI ? 'px-8 py-4 text-base' : 'px-6 py-2.5 text-sm'
-                }`}
-              >
-                {pdfLoading ? (
-                  <>
-                    <Loader2 className="h-4 w-4 animate-spin" />
-                    Loading...
-                  </>
-                ) : (
-                  <>
-                    <Upload size={touchUI ? 18 : 15} />
-                    Upload new PDF
-                  </>
-                )}
-              </button>
-              <span className="text-xs text-muted-foreground">or</span>
-              <button
-                onClick={() => setShowFilePicker(true)}
-                disabled={pdfLoading || disabled}
-                className={`flex w-full items-center justify-center gap-2 rounded-xl border border-border bg-surface font-medium text-foreground transition-colors touch-manipulation hover:bg-surface-hover disabled:opacity-50 sm:w-auto ${
-                  touchUI ? 'px-8 py-4 text-base' : 'px-6 py-2.5 text-sm'
-                }`}
-              >
-                <FolderOpen size={touchUI ? 18 : 15} />
-                Browse uploaded files
-              </button>
+        <div className="flex h-full items-center justify-center overflow-y-auto p-4 sm:p-8">
+          <div className="glass-card animate-rise-in w-full max-w-xl p-3 sm:p-4">
+            <div className="flex flex-col items-center rounded-2xl border border-dashed border-border-strong bg-[var(--glass-bg-subtle)] px-6 py-10 text-center sm:py-12">
+              <div className="mb-5 flex h-14 w-14 items-center justify-center rounded-2xl bg-[var(--accent-light)] text-accent">
+                <Upload className="h-6 w-6" />
+              </div>
+              <h3 className="font-display text-xl font-semibold tracking-[-0.02em] text-foreground">
+                Drop a PDF here to annotate
+              </h3>
+              <p className="mx-auto mt-1.5 max-w-sm text-sm leading-6 text-muted">
+                Upload a new file or pick one you&apos;ve already uploaded, then mark it up with
+                ink, shapes, text and sticky notes.
+              </p>
+
+              {pdfError && (
+                <p className="mt-4 w-full rounded-xl border border-[color:var(--danger)] bg-[var(--danger-light)] px-3 py-2 text-sm text-danger">
+                  {pdfError}
+                </p>
+              )}
+
+              <div className="mt-6 flex w-full flex-col items-stretch gap-2.5 sm:w-auto sm:flex-row sm:items-center sm:justify-center">
+                <button
+                  onClick={() => fileInputRef.current?.click()}
+                  disabled={pdfLoading || disabled}
+                  className="glass-btn-primary h-11 justify-center gap-2 px-6 text-sm disabled:opacity-50"
+                >
+                  {pdfLoading ? (
+                    <>
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                      Loading…
+                    </>
+                  ) : (
+                    <>
+                      <Upload size={16} />
+                      Choose a PDF
+                    </>
+                  )}
+                </button>
+                <button
+                  onClick={() => setShowFilePicker(true)}
+                  disabled={pdfLoading || disabled}
+                  className="glass-btn h-11 justify-center gap-2 px-6 text-sm disabled:opacity-50"
+                >
+                  <FolderOpen size={16} />
+                  Browse uploaded files
+                </button>
+              </div>
+
+              <p className="mt-5 text-xs text-muted">PDF up to 50 MB · your files stay in your workspace</p>
+
+              <input
+                ref={fileInputRef}
+                type="file"
+                accept="application/pdf"
+                className="hidden"
+                onChange={handleFileSelect}
+              />
             </div>
-            <p className="mt-4 text-xs text-muted-foreground">Max upload size: 50 MB</p>
-            <input
-              ref={fileInputRef}
-              type="file"
-              accept="application/pdf"
-              className="hidden"
-              onChange={handleFileSelect}
-            />
           </div>
 
           {/* File picker modal */}
@@ -3344,23 +3784,49 @@ const PdfAnnotationEditor = forwardRef<PdfAnnotationEditorHandle, PdfAnnotationE
     // ────────────────────────────────────────────────────────
     if (pdfLoading) {
       return (
-        <div className="flex h-full items-center justify-center">
-          <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
-          <span className="ml-3 text-muted-foreground">Loading PDF...</span>
+        <div className="flex h-full flex-col gap-4 p-4 sm:p-6" aria-busy="true" aria-live="polite">
+          <div className="glass-card animate-rise-in flex items-center gap-3 p-3">
+            <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-[var(--accent-light)] text-accent">
+              <Loader2 className="h-5 w-5 animate-spin" />
+            </div>
+            <div className="min-w-0 flex-1">
+              <p className="text-sm font-medium text-foreground">Preparing your PDF…</p>
+              <p className="text-xs text-muted">Rendering pages and building the text layer</p>
+              <div
+                className="mt-2 h-1 w-full overflow-hidden rounded-full bg-[var(--surface-sunken)]"
+                role="progressbar"
+                aria-label="Loading PDF"
+                aria-valuetext="Loading"
+              >
+                <div className="h-full w-1/3 animate-pulse-soft rounded-full bg-[var(--accent)]" />
+              </div>
+            </div>
+          </div>
+          <div className="glass-card flex flex-1 items-start justify-center p-4">
+            <div className="skeleton-shimmer h-full max-h-[620px] w-full max-w-[440px] rounded-xl" />
+          </div>
         </div>
       )
     }
 
     if (pdfError) {
       return (
-        <div className="flex h-full flex-col items-center justify-center gap-4">
-          <p className="text-red-500">{pdfError}</p>
-          <button
-            onClick={() => { setPdfError(null); setPdfLoading(false) }}
-            className={`rounded-xl bg-surface-hover font-medium touch-manipulation ${touchUI ? 'px-6 py-3 text-base' : 'px-4 py-2 text-sm'}`}
-          >
-            Retry
-          </button>
+        <div className="flex h-full items-center justify-center p-4 sm:p-8">
+          <div className="glass-card animate-rise-in w-full max-w-md p-6 text-center">
+            <div className="mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-2xl bg-[var(--danger-light)] text-danger">
+              <X className="h-5 w-5" />
+            </div>
+            <h3 className="font-display text-lg font-semibold tracking-[-0.01em] text-foreground">
+              Couldn&apos;t open this PDF
+            </h3>
+            <p className="mt-1.5 text-sm leading-6 text-muted">{pdfError}</p>
+            <button
+              onClick={() => { setPdfError(null); setPdfLoading(false) }}
+              className="glass-btn-primary mx-auto mt-5 h-10 gap-2 px-5 text-sm"
+            >
+              Try again
+            </button>
+          </div>
         </div>
       )
     }
@@ -3369,254 +3835,290 @@ const PdfAnnotationEditor = forwardRef<PdfAnnotationEditorHandle, PdfAnnotationE
     // RENDER: Main editor
     // ────────────────────────────────────────────────────────
     return (
-      <div ref={containerRef} className="flex h-full flex-col" tabIndex={-1}>
-        {/* ── Toolbar ─────────────────────────────────────────── */}
-        <div className="flex flex-col border-b border-border bg-surface">
+      <div ref={containerRef} className="relative flex h-full min-h-0 flex-col bg-transparent text-foreground" tabIndex={-1}>
+        {/* ── Single glass top bar ─────────────────────────────── */}
+        <div className="shrink-0 border-b border-border bg-[var(--glass-bg)] backdrop-blur-2xl">
+          <div className="toolbar-scroll scrollbar-hide flex items-center gap-0.5 px-2 py-1.5 sm:gap-1">
+            {/* Grouped tool palette (narrow screens keep it in the bottom dock) */}
+            <div className="hidden shrink-0 items-center gap-0.5 rounded-xl border border-border bg-surface px-1 py-0.5 sm:flex">
+              {groupedToolButtons}
+            </div>
 
-          {/* Tab bar row */}
-          <div className="flex items-center gap-0.5 px-2 pt-1.5">
-            {/* Tab buttons */}
-            {([ 
-              { id: 'annotate' as const, label: 'Annotate' },
-              { id: 'view'     as const, label: 'View' },
-              { id: 'pages'    as const, label: 'Pages' },
-            ] as const).map(tab => (
+            {/* Colour popover */}
+            <div className="relative hidden shrink-0 sm:block" onPointerDown={e => e.stopPropagation()}>
               <button
-                key={tab.id}
-                onClick={() => setToolbarTab(tab.id)}
-                className={`shrink-0 rounded-t-md font-medium transition-colors touch-manipulation ${
-                  touchUI ? 'px-4 py-2.5 text-sm' : 'px-3 py-1 text-xs'
-                } ${
-                  toolbarTab === tab.id
-                    ? 'bg-surface-hover text-foreground'
-                    : 'text-muted-foreground hover:text-foreground hover:bg-surface-hover/60'
-                }`}
+                type="button"
+                onClick={() => setOpenPopover(p => (p === 'color' ? null : 'color'))}
+                aria-label="Stroke and text colour"
+                aria-expanded={openPopover === 'color'}
+                aria-haspopup="dialog"
+                title="Colour"
+                className={barChipClass(openPopover === 'color')}
               >
-                {tab.label}
+                <span className="h-4 w-4 rounded-full border border-black/10 shadow-sm" style={{ backgroundColor: color }} />
+                <span className="hidden 2xl:inline">Colour</span>
               </button>
-            ))}
+              {openPopover === 'color' && (
+                <div className="floating-pop-in glass-strong absolute left-0 top-full z-50 mt-2 w-max rounded-2xl p-2.5">
+                  <p className={metaLabel}>Colour</p>
+                  <div className="mt-1.5 grid grid-cols-4 gap-1.5">
+                    {COLORS.map(c => (
+                      <button
+                        key={c}
+                        type="button"
+                        title={c}
+                        aria-label={'Colour ' + c}
+                        onClick={() => { setColor(c); setOpenPopover(null) }}
+                        className={['h-7 w-7 rounded-full border-2 transition-transform hover:scale-110', color === c ? 'scale-110 border-foreground' : 'border-transparent'].join(' ')}
+                        style={{ backgroundColor: c }}
+                      />
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
 
-            <div className="flex-1" />
+            {/* Size popover */}
+            <div className="relative hidden shrink-0 sm:block" onPointerDown={e => e.stopPropagation()}>
+              <button
+                type="button"
+                onClick={() => setOpenPopover(p => (p === 'size' ? null : 'size'))}
+                aria-label="Stroke size"
+                aria-expanded={openPopover === 'size'}
+                aria-haspopup="dialog"
+                title="Stroke size"
+                className={barChipClass(openPopover === 'size')}
+              >
+                <span className="text-[11px] tabular-nums">{strokeSize}px</span>
+              </button>
+              {openPopover === 'size' && (
+                <div className="floating-pop-in glass-strong absolute left-0 top-full z-50 mt-2 w-56 rounded-2xl p-3">
+                  <div className="flex items-center justify-between">
+                    <p className={metaLabel}>Stroke size</p>
+                    <span className="text-xs tabular-nums text-foreground">{strokeSize}px</span>
+                  </div>
+                  <input
+                    type="range"
+                    min={1}
+                    max={20}
+                    value={strokeSize}
+                    onChange={e => setStrokeSize(Number(e.target.value))}
+                    className="mt-2 w-full accent-[var(--accent)]"
+                    aria-label="Stroke size"
+                  />
+                  <div className="mt-2 grid grid-cols-4 gap-1.5">
+                    {[1, 3, 6, 12].map(size => (
+                      <button
+                        key={size}
+                        type="button"
+                        onClick={() => setStrokeSize(size)}
+                        className={['rounded-lg border px-1 py-1 text-[11px] tabular-nums transition-colors', strokeSize === size ? 'border-[color:var(--accent)] bg-[var(--accent-light)] text-accent' : 'border-border text-muted hover:bg-surface-hover hover:text-foreground'].join(' ')}
+                      >
+                        {size}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
 
-            {/* Always-visible: Undo / Redo / Export */}
-            <button title="Undo (Ctrl+Z)" aria-label="Undo" onClick={undo} disabled={historyIdx <= 0}
-              className={iconButtonClass(false) + ' disabled:opacity-30'}>
-              <Undo2 size={toolIconSize} />
+            <div className="hidden sm:block">{barDivider}</div>
+
+            {/* Undo / redo */}
+            <button type="button" title="Undo (Ctrl+Z)" aria-label="Undo" onClick={undo} disabled={historyIdx <= 0} className={barIconButtonClass(false) + ' hidden disabled:opacity-30 sm:flex'}>
+              <Undo2 size={16} />
             </button>
-            <button title="Redo (Ctrl+Shift+Z)" aria-label="Redo" onClick={redo} disabled={historyIdx >= history.length - 1}
-              className={iconButtonClass(false) + ' disabled:opacity-30'}>
-              <Redo2 size={toolIconSize} />
+            <button type="button" title="Redo (Ctrl+Shift+Z)" aria-label="Redo" onClick={redo} disabled={historyIdx >= history.length - 1} className={barIconButtonClass(false) + ' hidden disabled:opacity-30 sm:flex'}>
+              <Redo2 size={16} />
             </button>
-            <div className={`mx-0.5 shrink-0 bg-border ${touchUI ? 'h-7 w-px' : 'h-4 w-px'}`} />
-            <button
-              title="Export annotated PDF"
-              onClick={handleExportPdf}
-              className={chipButtonClass(false)}
-            >
-              <Download size={touchUI ? 18 : 14} />
-              <span>Export</span>
-            </button>
-          </div>
 
-          {/* Tab content row — horizontally scrollable so nothing ever wraps into
-              a second row of tiny targets. The Annotate cluster lives in the
-              bottom dock on touch devices instead, so this row is hidden there. */}
-          {(toolbarTab !== 'annotate' || !touchUI) && (
-          <div className="toolbar-scroll scrollbar-hide flex items-center gap-1 px-2 pb-1.5 pt-0.5">
+            <div className="min-w-2 flex-1" />
 
-            {/* ── ANNOTATE tab (desktop layout) ─────────────── */}
-            {toolbarTab === 'annotate' && !touchUI && (
-              <>
-                {drawingToolButtons}
-                {divider}
-                {colorSwatches}
-                {divider}
-                {strokeSizeControl}
-                {(tool === 'rectangle' || tool === 'circle' || tool === 'arrow') && divider}
-                {toolOptions}
-              </>
-            )}
+            {/* Page navigation — always visible */}
+            <div className="flex shrink-0 items-center gap-0.5 rounded-xl border border-border bg-surface px-1 py-0.5" role="group" aria-label="Page navigation">
+              <button type="button" title="Previous page (←)" aria-label="Previous page" onClick={() => goToPage(Math.max(0, currentPage - 1))} disabled={currentPage <= 0} className={barIconButtonClass(false) + ' disabled:opacity-30'}>
+                <ChevronLeft size={16} />
+              </button>
+              <input
+                type="text"
+                inputMode="numeric"
+                aria-label="Page number"
+                title="Jump to page"
+                value={pageInput}
+                onChange={e => setPageInput(e.target.value.replace(/[^0-9]/g, '').slice(0, 5))}
+                onKeyDown={e => {
+                  if (e.key === 'Enter') { e.preventDefault(); commitPageInput(); e.currentTarget.blur() }
+                  if (e.key === 'Escape') { setPageInput(String(currentPage + 1)); e.currentTarget.blur() }
+                }}
+                onBlur={commitPageInput}
+                onFocus={e => e.currentTarget.select()}
+                className="h-7 w-7 rounded-md border border-border bg-[var(--surface-sunken)] text-center text-xs tabular-nums text-foreground outline-none transition-colors focus:border-accent focus:ring-2 focus:ring-[color:var(--accent-light)] sm:w-9"
+              />
+              <span className="hidden px-0.5 text-xs tabular-nums text-muted sm:inline">/ {totalPages}</span>
+              <button type="button" title="Next page (→)" aria-label="Next page" onClick={() => goToPage(Math.min(totalPages - 1, currentPage + 1))} disabled={currentPage >= totalPages - 1} className={barIconButtonClass(false) + ' disabled:opacity-30'}>
+                <ChevronRight size={16} />
+              </button>
+            </div>
 
-            {/* ── VIEW tab ─────────────────────────────────── */}
-            {toolbarTab === 'view' && (
-              <>
-                {/* Zoom */}
-                <button title="Zoom out" aria-label="Zoom out" onClick={handleZoomOut} disabled={zoom <= MIN_ZOOM}
-                  className={iconButtonClass(false) + ' disabled:opacity-30'}>
-                  <ZoomOut size={toolIconSize} />
-                </button>
-                <input
-                  type="range" min={MIN_ZOOM} max={MAX_ZOOM} step={0.05} value={zoom}
-                  onChange={handleZoomSlider}
-                  className={`shrink-0 ${touchUI ? 'h-8 w-36' : 'w-24'}`}
-                  title={`Zoom: ${Math.round(zoom * 100)}%`}
-                />
-                <button title="Zoom in" aria-label="Zoom in" onClick={handleZoomIn} disabled={zoom >= MAX_ZOOM}
-                  className={iconButtonClass(false) + ' disabled:opacity-30'}>
-                  <ZoomIn size={toolIconSize} />
-                </button>
-                <span className={`shrink-0 text-center text-muted-foreground ${touchUI ? 'min-w-[3.5rem] text-sm' : 'min-w-[3rem] text-xs'}`}>
+            {/* Zoom cluster — always visible */}
+            <div className="flex shrink-0 items-center gap-0.5 rounded-xl border border-border bg-surface px-1 py-0.5" role="group" aria-label="Zoom" onPointerDown={e => e.stopPropagation()}>
+              <button type="button" title="Zoom out" aria-label="Zoom out" onClick={handleZoomOut} disabled={zoom <= MIN_ZOOM} className={barIconButtonClass(false) + ' disabled:opacity-30'}>
+                <ZoomOut size={16} />
+              </button>
+              <input
+                type="range"
+                min={MIN_ZOOM}
+                max={MAX_ZOOM}
+                step={0.05}
+                value={zoom}
+                onChange={handleZoomSlider}
+                aria-label="Zoom level"
+                title={'Zoom: ' + Math.round(zoom * 100) + '%'}
+                className="hidden h-1.5 w-20 accent-[var(--accent)] xl:block"
+              />
+              <div className="relative">
+                <button
+                  type="button"
+                  onClick={() => setOpenPopover(p => (p === 'zoom' ? null : 'zoom'))}
+                  aria-label="Zoom level"
+                  aria-expanded={openPopover === 'zoom'}
+                  aria-haspopup="dialog"
+                  title="Zoom"
+                  className="min-w-[2.5rem] rounded-md px-0.5 py-1 text-center text-xs tabular-nums text-foreground transition-colors hover:bg-surface-hover focus-ring sm:min-w-[3rem] sm:px-1"
+                >
                   {Math.round(zoom * 100)}%
-                </span>
-                <button title="Fit to width" onClick={handleFitWidth}
-                  className={chipButtonClass(false)}>
-                  Fit&nbsp;width
                 </button>
-                <button title="Fit to page" aria-label="Fit to page" onClick={handleFitPage}
-                  className={iconButtonClass(false)}>
-                  <Maximize size={toolIconSize - 2} />
-                </button>
+                {openPopover === 'zoom' && (
+                  <div className="floating-pop-in glass-strong absolute left-1/2 top-full z-50 mt-2 w-64 -translate-x-1/2 rounded-2xl p-3 shadow-glass-lg">
+                    <div className="flex items-center justify-between">
+                      <p className={metaLabel}>Zoom</p>
+                      <span className="text-xs tabular-nums text-foreground">{Math.round(zoom * 100)}%</span>
+                    </div>
+                    <input
+                      type="range"
+                      min={MIN_ZOOM}
+                      max={MAX_ZOOM}
+                      step={0.05}
+                      value={zoom}
+                      onChange={handleZoomSlider}
+                      aria-label="Zoom level"
+                      className="mt-2 w-full accent-[var(--accent)]"
+                    />
+                    <div className="mt-2 grid grid-cols-4 gap-1.5">
+                      {[0.5, 1, 1.5, 2].map(preset => (
+                        <button
+                          key={preset}
+                          type="button"
+                          onClick={() => applyZoomPreset(preset)}
+                          className={['rounded-lg border px-1 py-1 text-[11px] tabular-nums transition-colors', Math.abs(zoom - preset) < 0.01 ? 'border-[color:var(--accent)] bg-[var(--accent-light)] text-accent' : 'border-border text-muted hover:bg-surface-hover hover:text-foreground'].join(' ')}
+                        >
+                          {preset * 100}%
+                        </button>
+                      ))}
+                    </div>
+                    <div className="mt-2 grid grid-cols-2 gap-1.5">
+                      <button type="button" onClick={() => { handleFitPage(); setOpenPopover(null) }} className="glass-btn h-8 text-[11px]">
+                        Fit page
+                      </button>
+                      <button type="button" onClick={() => { handleFitWidth(); setOpenPopover(null) }} className="glass-btn h-8 text-[11px]">
+                        Fit width
+                      </button>
+                    </div>
+                    <button type="button" onClick={() => { handleZoomReset(); setOpenPopover(null) }} className="glass-btn mt-1.5 h-8 w-full text-[11px]">
+                      Actual size (100%)
+                    </button>
+                  </div>
+                )}
+              </div>
+              <button type="button" title="Zoom in" aria-label="Zoom in" onClick={handleZoomIn} disabled={zoom >= MAX_ZOOM} className={barIconButtonClass(false) + ' disabled:opacity-30'}>
+                <ZoomIn size={16} />
+              </button>
+              <button type="button" title="Fit to page" aria-label="Fit to page" onClick={handleFitPage} className={barIconButtonClass(false) + ' hidden sm:flex'}>
+                <Maximize size={15} />
+              </button>
+            </div>
 
-                {/* Rotate */}
-                <button title="Rotate 90° counter-clockwise" aria-label="Rotate counter-clockwise"
-                  onClick={() => setViewRotation(r => ((r + 270) % 360) as 0 | 90 | 180 | 270)}
-                  className={iconButtonClass(false)}>
-                  <RotateCcw size={toolIconSize - 1} />
-                </button>
-                <select
-                  value={viewRotation}
-                  onChange={e => setViewRotation(Number(e.target.value) as 0 | 90 | 180 | 270)}
-                  title="Page rotation"
-                  className={`shrink-0 rounded-lg border border-border bg-surface text-muted-foreground focus:outline-none ${
-                    touchUI ? 'h-11 px-2 text-sm' : 'px-1 py-0.5 text-xs'
-                  }`}
-                >
-                  <option value={0}>0°</option>
-                  <option value={90}>90° CW</option>
-                  <option value={180}>180°</option>
-                  <option value={270}>90° CCW</option>
-                </select>
-                <button title="Rotate 90° clockwise" aria-label="Rotate clockwise"
-                  onClick={() => setViewRotation(r => ((r + 90) % 360) as 0 | 90 | 180 | 270)}
-                  className={iconButtonClass(false)}>
-                  <RotateCw size={toolIconSize - 1} />
-                </button>
+            <div className="hidden sm:block">{barDivider}</div>
 
-                {divider}
+            {/* Search */}
+            <button type="button" title="Find in PDF (Ctrl+F)" aria-label="Find in PDF" aria-pressed={searchVisible} onClick={() => { setSearchVisible(v => { if (!v) setSearchQuery(''); return true }) }} className={barIconButtonClass(searchVisible)}>
+              <Search size={16} />
+            </button>
 
-                {/* Text layer */}
-                <button
-                  title={showTextLayer ? 'Hide PDF text layer' : 'Select & copy PDF text'}
-                  onClick={() => {
-                    if (showTextLayer) {
-                      setShowTextLayer(false)
-                      setTool(t => (t === 'textselect' ? 'select' : t))
-                      setSearchVisible(false)
-                      setSearchQuery('')
-                      if (selectedTextRef.current) {
-                        selectedTextRef.current = ''
-                        setSelectedText('')
-                      }
-                    } else {
-                      // Showing the layer implies the text-selection tool, otherwise it is not usable
-                      setShowTextLayer(true)
-                      setTool('textselect')
-                      setSelectedId(null)
-                    }
-                  }}
-                  className={chipButtonClass(showTextLayer)}
-                >
-                  <Layers size={toolIconSize - 2} />
-                  Text layer
-                </button>
+            {/* PDF text layer */}
+            <button
+              type="button"
+              title={showTextLayer ? 'Hide PDF text layer' : 'Select & copy PDF text'}
+              aria-label="PDF text layer"
+              aria-pressed={showTextLayer}
+              onClick={() => {
+                if (showTextLayer) {
+                  setShowTextLayer(false)
+                  setTool(t => (t === 'textselect' ? 'select' : t))
+                  setSearchVisible(false)
+                  setSearchQuery('')
+                  if (selectedTextRef.current) {
+                    selectedTextRef.current = ''
+                    setSelectedText('')
+                  }
+                } else {
+                  // Showing the layer implies the text-selection tool, otherwise it is not usable
+                  setShowTextLayer(true)
+                  setTool('textselect')
+                  setSelectedId(null)
+                }
+              }}
+              className={barIconButtonClass(showTextLayer) + ' hidden sm:flex'}
+            >
+              <Layers size={16} />
+            </button>
 
-                {/* Search */}
-                <button
-                  title="Find in PDF (Ctrl+F)"
-                  onClick={() => {
-                    setSearchVisible(v => { if (!v) setSearchQuery(''); return true })
-                  }}
-                  className={chipButtonClass(searchVisible)}
-                >
-                  <Search size={toolIconSize - 2} />
-                  Find
-                </button>
-              </>
-            )}
+            {/* Side panel toggles */}
+            <button
+              type="button"
+              title="Page thumbnails"
+              aria-label="Toggle page thumbnails"
+              aria-pressed={showThumbnails && panelTab === 'pages'}
+              onClick={() => {
+                setPanelTab('pages')
+                setShowThumbnails(v => (panelTab === 'pages' ? !v : true))
+              }}
+              className={barIconButtonClass(showThumbnails && panelTab === 'pages')}
+            >
+              <PanelLeft size={16} />
+            </button>
+            <button
+              type="button"
+              title="Annotations list"
+              aria-label="Toggle annotations panel"
+              aria-pressed={showThumbnails && panelTab === 'annotations'}
+              onClick={() => {
+                setPanelTab('annotations')
+                setShowThumbnails(v => (panelTab === 'annotations' ? !v : true))
+              }}
+              className={barIconButtonClass(showThumbnails && panelTab === 'annotations')}
+            >
+              <List size={16} />
+            </button>
 
-            {/* ── PAGES tab ────────────────────────────────── */}
-            {toolbarTab === 'pages' && (
-              <>
-                {/* Thumbnails */}
-                <button
-                  title="Toggle page thumbnails"
-                  onClick={() => setShowThumbnails(v => !v)}
-                  className={chipButtonClass(showThumbnails)}
-                >
-                  <PanelLeft size={toolIconSize - 2} />
-                  Thumbnails
-                </button>
-
-                {divider}
-
-                {/* Insert before */}
-                <button
-                  title="Insert blank page before current page"
-                  onClick={() => insertBlankPage(currentPage - 1)}
-                  disabled={disabled}
-                  className={chipButtonClass(false) + ' disabled:opacity-30'}>
-                  <Plus size={toolIconSize - 3} />
-                  Before
-                </button>
-
-                {/* Page navigation */}
-                <button title="Previous page (←)" aria-label="Previous page"
-                  onClick={() => goToPage(Math.max(0, currentPage - 1))}
-                  disabled={currentPage <= 0}
-                  className={iconButtonClass(false) + ' disabled:opacity-30'}>
-                  <ChevronLeft size={toolIconSize} />
-                </button>
-                <span className={`shrink-0 text-center text-muted-foreground ${touchUI ? 'min-w-[4.5rem] text-sm' : 'min-w-[4rem] text-xs'}`}>
-                  {currentPage + 1} / {totalPages}
-                </span>
-                <button title="Next page (→)" aria-label="Next page"
-                  onClick={() => goToPage(Math.min(totalPages - 1, currentPage + 1))}
-                  disabled={currentPage >= totalPages - 1}
-                  className={iconButtonClass(false) + ' disabled:opacity-30'}>
-                  <ChevronRight size={toolIconSize} />
-                </button>
-
-                {/* Insert after */}
-                <button
-                  title="Insert blank page after current page"
-                  onClick={() => insertBlankPage(currentPage)}
-                  disabled={disabled}
-                  className={chipButtonClass(false) + ' disabled:opacity-30'}>
-                  <Plus size={toolIconSize - 3} />
-                  After
-                </button>
-
-                {divider}
-
-                {/* Delete page */}
-                <button
-                  title={pages.length <= 1 ? 'Cannot delete the only page' : 'Delete current page'}
-                  onClick={() => {
-                    const pg = pages.find(p => p.pageNumber === currentPage)
-                    if (pg?.isBlank) { deletePage(currentPage) } else { setDeleteConfirmIdx(currentPage) }
-                  }}
-                  disabled={disabled || pages.length <= 1}
-                  className={`flex shrink-0 items-center gap-1.5 text-red-500 transition-colors touch-manipulation hover:bg-red-50 dark:hover:bg-red-950/30 disabled:opacity-30 ${
-                    touchUI ? 'h-11 rounded-xl px-3 text-sm' : 'rounded px-2 py-1 text-xs'
-                  }`}
-                >
-                  <Trash2 size={toolIconSize - 3} />
-                  Delete page
-                </button>
-              </>
-            )}
-
+            {/* Export */}
+            <button type="button" title="Export annotated PDF" onClick={handleExportPdf} className="glass-btn-primary ml-0.5 h-8 shrink-0 gap-1.5 px-3 text-xs">
+              <Download size={14} />
+              <span className="hidden sm:inline">Export</span>
+            </button>
           </div>
-          )}
+
+          <div className="hidden sm:block">{propertyBar}</div>
         </div>
 
         {/* Find/search bar */}
         {searchVisible && (
-          <div className={`flex items-center gap-1.5 border-b border-border bg-surface ${touchUI ? 'px-3 py-2' : 'px-3 py-1.5'}`}>
-            {searchIndexBuilding
-              ? <Loader2 size={touchUI ? 18 : 13} className="shrink-0 animate-spin text-muted-foreground" />
-              : <Search size={touchUI ? 18 : 13} className="shrink-0 text-muted-foreground" />
-            }
+          <div className="flex shrink-0 items-center gap-1.5 border-b border-border bg-[var(--surface-sunken)] px-2.5 py-1.5">
+            {searchIndexBuilding ? (
+              <Loader2 size={14} className="shrink-0 animate-spin text-accent" />
+            ) : (
+              <Search size={14} className="shrink-0 text-muted" />
+            )}
             <input
               autoFocus
               type="text"
@@ -3628,133 +4130,47 @@ const PdfAnnotationEditor = forwardRef<PdfAnnotationEditorHandle, PdfAnnotationE
                 if (e.key === 'Enter') navigateSearch(e.shiftKey ? -1 : 1)
                 if (e.key === 'Escape') { setSearchVisible(false); setSearchQuery('') }
               }}
-              className={`min-w-0 flex-1 bg-transparent text-foreground outline-none placeholder:text-muted-foreground ${
-                touchUI ? 'text-base' : 'text-xs'
-              }`}
+              aria-label="Find in PDF"
+              className="min-w-0 flex-1 bg-transparent text-sm text-foreground outline-none placeholder:text-muted"
             />
             {searchQuery.trim() && (
-              <span className={`shrink-0 text-muted-foreground ${touchUI ? 'text-xs' : 'text-[11px]'}`}>
+              <span className="shrink-0 rounded-md bg-surface px-1.5 py-0.5 text-[11px] tabular-nums text-muted">
                 {searchIndexBuilding
                   ? 'Indexing…'
                   : searchMatchCount === 0
                   ? 'No results'
-                  : `${searchCurrentIdx + 1} / ${searchMatchCount}`}
+                  : (searchCurrentIdx + 1) + ' / ' + searchMatchCount}
               </span>
             )}
-            <button
-              onClick={() => navigateSearch(-1)}
-              disabled={searchMatchCount === 0}
-              title="Previous match (Shift+Enter)"
-              aria-label="Previous match"
-              className={iconButtonClass(false) + ' disabled:opacity-30'}>
-              <ChevronUp size={toolIconSize - 2} />
+            <button type="button" onClick={() => navigateSearch(-1)} disabled={searchMatchCount === 0} title="Previous match (Shift+Enter)" aria-label="Previous match" className={barIconButtonClass(false) + ' disabled:opacity-30'}>
+              <ChevronUp size={15} />
             </button>
-            <button
-              onClick={() => navigateSearch(1)}
-              disabled={searchMatchCount === 0}
-              title="Next match (Enter)"
-              aria-label="Next match"
-              className={iconButtonClass(false) + ' disabled:opacity-30'}>
-              <ChevronDown size={toolIconSize - 2} />
+            <button type="button" onClick={() => navigateSearch(1)} disabled={searchMatchCount === 0} title="Next match (Enter)" aria-label="Next match" className={barIconButtonClass(false) + ' disabled:opacity-30'}>
+              <ChevronDown size={15} />
             </button>
-            <button
-              onClick={() => { setSearchVisible(false); setSearchQuery('') }}
-              title="Close search (Escape)"
-              aria-label="Close search"
-              className={iconButtonClass(false)}>
-              <X size={toolIconSize - 2} />
+            <button type="button" onClick={() => { setSearchVisible(false); setSearchQuery('') }} title="Close search (Escape)" aria-label="Close search" className={barIconButtonClass(false)}>
+              <X size={15} />
             </button>
           </div>
         )}
 
-        {/* Canvas area + optional thumbnail strip */}
-        <div className="relative flex flex-1 overflow-hidden">
-          {/* Backdrop for the touch thumbnail drawer */}
+        {/* Canvas area + right side panel */}
+        <div className="relative flex min-h-0 flex-1 overflow-hidden">
+          {/* Scrim for the touch drawer */}
           {showThumbnails && touchUI && (
             <button
-              aria-label="Close thumbnails"
+              aria-label="Close panel"
               onClick={() => setShowThumbnails(false)}
-              className="absolute inset-0 z-30 cursor-default bg-black/40"
+              className="absolute inset-0 z-30 cursor-default bg-black/30 backdrop-blur-sm lg:hidden"
             />
           )}
 
-          {/* Thumbnails — inline rail on desktop, slide-over drawer on touch */}
-          {showThumbnails && (
-            <div
-              className={
-                touchUI
-                  ? 'absolute inset-y-0 left-0 z-40 flex w-40 flex-col gap-2 overflow-y-auto border-r border-border bg-surface p-2 shadow-2xl'
-                  : 'flex w-28 shrink-0 flex-col gap-1.5 overflow-y-auto border-r border-border bg-surface p-1.5'
-              }
-            >
-              {pages.map((pg, i) => (
-                <button
-                  key={i}
-                  onClick={() => {
-                    goToPage(pg.pageNumber)
-                    // The drawer covers the page — get out of the way after picking
-                    if (touchUI) setShowThumbnails(false)
-                  }}
-                  className={`flex flex-col items-center rounded-md border transition-colors touch-manipulation ${
-                    touchUI ? 'gap-1 p-1.5' : 'gap-0.5 p-1'
-                  } ${
-                    pg.pageNumber === currentPage
-                      ? 'border-rose-500 bg-rose-50 dark:bg-rose-900/20'
-                      : 'border-border hover:bg-surface-hover'
-                  }`}
-                >
-                  {thumbnailUrls[i] ? (
-                    // eslint-disable-next-line @next/next/no-img-element
-                    <img
-                      src={thumbnailUrls[i]}
-                      alt={`Page ${i + 1}`}
-                      className="w-full rounded object-contain shadow-sm"
-                      style={{ maxHeight: touchUI ? 120 : 90 }}
-                    />
-                  ) : (
-                    <div className={`flex w-full items-center justify-center rounded bg-neutral-100 dark:bg-neutral-700 ${touchUI ? 'h-20' : 'h-16'}`}>
-                      <span className="text-xs text-muted-foreground">{pg.isBlank ? '\u25A1' : '\u22EF'}</span>
-                    </div>
-                  )}
-                  <span className={`text-muted-foreground ${touchUI ? 'text-xs' : 'text-[10px]'}`}>{i + 1}</span>
-                  {pg.isBlank && (
-                    <span className={`italic text-rose-400 ${touchUI ? 'text-[11px]' : 'text-[9px]'}`}>blank</span>
-                  )}
-                </button>
-              ))}
-            </div>
-          )}
-
           {/* Canvas scroll area */}
-          <div ref={scrollAreaRef} className="pdf-scroll-area relative flex-1 overflow-auto bg-neutral-200 dark:bg-neutral-800">
-            {/* Delete page confirmation overlay */}
-            {deleteConfirmIdx !== null && (
-              <div className="absolute inset-0 z-50 flex items-center justify-center bg-black/50">
-                <div className="rounded-xl bg-surface p-6 shadow-xl">
-                  <p className="mb-1 text-sm font-medium text-foreground">Delete this page?</p>
-                  <p className="mb-4 text-xs text-muted-foreground">The original PDF file is unchanged.</p>
-                  <div className="flex justify-end gap-2">
-                    <button
-                      onClick={() => setDeleteConfirmIdx(null)}
-                      className={`rounded-lg text-sm hover:bg-surface-hover touch-manipulation ${touchUI ? 'px-4 py-3' : 'px-3 py-1.5'}`}
-                    >
-                      Cancel
-                    </button>
-                    <button
-                      onClick={() => deletePage(deleteConfirmIdx!)}
-                      className={`rounded-lg bg-red-500 text-sm text-white hover:bg-red-600 touch-manipulation ${touchUI ? 'px-4 py-3' : 'px-3 py-1.5'}`}
-                    >
-                      Delete
-                    </button>
-                  </div>
-                </div>
-              </div>
-            )}
-
-            {/* Outer div reserves the correct bounding-box size in the scroll area */}
+          <div ref={scrollAreaRef} className="scroll-thin relative min-w-0 flex-1 overflow-auto bg-[var(--background-deep)] dark:bg-[rgb(0_0_0_/_0.3)]">
+{/* Outer div reserves the correct bounding-box size in the scroll area */}
             <div
               ref={pageRef}
-              className={`relative mx-auto my-4${
+              className={`relative mx-auto my-4 shadow-glass${
                 pageAnim === 'exit-up'           ? ' pdf-page-exit-up'
                 : pageAnim === 'exit-down'       ? ' pdf-page-exit-down'
                 : pageAnim === 'enter-from-bottom' ? ' pdf-page-enter-from-bottom'
@@ -3849,7 +4265,7 @@ const PdfAnnotationEditor = forwardRef<PdfAnnotationEditorHandle, PdfAnnotationE
                 const { vx, vy } = logicalToVisual(ta.x, ta.y)
                 return (
                   <div
-                    className="absolute z-40 flex items-center gap-0.5 rounded-lg border border-border bg-surface px-1.5 py-1 shadow-md"
+                    className="floating-pop-in glass-strong absolute z-40 flex items-center gap-0.5 rounded-2xl px-1.5 py-1"
                     style={{ left: Math.max(0, vx), top: Math.max(0, vy - 40) }}
                   >
                     {selectedTextControls(ta)}
@@ -3864,7 +4280,7 @@ const PdfAnnotationEditor = forwardRef<PdfAnnotationEditorHandle, PdfAnnotationE
                 const { vx, vy } = logicalToVisual(Math.min(shape.x1, shape.x2), Math.min(shape.y1, shape.y2))
                 return (
                   <div
-                    className="absolute z-40 flex items-center gap-0.5 rounded-lg border border-border bg-surface px-1.5 py-1 shadow-md"
+                    className="absolute z-40 flex items-center gap-0.5 rounded-lg border border-border floating-pop-in glass-strong absolute z-40 flex items-center gap-0.5 rounded-2xl px-1.5 py-1"
                     style={{ left: Math.max(0, vx), top: Math.max(0, vy - 40) }}
                   >
                     {selectedShapeControls(shape)}
@@ -3930,8 +4346,12 @@ const PdfAnnotationEditor = forwardRef<PdfAnnotationEditorHandle, PdfAnnotationE
                     height: sn.collapsed ? (touchUI ? 40 : 28) : sn.height * zoom,
                     backgroundColor: STICKY_COLORS[sn.color],
                     border: `1.5px solid ${
-                      selectedId === sn.id ? '#3b82f6' : 'rgba(0,0,0,0.15)'
+                      selectedId === sn.id ? 'var(--accent)' : 'rgba(0,0,0,0.15)'
                     }`,
+                    boxShadow:
+                      selectedId === sn.id
+                        ? '0 0 0 3px var(--accent-light), 0 10px 24px -16px rgb(0 0 0 / 0.5)'
+                        : undefined,
                   }}
                 >
                   {/* Sticky header / drag handle */}
@@ -3987,7 +4407,7 @@ const PdfAnnotationEditor = forwardRef<PdfAnnotationEditorHandle, PdfAnnotationE
                         }}
                         title="Delete sticky note"
                         aria-label="Delete sticky note"
-                        className={`flex items-center justify-center rounded text-black/50 hover:bg-black/5 hover:text-red-600 touch-manipulation ${
+                        className={`flex items-center justify-center rounded text-black/50 hover:bg-black/5 hover:text-[var(--danger)] touch-manipulation ${
                           touchUI ? 'h-7 w-7 text-base' : 'px-0.5 text-[11px] leading-none'
                         }`}
                       >{'\u00D7'}</button>
@@ -4050,7 +4470,7 @@ const PdfAnnotationEditor = forwardRef<PdfAnnotationEditorHandle, PdfAnnotationE
                   >
                     {!touchUI && (
                       <div
-                        className="absolute z-40 flex items-center gap-0.5 rounded-lg border border-border bg-surface px-1.5 py-1 shadow-md"
+                        className="absolute z-40 flex items-center gap-0.5 rounded-lg border border-border floating-pop-in glass-strong absolute z-40 flex items-center gap-0.5 rounded-2xl px-1.5 py-1"
                         style={{ left: Math.max(0, vx), top: toolbarTop }}
                       >
                         {editingTextControls}
@@ -4091,7 +4511,7 @@ const PdfAnnotationEditor = forwardRef<PdfAnnotationEditorHandle, PdfAnnotationE
                         resize: touchUI ? 'none' : 'horizontal',
                         transform: `rotate(${viewRotation}deg)`,
                         transformOrigin: 'top left',
-                        outline: '1.5px solid #60a5fa',
+                        outline: '1.5px solid var(--accent)',
                         outlineOffset: 2,
                         touchAction: 'manipulation',
                       }}
@@ -4121,7 +4541,7 @@ const PdfAnnotationEditor = forwardRef<PdfAnnotationEditorHandle, PdfAnnotationE
                         box width without relying on the native textarea corner. */}
                     {touchUI && (
                       <div
-                        className="absolute z-40 flex items-center justify-center rounded-full bg-rose-500 text-white shadow-lg"
+                        className="absolute z-40 flex items-center justify-center rounded-full bg-[var(--accent)] text-[var(--accent-foreground)] shadow-glass"
                         style={{
                           // Sits diagonally outside the bottom-right corner so it
                           // never covers the text being typed.
@@ -4176,7 +4596,7 @@ const PdfAnnotationEditor = forwardRef<PdfAnnotationEditorHandle, PdfAnnotationE
                   onPointerDown={e => e.preventDefault()}
                   onClick={handleCopySelectedText}
                   title="Copy selected text"
-                  className={`absolute right-2 top-2 z-40 flex items-center gap-1.5 rounded-md border border-border bg-surface text-foreground shadow-md transition-colors hover:bg-surface-hover touch-manipulation ${
+                  className={`absolute right-2 top-2 z-40 glass-strong flex items-center gap-1.5 rounded-full text-foreground shadow-glass-lg transition-colors hover:bg-surface-hover touch-manipulation ${
                     touchUI ? 'px-3 py-2 text-sm' : 'px-2 py-1 text-xs'
                   }`}
                 >
@@ -4186,6 +4606,313 @@ const PdfAnnotationEditor = forwardRef<PdfAnnotationEditorHandle, PdfAnnotationE
               )}
             </div>
           </div>
+
+          {/* Right glass panel: Pages / Annotations */}
+          {showThumbnails && (
+            <aside
+              className={[
+                'flex flex-col border-l border-border bg-[var(--glass-bg-strong)] backdrop-blur-2xl',
+                touchUI ? 'absolute inset-y-0 right-0 z-40 w-[84vw] max-w-[330px] shadow-glass-lg' : 'relative w-[300px] shrink-0',
+              ].join(' ')}
+              aria-label="PDF side panel"
+            >
+              <div className="flex items-center justify-between gap-2 border-b border-border px-2.5 py-2">
+                <div className="segmented min-w-0" role="tablist" aria-label="PDF panel">
+                  <button
+                    type="button"
+                    role="tab"
+                    aria-selected={panelTab === 'pages'}
+                    data-active={panelTab === 'pages'}
+                    onClick={() => setPanelTab('pages')}
+                    className="segmented-item gap-1.5 px-2.5"
+                  >
+                    <PanelLeft size={13} />
+                    Pages
+                  </button>
+                  <button
+                    type="button"
+                    role="tab"
+                    aria-selected={panelTab === 'annotations'}
+                    data-active={panelTab === 'annotations'}
+                    onClick={() => setPanelTab('annotations')}
+                    className="segmented-item gap-1.5 px-2.5"
+                  >
+                    <List size={13} />
+                    Annotations
+                    {annotationCount > 0 && (
+                      <span className="rounded-full bg-[var(--accent-light)] px-1.5 text-[10px] tabular-nums text-accent">{annotationCount}</span>
+                    )}
+                  </button>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setShowThumbnails(false)}
+                  aria-label="Close panel"
+                  className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg text-muted transition-colors hover:bg-surface-hover hover:text-foreground"
+                >
+                  <X size={14} />
+                </button>
+              </div>
+
+              {panelTab === 'pages' ? (
+                <div className="scroll-thin flex-1 overflow-y-auto p-2">
+                  <div className="grid grid-cols-2 gap-2">
+                    {pages.map((pg, i) => {
+                      const active = pg.pageNumber === currentPage
+                      return (
+                        <button
+                          key={i}
+                          type="button"
+                          onClick={() => {
+                            goToPage(pg.pageNumber)
+                            // The drawer covers the page — get out of the way after picking
+                            if (touchUI) setShowThumbnails(false)
+                          }}
+                          aria-current={active ? 'page' : undefined}
+                          aria-label={'Go to page ' + (i + 1)}
+                          className={[
+                            'group flex flex-col gap-1 rounded-xl border p-1.5 text-left transition-colors focus-ring',
+                            active
+                              ? 'border-[color:var(--accent)] bg-[var(--accent-light)]'
+                              : 'border-border bg-surface hover:bg-surface-hover',
+                          ].join(' ')}
+                        >
+                          {thumbnailUrls[i] ? (
+                            // eslint-disable-next-line @next/next/no-img-element
+                            <img
+                              src={thumbnailUrls[i]}
+                              alt={'Page ' + (i + 1)}
+                              className="w-full rounded-lg object-contain shadow-sm"
+                              style={{ maxHeight: 132 }}
+                            />
+                          ) : (
+                            <div className="skeleton-shimmer h-24 w-full rounded-lg" />
+                          )}
+                          <div className="flex items-center justify-between gap-1 px-0.5">
+                            <span className={['text-[11px] font-semibold tabular-nums', active ? 'text-accent' : 'text-foreground'].join(' ')}>
+                              {i + 1}
+                            </span>
+                            {pg.isBlank && (
+                              <span className="rounded bg-surface px-1 text-[9px] uppercase tracking-wide text-muted">blank</span>
+                            )}
+                          </div>
+                        </button>
+                      )
+                    })}
+                  </div>
+
+                  {/* Page operations */}
+                  <div className="mt-3 space-y-2 border-t border-border pt-2.5">
+                    <div className="flex items-center gap-1">
+                      <span className={metaLabel + ' shrink-0 pr-0.5'}>Rotate</span>
+                      <button
+                        type="button"
+                        title="Rotate 90° counter-clockwise"
+                        aria-label="Rotate counter-clockwise"
+                        onClick={() => setViewRotation(r => ((r + 270) % 360) as 0 | 90 | 180 | 270)}
+                        className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-muted transition-colors hover:bg-surface-hover hover:text-foreground"
+                      >
+                        <RotateCcw size={15} />
+                      </button>
+                      <select
+                        value={viewRotation}
+                        onChange={e => setViewRotation(Number(e.target.value) as 0 | 90 | 180 | 270)}
+                        title="Page rotation"
+                        aria-label="Page rotation"
+                        className="glass-input h-8 min-w-0 flex-1 px-1.5 text-xs"
+                      >
+                        <option value={0}>0°</option>
+                        <option value={90}>90° CW</option>
+                        <option value={180}>180°</option>
+                        <option value={270}>90° CCW</option>
+                      </select>
+                      <button
+                        type="button"
+                        title="Rotate 90° clockwise"
+                        aria-label="Rotate clockwise"
+                        onClick={() => setViewRotation(r => ((r + 90) % 360) as 0 | 90 | 180 | 270)}
+                        className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-muted transition-colors hover:bg-surface-hover hover:text-foreground"
+                      >
+                        <RotateCw size={15} />
+                      </button>
+                    </div>
+                    <div className="flex gap-1.5">
+                      <button
+                        type="button"
+                        title="Insert blank page before current page"
+                        onClick={() => insertBlankPage(currentPage - 1)}
+                        disabled={disabled}
+                        className="glass-btn h-8 flex-1 gap-1 px-2 text-[11px] disabled:opacity-40"
+                      >
+                        <Plus size={12} />
+                        Page before
+                      </button>
+                      <button
+                        type="button"
+                        title="Insert blank page after current page"
+                        onClick={() => insertBlankPage(currentPage)}
+                        disabled={disabled}
+                        className="glass-btn h-8 flex-1 gap-1 px-2 text-[11px] disabled:opacity-40"
+                      >
+                        <Plus size={12} />
+                        Page after
+                      </button>
+                    </div>
+                    <button
+                      type="button"
+                      title={pages.length <= 1 ? 'Cannot delete the only page' : 'Delete current page'}
+                      onClick={() => {
+                        const pg = pages.find(p => p.pageNumber === currentPage)
+                        if (pg?.isBlank) { deletePage(currentPage) } else { setDeleteConfirmIdx(currentPage) }
+                      }}
+                      disabled={disabled || pages.length <= 1}
+                      className="flex h-8 w-full items-center justify-center gap-1.5 rounded-lg border border-border bg-[var(--danger-light)] text-[11px] font-medium text-danger transition-colors hover:border-[color:var(--danger)] disabled:opacity-40"
+                    >
+                      <Trash2 size={12} />
+                      Delete page
+                    </button>
+                    <p className="px-0.5 text-[11px] leading-4 text-muted">
+                      Blank pages and annotations live in this note. The original PDF is unchanged.
+                    </p>
+                  </div>
+                </div>
+              ) : (
+                <div className="scroll-thin flex-1 overflow-y-auto p-2">
+                  {annotationGroups.length === 0 ? (
+                    <div className="mt-6 rounded-xl border border-dashed border-border px-4 py-8 text-center">
+                      <div className="mx-auto mb-2 flex h-10 w-10 items-center justify-center rounded-xl bg-[var(--accent-light)] text-accent">
+                        <Pen size={16} />
+                      </div>
+                      <p className="text-sm font-medium text-foreground">No annotations yet</p>
+                      <p className="mt-1 text-xs leading-5 text-muted">
+                        Use the pen, shapes, text or sticky notes to mark up this PDF.
+                      </p>
+                    </div>
+                  ) : (
+                    annotationGroups.map(group => (
+                      <div key={group.page.pageNumber} className="mb-3">
+                        <button
+                          type="button"
+                          onClick={() => goToPage(group.page.pageNumber)}
+                          className="sticky top-0 z-10 -mx-2 mb-1 flex w-[calc(100%+1rem)] items-center justify-between border-b border-border bg-[var(--glass-bg-strong)] px-3 py-1 text-left backdrop-blur-md transition-colors hover:text-foreground"
+                          title={'Go to page ' + (group.page.pageNumber + 1)}
+                        >
+                          <span className={metaLabel + ' shrink-0'}>Page {group.page.pageNumber + 1}</span>
+                          <span className="text-[10px] tabular-nums text-muted">{group.items.length}</span>
+                        </button>
+                        <div className="space-y-0.5">
+                          {group.items.map(item => {
+                            const Icon = item.icon
+                            const active = selectedId === item.id && group.page.pageNumber === currentPage
+                            return (
+                              <div
+                                key={item.id}
+                                className={['group flex items-center gap-0.5 rounded-lg pr-0.5 transition-colors', active ? 'bg-[var(--accent-light)]' : ''].join(' ')}
+                              >
+                                <button
+                                  type="button"
+                                  onClick={() => jumpToAnnotation(group.page.pageNumber, item)}
+                                  aria-current={active ? 'true' : undefined}
+                                  className={['glass-row min-w-0 flex-1 gap-2 px-2 py-1.5', active ? 'text-accent' : ''].join(' ')}
+                                >
+                                  <Icon size={13} className={['shrink-0', active ? 'text-accent' : 'text-muted'].join(' ')} />
+                                  <span className="min-w-0 flex-1">
+                                    <span className={['block truncate text-xs font-medium', active ? 'text-accent' : 'text-foreground'].join(' ')}>
+                                      {item.label}
+                                    </span>
+                                    <span className="block truncate text-[10px] text-muted">
+                                      {item.meta}
+                                    </span>
+                                  </span>
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => deleteAnnotationOnPage(group.page.pageNumber, item.kind, item.id)}
+                                  aria-label={'Delete ' + item.kind + ' annotation'}
+                                  title="Delete annotation"
+                                  className={['flex h-7 w-7 shrink-0 items-center justify-center rounded-md text-muted transition-colors hover:bg-[var(--danger-light)] hover:text-danger focus-visible:opacity-100', touchUI ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'].join(' ')}
+                                >
+                                  <Trash2 size={12} />
+                                </button>
+                              </div>
+                            )
+                          })}
+                        </div>
+                      </div>
+                    ))
+                  )}
+                </div>
+              )}
+            </aside>
+          )}
+
+          {/* Delete page confirmation */}
+          {deleteConfirmIdx !== null && (
+            <div className="absolute inset-0 z-50 flex items-center justify-center p-4">
+              <button
+                type="button"
+                aria-label="Cancel page deletion"
+                onClick={() => setDeleteConfirmIdx(null)}
+                className="absolute inset-0 cursor-default bg-black/40 backdrop-blur-sm dark:bg-black/60"
+              />
+              <div className="glass-strong animate-rise-in relative w-full max-w-sm rounded-2xl p-5">
+                <div className="flex items-center gap-2 text-sm font-semibold text-foreground">
+                  <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-[var(--danger-light)] text-danger">
+                    <Trash2 size={15} />
+                  </span>
+                  Delete this page?
+                </div>
+                <p className="mt-2 text-xs leading-5 text-muted">
+                  Any annotations on this page are removed from the note. The original PDF file is unchanged.
+                </p>
+                <div className="mt-4 flex justify-end gap-2">
+                  <button type="button" onClick={() => setDeleteConfirmIdx(null)} className="glass-btn h-9 px-4 text-xs">
+                    Cancel
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => deletePage(deleteConfirmIdx!)}
+                    className="flex h-9 items-center gap-1.5 rounded-full border border-[color:var(--danger)] bg-[var(--danger-light)] px-4 text-xs font-semibold text-danger transition-colors hover:bg-[var(--danger)] hover:text-white"
+                  >
+                    <Trash2 size={13} />
+                    Delete page
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
+        </div>
+
+        {/* ── Status bar ──────────────────────────────────────── */}
+        <div className="flex shrink-0 items-center justify-between gap-3 border-t border-border bg-surface px-3 py-1 text-[11px] text-muted">
+          <div className="flex min-w-0 items-center gap-2">
+            <span className="shrink-0 tabular-nums">Page {currentPage + 1} of {totalPages || '—'}</span>
+            <span className="h-3 w-px shrink-0 bg-border" aria-hidden />
+            <span className="shrink-0 tabular-nums">{Math.round(zoom * 100)}%</span>
+            <span className="h-3 w-px shrink-0 bg-border" aria-hidden />
+            <span className="truncate" title={toolHints[tool]}>
+              {toolLabel}
+              {editingText ? ' · editing text' : selectedAnnotation ? ' · ' + selectedAnnotation.kind + ' selected' : ''}
+            </span>
+          </div>
+          <div className="flex shrink-0 items-center gap-2">
+            {selectedId && selectedAnnotation ? (
+              <button
+                type="button"
+                onClick={() => deleteAnnotationOnPage(currentPage, selectedAnnotation.kind, selectedId)}
+                className="flex items-center gap-1 rounded-md px-1.5 py-0.5 text-[11px] font-medium text-danger transition-colors hover:bg-[var(--danger-light)]"
+              >
+                <Trash2 size={11} />
+                Delete
+              </button>
+            ) : (
+              <span className="hidden md:inline">
+                {annotationCount > 0
+                  ? annotationCount + (annotationCount === 1 ? ' annotation' : ' annotations')
+                  : 'No annotations yet'}
+              </span>
+            )}
+          </div>
         </div>
 
         {/* ── Contextual bottom dock (touch / compact) ──────────────
@@ -4194,13 +4921,69 @@ const PdfAnnotationEditor = forwardRef<PdfAnnotationEditorHandle, PdfAnnotationE
             selection formatting → drawing tools. */}
         {touchUI && (
           <div
-            className="shrink-0 border-t border-border bg-surface/95 backdrop-blur"
-            style={{
-              paddingTop: 6,
-              paddingBottom: 'max(env(safe-area-inset-bottom), 6px)',
-            }}
+            className="relative shrink-0 border-t border-border bg-[var(--glass-bg-strong)] backdrop-blur-xl lg:hidden"
+            style={{ paddingBottom: 'env(safe-area-inset-bottom, 0px)' }}
           >
-            {touchDockContent}
+            {mobileStyleOpen && (
+              <>
+                <button
+                  type="button"
+                  aria-label="Close style panel"
+                  onClick={() => setMobileStyleOpen(false)}
+                  className="absolute inset-x-0 bottom-full top-[calc(-100vh+56px)] z-40 cursor-default bg-black/30 backdrop-blur-sm"
+                />
+                <div className="floating-pop-in glass-strong absolute inset-x-2 bottom-full z-50 mb-2 rounded-2xl p-3 shadow-glass-lg">
+                  <div className="flex items-center justify-between">
+                    <span className={metaLabel}>Style</span>
+                    <button
+                      type="button"
+                      onClick={() => setMobileStyleOpen(false)}
+                      aria-label="Close style panel"
+                      className="flex h-7 w-7 items-center justify-center rounded-lg text-muted transition-colors hover:bg-surface-hover hover:text-foreground"
+                    >
+                      <X size={14} />
+                    </button>
+                  </div>
+                  <div className="mt-2 flex items-center justify-between">
+                    <span className={metaLabel}>Colour</span>
+                    <span className="font-mono text-[10px] text-muted">{color}</span>
+                  </div>
+                  <div className="mt-1.5 grid grid-cols-8 gap-1.5">
+                    {COLORS.map(c => (
+                      <button
+                        key={c}
+                        type="button"
+                        title={c}
+                        aria-label={'Colour ' + c}
+                        onClick={() => setColor(c)}
+                        className={['h-8 w-8 rounded-full border-2 transition-transform', color === c ? 'scale-110 border-foreground' : 'border-transparent'].join(' ')}
+                        style={{ backgroundColor: c }}
+                      />
+                    ))}
+                  </div>
+                  <label className="mt-3 flex items-center gap-2">
+                    <span className={metaLabel + ' shrink-0'}>Size</span>
+                    <input
+                      type="range"
+                      min={1}
+                      max={20}
+                      value={strokeSize}
+                      onChange={e => setStrokeSize(Number(e.target.value))}
+                      className="h-1.5 flex-1 accent-[var(--accent)]"
+                      aria-label="Stroke size"
+                    />
+                    <span className="w-6 text-center text-xs tabular-nums text-foreground">{strokeSize}</span>
+                  </label>
+                  {(tool === 'rectangle' || tool === 'circle' || tool === 'arrow') && (
+                    <div className="mt-3 flex items-center gap-2 border-t border-border pt-2.5">
+                      <span className={metaLabel + ' shrink-0'}>Options</span>
+                      {toolOptions}
+                    </div>
+                  )}
+                </div>
+              </>
+            )}
+            <div className="h-14">{touchDockContent}</div>
           </div>
         )}
       </div>

@@ -104,6 +104,12 @@ transcript with collapsible reasoning, context picker, quick actions, chat
 history and structured suggestions. Open it from the note details footer, the
 top-bar overflow menu, or `⌘/Ctrl+J`; `Escape` closes it.
 
+The **PDF annotation workspace** (`components/PdfAnnotationEditor.tsx`) follows the
+same system: a single glass command bar (tools, colour/size popovers, undo/redo,
+always-visible page navigation and zoom, search, panels, export), a contextual
+property row, a Pages/Annotations side panel, a status bar, auto fit-to-page and
+a touch dock with a pinned Style sheet.
+
 The full design contract lives in [UI_REDESIGN_SPEC.md](./md-docs/UI_REDESIGN_SPEC.md).
 
 ## Build
