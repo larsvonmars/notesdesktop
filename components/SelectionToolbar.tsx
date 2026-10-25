@@ -93,7 +93,7 @@ const HIGHLIGHT_COLORS: ColorSwatch[] = [
 ]
 
 const TEXT_COLORS: ColorSwatch[] = [
-  { key: 'default', bg: 'bg-transparent', border: 'border border-gray-300 dark:border-gray-500', label: 'Default color' },
+  { key: 'default', bg: 'bg-transparent', border: 'border border-border-strong', label: 'Default color' },
   { key: 'red', bg: 'bg-red-500', label: 'Red text' },
   { key: 'green', bg: 'bg-green-500', label: 'Green text' },
   { key: 'blue', bg: 'bg-blue-500', label: 'Blue text' },
@@ -146,7 +146,7 @@ const toAriaKeyshortcuts = (display: string): string | undefined => {
 
 const Divider = memo(() => (
   <span
-    className="mx-0.5 h-5 w-px shrink-0 bg-border"
+    className="mx-1 h-4 w-px shrink-0 bg-border"
     aria-hidden="true"
   />
 ))
@@ -177,12 +177,12 @@ const TBtn = memo<TBtnProps>(
       onClick={onClick}
       className={[
         'inline-flex items-center justify-center rounded-full border transition-colors',
-        'focus:outline-none focus-visible:ring-2 focus-visible:ring-alpine-500',
+        'focus-ring',
         'disabled:pointer-events-none disabled:opacity-40',
         mobile ? 'h-10 w-10' : 'h-8 w-8',
         active
-          ? 'border-alpine-300 bg-alpine-50 text-alpine-700 dark:border-alpine-600 dark:bg-alpine-900/50 dark:text-alpine-300'
-          : 'border-transparent text-muted hover:border-border hover:bg-surface-hover hover:text-foreground',
+          ? 'border-accent-light bg-accent-light text-accent'
+          : 'border-transparent text-muted hover:bg-surface-hover hover:text-foreground',
         className,
       ]
         .filter(Boolean)
@@ -372,11 +372,14 @@ const SelectionToolbar = forwardRef<HTMLDivElement | null, SelectionToolbarProps
         role="toolbar"
         aria-label="Text formatting"
         aria-orientation="horizontal"
-        className="selection-toolbar-in fixed z-50 flex flex-col rounded-2xl border border-border bg-surface/95 backdrop-blur-xl shadow-lg"
+        className={`selection-toolbar-in glass-strong fixed z-50 flex flex-col p-1 ${
+          showMore ? 'rounded-2xl' : 'rounded-full'
+        }`}
         style={
           docked
             ? {
-                bottom: 'calc(env(safe-area-inset-bottom, 0px) + 12px)',
+                bottom:
+                  'calc(var(--mobile-bar-height, 60px) + env(safe-area-inset-bottom, 0px) + 10px)',
                 left: 0,
                 right: 0,
                 marginLeft: 'auto',
@@ -391,7 +394,7 @@ const SelectionToolbar = forwardRef<HTMLDivElement | null, SelectionToolbarProps
         onKeyDown={handleKeyDown}
       >
         {/* Primary row */}
-        <div className="flex flex-wrap items-center gap-0.5 px-2 py-1.5">
+        <div className="flex flex-wrap items-center gap-0.5 px-0.5">
           {/* Heading selector */}
           <div ref={headingRef} className="relative">
             <button
@@ -403,13 +406,13 @@ const SelectionToolbar = forwardRef<HTMLDivElement | null, SelectionToolbarProps
               onMouseDown={(e) => e.preventDefault()}
               onClick={toggleHeadingDropdown}
               className={[
-                'inline-flex items-center gap-0.5 rounded-full border px-2 text-xs font-semibold transition-colors',
-                'focus:outline-none focus-visible:ring-2 focus-visible:ring-alpine-500',
+                'inline-flex items-center gap-0.5 rounded-full border px-2.5 text-xs font-semibold transition-colors',
+                'focus-ring',
                 'disabled:pointer-events-none disabled:opacity-40',
                 isMobile ? 'h-10' : 'h-8',
                 activeHeading
-                  ? 'border-alpine-300 bg-alpine-50 text-alpine-700 dark:border-alpine-600 dark:bg-alpine-900/50 dark:text-alpine-300'
-                  : 'border-transparent text-gray-600 hover:border-gray-300 hover:bg-gray-100 dark:text-gray-300 dark:hover:border-gray-600 dark:hover:bg-gray-700',
+                  ? 'border-accent-light bg-accent-light text-accent'
+                  : 'border-transparent text-muted hover:bg-surface-hover hover:text-foreground',
               ].join(' ')}
             >
               {headingBtnLabel}
@@ -423,7 +426,7 @@ const SelectionToolbar = forwardRef<HTMLDivElement | null, SelectionToolbarProps
               <div
                 role="listbox"
                 tabIndex={-1}
-                className={`absolute left-0 z-10 min-w-[160px] overflow-y-auto overflow-x-hidden rounded-xl border border-border bg-surface py-1 shadow-xl ${
+                className={`floating-pop-in glass-strong absolute left-0 z-10 min-w-[170px] overflow-y-auto overflow-x-hidden rounded-2xl py-1 ${
                   headingOpensUp ? 'bottom-full mb-1.5' : 'top-full mt-1.5'
                 }`}
                 // Never taller than the space a small window/short viewport has.
@@ -438,9 +441,9 @@ const SelectionToolbar = forwardRef<HTMLDivElement | null, SelectionToolbarProps
                     if (activeHeading) fire(activeHeading.command)
                     setHeadingOpen(false)
                   }}
-                  className={`flex w-full items-center px-3 py-1.5 text-sm transition-colors ${
+                  className={`focus-ring flex w-full items-center rounded-lg px-3 py-1.5 text-[13px] transition-colors ${
                     !activeHeading
-                      ? 'bg-alpine-50 font-medium text-alpine-700 dark:bg-alpine-900/40 dark:text-alpine-300'
+                      ? 'bg-accent-light font-medium text-accent'
                       : 'text-foreground hover:bg-surface-hover'
                   }`}
                 >
@@ -457,14 +460,14 @@ const SelectionToolbar = forwardRef<HTMLDivElement | null, SelectionToolbarProps
                       fire(command)
                       setHeadingOpen(false)
                     }}
-                    className={`flex w-full items-center justify-between px-3 py-1.5 text-sm transition-colors ${
+                    className={`focus-ring flex w-full items-center justify-between rounded-lg px-3 py-1.5 text-[13px] transition-colors ${
                       activeFormats.has(command)
-                        ? 'bg-alpine-50 font-medium text-alpine-700 dark:bg-alpine-900/40 dark:text-alpine-300'
+                        ? 'bg-accent-light font-medium text-accent'
                         : 'text-foreground hover:bg-surface-hover'
                     }`}
                   >
                     <span>{label}</span>
-                    <kbd className="text-[10px] text-muted">
+                    <kbd className="kbd text-[10px] text-muted">
                       {shortcut}
                     </kbd>
                   </button>
@@ -562,7 +565,7 @@ const SelectionToolbar = forwardRef<HTMLDivElement | null, SelectionToolbarProps
         {/* Expanded panel */}
         {showMore && (
           <div
-            className="flex flex-wrap items-center gap-0.5 border-t border-border px-2 py-1.5"
+            className="flex flex-wrap items-center gap-0.5 border-t border-border px-0.5 pb-0.5 pt-1"
             onMouseDown={(e) => e.preventDefault()}
           >
             {/* Lists */}
@@ -594,7 +597,7 @@ const SelectionToolbar = forwardRef<HTMLDivElement | null, SelectionToolbarProps
                   onClick={() => fire(cmd)}
                   mobile={isMobile}
                 >
-                  <span className={`inline-block h-3.5 w-3.5 rounded-sm ${bg}`} />
+                  <span className={`inline-block h-3.5 w-3.5 rounded-[4px] ring-1 ring-inset ring-border ${bg}`} />
                 </TBtn>
               )
             })}
@@ -622,7 +625,7 @@ const SelectionToolbar = forwardRef<HTMLDivElement | null, SelectionToolbarProps
                   mobile={isMobile}
                 >
                   <span
-                    className={`inline-block h-3.5 w-3.5 rounded-sm ${bg} ${border ?? ''}`}
+                    className={`inline-block h-3.5 w-3.5 rounded-[4px] ${bg} ${border ?? ''}`}
                   />
                 </TBtn>
               )
@@ -670,7 +673,7 @@ const SelectionToolbar = forwardRef<HTMLDivElement | null, SelectionToolbarProps
                   role="menu"
                   tabIndex={-1}
                   aria-label="Change case"
-                  className="absolute bottom-full left-0 z-10 mb-1.5 min-w-[152px] overflow-hidden rounded-xl border border-border bg-surface py-1 shadow-xl"
+                  className="floating-pop-in glass-strong absolute bottom-full left-0 z-10 mb-1.5 min-w-[160px] overflow-hidden rounded-2xl py-1"
                   onMouseDown={(e) => e.preventDefault()}
                 >
                   {TEXT_CASE_OPTIONS.map(({ command, label, sample }) => (
@@ -682,7 +685,7 @@ const SelectionToolbar = forwardRef<HTMLDivElement | null, SelectionToolbarProps
                         fire(command)
                         setCaseOpen(false)
                       }}
-                      className="flex w-full items-center justify-between px-3 py-1.5 text-sm text-foreground transition-colors hover:bg-surface-hover"
+                      className="focus-ring flex w-full items-center justify-between px-3 py-1.5 text-[13px] text-foreground transition-colors hover:bg-surface-hover"
                     >
                       <span>{label}</span>
                       <span className="text-[10px] text-muted">{sample}</span>

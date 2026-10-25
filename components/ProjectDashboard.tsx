@@ -20,12 +20,10 @@ import {
   FilePenLine,
   Edit3,
   AlertCircle,
-  ArrowUpRight,
   Type,
   Star,
   Calendar,
   TrendingUp,
-  Circle,
   Sparkles,
 } from 'lucide-react'
 import type { LucideIcon } from 'lucide-react'
@@ -38,7 +36,11 @@ import {
   updateProjectQuickLinks,
 } from '@/lib/projects'
 import { getTasks, type Task } from '@/lib/tasks'
-import { getNoteTypePresentation, type NoteTypeIconKey } from '@/lib/note-types'
+import {
+  getNoteTypePresentation,
+  type NoteTypeIconKey,
+  type NoteTypePresentation,
+} from '@/lib/note-types'
 import { sendAIRequestStream, type AIMessage } from '@/lib/ai'
 import NoteGraph from '@/components/NoteGraph'
 
@@ -55,18 +57,11 @@ const NOTE_TYPE_ICON_MAP: Record<NoteTypeIconKey, LucideIcon> = {
   'file-pen-line': FilePenLine,
 }
 
-const PRIORITY_COLORS: Record<string, string> = {
-  urgent: 'bg-red-100 text-red-700 dark:bg-red-900/40 dark:text-red-300',
-  high: 'bg-orange-100 text-orange-700 dark:bg-orange-900/40 dark:text-orange-300',
-  medium: 'bg-yellow-100 text-yellow-700 dark:bg-yellow-900/40 dark:text-yellow-300',
-  low: 'bg-green-100 text-green-700 dark:bg-green-900/40 dark:text-green-300',
-}
-
 const PRIORITY_DOT: Record<string, string> = {
-  urgent: 'bg-red-500',
+  urgent: 'bg-danger',
   high: 'bg-orange-500',
-  medium: 'bg-yellow-500',
-  low: 'bg-emerald-500',
+  medium: 'bg-amber-500',
+  low: 'bg-muted',
 }
 
 const STATUS_LABELS: Record<string, string> = {
@@ -77,12 +72,33 @@ const STATUS_LABELS: Record<string, string> = {
   cancelled: 'Cancelled',
 }
 
-const STATUS_COLORS: Record<string, { bg: string; text: string; ring: string }> = {
-  todo: { bg: 'bg-slate-100 dark:bg-slate-800', text: 'text-slate-600 dark:text-slate-300', ring: '#94a3b8' },
-  in_progress: { bg: 'bg-blue-50 dark:bg-blue-900/30', text: 'text-blue-600 dark:text-blue-300', ring: '#3b82f6' },
-  waiting: { bg: 'bg-amber-50 dark:bg-amber-900/30', text: 'text-amber-600 dark:text-amber-300', ring: '#f59e0b' },
-  completed: { bg: 'bg-emerald-50 dark:bg-emerald-900/30', text: 'text-emerald-600 dark:text-emerald-300', ring: '#10b981' },
-  cancelled: { bg: 'bg-stone-100 dark:bg-stone-800', text: 'text-stone-500 dark:text-stone-400', ring: '#a8a29e' },
+const STATUS_PILL: Record<string, string> = {
+  todo: 'bg-surface-hover text-muted',
+  in_progress: 'bg-accent-light text-accent',
+  waiting: 'bg-warning-light text-warning',
+  completed: 'bg-success-light text-success',
+  cancelled: 'bg-surface-hover text-muted',
+}
+
+/** Theme-aware tint for note-type accents. */
+function typeTint(presentation: NoteTypePresentation): string {
+  return `color-mix(in srgb, ${presentation.graphStroke} 16%, transparent)`
+}
+
+function typeInk(presentation: NoteTypePresentation): string {
+  return `color-mix(in srgb, ${presentation.graphStroke} 72%, var(--foreground))`
+}
+
+/** Pick a readable foreground for a project colour chip. */
+function readableOn(color: string): string {
+  const hex = color.replace('#', '')
+  if (hex.length !== 6) return '#ffffff'
+  const r = parseInt(hex.slice(0, 2), 16)
+  const g = parseInt(hex.slice(2, 4), 16)
+  const b = parseInt(hex.slice(4, 6), 16)
+  if ([r, g, b].some((value) => Number.isNaN(value))) return '#ffffff'
+  const luminance = (0.299 * r + 0.587 * g + 0.114 * b) / 255
+  return luminance > 0.62 ? '#17162b' : '#ffffff'
 }
 
 // ────────────────────────────────────────────────────────────────────────────
@@ -450,112 +466,138 @@ export default function ProjectDashboard({
   const NoteTypeIcon = ({ noteType, size = 14 }: { noteType: NoteType; size?: number }) => {
     const pres = getNoteTypePresentation(noteType)
     const Icon = NOTE_TYPE_ICON_MAP[pres.iconKey]
-    return <Icon size={size} className={pres.iconClassName} />
+    return <Icon size={size} style={{ color: typeInk(pres) }} />
   }
 
   const completionPct = tasks.length > 0 ? Math.round((completedTaskCount / tasks.length) * 100) : 0
 
   // ── Layout ──────────────────────────────────────────────────────────────
   return (
-    <div className="h-full w-full overflow-y-auto bg-background">
-      {/* ────── Hero Banner ────── */}
-      <div className="relative overflow-hidden" style={{ background: `linear-gradient(135deg, ${project.color}18 0%, ${project.color}08 50%, transparent 100%)` }}>
-        <div className="absolute inset-0 bg-gradient-to-b from-transparent via-transparent to-background" />
-        {/* Decorative circles */}
-        <div className="absolute -top-20 -right-20 h-64 w-64 rounded-full opacity-[0.07]" style={{ backgroundColor: project.color }} />
-        <div className="absolute -bottom-10 -left-10 h-40 w-40 rounded-full opacity-[0.05]" style={{ backgroundColor: project.color }} />
+    <div className="h-full w-full overflow-y-auto scroll-thin">
+      <div className="mx-auto w-full max-w-7xl px-4 pb-24 pt-5 sm:px-6 lg:px-8 lg:pb-12">
+        {/* ────── Hero Banner ────── */}
+        <div className="glass animate-rise-in relative overflow-hidden rounded-3xl">
+          <div
+            className="pointer-events-none absolute inset-0"
+            style={{
+              background: `linear-gradient(135deg, ${project.color}26 0%, ${project.color}0d 48%, transparent 100%)`,
+            }}
+          />
+          <div
+            className="pointer-events-none absolute -right-24 -top-24 h-64 w-64 rounded-full opacity-20 blur-3xl"
+            style={{ backgroundColor: project.color }}
+          />
+          <div
+            className="pointer-events-none absolute -bottom-16 -left-20 h-48 w-48 rounded-full opacity-10 blur-3xl"
+            style={{ backgroundColor: project.color }}
+          />
 
-        <div className="relative mx-auto max-w-7xl px-4 pt-5 pb-8 sm:px-6 lg:px-8">
-          <button
-            onClick={onClose}
-            className="mb-4 inline-flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-xs font-medium text-muted hover:bg-surface-hover/60 hover:text-foreground transition-colors backdrop-blur-sm"
-          >
-            <ArrowLeft size={14} />
-            Back to notes
-          </button>
-
-          <div className="flex items-start gap-5">
-            <div
-              className="mt-0.5 h-14 w-14 rounded-2xl flex-shrink-0 flex items-center justify-center text-white font-bold text-2xl shadow-lg shadow-black/10"
-              style={{ backgroundColor: project.color }}
+          <div className="relative px-5 pb-6 pt-4 sm:px-7 sm:pb-7 sm:pt-5">
+            <button
+              type="button"
+              onClick={onClose}
+              className="glass-btn-ghost mb-4 w-auto gap-1.5 px-2.5 text-[11px]"
             >
-              {project.name.charAt(0).toUpperCase()}
-            </div>
-            <div className="flex-1 min-w-0">
-              <h1 className="text-3xl font-extrabold text-foreground tracking-tight truncate">{project.name}</h1>
-              {editingDescription ? (
-                <div className="mt-2 max-w-2xl">
-                  <textarea
-                    ref={descriptionRef}
-                    value={descriptionDraft}
-                    onChange={e => setDescriptionDraft(e.target.value)}
-                    onBlur={handleSaveDescription}
-                    onKeyDown={e => {
-                      if (e.key === 'Escape') {
-                        setEditingDescription(false)
-                        setDescriptionDraft(project.description ?? '')
-                      }
-                      if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) handleSaveDescription()
-                    }}
-                    placeholder="Add a project description…"
-                    className="w-full resize-none rounded-xl border border-border bg-surface/80 backdrop-blur-sm px-4 py-3 text-sm text-foreground placeholder:text-muted focus:outline-none focus:ring-2 focus:ring-accent min-h-[80px]"
-                    rows={3}
-                  />
-                  <p className="mt-1.5 text-[10px] text-muted">Ctrl+Enter to save · Escape to cancel</p>
-                </div>
-              ) : (
-                <button
-                  onClick={() => { setDescriptionDraft(project.description ?? ''); setEditingDescription(true) }}
-                  className="group mt-1.5 flex items-center gap-1.5 text-sm text-muted hover:text-foreground transition-colors text-left max-w-2xl"
-                >
-                  <span className="truncate">{project.description || 'Add a project description…'}</span>
-                  <Edit3 size={12} className="opacity-0 group-hover:opacity-60 transition-opacity flex-shrink-0" />
-                </button>
-              )}
+              <ArrowLeft size={13} />
+              Back to notes
+            </button>
 
-              {/* Inline meta */}
-              <div className="mt-3 flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-muted">
-                <span className="inline-flex items-center gap-1">
-                  <Calendar size={12} />
-                  Created {new Date(project.created_at).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' })}
-                </span>
-                {projectNotes.length > 0 && (
-                  <span className="inline-flex items-center gap-1">
-                    <Activity size={12} />
-                    Last edit {relativeTime(recentNotes[0]?.updated_at ?? project.updated_at)}
-                  </span>
+            <div className="flex items-start gap-4 sm:gap-5">
+              <div
+                className="flex h-14 w-14 shrink-0 items-center justify-center rounded-2xl font-display text-2xl font-bold shadow-glass sm:h-16 sm:w-16"
+                style={{ backgroundColor: project.color, color: readableOn(project.color) }}
+              >
+                {project.name.charAt(0).toUpperCase()}
+              </div>
+              <div className="min-w-0 flex-1">
+                <h1 className="truncate font-display text-2xl font-semibold tracking-[-0.02em] text-foreground sm:text-3xl">
+                  {project.name}
+                </h1>
+                {editingDescription ? (
+                  <div className="mt-2 max-w-2xl">
+                    <textarea
+                      ref={descriptionRef}
+                      value={descriptionDraft}
+                      onChange={e => setDescriptionDraft(e.target.value)}
+                      onBlur={handleSaveDescription}
+                      onKeyDown={e => {
+                        if (e.key === 'Escape') {
+                          setEditingDescription(false)
+                          setDescriptionDraft(project.description ?? '')
+                        }
+                        if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) handleSaveDescription()
+                      }}
+                      placeholder="Add a project description…"
+                      className="glass-input h-auto min-h-[84px] w-full resize-none px-4 py-3 text-sm leading-6"
+                      rows={3}
+                    />
+                    <p className="mt-1.5 text-[10px] text-muted">
+                      Ctrl+Enter to save · Escape to cancel
+                    </p>
+                  </div>
+                ) : (
+                  <button
+                    type="button"
+                    onClick={() => { setDescriptionDraft(project.description ?? ''); setEditingDescription(true) }}
+                    className="focus-ring group mt-1.5 flex max-w-2xl items-center gap-1.5 rounded-md text-left text-sm text-muted transition-colors hover:text-foreground"
+                  >
+                    <span className="truncate">
+                      {project.description || 'Add a project description…'}
+                    </span>
+                    <Edit3
+                      size={12}
+                      className="shrink-0 opacity-0 transition-opacity group-hover:opacity-60"
+                    />
+                  </button>
                 )}
+
+                {/* Inline meta */}
+                <div className="mt-3 flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-muted">
+                  <span className="inline-flex items-center gap-1.5">
+                    <Calendar size={12} />
+                    Created{' '}
+                    {new Date(project.created_at).toLocaleDateString(undefined, {
+                      month: 'short',
+                      day: 'numeric',
+                      year: 'numeric',
+                    })}
+                  </span>
+                  {projectNotes.length > 0 && (
+                    <span className="inline-flex items-center gap-1.5">
+                      <Activity size={12} />
+                      Last edit {relativeTime(recentNotes[0]?.updated_at ?? project.updated_at)}
+                    </span>
+                  )}
+                </div>
               </div>
             </div>
           </div>
         </div>
-      </div>
 
-      <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8 -mt-1">
+        <div className="mt-5 space-y-5">
+          {/* ────── Stats Strip ────── */}
+          <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+            <StatCard icon={FileText} label="Notes" value={stats.noteCount} accent={project.color} />
+            <StatCard icon={FolderOpen} label="Folders" value={stats.folderCount} accent="var(--hue-amber)" />
+            <StatCard icon={CheckCircle2} label="Open tasks" value={stats.openTasks} accent="var(--hue-mint)" />
+            <StatCard icon={Type} label="Words" value={stats.totalWords.toLocaleString()} accent="var(--hue-violet)" />
+          </div>
 
-        {/* ────── Stats Strip ────── */}
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-8">
-          <StatCard icon={FileText} label="Notes" value={stats.noteCount} accent={project.color} />
-          <StatCard icon={FolderOpen} label="Folders" value={stats.folderCount} accent="#f59e0b" />
-          <StatCard icon={CheckCircle2} label="Open Tasks" value={stats.openTasks} accent="#10b981" />
-          <StatCard icon={Type} label="Words" value={stats.totalWords.toLocaleString()} accent="#8b5cf6" />
-        </div>
-
-        {/* ────── AI Summary ────── */}
-        <DashboardCard
-          title="AI Summary"
-          icon={Sparkles}
-          className="mb-6"
-          action={
-            <button
-              onClick={handleGenerateSummary}
-              disabled={projectNotes.length === 0 && tasks.length === 0}
-              className="inline-flex items-center gap-1.5 rounded-lg px-2.5 py-1 text-[11px] font-medium text-muted hover:bg-surface-hover hover:text-foreground transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
-              title={isGeneratingSummary ? 'Stop generating' : 'Generate AI summary'}
-            >
+          {/* ────── AI Summary ────── */}
+          <DashboardCard
+            title="AI Summary"
+            icon={Sparkles}
+            action={
+              <button
+                type="button"
+                onClick={handleGenerateSummary}
+                disabled={projectNotes.length === 0 && tasks.length === 0}
+                className="glass-btn-ghost w-auto gap-1.5 px-2.5 text-[11px]"
+                title={isGeneratingSummary ? 'Stop generating' : 'Generate AI summary'}
+              >
                 {isGeneratingSummary ? (
                   <>
-                    <div className="h-3 w-3 border-[1.5px] border-accent border-t-transparent rounded-full animate-spin" />
+                    <div className="h-3 w-3 animate-spin rounded-full border-[1.5px] border-accent border-t-transparent" />
                     Stop
                   </>
                 ) : (
@@ -565,352 +607,410 @@ export default function ProjectDashboard({
                   </>
                 )}
               </button>
-          }
-        >
-          {summaryError ? (
-            <div className="flex items-center gap-2 rounded-lg bg-red-50 dark:bg-red-900/20 px-3 py-2 text-xs text-red-600 dark:text-red-400">
-              <AlertCircle size={14} />
-              <span>{summaryError}</span>
-            </div>
-          ) : aiSummary ? (
-            <div className="text-sm text-foreground/90 leading-relaxed whitespace-pre-wrap">
-              {aiSummary}
-              {isGeneratingSummary && <span className="inline-block w-1.5 h-4 bg-accent/70 animate-pulse ml-0.5 align-text-bottom rounded-sm" />}
-            </div>
-          ) : (
-            <EmptyState text={projectNotes.length === 0 && tasks.length === 0 ? 'Add notes or tasks first' : 'Click Generate to create an AI-powered project summary'} icon={Sparkles} />
-          )}
-        </DashboardCard>
-
-        {/* ────── 7-Day Activity Heatmap ────── */}
-        <DashboardCard title="Weekly Activity" icon={TrendingUp} className="mb-6">
-          <div className="flex items-end gap-2 h-20">
-            {heatmap.map((d, i) => (
-              <div key={i} className="flex-1 flex flex-col items-center gap-1">
-                <div className="w-full relative group">
-                  <div
-                    className="w-full rounded-md transition-all duration-300 min-h-[4px]"
-                    style={{
-                      height: `${Math.max(6, (d.count / heatmapMax) * 64)}px`,
-                      backgroundColor: d.count > 0 ? project.color : 'var(--surface-hover)',
-                      opacity: d.count > 0 ? 0.25 + (d.count / heatmapMax) * 0.75 : 1,
-                    }}
-                  />
-                  {d.count > 0 && (
-                    <div className="absolute -top-6 left-1/2 -translate-x-1/2 opacity-0 group-hover:opacity-100 transition-opacity text-[10px] font-medium text-foreground bg-surface border border-border rounded px-1.5 py-0.5 shadow-sm whitespace-nowrap pointer-events-none">
-                      {d.count} edit{d.count !== 1 ? 's' : ''}
-                    </div>
-                  )}
-                </div>
-                <span className="text-[10px] text-muted">{d.day}</span>
+            }
+          >
+            {summaryError ? (
+              <div className="flex items-center gap-2 rounded-xl bg-danger-light px-3 py-2 text-xs text-danger">
+                <AlertCircle size={14} />
+                <span>{summaryError}</span>
               </div>
-            ))}
-          </div>
-        </DashboardCard>
-
-        {/* ────── Main 3-Column Grid ────── */}
-        <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 mb-8">
-
-          {/* ─── LEFT: Recent Notes + Note Types ─── */}
-          <div className="lg:col-span-4 space-y-6">
-            <DashboardCard title="Recent Notes" icon={Clock}>
-              {recentNotes.length === 0 ? (
-                <EmptyState text="No notes yet" icon={FileText} />
-              ) : (
-                <div className="space-y-0.5">
-                  {recentNotes.map(note => {
-                    const pres = getNoteTypePresentation(note.note_type)
-                    return (
-                      <button
-                        key={note.id}
-                        onClick={() => void openNote(note)}
-                        className="group flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-left transition-all hover:bg-surface-hover active:scale-[0.99]"
-                      >
-                        <div className={`h-8 w-8 rounded-lg flex items-center justify-center flex-shrink-0 ${pres.iconBgClassName}`}>
-                          <NoteTypeIcon noteType={note.note_type} />
-                        </div>
-                        <div className="flex-1 min-w-0">
-                          <div className="text-sm font-medium text-foreground truncate group-hover:text-accent transition-colors">
-                            {note.title || 'Untitled'}
-                          </div>
-                          <div className="text-[11px] text-muted truncate">{pres.label}</div>
-                        </div>
-                        <span className="text-[10px] text-muted flex-shrink-0 tabular-nums">
-                          {relativeTime(note.updated_at)}
-                        </span>
-                      </button>
-                    )
-                  })}
-                </div>
-              )}
-            </DashboardCard>
-
-            {/* Note Type Distribution */}
-            {noteTypeDistribution.length > 0 && (
-              <DashboardCard title="Note Types" icon={BarChart3}>
-                <div className="space-y-2.5">
-                  {noteTypeDistribution.map(([type, count]) => {
-                    const pres = getNoteTypePresentation(type)
-                    const Icon = NOTE_TYPE_ICON_MAP[pres.iconKey]
-                    const pct = projectNotes.length > 0 ? (count / projectNotes.length) * 100 : 0
-                    return (
-                      <div key={type} className="flex items-center gap-3">
-                        <div className={`h-7 w-7 rounded-lg flex items-center justify-center flex-shrink-0 ${pres.iconBgClassName}`}>
-                          <Icon size={13} />
-                        </div>
-                        <div className="flex-1 min-w-0">
-                          <div className="flex items-center justify-between mb-1">
-                            <span className="text-xs font-medium text-foreground">{pres.label}</span>
-                            <span className="text-[10px] text-muted tabular-nums">{count}</span>
-                          </div>
-                          <div className="h-1.5 rounded-full bg-surface-hover overflow-hidden">
-                            <div
-                              className="h-full rounded-full transition-all duration-500"
-                              style={{ width: `${pct}%`, backgroundColor: pres.graphStroke }}
-                            />
-                          </div>
-                        </div>
-                      </div>
-                    )
-                  })}
-                </div>
-              </DashboardCard>
+            ) : aiSummary ? (
+              <div className="whitespace-pre-wrap text-sm leading-6 text-foreground">
+                {aiSummary}
+                {isGeneratingSummary && (
+                  <span className="ml-0.5 inline-block h-4 w-1.5 animate-pulse rounded-sm bg-accent align-text-bottom opacity-70" />
+                )}
+              </div>
+            ) : (
+              <EmptyState
+                text={
+                  projectNotes.length === 0 && tasks.length === 0
+                    ? 'Add notes or tasks first'
+                    : 'Click Generate to create an AI-powered project summary'
+                }
+                icon={Sparkles}
+              />
             )}
-          </div>
+          </DashboardCard>
 
-          {/* ─── CENTER: Tasks ─── */}
-          <div className="lg:col-span-4 space-y-6">
-            <DashboardCard title="Tasks" icon={CheckCircle2}>
-              {isLoadingTasks ? (
-                <div className="py-8 flex flex-col items-center gap-2">
-                  <div className="h-5 w-5 border-2 border-accent border-t-transparent rounded-full animate-spin" />
-                  <span className="text-xs text-muted">Loading tasks…</span>
+          {/* ────── 7-Day Activity Heatmap ────── */}
+          <DashboardCard title="Weekly Activity" icon={TrendingUp}>
+            <div className="flex h-20 items-end gap-2">
+              {heatmap.map((d, i) => (
+                <div key={i} className="flex flex-1 flex-col items-center gap-1">
+                  <div className="group relative w-full">
+                    <div
+                      className="min-h-[4px] w-full rounded-md transition-all duration-300"
+                      style={{
+                        height: `${Math.max(6, (d.count / heatmapMax) * 64)}px`,
+                        backgroundColor: d.count > 0 ? project.color : 'var(--surface-hover)',
+                        opacity: d.count > 0 ? 0.25 + (d.count / heatmapMax) * 0.75 : 1,
+                      }}
+                    />
+                    {d.count > 0 && (
+                      <div className="pointer-events-none absolute -top-6 left-1/2 -translate-x-1/2 whitespace-nowrap rounded-lg border border-border bg-surface px-1.5 py-0.5 text-[10px] font-medium text-foreground opacity-0 shadow-glass-sm transition-opacity group-hover:opacity-100">
+                        {d.count} edit{d.count !== 1 ? 's' : ''}
+                      </div>
+                    )}
+                  </div>
+                  <span className="text-[10px] text-muted">{d.day}</span>
                 </div>
-              ) : tasks.length === 0 ? (
-                <EmptyState text="No tasks linked to this project" icon={CheckCircle2} />
-              ) : (
-                <div className="space-y-4">
-                  {/* Ring chart + stats */}
-                  <div className="flex items-center gap-5">
-                    <CompletionRing pct={completionPct} color={project.color} />
-                    <div className="flex-1 space-y-1.5">
-                      <div className="text-2xl font-bold text-foreground tabular-nums">{completionPct}%</div>
-                      <div className="text-xs text-muted">{completedTaskCount} of {tasks.length} completed</div>
-                      {/* Status pills */}
-                      <div className="flex flex-wrap gap-1.5 mt-2">
-                        {Object.entries(taskStatusCounts).map(([status, count]) => {
-                          const sc = STATUS_COLORS[status]
-                          return (
-                            <span key={status} className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-medium ${sc?.bg ?? ''} ${sc?.text ?? ''}`}>
+              ))}
+            </div>
+          </DashboardCard>
+
+          {/* ────── Main 3-Column Grid ────── */}
+          <div className="grid grid-cols-1 gap-5 lg:grid-cols-12">
+            {/* ─── LEFT: Recent Notes + Note Types ─── */}
+            <div className="min-w-0 space-y-5 lg:col-span-4">
+              <DashboardCard title="Recent Notes" icon={Clock}>
+                {recentNotes.length === 0 ? (
+                  <EmptyState text="No notes yet" icon={FileText} />
+                ) : (
+                  <div className="space-y-0.5">
+                    {recentNotes.map(note => {
+                      const pres = getNoteTypePresentation(note.note_type)
+                      return (
+                        <button
+                          key={note.id}
+                          type="button"
+                          onClick={() => void openNote(note)}
+                          className="glass-row group gap-3 px-2 py-2.5"
+                        >
+                          <span
+                            className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg"
+                            style={{ backgroundColor: typeTint(pres) }}
+                          >
+                            <NoteTypeIcon noteType={note.note_type} />
+                          </span>
+                          <span className="min-w-0 flex-1">
+                            <span className="block truncate text-[13px] font-medium text-foreground transition-colors group-hover:text-accent">
+                              {note.title || 'Untitled'}
+                            </span>
+                            <span className="block truncate text-[11px] text-muted">
+                              {pres.label}
+                            </span>
+                          </span>
+                          <span className="shrink-0 text-[10px] tabular-nums text-muted">
+                            {relativeTime(note.updated_at)}
+                          </span>
+                        </button>
+                      )
+                    })}
+                  </div>
+                )}
+              </DashboardCard>
+
+              {/* Note Type Distribution */}
+              {noteTypeDistribution.length > 0 && (
+                <DashboardCard title="Note Types" icon={BarChart3}>
+                  <div className="space-y-2.5">
+                    {noteTypeDistribution.map(([type, count]) => {
+                      const pres = getNoteTypePresentation(type)
+                      const Icon = NOTE_TYPE_ICON_MAP[pres.iconKey]
+                      const pct = projectNotes.length > 0 ? (count / projectNotes.length) * 100 : 0
+                      return (
+                        <div key={type} className="flex items-center gap-3">
+                          <span
+                            className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg"
+                            style={{ backgroundColor: typeTint(pres) }}
+                          >
+                            <Icon size={13} style={{ color: typeInk(pres) }} />
+                          </span>
+                          <div className="min-w-0 flex-1">
+                            <div className="mb-1 flex items-center justify-between">
+                              <span className="text-xs font-medium text-foreground">{pres.label}</span>
+                              <span className="text-[10px] tabular-nums text-muted">{count}</span>
+                            </div>
+                            <div className="h-1.5 overflow-hidden rounded-full bg-surface-hover">
+                              <div
+                                className="h-full rounded-full transition-all duration-500"
+                                style={{ width: `${pct}%`, backgroundColor: pres.graphStroke }}
+                              />
+                            </div>
+                          </div>
+                        </div>
+                      )
+                    })}
+                  </div>
+                </DashboardCard>
+              )}
+            </div>
+
+            {/* ─── CENTER: Tasks ─── */}
+            <div className="min-w-0 space-y-5 lg:col-span-4">
+              <DashboardCard title="Tasks" icon={CheckCircle2}>
+                {isLoadingTasks ? (
+                  <div className="flex flex-col items-center gap-2 py-8">
+                    <div className="h-5 w-5 animate-spin rounded-full border-2 border-accent border-t-transparent" />
+                    <span className="text-xs text-muted">Loading tasks…</span>
+                  </div>
+                ) : tasks.length === 0 ? (
+                  <EmptyState text="No tasks linked to this project" icon={CheckCircle2} />
+                ) : (
+                  <div className="space-y-4">
+                    {/* Ring chart + stats */}
+                    <div className="flex items-center gap-5">
+                      <CompletionRing pct={completionPct} color={project.color} />
+                      <div className="min-w-0 flex-1 space-y-1.5">
+                        <div className="font-display text-2xl font-semibold tabular-nums leading-none text-foreground">
+                          {completionPct}%
+                        </div>
+                        <div className="text-xs text-muted">
+                          {completedTaskCount} of {tasks.length} completed
+                        </div>
+                        <div className="mt-2 flex flex-wrap gap-1.5">
+                          {Object.entries(taskStatusCounts).map(([status, count]) => (
+                            <span
+                              key={status}
+                              className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-medium ${STATUS_PILL[status] ?? 'bg-surface-hover text-muted'}`}
+                            >
                               {STATUS_LABELS[status] ?? status}
                               <span className="opacity-70">{count}</span>
                             </span>
-                          )
-                        })}
+                          ))}
+                        </div>
                       </div>
                     </div>
-                  </div>
 
-                  {/* Open tasks */}
-                  {openTasks.length > 0 && (
-                    <div>
-                      <div className="text-[11px] font-semibold text-muted uppercase tracking-wider mb-2">Open</div>
-                      <div className="space-y-0.5">
-                        {openTasks.slice(0, 6).map(task => (
-                          <div
-                            key={task.id}
-                            className="flex items-center gap-2.5 rounded-xl px-3 py-2 hover:bg-surface-hover transition-colors"
-                          >
-                            <div className={`h-2 w-2 rounded-full flex-shrink-0 ${PRIORITY_DOT[task.priority] ?? 'bg-slate-400'}`} />
-                            <span className="text-sm text-foreground truncate flex-1">{task.title}</span>
-                            {task.is_starred && <Star size={12} className="text-amber-400 fill-amber-400 flex-shrink-0" />}
-                            {task.due_date && (
-                              <span className="text-[10px] text-muted tabular-nums flex-shrink-0">
-                                {new Date(task.due_date).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}
-                              </span>
-                            )}
-                          </div>
-                        ))}
-                        {openTasks.length > 6 && (
-                          <p className="text-center text-[11px] text-muted py-1.5">
-                            + {openTasks.length - 6} more
-                          </p>
-                        )}
-                      </div>
-                    </div>
-                  )}
-
-                  {/* Upcoming deadlines */}
-                  {upcomingTasks.length > 0 && (
-                    <div>
-                      <div className="text-[11px] font-semibold text-muted uppercase tracking-wider mb-2">Upcoming Deadlines</div>
-                      <div className="space-y-1">
-                        {upcomingTasks.map(task => {
-                          const due = new Date(task.due_date!)
-                          const daysLeft = Math.ceil((due.getTime() - Date.now()) / 86400000)
-                          const isOverdue = daysLeft < 0
-                          const isUrgent = daysLeft >= 0 && daysLeft <= 2
-                          return (
-                            <div key={task.id} className="flex items-center gap-2.5 rounded-lg px-3 py-1.5">
-                              <Calendar size={12} className={isOverdue ? 'text-danger' : isUrgent ? 'text-warning' : 'text-muted'} />
-                              <span className="text-xs text-foreground truncate flex-1">{task.title}</span>
-                              <span className={`text-[10px] font-medium tabular-nums ${isOverdue ? 'text-danger' : isUrgent ? 'text-warning' : 'text-muted'}`}>
-                                {isOverdue ? `${Math.abs(daysLeft)}d overdue` : daysLeft === 0 ? 'Today' : `${daysLeft}d left`}
-                              </span>
-                            </div>
-                          )
-                        })}
-                      </div>
-                    </div>
-                  )}
-                </div>
-              )}
-            </DashboardCard>
-          </div>
-
-          {/* ─── RIGHT: Activity + Quick Links ─── */}
-          <div className="lg:col-span-4 space-y-6">
-            <DashboardCard title="Activity" icon={Activity}>
-              {activityGroups.length === 0 ? (
-                <EmptyState text="No activity yet" icon={Activity} />
-              ) : (
-                <div className="space-y-4">
-                  {activityGroups.map((group, gi) => (
-                    <div key={gi}>
-                      <div className="text-[10px] font-semibold text-muted uppercase tracking-wider mb-1.5">{group.label}</div>
-                      <div className="relative pl-4 border-l-2 border-border/60 space-y-1">
-                        {group.items.map(note => {
-                          const pres = getNoteTypePresentation(note.note_type)
-                          const Icon = NOTE_TYPE_ICON_MAP[pres.iconKey]
-                          return (
+                    {/* Open tasks */}
+                    {openTasks.length > 0 && (
+                      <div>
+                        <div className="mb-2 text-[11px] font-semibold uppercase tracking-[0.08em] text-muted">
+                          Open
+                        </div>
+                        <div className="space-y-0.5">
+                          {openTasks.slice(0, 6).map(task => (
                             <div
-                              key={note.id}
-                              className="relative flex items-center gap-2.5 group cursor-pointer rounded-lg py-1.5 px-2 -ml-2 hover:bg-surface-hover transition-colors"
-                              onClick={() => void openNote(note)}
+                              key={task.id}
+                              className="flex items-center gap-2.5 rounded-xl px-2.5 py-2 transition-colors hover:bg-surface-hover"
                             >
                               <div
-                                className="absolute -left-[13px] top-1/2 -translate-y-1/2 h-2 w-2 rounded-full border-2 border-background transition-colors"
-                                style={{ backgroundColor: pres.graphStroke }}
+                                className={`h-2 w-2 shrink-0 rounded-full ${PRIORITY_DOT[task.priority] ?? 'bg-muted'}`}
                               />
-                              <Icon size={13} className={`${pres.iconClassName} flex-shrink-0`} />
-                              <span className="text-xs text-foreground truncate flex-1 group-hover:text-accent transition-colors font-medium">
-                                {note.title || 'Untitled'}
+                              <span className="flex-1 truncate text-[13px] text-foreground">
+                                {task.title}
                               </span>
-                              <span className="text-[10px] text-muted flex-shrink-0 tabular-nums">
-                                {relativeTime(note.updated_at)}
-                              </span>
+                              {task.is_starred && (
+                                <Star size={12} className="shrink-0 fill-amber-400 text-amber-400" />
+                              )}
+                              {task.due_date && (
+                                <span className="shrink-0 text-[10px] tabular-nums text-muted">
+                                  {new Date(task.due_date).toLocaleDateString(undefined, {
+                                    month: 'short',
+                                    day: 'numeric',
+                                  })}
+                                </span>
+                              )}
                             </div>
-                          )
-                        })}
+                          ))}
+                          {openTasks.length > 6 && (
+                            <p className="py-1.5 text-center text-[11px] text-muted">
+                              + {openTasks.length - 6} more
+                            </p>
+                          )}
+                        </div>
                       </div>
-                    </div>
-                  ))}
-                </div>
-              )}
-            </DashboardCard>
+                    )}
 
-            {/* Quick Links */}
-            <DashboardCard
-              title="Quick Links"
-              icon={Link2}
-              action={
-                <button
-                  onClick={() => setShowAddLink(true)}
-                  className="rounded-lg p-1 text-muted hover:bg-surface-hover hover:text-foreground transition-colors"
-                  title="Add quick link"
-                >
-                  <Plus size={14} />
-                </button>
-              }
-            >
-              {quickLinks.length === 0 && !showAddLink ? (
-                <EmptyState text="No quick links yet" icon={Link2} />
-              ) : (
-                <div className="space-y-1">
-                  {quickLinks.map(link => (
-                    <div
-                      key={link.id}
-                      className="group flex items-center gap-3 rounded-xl px-3 py-2.5 hover:bg-surface-hover transition-colors"
-                    >
-                      <div className="h-7 w-7 rounded-lg bg-surface-hover flex items-center justify-center flex-shrink-0">
-                        <ExternalLink size={13} className="text-muted" />
+                    {/* Upcoming deadlines */}
+                    {upcomingTasks.length > 0 && (
+                      <div>
+                        <div className="mb-2 text-[11px] font-semibold uppercase tracking-[0.08em] text-muted">
+                          Upcoming Deadlines
+                        </div>
+                        <div className="space-y-1">
+                          {upcomingTasks.map(task => {
+                            const due = new Date(task.due_date!)
+                            const daysLeft = Math.ceil((due.getTime() - Date.now()) / 86400000)
+                            const isOverdue = daysLeft < 0
+                            const isUrgent = daysLeft >= 0 && daysLeft <= 2
+                            return (
+                              <div key={task.id} className="flex items-center gap-2.5 rounded-lg px-2.5 py-1.5">
+                                <Calendar
+                                  size={12}
+                                  className={isOverdue ? 'text-danger' : isUrgent ? 'text-warning' : 'text-muted'}
+                                />
+                                <span className="flex-1 truncate text-xs text-foreground">
+                                  {task.title}
+                                </span>
+                                <span
+                                  className={`text-[10px] font-medium tabular-nums ${
+                                    isOverdue ? 'text-danger' : isUrgent ? 'text-warning' : 'text-muted'
+                                  }`}
+                                >
+                                  {isOverdue
+                                    ? `${Math.abs(daysLeft)}d overdue`
+                                    : daysLeft === 0
+                                      ? 'Today'
+                                      : `${daysLeft}d left`}
+                                </span>
+                              </div>
+                            )
+                          })}
+                        </div>
                       </div>
-                      <a
-                        href={link.url}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="text-sm text-foreground hover:text-accent truncate flex-1 transition-colors"
+                    )}
+                  </div>
+                )}
+              </DashboardCard>
+            </div>
+
+            {/* ─── RIGHT: Activity + Quick Links ─── */}
+            <div className="min-w-0 space-y-5 lg:col-span-4">
+              <DashboardCard title="Activity" icon={Activity}>
+                {activityGroups.length === 0 ? (
+                  <EmptyState text="No activity yet" icon={Activity} />
+                ) : (
+                  <div className="space-y-4">
+                    {activityGroups.map((group, gi) => (
+                      <div key={gi}>
+                        <div className="mb-1.5 text-[11px] font-semibold uppercase tracking-[0.08em] text-muted">
+                          {group.label}
+                        </div>
+                        <div className="relative space-y-1 border-l-2 border-border pl-4">
+                          {group.items.map(note => {
+                            const pres = getNoteTypePresentation(note.note_type)
+                            const Icon = NOTE_TYPE_ICON_MAP[pres.iconKey]
+                            return (
+                              <button
+                                key={note.id}
+                                type="button"
+                                onClick={() => void openNote(note)}
+                                className="focus-ring group relative -ml-2 flex w-full items-center gap-2.5 rounded-lg px-2 py-1.5 text-left transition-colors hover:bg-surface-hover"
+                              >
+                                <span
+                                  className="absolute -left-[13px] top-1/2 h-2 w-2 -translate-y-1/2 rounded-full border-2 border-background"
+                                  style={{ backgroundColor: pres.graphStroke }}
+                                />
+                                <Icon size={13} style={{ color: typeInk(pres) }} className="shrink-0" />
+                                <span className="flex-1 truncate text-xs font-medium text-foreground transition-colors group-hover:text-accent">
+                                  {note.title || 'Untitled'}
+                                </span>
+                                <span className="shrink-0 text-[10px] tabular-nums text-muted">
+                                  {relativeTime(note.updated_at)}
+                                </span>
+                              </button>
+                            )
+                          })}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </DashboardCard>
+
+              {/* Quick Links */}
+              <DashboardCard
+                title="Quick Links"
+                icon={Link2}
+                action={
+                  <button
+                    type="button"
+                    onClick={() => setShowAddLink(true)}
+                    aria-label="Add quick link"
+                    className="glass-btn-ghost"
+                    title="Add quick link"
+                  >
+                    <Plus size={14} />
+                  </button>
+                }
+              >
+                {quickLinks.length === 0 && !showAddLink ? (
+                  <EmptyState text="No quick links yet" icon={Link2} />
+                ) : (
+                  <div className="space-y-0.5">
+                    {quickLinks.map(link => (
+                      <div
+                        key={link.id}
+                        className="group flex items-center gap-3 rounded-xl px-2 py-2 transition-colors hover:bg-surface-hover"
                       >
-                        {link.label}
-                      </a>
+                        <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-surface-hover">
+                          <ExternalLink size={13} className="text-muted" />
+                        </div>
+                        <a
+                          href={link.url}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="focus-ring flex-1 truncate rounded-md text-[13px] text-foreground transition-colors hover:text-accent"
+                        >
+                          {link.label}
+                        </a>
+                        <button
+                          type="button"
+                          onClick={() => handleDeleteQuickLink(link.id)}
+                          aria-label={`Remove ${link.label}`}
+                          className="focus-ring rounded-md p-1 text-muted opacity-0 transition-all hover:bg-danger-light hover:text-danger group-hover:opacity-100 focus-visible:opacity-100 max-sm:opacity-100"
+                          title="Remove link"
+                        >
+                          <Trash2 size={12} />
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                )}
+
+                {showAddLink && (
+                  <div className="glass-subtle mt-2 space-y-2 rounded-2xl p-3">
+                    <input
+                      ref={linkLabelRef}
+                      type="text"
+                      value={newLinkLabel}
+                      onChange={e => setNewLinkLabel(e.target.value)}
+                      placeholder="Label"
+                      aria-label="Link label"
+                      className="glass-input px-3 text-sm"
+                      onKeyDown={e => {
+                        if (e.key === 'Enter') handleAddQuickLink()
+                        if (e.key === 'Escape') { setShowAddLink(false); setNewLinkLabel(''); setNewLinkUrl('') }
+                      }}
+                    />
+                    <input
+                      type="url"
+                      value={newLinkUrl}
+                      onChange={e => setNewLinkUrl(e.target.value)}
+                      placeholder="https://…"
+                      aria-label="Link URL"
+                      className="glass-input px-3 text-sm"
+                      onKeyDown={e => {
+                        if (e.key === 'Enter') handleAddQuickLink()
+                        if (e.key === 'Escape') { setShowAddLink(false); setNewLinkLabel(''); setNewLinkUrl('') }
+                      }}
+                    />
+                    <div className="flex justify-end gap-2 pt-1">
                       <button
-                        onClick={() => handleDeleteQuickLink(link.id)}
-                        className="opacity-0 group-hover:opacity-100 p-1 rounded-md text-muted hover:text-danger hover:bg-danger-light transition-all"
-                        title="Remove link"
+                        type="button"
+                        onClick={() => { setShowAddLink(false); setNewLinkLabel(''); setNewLinkUrl('') }}
+                        className="focus-ring rounded-lg px-3 py-1.5 text-xs font-medium text-muted transition-colors hover:bg-surface-hover hover:text-foreground"
                       >
-                        <Trash2 size={12} />
+                        Cancel
+                      </button>
+                      <button
+                        type="button"
+                        onClick={handleAddQuickLink}
+                        disabled={!newLinkLabel.trim() || !newLinkUrl.trim()}
+                        className="glass-btn-primary h-8 px-3 text-xs"
+                      >
+                        Add Link
                       </button>
                     </div>
-                  ))}
-                </div>
-              )}
-
-              {showAddLink && (
-                <div className="mt-2 rounded-xl border border-border bg-background p-3 space-y-2">
-                  <input
-                    ref={linkLabelRef}
-                    type="text"
-                    value={newLinkLabel}
-                    onChange={e => setNewLinkLabel(e.target.value)}
-                    placeholder="Label"
-                    className="w-full rounded-lg border border-border bg-surface px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-accent text-foreground placeholder:text-muted"
-                    onKeyDown={e => {
-                      if (e.key === 'Enter') handleAddQuickLink()
-                      if (e.key === 'Escape') { setShowAddLink(false); setNewLinkLabel(''); setNewLinkUrl('') }
-                    }}
-                  />
-                  <input
-                    type="url"
-                    value={newLinkUrl}
-                    onChange={e => setNewLinkUrl(e.target.value)}
-                    placeholder="https://…"
-                    className="w-full rounded-lg border border-border bg-surface px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-accent text-foreground placeholder:text-muted"
-                    onKeyDown={e => {
-                      if (e.key === 'Enter') handleAddQuickLink()
-                      if (e.key === 'Escape') { setShowAddLink(false); setNewLinkLabel(''); setNewLinkUrl('') }
-                    }}
-                  />
-                  <div className="flex justify-end gap-2 pt-1">
-                    <button
-                      onClick={() => { setShowAddLink(false); setNewLinkLabel(''); setNewLinkUrl('') }}
-                      className="rounded-lg px-3 py-1.5 text-xs font-medium text-muted hover:text-foreground hover:bg-surface-hover transition-colors"
-                    >
-                      Cancel
-                    </button>
-                    <button
-                      onClick={handleAddQuickLink}
-                      disabled={!newLinkLabel.trim() || !newLinkUrl.trim()}
-                      className="rounded-lg bg-accent px-3 py-1.5 text-xs font-medium text-accent-foreground hover:bg-accent/90 transition-colors disabled:opacity-40"
-                    >
-                      Add Link
-                    </button>
                   </div>
-                </div>
-              )}
-            </DashboardCard>
+                )}
+              </DashboardCard>
+            </div>
           </div>
-        </div>
 
-        {/* ────── Note Structure Graph (full width) ────── */}
-        <DashboardCard title="Note Structure" icon={Network} className="mb-8">
-          <div className="h-[320px] sm:h-[400px] rounded-xl bg-background overflow-hidden">
-            <NoteGraph
-              notes={projectNotes}
-              folders={projectFolders}
-              onSelectNote={(note) => void openNote(note)}
-            />
-          </div>
-        </DashboardCard>
+          {/* ────── Note Structure Graph (full width) ────── */}
+          <DashboardCard title="Note Structure" icon={Network}>
+            <div className="h-[320px] overflow-hidden rounded-2xl bg-background sm:h-[400px]">
+              <NoteGraph
+                notes={projectNotes}
+                folders={projectFolders}
+                onSelectNote={(note) => void openNote(note)}
+              />
+            </div>
+          </DashboardCard>
+        </div>
       </div>
     </div>
   )
@@ -934,17 +1034,19 @@ function DashboardCard({
   action?: React.ReactNode
 }) {
   return (
-    <section className={`rounded-2xl border border-border bg-surface shadow-sm shadow-black/[0.03] dark:shadow-none ${className ?? ''}`}>
-      <div className="flex items-center justify-between px-4 py-3">
-        <div className="flex items-center gap-2">
-          <Icon size={15} className="text-muted" />
-          <h2 className="text-xs font-semibold text-muted uppercase tracking-wider">{title}</h2>
+    <section className={`glass-card overflow-hidden ${className ?? ''}`}>
+      <div className="flex items-center justify-between gap-2 px-4 pb-2.5 pt-4">
+        <div className="flex min-w-0 items-center gap-2">
+          <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-lg bg-surface-hover text-muted">
+            <Icon size={13} />
+          </span>
+          <h2 className="truncate text-sm font-semibold tracking-[-0.01em] text-foreground">
+            {title}
+          </h2>
         </div>
         {action}
       </div>
-      <div className="px-4 pb-4">
-        {children}
-      </div>
+      <div className="px-4 pb-4">{children}</div>
     </section>
   )
 }
@@ -961,18 +1063,24 @@ function StatCard({
   accent: string
 }) {
   return (
-    <div className="group relative rounded-2xl border border-border bg-surface p-4 shadow-sm shadow-black/[0.03] dark:shadow-none overflow-hidden transition-all hover:border-border-strong hover:shadow-md hover:shadow-black/[0.05]">
-      <div className="absolute top-0 left-0 h-1 w-full rounded-t-2xl" style={{ backgroundColor: accent }} />
-      <div className="flex items-center gap-3">
-        <div
-          className="rounded-xl p-2.5 transition-transform group-hover:scale-105"
-          style={{ backgroundColor: `${accent}15` }}
+    <div className="glass-card group relative overflow-hidden p-4 transition-transform duration-200 hover:-translate-y-0.5">
+      <div className="flex items-start justify-between gap-2">
+        <span
+          className="flex h-10 w-10 items-center justify-center rounded-xl"
+          style={{
+            backgroundColor: `color-mix(in srgb, ${accent} 16%, transparent)`,
+            color: accent,
+          }}
         >
-          <Icon size={18} style={{ color: accent }} />
-        </div>
-        <div>
-          <div className="text-2xl font-bold text-foreground tabular-nums leading-none">{value}</div>
-          <div className="text-[11px] text-muted mt-0.5">{label}</div>
+          <Icon size={18} />
+        </span>
+        <div className="min-w-0 text-right">
+          <div className="truncate font-display text-2xl font-semibold leading-none tabular-nums text-foreground">
+            {value}
+          </div>
+          <div className="mt-1 text-[10px] font-medium uppercase tracking-[0.08em] text-muted">
+            {label}
+          </div>
         </div>
       </div>
     </div>
@@ -984,9 +1092,9 @@ function CompletionRing({ pct, color }: { pct: number; color: string }) {
   const circumference = 2 * Math.PI * r
   const offset = circumference - (pct / 100) * circumference
   return (
-    <div className="relative h-20 w-20 flex-shrink-0">
+    <div className="relative h-20 w-20 shrink-0">
       <svg viewBox="0 0 80 80" className="h-20 w-20 -rotate-90">
-        <circle cx="40" cy="40" r={r} fill="none" stroke="var(--surface-hover)" strokeWidth="7" />
+        <circle cx="40" cy="40" r={r} fill="none" stroke="var(--border-strong)" strokeWidth="7" />
         <circle
           cx="40" cy="40" r={r} fill="none"
           stroke={color}
@@ -1006,10 +1114,10 @@ function CompletionRing({ pct, color }: { pct: number; color: string }) {
 
 function EmptyState({ text, icon: Icon }: { text: string; icon?: LucideIcon }) {
   return (
-    <div className="py-8 flex flex-col items-center gap-2 text-center">
+    <div className="flex flex-col items-center gap-2 py-8 text-center">
       {Icon && (
-        <div className="h-10 w-10 rounded-xl bg-surface-hover flex items-center justify-center mb-1">
-          <Icon size={18} className="text-muted/60" />
+        <div className="mb-1 flex h-10 w-10 items-center justify-center rounded-xl bg-surface-hover text-muted">
+          <Icon size={18} />
         </div>
       )}
       <p className="text-xs text-muted">{text}</p>

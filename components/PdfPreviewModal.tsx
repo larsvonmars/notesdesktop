@@ -3,7 +3,7 @@
 import React, { useEffect, useState } from 'react'
 import ModalCloseButton from './ModalCloseButton'
 import { getFileUrl } from '@/lib/file-storage'
-import BaseModal, { ModalHeader } from './BaseModal'
+import BaseModal, { ModalHeader, ModalTitle } from './BaseModal'
 
 interface PdfPreviewModalProps {
   isOpen: boolean
@@ -42,8 +42,8 @@ export default function PdfPreviewModal({
 
   return (
     <BaseModal isOpen={isOpen} onClose={onClose} size="5xl" maxHeight="90vh" className="h-[90vh]" animation="zoom">
-        <ModalHeader onClose={onClose} closeAriaLabel="Close preview" gradient={false} className="bg-gray-50 dark:bg-slate-800/50">
-            <div className="flex h-8 w-8 flex-shrink-0 items-center justify-center rounded bg-red-100 dark:bg-red-900/30 text-red-600 dark:text-red-400">
+        <ModalHeader onClose={onClose} closeAriaLabel="Close preview" gradient={false}>
+            <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-[var(--accent-light)] text-accent">
               <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                 <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
                 <polyline points="14 2 14 8 20 8"/>
@@ -51,14 +51,14 @@ export default function PdfPreviewModal({
                 <line x1="16" y1="17" x2="8" y2="17"/>
                 <polyline points="10 9 9 9 8 9"/>
               </svg>
-            </div>
-            <h3 className="text-sm font-semibold text-gray-900 dark:text-slate-100 truncate">
+            </span>
+            <ModalTitle className="truncate">
               {fileName || 'PDF Document'}
-            </h3>
+            </ModalTitle>
             <div className="ml-auto flex items-center gap-2">
               <button
                 onClick={() => url && window.open(url, '_blank')}
-                className="px-3 py-1.5 text-xs font-medium bg-white dark:bg-slate-800 border border-gray-200 dark:border-slate-700 text-gray-700 dark:text-slate-200 rounded-md hover:bg-gray-50 dark:hover:bg-slate-700 transition-colors"
+                className="glass-btn h-8 shrink-0 px-3 text-xs"
                 disabled={!url}
               >
                 Open in new tab
@@ -67,17 +67,17 @@ export default function PdfPreviewModal({
         </ModalHeader>
 
         {/* Content */}
-        <div className="flex-1 overflow-hidden bg-gray-100 dark:bg-slate-950 flex items-center justify-center">
+        <div className="flex flex-1 items-center justify-center overflow-hidden bg-[var(--surface-sunken)]">
           {url ? (
             <iframe
               src={url}
               title={fileName || 'PDF'}
-              className="w-full h-full border-none"
+              className="h-full w-full border-none"
             />
           ) : (
-            <div className="flex flex-col items-center gap-2 text-slate-500">
-              <div className="h-6 w-6 border-2 border-slate-300 border-t-indigo-500 rounded-full animate-spin"></div>
-              <span className="text-sm">Loading PDF...</span>
+            <div className="flex flex-col items-center gap-2 text-muted">
+              <div className="h-6 w-6 animate-spin rounded-full border-2 border-border border-t-[var(--accent)]"></div>
+              <span className="text-sm">Loading PDF…</span>
             </div>
           )}
         </div>

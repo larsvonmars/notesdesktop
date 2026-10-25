@@ -1,7 +1,7 @@
 'use client'
 
-import { Keyboard } from 'lucide-react'
-import { KEYBOARD_SHORTCUTS, AUTOFORMAT_HELP, formatShortcutKeys, getShortcutsByCategory } from '@/lib/editor/keyboardShortcuts'
+import { Keyboard, Sparkles } from 'lucide-react'
+import { AUTOFORMAT_HELP, formatShortcutKeys, getShortcutsByCategory } from '@/lib/editor/keyboardShortcuts'
 import BaseModal, { ModalHeader, ModalBody, ModalFooter, ModalTitle } from './BaseModal'
 
 interface KeyboardShortcutsHelpProps {
@@ -13,6 +13,7 @@ export default function KeyboardShortcutsHelp({ isOpen, onClose }: KeyboardShort
   if (!isOpen) return null
 
   const categories = [
+    { id: 'navigation', title: 'Workspace Navigation' },
     { id: 'formatting', title: 'Text Formatting' },
     { id: 'blocks', title: 'Blocks & Structure' },
     { id: 'editing', title: 'Editing' },
@@ -21,29 +22,34 @@ export default function KeyboardShortcutsHelp({ isOpen, onClose }: KeyboardShort
   return (
     <BaseModal isOpen={isOpen} onClose={onClose} size="3xl" maxHeight="80vh">
         <ModalHeader onClose={onClose} closeAriaLabel="Close keyboard shortcuts">
-          <Keyboard size={24} className="text-alpine-600" />
+          <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-[var(--accent-light)] text-accent">
+            <Keyboard size={18} strokeWidth={1.9} />
+          </span>
           <ModalTitle>Keyboard Shortcuts</ModalTitle>
         </ModalHeader>
 
-        <ModalBody className="space-y-6">
+        <ModalBody className="space-y-7">
           {/* Keyboard Shortcuts */}
-          <div className="space-y-4">
+          <div className="grid grid-cols-1 gap-x-8 gap-y-6 md:grid-cols-2">
             {categories.map(({ id, title }) => {
               const shortcuts = getShortcutsByCategory(id as any)
               if (shortcuts.length === 0) return null
 
               return (
                 <div key={id}>
-                  <h3 className="text-sm font-semibold text-gray-700 dark:text-slate-200 uppercase tracking-wide mb-3">
+                  <h3 className="mb-2 px-1 text-[11px] font-medium uppercase tracking-[0.08em] text-muted">
                     {title}
                   </h3>
-                  <div className="space-y-2">
+                  <div className="space-y-0.5">
                     {shortcuts.map((shortcut, index) => (
-                      <div key={index} className="flex items-center justify-between py-2 px-3 rounded hover:bg-gray-50 dark:hover:bg-slate-800">
-                        <span className="text-gray-700 dark:text-slate-200">{shortcut.description}</span>
-                        <kbd className="px-3 py-1 text-sm font-mono bg-gray-100 dark:bg-slate-800 border border-gray-300 dark:border-slate-600 rounded shadow-sm text-gray-700 dark:text-slate-200">
-                          {formatShortcutKeys(shortcut.keys)}
-                        </kbd>
+                      <div
+                        key={index}
+                        className="flex items-center justify-between gap-3 rounded-lg px-1.5 py-1.5 transition-colors duration-150 hover:bg-[var(--surface-sunken)]"
+                      >
+                        <span className="min-w-0 text-[13px] leading-5 text-foreground">
+                          {shortcut.description}
+                        </span>
+                        <kbd className="kbd shrink-0">{formatShortcutKeys(shortcut.keys)}</kbd>
                       </div>
                     ))}
                   </div>
@@ -54,17 +60,20 @@ export default function KeyboardShortcutsHelp({ isOpen, onClose }: KeyboardShort
 
           {/* Autoformat Patterns */}
           <div>
-            <h3 className="text-sm font-semibold text-gray-700 dark:text-slate-200 uppercase tracking-wide mb-3">
+            <h3 className="mb-2 px-1 text-[11px] font-medium uppercase tracking-[0.08em] text-muted">
               Markdown Auto-formatting
             </h3>
-            <p className="text-sm text-gray-600 dark:text-slate-300 mb-3">
-              Type these patterns and press <kbd className="px-2 py-0.5 text-xs font-mono bg-gray-100 dark:bg-slate-800 border border-gray-300 dark:border-slate-600 rounded text-gray-700 dark:text-slate-200">Space</kbd> to auto-format:
+            <p className="mb-2.5 px-1 text-[13px] leading-5 text-muted">
+              Type these patterns and press <kbd className="kbd">Space</kbd> to auto-format:
             </p>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
+            <div className="grid grid-cols-1 gap-1.5 md:grid-cols-2">
               {AUTOFORMAT_HELP.map((item, index) => (
-                <div key={index} className="flex items-center justify-between py-2 px-3 rounded hover:bg-gray-50 dark:hover:bg-slate-800">
-                  <span className="text-gray-700 dark:text-slate-200 text-sm">{item.description}</span>
-                  <code className="px-2 py-1 text-xs font-mono bg-alpine-50 dark:bg-alpine-900/30 text-alpine-700 dark:text-alpine-300 rounded border border-alpine-200 dark:border-alpine-700">
+                <div
+                  key={index}
+                  className="glass flex items-center justify-between gap-3 rounded-xl px-2.5 py-2"
+                >
+                  <span className="min-w-0 text-[13px] leading-5 text-foreground">{item.description}</span>
+                  <code className="shrink-0 rounded-md bg-[var(--surface-sunken)] px-1.5 py-0.5 font-mono text-[11px] text-accent">
                     {item.pattern}
                   </code>
                 </div>
@@ -73,21 +82,39 @@ export default function KeyboardShortcutsHelp({ isOpen, onClose }: KeyboardShort
           </div>
 
           {/* Additional Tips */}
-          <div className="bg-alpine-50 dark:bg-alpine-900/30 border border-alpine-200 dark:border-alpine-700 rounded-lg p-4">
-            <h4 className="text-sm font-semibold text-alpine-900 dark:text-alpine-200 mb-2">💡 Pro Tips</h4>
-            <ul className="text-sm text-alpine-800 dark:text-alpine-300 space-y-1">
-              <li>• Select text to see the floating toolbar for quick formatting</li>
-              <li>• Paste Markdown text and it will be automatically converted</li>
-              <li>• Drag and drop images to insert them (if supported)</li>
-              <li>• Use the slash command <code className="px-1 py-0.5 bg-alpine-100 dark:bg-alpine-800/50 rounded">/</code> for quick access to all features</li>
+          <div className="rounded-2xl bg-[var(--accent-light)] p-4">
+            <h4 className="mb-2 flex items-center gap-1.5 text-[13px] font-semibold text-foreground">
+              <Sparkles size={14} strokeWidth={1.9} className="text-accent" aria-hidden />
+              Pro tips
+            </h4>
+            <ul className="space-y-1.5 text-[13px] leading-5 text-muted">
+              <li className="flex gap-2">
+                <span className="mt-[7px] h-1 w-1 shrink-0 rounded-full bg-accent" aria-hidden />
+                Select text to see the floating toolbar for quick formatting
+              </li>
+              <li className="flex gap-2">
+                <span className="mt-[7px] h-1 w-1 shrink-0 rounded-full bg-accent" aria-hidden />
+                Paste Markdown text and it will be automatically converted
+              </li>
+              <li className="flex gap-2">
+                <span className="mt-[7px] h-1 w-1 shrink-0 rounded-full bg-accent" aria-hidden />
+                Drag and drop images to insert them (if supported)
+              </li>
+              <li className="flex gap-2">
+                <span className="mt-[7px] h-1 w-1 shrink-0 rounded-full bg-accent" aria-hidden />
+                Use the slash command{' '}
+                <code className="rounded-md bg-[var(--surface)] px-1 py-0.5 font-mono text-[11px] text-foreground">/</code>{' '}
+                for quick access to all features
+              </li>
             </ul>
           </div>
         </ModalBody>
 
-        <ModalFooter className="bg-gray-50 dark:bg-slate-800/50">
+        <ModalFooter>
           <button
             onClick={onClose}
-            className="w-full px-4 py-2 bg-alpine-600 text-white rounded-md hover:bg-alpine-700 transition-colors"
+            className="glass-btn-primary inline-flex h-10 w-full items-center justify-center rounded-full text-[13px] text-accent-foreground transition-[filter] duration-200 hover:brightness-105"
+            type="button"
           >
             Got it!
           </button>

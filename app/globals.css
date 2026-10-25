@@ -2,6 +2,9 @@
 /* Design tokens (must load first) */
 @import './styles/tokens.css';
 
+/* Glass design system */
+@import './styles/glass.css';
+
 /* Base styles */
 @import './styles/base.css';
 @import './styles/utilities.css';

@@ -107,7 +107,14 @@ const MindmapEditor = forwardRef<MindmapEditorHandle, MindmapEditorProps>(
 
     // Theme & mobile
     const { resolvedTheme } = useTheme()
-    const isDark = resolvedTheme === 'dark'
+    // The canvas paints its own background, so it must follow the same signal as
+    // the CSS: the resolved theme, backed by the html.dark class that the inline
+    // boot script applies before first paint. Without the class fallback, a
+    // mindmap mounted during the first theme resolution can paint a light canvas
+    // on a dark app until something else triggers a repaint.
+    const isDark =
+      resolvedTheme === 'dark' ||
+      (typeof document !== 'undefined' && document.documentElement.classList.contains('dark'))
     const isMobile = useIsMobile()
     
     // Consolidated state using reducer
@@ -2231,7 +2238,7 @@ const MindmapEditor = forwardRef<MindmapEditorHandle, MindmapEditorProps>(
 
         {breadcrumbPath.length > 0 && (
           <div className="absolute top-3 left-1/2 z-10 -translate-x-1/2 max-w-[55%] overflow-hidden">
-            <nav className="flex items-center gap-1 rounded-full border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800/90 px-3 py-1.5 text-xs font-medium text-slate-500 dark:text-slate-400 shadow-sm  overflow-x-auto">
+            <nav className="scroll-thin flex items-center gap-1 overflow-x-auto rounded-full border border-border bg-[var(--glass-bg-strong)] px-3 py-1.5 text-xs font-medium text-muted backdrop-blur-md">
               {breadcrumbPath.map((node, index) => {
                 const isActive = index === breadcrumbPath.length - 1
                 return (
@@ -2241,13 +2248,13 @@ const MindmapEditor = forwardRef<MindmapEditorHandle, MindmapEditorProps>(
                       onClick={() => handleBreadcrumbClick(node.id)}
                       disabled={isActive}
                       className={`max-w-[120px] truncate transition-colors shrink-0 ${
-                        isActive ? 'cursor-default text-alpine-600' : 'hover:text-alpine-600'
+                        isActive ? 'cursor-default text-accent' : 'hover:text-accent'
                       }`}
                       title={node.text}
                     >
                       {node.text}
                     </button>
-                    {index < breadcrumbPath.length - 1 && <span className="text-slate-300 dark:text-slate-600 shrink-0">/</span>}
+                    {index < breadcrumbPath.length - 1 && <span className="text-muted shrink-0">/</span>}
                   </React.Fragment>
                 )
               })}
@@ -2256,7 +2263,7 @@ const MindmapEditor = forwardRef<MindmapEditorHandle, MindmapEditorProps>(
         )}
 
         {connectionMode && !readOnly && (
-          <div className="absolute top-3 right-3 z-10 rounded-full border border-alpine-200 bg-alpine-50 px-3 py-1.5 text-xs font-semibold text-alpine-700 dark:border-alpine-900/40 dark:bg-alpine-900/30 dark:text-alpine-300">
+          <div className="animate-rise-in absolute top-3 right-3 z-10 rounded-full border border-border bg-[var(--accent-light)] px-3 py-1.5 text-xs font-semibold text-accent backdrop-blur-md">
             Connect mode {connectionStartNodeId ? `• from ${mindmapData.nodes[connectionStartNodeId]?.text ?? 'node'}` : '• select source'}
           </div>
         )}
@@ -2305,8 +2312,8 @@ const MindmapEditor = forwardRef<MindmapEditorHandle, MindmapEditorProps>(
 
         {/* Layout options dropdown */}
         {isLayoutMenuOpen && !readOnly && (
-          <div className="absolute top-3 left-16 z-20 w-64 bg-white dark:bg-slate-800 rounded-xl shadow-lg border border-gray-200 dark:border-slate-700 p-3 space-y-3">
-            <span className="text-xs font-medium uppercase tracking-wide text-slate-400 dark:text-slate-500">Layout direction</span>
+          <div className="floating-pop-in glass-strong absolute top-3 left-16 z-20 w-64 max-w-[calc(100vw-5rem)] rounded-2xl p-3 space-y-3">
+            <span className="text-[11px] font-medium uppercase tracking-[0.08em] text-muted">Layout direction</span>
             <div className="grid grid-cols-2 gap-1.5">
               {(['lr', 'radial'] as const).map((direction) => (
                 <button
@@ -2315,20 +2322,20 @@ const MindmapEditor = forwardRef<MindmapEditorHandle, MindmapEditorProps>(
                   onClick={() => setLayoutDirection(direction)}
                   className={`rounded-lg px-2 py-1.5 text-xs font-medium transition-colors ${
                     layoutDirection === direction
-                      ? 'bg-alpine-500 text-white'
-                      : 'border border-slate-200 dark:border-slate-600 text-slate-600 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-700'
+                      ? 'border border-[color:var(--accent)] bg-[var(--accent-light)] text-accent'
+                      : 'border border-border text-muted hover:bg-surface-hover hover:text-foreground'
                   }`}
                 >
                   {direction === 'lr' ? 'Left-to-right' : 'Radial'}
                 </button>
               ))}
             </div>
-            <label className="flex items-center gap-2 text-xs text-slate-600 dark:text-slate-300 cursor-pointer">
+            <label className="flex items-center gap-2 text-xs text-foreground cursor-pointer">
               <input
                 type="checkbox"
                 checked={preserveManualPositions}
                 onChange={(event) => setPreserveManualPositions(event.target.checked)}
-                className="h-3.5 w-3.5 accent-alpine-500"
+                className="h-3.5 w-3.5 accent-[var(--accent)]"
               />
               Preserve manually placed nodes
             </label>
@@ -2338,7 +2345,7 @@ const MindmapEditor = forwardRef<MindmapEditorHandle, MindmapEditorProps>(
                 autoLayout()
                 setIsLayoutMenuOpen(false)
               }}
-              className="w-full rounded-lg bg-alpine-600 px-3 py-2 text-xs font-semibold text-white hover:bg-alpine-700 transition-colors"
+              className="glass-btn-primary w-full px-3 text-xs"
             >
               Apply layout
             </button>
@@ -2430,7 +2437,7 @@ const MindmapEditor = forwardRef<MindmapEditorHandle, MindmapEditorProps>(
                   e.stopPropagation()
                 }}
                 onBlur={commitInlineEdit}
-                className="absolute z-40 rounded-lg border-2 border-alpine-500 bg-white dark:bg-slate-800 text-slate-900 dark:text-slate-100 px-2 py-1 shadow-xl outline-none ring-2 ring-alpine-300 dark:ring-alpine-600"
+                className="glass-strong absolute z-40 rounded-xl border-2 border-[color:var(--accent)] px-2 py-1 text-foreground shadow-glass-lg outline-none ring-2 ring-[color:var(--accent-light)]"
                 style={{
                   left: screenX - inputWidth / 2,
                   top: screenY - (NODE_HEIGHT * scale) / 2,

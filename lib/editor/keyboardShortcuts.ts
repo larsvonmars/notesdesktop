@@ -186,7 +186,58 @@ export const KEYBOARD_SHORTCUTS: KeyboardShortcut[] = [
     category: 'editing'
   },
   
-  // Navigation shortcuts
+  // Workspace navigation (app-level, available everywhere)
+  {
+    keys: ['⌘K', 'Ctrl+K'],
+    description: 'Search notes, folders, projects or run a command',
+    category: 'navigation'
+  },
+  {
+    keys: ['⌘N', 'Ctrl+N'],
+    description: 'New note',
+    category: 'navigation'
+  },
+  {
+    keys: ['⌘1', 'Ctrl+1'],
+    description: 'Go to Home',
+    category: 'navigation'
+  },
+  {
+    keys: ['⌘2', 'Ctrl+2'],
+    description: 'Go to Notes',
+    category: 'navigation'
+  },
+  {
+    keys: ['⌘3', 'Ctrl+3'],
+    description: 'Go to Tasks',
+    category: 'navigation'
+  },
+  {
+    keys: ['⌘4', 'Ctrl+4'],
+    description: 'Go to Files',
+    category: 'navigation'
+  },
+  {
+    keys: ['⌘J', 'Ctrl+J'],
+    description: 'Open the AI assistant',
+    category: 'navigation'
+  },
+  {
+    keys: ['⌘[' , 'Ctrl+['],
+    description: 'Back',
+    category: 'navigation'
+  },
+  {
+    keys: ['⌘]', 'Ctrl+]'],
+    description: 'Forward',
+    category: 'navigation'
+  },
+  {
+    keys: ['⌘\\', 'Ctrl+\\'],
+    description: 'Show or hide the library sidebar',
+    category: 'navigation'
+  },
+  // Editor navigation shortcuts
   {
     keys: ['Tab'],
     description: 'Next table cell (in a table)',

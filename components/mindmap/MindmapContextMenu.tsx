@@ -16,6 +16,8 @@ interface MindmapContextMenuProps {
   onDelete: () => void
 }
 
+const menuItemClass = 'glass-row w-full gap-3 px-3 py-2 text-sm'
+
 export default function MindmapContextMenu({
   node,
   isRoot,
@@ -32,69 +34,69 @@ export default function MindmapContextMenu({
 }: MindmapContextMenuProps) {
   return (
     <div
-      className="absolute z-50 min-w-[180px] rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 shadow-2xl py-1 text-sm text-slate-700 dark:text-slate-200 overflow-hidden"
+      className="floating-pop-in glass-strong absolute z-50 min-w-[180px] overflow-hidden rounded-2xl p-1 text-sm text-foreground"
       style={{ left: x, top: y }}
       onClick={(e) => e.stopPropagation()}
     >
       <button
         type="button"
-        className="flex w-full items-center gap-3 px-3 py-2 hover:bg-slate-100 dark:hover:bg-slate-700 transition-colors"
+        className={menuItemClass}
         onClick={onAddChild}
       >
-        <Plus size={15} className="text-slate-400" />
+        <Plus size={15} className="text-muted" />
         <span className="flex-1 text-left">Add child</span>
-        <kbd className="text-xs text-slate-400">+</kbd>
+        <kbd className="kbd">+</kbd>
       </button>
       <button
         type="button"
-        className="flex w-full items-center gap-3 px-3 py-2 hover:bg-slate-100 dark:hover:bg-slate-700 transition-colors"
+        className={menuItemClass}
         onClick={onRename}
       >
-        <Type size={15} className="text-slate-400" />
+        <Type size={15} className="text-muted" />
         <span className="flex-1 text-left">Rename</span>
-        <kbd className="text-xs text-slate-400">F2</kbd>
+        <kbd className="kbd">F2</kbd>
       </button>
       <button
         type="button"
-        className="flex w-full items-center gap-3 px-3 py-2 hover:bg-slate-100 dark:hover:bg-slate-700 transition-colors"
+        className={menuItemClass}
         onClick={onEditDetails}
       >
-        <Info size={15} className="text-slate-400" />
+        <Info size={15} className="text-muted" />
         <span className="flex-1 text-left">Edit details</span>
-        <kbd className="text-xs text-slate-400">Enter</kbd>
+        <kbd className="kbd">Enter</kbd>
       </button>
       <button
         type="button"
-        className="flex w-full items-center gap-3 px-3 py-2 hover:bg-slate-100 dark:hover:bg-slate-700 transition-colors"
+        className={menuItemClass}
         onClick={onStartConnection}
       >
-        <Link2 size={15} className="text-slate-400" />
+        <Link2 size={15} className="text-muted" />
         <span className="flex-1 text-left">Start connection here</span>
       </button>
       {hasChildren && (
         <button
           type="button"
-          className="flex w-full items-center gap-3 px-3 py-2 hover:bg-slate-100 dark:hover:bg-slate-700 transition-colors"
+          className={menuItemClass}
           onClick={onToggleCollapse}
         >
           {node.collapsed
-            ? <UnfoldVertical size={15} className="text-slate-400" />
-            : <FoldVertical size={15} className="text-slate-400" />
+            ? <UnfoldVertical size={15} className="text-muted" />
+            : <FoldVertical size={15} className="text-muted" />
           }
           <span className="flex-1 text-left">{node.collapsed ? 'Expand' : 'Collapse'}</span>
-          <kbd className="text-xs text-slate-400">Space</kbd>
+          <kbd className="kbd">Space</kbd>
         </button>
       )}
-      <div className="h-px bg-slate-200 dark:bg-slate-700 my-1" />
+      <div className="glass-divider my-1" />
       <div className="px-3 py-1.5">
-        <span className="text-xs font-medium text-slate-400 dark:text-slate-500">Color</span>
+        <span className="text-[11px] font-medium uppercase tracking-[0.08em] text-muted">Color</span>
         <div className="flex gap-1.5 mt-1.5">
           {DEFAULT_COLORS.map((color) => (
             <button
               key={color}
               type="button"
               className={`h-5 w-5 rounded-full border-2 transition-transform hover:scale-110 ${
-                node.color === color ? 'border-slate-900 dark:border-white scale-110' : 'border-transparent'
+                node.color === color ? 'border-foreground scale-110' : 'border-transparent'
               }`}
               style={{ backgroundColor: color }}
               onClick={() => onSetColor(color)}
@@ -104,15 +106,15 @@ export default function MindmapContextMenu({
       </div>
       {!isRoot && (
         <>
-          <div className="h-px bg-slate-200 dark:bg-slate-700 my-1" />
+          <div className="glass-divider my-1" />
           <button
             type="button"
-            className="flex w-full items-center gap-3 px-3 py-2 hover:bg-red-50 dark:hover:bg-red-900/20 text-red-600 dark:text-red-400 transition-colors"
+            className="glass-row w-full gap-3 px-3 py-2 text-sm text-danger hover:bg-[var(--danger-light)]"
             onClick={onDelete}
           >
             <Trash2 size={15} />
             <span className="flex-1 text-left">Delete</span>
-            <kbd className="text-xs text-red-400">Del</kbd>
+            <kbd className="kbd text-danger">Del</kbd>
           </button>
         </>
       )}

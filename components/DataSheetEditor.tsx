@@ -1370,21 +1370,21 @@ const DataSheetEditor = forwardRef<DataSheetEditorHandle, DataSheetEditorProps>(
       const isValid = !isNaN(parsedCols) && !isNaN(parsedRows) && parsedCols >= 1 && parsedRows >= 1
 
       return (
-        <div className="flex flex-col items-center justify-center h-full bg-white">
+        <div className="flex flex-col items-center justify-center h-full bg-transparent text-foreground">
           <div className="max-w-md w-full px-6">
             <div className="flex items-center justify-center gap-3 mb-6">
-              <div className="w-12 h-12 rounded-xl bg-cyan-100 flex items-center justify-center">
-                <Table2 size={24} className="text-cyan-600" />
+              <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-[var(--accent-light)] text-accent">
+                <Table2 size={24} className="text-accent" />
               </div>
               <div>
-                <h2 className="text-lg font-semibold text-gray-900">New Data Sheet</h2>
-                <p className="text-sm text-gray-500">Choose your grid size to get started</p>
+                <h2 className="font-display text-lg font-semibold tracking-[-0.01em] text-foreground">New Data Sheet</h2>
+                <p className="text-sm text-muted">Choose your grid size to get started</p>
               </div>
             </div>
 
             {/* Custom size input */}
             <div className="mb-5">
-              <div className="block text-sm font-medium text-gray-700 mb-2">Grid size</div>
+              <div className="mb-2 block text-sm font-medium text-foreground">Grid size</div>
               <div className="flex items-center gap-2">
                 <div className="flex-1">
                   <input
@@ -1396,12 +1396,12 @@ const DataSheetEditor = forwardRef<DataSheetEditorHandle, DataSheetEditorProps>(
                     value={sizeColsInput}
                     onChange={(e) => setSizeColsInput(e.target.value)}
                     onKeyDown={(e) => { if (e.key === 'Enter') handleSizePickerSubmit() }}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg text-center text-sm focus:border-cyan-400 focus:ring-2 focus:ring-cyan-100 outline-none"
+                    className="glass-input h-10 w-full px-3 text-center text-sm"
                     placeholder="Columns"
                   />
-                  <div className="text-[10px] text-gray-400 text-center mt-1">Columns</div>
+                  <div className="mt-1 text-center text-[10px] text-muted">Columns</div>
                 </div>
-                <span className="text-gray-400 font-medium text-lg pb-4">×</span>
+                <span className="pb-4 text-lg font-medium text-muted">×</span>
                 <div className="flex-1">
                   <input
                     type="number"
@@ -1411,15 +1411,15 @@ const DataSheetEditor = forwardRef<DataSheetEditorHandle, DataSheetEditorProps>(
                     value={sizeRowsInput}
                     onChange={(e) => setSizeRowsInput(e.target.value)}
                     onKeyDown={(e) => { if (e.key === 'Enter') handleSizePickerSubmit() }}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg text-center text-sm focus:border-cyan-400 focus:ring-2 focus:ring-cyan-100 outline-none"
+                    className="glass-input h-10 w-full px-3 text-center text-sm"
                     placeholder="Rows"
                   />
-                  <div className="text-[10px] text-gray-400 text-center mt-1">Rows</div>
+                  <div className="mt-1 text-center text-[10px] text-muted">Rows</div>
                 </div>
                 <button
                   onClick={handleSizePickerSubmit}
                   disabled={!isValid}
-                  className="px-4 py-2 bg-cyan-600 text-white text-sm font-medium rounded-lg hover:bg-cyan-700 transition-colors disabled:opacity-40 disabled:cursor-not-allowed mb-4"
+                  className="glass-btn-primary mb-4 px-4 text-sm"
                 >
                   Create
                 </button>
@@ -1428,13 +1428,13 @@ const DataSheetEditor = forwardRef<DataSheetEditorHandle, DataSheetEditorProps>(
 
             {/* Presets */}
             <div>
-              <div className="block text-xs font-medium text-gray-500 mb-2 uppercase tracking-wide">Quick presets</div>
+              <div className="mb-2 block text-[11px] font-medium uppercase tracking-[0.08em] text-muted">Quick presets</div>
               <div className="grid grid-cols-4 gap-2">
                 {SIZE_PRESETS.map((preset) => (
                   <button
                     key={preset.label}
                     onClick={() => handleCreateSheet(preset.cols, preset.rows)}
-                    className="px-3 py-2 border border-gray-200 rounded-lg text-sm text-gray-700 hover:border-cyan-300 hover:bg-cyan-50 transition-colors text-center"
+                    className="focus-ring rounded-xl border border-border px-3 py-2 text-center text-sm text-foreground transition-colors hover:border-border-strong hover:bg-surface-hover"
                   >
                     {preset.label}
                   </button>
@@ -1442,7 +1442,7 @@ const DataSheetEditor = forwardRef<DataSheetEditorHandle, DataSheetEditorProps>(
               </div>
             </div>
 
-            <p className="text-xs text-gray-400 text-center mt-5">
+            <p className="mt-5 text-center text-xs text-muted">
               You can always add or remove rows and columns later.
             </p>
           </div>
@@ -1452,7 +1452,7 @@ const DataSheetEditor = forwardRef<DataSheetEditorHandle, DataSheetEditorProps>(
 
     return (
       <div
-        className={`flex flex-col h-full bg-white select-none ${resizingCol !== null ? 'cursor-col-resize' : ''} ${resizingRow !== null ? 'cursor-row-resize' : ''}`}
+        className={`flex flex-col h-full bg-transparent text-foreground select-none ${resizingCol !== null ? 'cursor-col-resize' : ''} ${resizingRow !== null ? 'cursor-row-resize' : ''}`}
         onKeyDown={handleKeyDown as any}
         onPaste={handlePaste as any}
         onCopy={handleCopy as any}
@@ -1461,11 +1461,11 @@ const DataSheetEditor = forwardRef<DataSheetEditorHandle, DataSheetEditorProps>(
         tabIndex={0}
       >
         {/* Toolbar */}
-        <div className="flex items-center gap-1 px-3 py-2 border-b border-gray-200 bg-gray-50 flex-shrink-0">
+        <div className="flex flex-wrap items-center gap-1 border-b border-border bg-[var(--surface-sunken)] px-3 py-2 flex-shrink-0">
           <button
             onClick={() => addRow()}
             disabled={disabled}
-            className="flex items-center gap-1 px-2 py-1 text-xs font-medium text-gray-700 hover:bg-gray-200 rounded transition-colors disabled:opacity-50"
+            className="flex items-center gap-1 rounded-lg px-2 py-1 text-xs font-medium text-muted transition-colors hover:bg-surface-hover hover:text-foreground disabled:opacity-50"
             title="Add row"
           >
             <ArrowDown size={12} />
@@ -1474,7 +1474,7 @@ const DataSheetEditor = forwardRef<DataSheetEditorHandle, DataSheetEditorProps>(
           <button
             onClick={() => addColumn()}
             disabled={disabled}
-            className="flex items-center gap-1 px-2 py-1 text-xs font-medium text-gray-700 hover:bg-gray-200 rounded transition-colors disabled:opacity-50"
+            className="flex items-center gap-1 rounded-lg px-2 py-1 text-xs font-medium text-muted transition-colors hover:bg-surface-hover hover:text-foreground disabled:opacity-50"
             title="Add column"
           >
             <ArrowRight size={12} />
@@ -1486,7 +1486,7 @@ const DataSheetEditor = forwardRef<DataSheetEditorHandle, DataSheetEditorProps>(
             <button
               onClick={openResizePopover}
               disabled={disabled}
-              className="flex items-center gap-1 px-2 py-1 text-xs font-medium text-gray-700 hover:bg-gray-200 rounded transition-colors disabled:opacity-50"
+              className="flex items-center gap-1 rounded-lg px-2 py-1 text-xs font-medium text-muted transition-colors hover:bg-surface-hover hover:text-foreground disabled:opacity-50"
               title="Resize grid"
             >
               <Table2 size={12} />
@@ -1495,9 +1495,9 @@ const DataSheetEditor = forwardRef<DataSheetEditorHandle, DataSheetEditorProps>(
             {showResizePopover && (
               <div
                 ref={resizePopoverRef}
-                className="absolute top-full left-0 mt-1 z-50 bg-white rounded-lg shadow-lg border border-gray-200 p-3 w-64"
+                className="floating-pop-in glass-strong absolute top-full left-0 z-50 mt-1 w-64 rounded-2xl p-3"
               >
-                <div className="text-xs font-medium text-gray-600 mb-2">Resize grid (data preserved)</div>
+                <div className="mb-2 text-[11px] font-medium uppercase tracking-[0.08em] text-muted">Resize grid (data preserved)</div>
                 <div className="flex items-center gap-2">
                   <div className="flex-1">
                     <input
@@ -1508,11 +1508,11 @@ const DataSheetEditor = forwardRef<DataSheetEditorHandle, DataSheetEditorProps>(
                       value={resizeColsInput}
                       onChange={(e) => setResizeColsInput(e.target.value)}
                       onKeyDown={(e) => { if (e.key === 'Enter') handleResizeSubmit(); if (e.key === 'Escape') setShowResizePopover(false) }}
-                      className="w-full px-2 py-1.5 border border-gray-300 rounded text-center text-xs focus:border-cyan-400 focus:ring-1 focus:ring-cyan-100 outline-none"
+                      className="glass-input h-8 w-full px-2 text-center text-xs"
                     />
-                    <div className="text-[9px] text-gray-400 text-center mt-0.5">Cols</div>
+                    <div className="mt-0.5 text-center text-[9px] text-muted">Cols</div>
                   </div>
-                  <span className="text-gray-400 text-sm pb-3">×</span>
+                  <span className="pb-3 text-sm text-muted">×</span>
                   <div className="flex-1">
                     <input
                       type="number"
@@ -1521,25 +1521,25 @@ const DataSheetEditor = forwardRef<DataSheetEditorHandle, DataSheetEditorProps>(
                       value={resizeRowsInput}
                       onChange={(e) => setResizeRowsInput(e.target.value)}
                       onKeyDown={(e) => { if (e.key === 'Enter') handleResizeSubmit(); if (e.key === 'Escape') setShowResizePopover(false) }}
-                      className="w-full px-2 py-1.5 border border-gray-300 rounded text-center text-xs focus:border-cyan-400 focus:ring-1 focus:ring-cyan-100 outline-none"
+                      className="glass-input h-8 w-full px-2 text-center text-xs"
                     />
-                    <div className="text-[9px] text-gray-400 text-center mt-0.5">Rows</div>
+                    <div className="mt-0.5 text-center text-[9px] text-muted">Rows</div>
                   </div>
                   <button
                     onClick={handleResizeSubmit}
-                    className="px-3 py-1.5 bg-cyan-600 text-white text-xs font-medium rounded hover:bg-cyan-700 transition-colors mb-3"
+                    className="glass-btn-primary mb-3 h-8 px-3 text-xs"
                   >
                     Apply
                   </button>
                 </div>
-                <p className="text-[10px] text-gray-400 mt-1">Shrinking will trim data from removed rows/columns.</p>
+                <p className="mt-1 text-[10px] text-muted">Shrinking will trim data from removed rows/columns.</p>
               </div>
             )}
           </div>
 
-          <div className="w-px h-5 bg-gray-300 mx-1" />
+          <div className="mx-1 h-5 w-px bg-border-strong" />
 
-          <div className="flex items-center gap-1 text-[11px] text-gray-600">
+          <div className="flex items-center gap-1 text-[11px] text-muted">
             <span>Freeze</span>
             <input
               type="number"
@@ -1547,7 +1547,7 @@ const DataSheetEditor = forwardRef<DataSheetEditorHandle, DataSheetEditorProps>(
               max={Math.max(rowCount - 1, 0)}
               value={frozenRows}
               onChange={(e) => updateFrozenRows(parseInt(e.target.value || '0', 10))}
-              className="w-12 px-1 py-0.5 border border-gray-300 rounded text-center"
+              className="glass-input h-7 w-12 px-1 text-center text-[11px]"
               title="Frozen rows"
             />
             <span>R</span>
@@ -1557,7 +1557,7 @@ const DataSheetEditor = forwardRef<DataSheetEditorHandle, DataSheetEditorProps>(
               max={Math.max(colCount - 1, 0)}
               value={frozenCols}
               onChange={(e) => updateFrozenCols(parseInt(e.target.value || '0', 10))}
-              className="w-12 px-1 py-0.5 border border-gray-300 rounded text-center"
+              className="glass-input h-7 w-12 px-1 text-center text-[11px]"
               title="Frozen columns"
             />
             <span>C</span>
@@ -1565,19 +1565,19 @@ const DataSheetEditor = forwardRef<DataSheetEditorHandle, DataSheetEditorProps>(
 
           <button
             onClick={clearAllFilters}
-            className="flex items-center gap-1 px-2 py-1 text-xs font-medium text-gray-700 hover:bg-gray-200 rounded transition-colors"
+            className="flex items-center gap-1 rounded-lg px-2 py-1 text-xs font-medium text-muted transition-colors hover:bg-surface-hover hover:text-foreground"
             title="Clear all filters"
           >
             <X size={12} />
             <span>Clear Filters</span>
           </button>
 
-          <div className="w-px h-5 bg-gray-300 mx-1" />
+          <div className="mx-1 h-5 w-px bg-border-strong" />
 
           <button
             onClick={handleImportCSV}
             disabled={disabled}
-            className="flex items-center gap-1 px-2 py-1 text-xs font-medium text-gray-700 hover:bg-gray-200 rounded transition-colors disabled:opacity-50"
+            className="flex items-center gap-1 rounded-lg px-2 py-1 text-xs font-medium text-muted transition-colors hover:bg-surface-hover hover:text-foreground disabled:opacity-50"
             title="Import CSV"
           >
             <Upload size={12} />
@@ -1585,28 +1585,28 @@ const DataSheetEditor = forwardRef<DataSheetEditorHandle, DataSheetEditorProps>(
           </button>
           <button
             onClick={handleExportCSV}
-            className="flex items-center gap-1 px-2 py-1 text-xs font-medium text-gray-700 hover:bg-gray-200 rounded transition-colors"
+            className="flex items-center gap-1 rounded-lg px-2 py-1 text-xs font-medium text-muted transition-colors hover:bg-surface-hover hover:text-foreground"
             title="Export CSV"
           >
             <Download size={12} />
             <span>Export</span>
           </button>
 
-          <div className="w-px h-5 bg-gray-300 mx-1" />
+          <div className="mx-1 h-5 w-px bg-border-strong" />
 
           {/* Formula indicator */}
-          <div className="flex items-center gap-1 text-xs text-gray-500">
+          <div className="flex items-center gap-1 text-xs text-muted">
             <Calculator size={12} />
             <span>Formulas: =SUM, AVG, MIN, MAX, COUNT, IF, ROUND, ABS, CONCAT</span>
           </div>
         </div>
 
         {/* Formula Bar */}
-        <div className="flex items-center gap-2 px-3 py-1.5 border-b border-gray-200 bg-white flex-shrink-0">
-          <div className="flex-shrink-0 w-16 text-center text-xs font-mono font-medium text-gray-600 bg-gray-100 rounded px-2 py-1">
+        <div className="flex items-center gap-2 border-b border-border bg-surface px-3 py-1.5 flex-shrink-0">
+          <div className="flex-shrink-0 w-16 rounded-lg border border-border bg-surface-solid px-2 py-1 text-center font-mono text-xs font-medium text-foreground">
             {activeCell ? `${columnIndexToLetter(activeCell.col)}${activeCell.row + 1}` : '—'}
           </div>
-          <div className="text-gray-300 text-sm">ƒ</div>
+          <div className="text-sm text-muted">ƒ</div>
           <input
             type="text"
             value={formulaBarValue}
@@ -1614,7 +1614,7 @@ const DataSheetEditor = forwardRef<DataSheetEditorHandle, DataSheetEditorProps>(
             onKeyDown={handleFormulaBarKeyDown as any}
             onFocus={handleFormulaBarFocus}
             disabled={disabled || !activeCell}
-            className="flex-1 text-sm font-mono px-2 py-1 border border-gray-200 rounded focus:border-alpine-400 focus:ring-1 focus:ring-alpine-200 outline-none disabled:bg-gray-50 disabled:text-gray-400"
+            className="glass-input h-8 flex-1 px-2 font-mono text-sm disabled:opacity-50"
             placeholder={activeCell ? 'Enter value or formula (e.g., =SUM(A1:A10))' : 'Select a cell'}
           />
         </div>
@@ -1629,7 +1629,7 @@ const DataSheetEditor = forwardRef<DataSheetEditorHandle, DataSheetEditorProps>(
         />
 
         {/* Grid */}
-        <div ref={tableRef} className="flex-1 overflow-auto relative">
+        <div ref={tableRef} className="relative flex-1 overflow-auto bg-white">
           <table className="border-collapse min-w-full" style={{ tableLayout: 'fixed' }}>
             <colgroup>
               {/* Row number column */}
@@ -1816,35 +1816,35 @@ const DataSheetEditor = forwardRef<DataSheetEditorHandle, DataSheetEditorProps>(
         {/* Context Menu */}
         {contextMenu && (
           <div
-            className="fixed z-50 bg-white rounded-lg shadow-lg border border-gray-200 py-1 min-w-[160px]"
+            className="floating-pop-in glass-strong fixed z-50 min-w-[160px] rounded-2xl p-1"
             style={{ top: contextMenu.y, left: contextMenu.x }}
           >
             {contextMenu.type === 'row' && (
               <>
                 <button
-                  className={`w-full text-left px-3 py-1.5 text-sm hover:bg-gray-100 flex items-center gap-2 ${
-                    headerRowsSet.has(contextMenu.index) ? 'text-slate-700 font-medium' : ''
+                  className={`glass-row w-full gap-2 px-3 py-1.5 text-sm ${
+                    headerRowsSet.has(contextMenu.index) ? 'text-accent font-medium' : ''
                   }`}
                   onClick={() => { toggleHeaderRow(contextMenu.index); setContextMenu(null) }}
                 >
                   <Type size={14} /> {headerRowsSet.has(contextMenu.index) ? 'Remove header style' : 'Mark as header row'}
                 </button>
-                <hr className="my-1 border-gray-100" />
+                <hr className="glass-divider my-1 border-0" />
                 <button
-                  className="w-full text-left px-3 py-1.5 text-sm hover:bg-gray-100 flex items-center gap-2"
+                  className="glass-row w-full gap-2 px-3 py-1.5 text-sm"
                   onClick={() => { addRow(contextMenu.index); setContextMenu(null) }}
                 >
                   <Plus size={14} /> Insert row above
                 </button>
                 <button
-                  className="w-full text-left px-3 py-1.5 text-sm hover:bg-gray-100 flex items-center gap-2"
+                  className="glass-row w-full gap-2 px-3 py-1.5 text-sm"
                   onClick={() => { addRow(contextMenu.index + 1); setContextMenu(null) }}
                 >
                   <Plus size={14} /> Insert row below
                 </button>
-                <hr className="my-1 border-gray-100" />
+                <hr className="glass-divider my-1 border-0" />
                 <button
-                  className="w-full text-left px-3 py-1.5 text-sm text-red-600 hover:bg-red-50 flex items-center gap-2"
+                  className="glass-row w-full gap-2 px-3 py-1.5 text-sm text-danger hover:bg-[var(--danger-light)]"
                   onClick={() => { deleteRow(contextMenu.index); setContextMenu(null) }}
                   disabled={data.rows.length <= 1}
                 >
@@ -1855,20 +1855,20 @@ const DataSheetEditor = forwardRef<DataSheetEditorHandle, DataSheetEditorProps>(
             {contextMenu.type === 'col' && (
               <>
                 <button
-                  className="w-full text-left px-3 py-1.5 text-sm hover:bg-gray-100 flex items-center gap-2"
+                  className="glass-row w-full gap-2 px-3 py-1.5 text-sm"
                   onClick={() => { addColumn(contextMenu.index); setContextMenu(null) }}
                 >
                   <Plus size={14} /> Insert column left
                 </button>
                 <button
-                  className="w-full text-left px-3 py-1.5 text-sm hover:bg-gray-100 flex items-center gap-2"
+                  className="glass-row w-full gap-2 px-3 py-1.5 text-sm"
                   onClick={() => { addColumn(contextMenu.index + 1); setContextMenu(null) }}
                 >
                   <Plus size={14} /> Insert column right
                 </button>
-                <hr className="my-1 border-gray-100" />
+                <hr className="glass-divider my-1 border-0" />
                 <button
-                  className="w-full text-left px-3 py-1.5 text-sm text-red-600 hover:bg-red-50 flex items-center gap-2"
+                  className="glass-row w-full gap-2 px-3 py-1.5 text-sm text-danger hover:bg-[var(--danger-light)]"
                   onClick={() => { deleteColumn(contextMenu.index); setContextMenu(null) }}
                   disabled={data.columns.length <= 1}
                 >
@@ -1879,7 +1879,7 @@ const DataSheetEditor = forwardRef<DataSheetEditorHandle, DataSheetEditorProps>(
             {contextMenu.type === 'cell' && (
               <>
                 <button
-                  className="w-full text-left px-3 py-1.5 text-sm hover:bg-gray-100 flex items-center gap-2"
+                  className="glass-row w-full gap-2 px-3 py-1.5 text-sm"
                   onClick={() => {
                     const ri = Math.floor(contextMenu.index / colCount)
                     const ci = contextMenu.index % colCount
@@ -1892,7 +1892,7 @@ const DataSheetEditor = forwardRef<DataSheetEditorHandle, DataSheetEditorProps>(
                   <X size={14} /> Clear cell
                 </button>
                 <button
-                  className="w-full text-left px-3 py-1.5 text-sm hover:bg-gray-100 flex items-center gap-2"
+                  className="glass-row w-full gap-2 px-3 py-1.5 text-sm"
                   onClick={() => {
                     const ri = Math.floor(contextMenu.index / colCount)
                     addRow(ri + 1)
@@ -1902,7 +1902,7 @@ const DataSheetEditor = forwardRef<DataSheetEditorHandle, DataSheetEditorProps>(
                   <Plus size={14} /> Insert row below
                 </button>
                 <button
-                  className="w-full text-left px-3 py-1.5 text-sm hover:bg-gray-100 flex items-center gap-2"
+                  className="glass-row w-full gap-2 px-3 py-1.5 text-sm"
                   onClick={() => {
                     const ci = contextMenu.index % colCount
                     addColumn(ci + 1)
@@ -1917,11 +1917,11 @@ const DataSheetEditor = forwardRef<DataSheetEditorHandle, DataSheetEditorProps>(
         )}
 
         {/* Status Bar */}
-        <div className="flex items-center justify-between px-3 py-1 border-t border-gray-200 bg-gray-50 text-xs text-gray-500 flex-shrink-0">
+        <div className="flex items-center justify-between border-t border-border bg-[var(--surface-sunken)] px-3 py-1 text-xs text-muted flex-shrink-0">
           <div className="flex items-center gap-3">
             <span>{rowCount} rows × {colCount} columns</span>
             {visibleRowIndices.length !== rowCount && (
-              <span className="text-cyan-700">Visible: {visibleRowIndices.length}</span>
+              <span className="text-accent">Visible: {visibleRowIndices.length}</span>
             )}
             {selection && (() => {
               const bounds = getSelectionBounds(selection)
@@ -1937,9 +1937,9 @@ const DataSheetEditor = forwardRef<DataSheetEditorHandle, DataSheetEditorProps>(
 
               return (
                 <>
-                  <span className="text-cyan-700">Selection: {height}×{width}</span>
+                  <span className="text-accent">Selection: {height}×{width}</span>
                   {values.length > 0 && (
-                    <span className="text-cyan-700">
+                    <span className="text-accent">
                       Sum: {Math.round(values.reduce((a, b) => a + b, 0) * 1e6) / 1e6} · Avg: {Math.round((values.reduce((a, b) => a + b, 0) / values.length) * 1e6) / 1e6}
                     </span>
                   )}
@@ -1947,7 +1947,7 @@ const DataSheetEditor = forwardRef<DataSheetEditorHandle, DataSheetEditorProps>(
               )
             })()}
             {activeCell && data.rows[activeCell.row]?.[activeCell.col]?.startsWith('=') && (
-              <span className="text-alpine-600 flex items-center gap-1">
+              <span className="text-accent flex items-center gap-1">
                 <Calculator size={10} />
                 Formula: {data.rows[activeCell.row][activeCell.col]}
               </span>
@@ -1961,7 +1961,7 @@ const DataSheetEditor = forwardRef<DataSheetEditorHandle, DataSheetEditorProps>(
                 const display = getCellDisplay(activeCell.row, activeCell.col)
                 const num = Number(display)
                 if (raw && !isNaN(num)) {
-                  return <span className="text-gray-400">Value: {display}</span>
+                  return <span className="text-muted">Value: {display}</span>
                 }
                 return null
               })()}

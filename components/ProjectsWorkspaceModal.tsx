@@ -52,7 +52,7 @@ import {
   deleteNote,
 } from '@/lib/notes'
 import { getNoteTypePresentation, type NoteTypeIconKey } from '@/lib/note-types'
-import BaseModal, { ModalHeader } from './BaseModal'
+import BaseModal, { ModalHeader, ModalTitle } from './BaseModal'
 
 /* ─── Types ───────────────────────────────────────────────────── */
 
@@ -402,49 +402,47 @@ export default function ProjectsWorkspaceModal({
     return (
       <div key={node.id}>
         <div
-          className={`group flex items-center gap-1.5 rounded-md px-2 py-1 text-sm cursor-pointer transition-colors ${
-            isSelected ? 'bg-alpine-100 dark:bg-alpine-900/30 text-alpine-800 dark:text-alpine-300 font-medium' : 'text-gray-700 dark:text-slate-200 hover:bg-gray-100 dark:hover:bg-slate-800'
-          }`}
+          className={`glass-row group cursor-pointer gap-1.5 py-1 text-sm ${isSelected ? 'is-active font-medium' : ''}`}
           style={{ paddingLeft: `${depth * 16 + 8}px` }}
           onClick={() => setSelectedFolderId(isSelected ? null : node.id)}
         >
           <button
             type="button"
-            className="flex-shrink-0 p-0.5"
+            className="focus-ring shrink-0 rounded p-0.5 text-muted"
             onClick={(e) => { e.stopPropagation(); if (hasChildren) toggleFolder(node.id) }}
           >
             {hasChildren ? (isExpanded ? <ChevronDown size={12} /> : <ChevronRight size={12} />) : <span className="w-3" />}
           </button>
-          <FolderTree size={13} className="text-amber-500 flex-shrink-0" />
+          <FolderTree size={13} className="shrink-0 text-[var(--hue-amber)]" />
           <span className="flex-1 truncate">{node.name}</span>
-          {noteCount > 0 && <span className="text-xs text-gray-400 dark:text-slate-500">{noteCount}</span>}
+          {noteCount > 0 && <span className="text-xs tabular-nums text-muted">{noteCount}</span>}
 
           {/* Inline actions on hover */}
           <span className="hidden items-center gap-0.5 group-hover:flex">
             <button
               type="button"
-              className="rounded p-0.5 hover:bg-gray-200 dark:hover:bg-slate-700"
+              className="focus-ring rounded-md p-0.5 text-muted transition-colors hover:bg-surface-active hover:text-foreground"
               title="Open in workspace"
               onClick={(e) => { e.stopPropagation(); handleFolderOpen(node.id) }}
-            ><FolderOpen size={12} className="text-gray-500 dark:text-slate-400" /></button>
+            ><FolderOpen size={12} /></button>
             <button
               type="button"
-              className="rounded p-0.5 hover:bg-gray-200 dark:hover:bg-slate-700"
+              className="focus-ring rounded-md p-0.5 text-muted transition-colors hover:bg-surface-active hover:text-foreground"
               title="Rename"
               onClick={(e) => { e.stopPropagation(); openFolderDialog('rename', { folderId: node.id, projectId: node.project_id, currentName: node.name }) }}
-            ><Edit2 size={12} className="text-gray-500 dark:text-slate-400" /></button>
+            ><Edit2 size={12} /></button>
             <button
               type="button"
-              className="rounded p-0.5 hover:bg-gray-200 dark:hover:bg-slate-700"
+              className="focus-ring rounded-md p-0.5 text-muted transition-colors hover:bg-surface-active hover:text-foreground"
               title="New subfolder"
               onClick={(e) => { e.stopPropagation(); openFolderDialog('create', { parentId: node.id, projectId: node.project_id }) }}
-            ><FolderPlus size={12} className="text-gray-500 dark:text-slate-400" /></button>
+            ><FolderPlus size={12} /></button>
             <button
               type="button"
-              className="rounded p-0.5 hover:bg-red-100 dark:hover:bg-red-900/30"
+              className="focus-ring rounded-md p-0.5 text-danger transition-colors hover:bg-danger-light"
               title="Delete"
               onClick={(e) => { e.stopPropagation(); setDialog({ type: 'delete-folder', folder: folderMap.get(node.id)! }) }}
-            ><Trash2 size={12} className="text-red-400" /></button>
+            ><Trash2 size={12} /></button>
           </span>
         </div>
         {isExpanded && hasChildren && (
@@ -466,51 +464,62 @@ export default function ProjectsWorkspaceModal({
 
         {/* Loading overlay */}
         {isLoading && (
-          <div className="absolute inset-0 z-20 flex items-center justify-center bg-white dark:bg-slate-900">
-            <Loader2 className="h-6 w-6 animate-spin text-alpine-500" />
+          <div className="absolute inset-0 z-20 flex items-center justify-center bg-background">
+            <Loader2 className="h-6 w-6 animate-spin text-accent" />
           </div>
         )}
 
         {/* ─── Header ─────────────────────────────────────────── */}
         <ModalHeader onClose={onClose} closeAriaLabel="Close projects" gradient={false}>
-          <Target size={18} className="text-alpine-500" />
-          <h2 className="text-base font-semibold text-gray-900 dark:text-slate-100">Projects</h2>
-          <span className="text-xs text-gray-400 dark:text-slate-500">{folders.length} folders · {notes.length} notes</span>
-          <div className="flex items-center gap-2 ml-auto">
+          <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-[var(--accent-light)] text-accent">
+            <Target size={17} strokeWidth={1.9} aria-hidden />
+          </span>
+          <div className="min-w-0">
+            <ModalTitle>Projects</ModalTitle>
+            <p className="mt-0.5 truncate text-xs leading-5 text-muted">
+              {folders.length} folders · {notes.length} notes
+            </p>
+          </div>
+          <div className="ml-auto flex shrink-0 items-center gap-2">
             <div className="relative flex items-center">
-              <Search size={14} className="absolute left-2.5 text-gray-400 dark:text-slate-500" />
+              <Search size={14} className="pointer-events-none absolute left-2.5 text-muted" />
               <input
                 ref={searchInputRef}
                 value={searchTerm}
                 onChange={e => setSearchTerm(e.target.value)}
                 placeholder="Search… (/ or ⌘K)"
-                className="w-52 rounded-md border border-gray-200 dark:border-slate-600 bg-gray-50 dark:bg-slate-800 py-1.5 pl-8 pr-7 text-sm text-gray-700 dark:text-slate-200 placeholder:text-gray-400 dark:placeholder:text-slate-500 focus:border-alpine-400 focus:outline-none focus:ring-1 focus:ring-alpine-400"
+                className="glass-input h-8 w-32 pl-8 pr-7 text-xs sm:w-52 sm:text-sm"
               />
               {searchTerm && (
-                <button type="button" onClick={() => setSearchTerm('')} className="absolute right-2 text-gray-400 hover:text-gray-600 dark:hover:text-slate-200">
+                <button
+                  type="button"
+                  onClick={() => setSearchTerm('')}
+                  aria-label="Clear search"
+                  className="focus-ring absolute right-1.5 rounded-full p-0.5 text-muted transition-colors hover:text-foreground"
+                >
                   <XCircle size={14} />
                 </button>
               )}
             </div>
-            <button type="button" onClick={() => { setIsLoading(true); loadAll() }} className="rounded-md p-1.5 text-gray-400 hover:bg-gray-100 dark:hover:bg-slate-800 hover:text-gray-600 dark:hover:text-slate-200" title="Refresh">
+            <button type="button" onClick={() => { setIsLoading(true); loadAll() }} className="glass-btn-ghost h-8 w-8" title="Refresh">
               <RefreshCw size={14} />
             </button>
           </div>
         </ModalHeader>
 
         {/* ─── Body — 2-panel layout ──────────────────────────── */}
-        <div className="flex flex-1 overflow-hidden">
+        <div className="flex min-h-0 flex-1 flex-col overflow-hidden sm:flex-row">
 
           {/* Left sidebar: Projects + Folders */}
-          <div className="flex w-64 flex-shrink-0 flex-col border-r border-gray-200 dark:border-slate-700 overflow-y-auto">
+          <div className="flex max-h-[45%] w-full shrink-0 flex-col overflow-y-auto border-b border-border bg-[var(--surface-sunken)] sm:max-h-none sm:w-64 sm:border-b-0 sm:border-r">
 
             {/* Project list */}
-            <div className="border-b border-gray-100 dark:border-slate-700 px-3 py-2">
+            <div className="border-b border-border px-3 py-2">
               <div className="mb-1.5 flex items-center justify-between">
-                <span className="text-[11px] font-semibold uppercase tracking-wider text-gray-400 dark:text-slate-500">Projects</span>
+                <span className="text-[11px] font-medium uppercase tracking-[0.08em] text-muted">Projects</span>
                 <button
                   type="button"
-                  className="rounded p-0.5 text-alpine-500 hover:bg-alpine-50 dark:hover:bg-alpine-900/30"
+                  className="glass-btn-ghost h-7 w-7"
                   onClick={() => openProjectDialog('create')}
                   title="New project"
                 ><Plus size={14} /></button>
@@ -522,29 +531,27 @@ export default function ProjectsWorkspaceModal({
                   return (
                     <div
                       key={entry.id}
-                      className={`group flex items-center gap-2 rounded-md px-2 py-1.5 text-sm cursor-pointer transition-colors ${
-                        isActive ? 'bg-alpine-100 dark:bg-alpine-900/30 text-alpine-800 dark:text-alpine-300 font-medium' : 'text-gray-700 dark:text-slate-200 hover:bg-gray-50 dark:hover:bg-slate-800'
-                      }`}
+                      className={`glass-row group cursor-pointer gap-2 py-1.5 text-sm ${isActive ? 'is-active font-medium' : ''}`}
                       onClick={() => { setActiveProjectId(entry.id); setSelectedFolderId(null) }}
                     >
                       {entry.id === 'all' ? (
-                        <Target size={12} className="text-alpine-500 flex-shrink-0" />
+                        <Target size={12} className="shrink-0 text-accent" />
                       ) : entry.id === 'unassigned' ? (
-                        <FolderTree size={12} className="text-gray-400 dark:text-slate-500 flex-shrink-0" />
+                        <FolderTree size={12} className="shrink-0 text-muted" />
                       ) : (
                         <span className="h-2.5 w-2.5 rounded-full flex-shrink-0" style={{ backgroundColor: entry.color }} />
                       )}
                       <span className="flex-1 truncate">{entry.name}</span>
-                      <span className="text-[11px] text-gray-400 dark:text-slate-500">{entry.noteCount}</span>
+                      <span className="text-[11px] tabular-nums text-muted">{entry.noteCount}</span>
 
                       {/* Edit/delete on hover for real projects */}
                       {project && (
                         <span className="hidden items-center gap-0.5 group-hover:flex">
-                          <button type="button" className="rounded p-0.5 hover:bg-gray-200 dark:hover:bg-slate-700" onClick={(e) => { e.stopPropagation(); openProjectDialog('edit', project) }} title="Edit">
-                            <Edit2 size={10} className="text-gray-500 dark:text-slate-400" />
+                          <button type="button" className="focus-ring rounded-md p-0.5 text-muted transition-colors hover:bg-surface-active hover:text-foreground" onClick={(e) => { e.stopPropagation(); openProjectDialog('edit', project) }} title="Edit">
+                            <Edit2 size={10} />
                           </button>
-                          <button type="button" className="rounded p-0.5 hover:bg-red-100 dark:hover:bg-red-900/30" onClick={(e) => { e.stopPropagation(); setDialog({ type: 'delete-project', project }) }} title="Delete">
-                            <Trash2 size={10} className="text-red-400" />
+                          <button type="button" className="focus-ring rounded-md p-0.5 text-danger transition-colors hover:bg-danger-light" onClick={(e) => { e.stopPropagation(); setDialog({ type: 'delete-project', project }) }} title="Delete">
+                            <Trash2 size={10} />
                           </button>
                         </span>
                       )}
@@ -557,20 +564,20 @@ export default function ProjectsWorkspaceModal({
             {/* Folder tree */}
             <div className="flex-1 overflow-y-auto px-2 py-2">
               <div className="mb-1.5 flex items-center justify-between px-1">
-                <span className="text-[11px] font-semibold uppercase tracking-wider text-gray-400 dark:text-slate-500">Folders</span>
+                <span className="text-[11px] font-medium uppercase tracking-[0.08em] text-muted">Folders</span>
                 {activeProjectId !== 'all' && (
                   <button
                     type="button"
-                    className="rounded p-0.5 text-gray-400 hover:bg-gray-100 dark:hover:bg-slate-800 hover:text-gray-600 dark:hover:text-slate-200"
+                    className="glass-btn-ghost h-7 w-7"
                     onClick={() => openFolderDialog('create', { parentId: null, projectId: resolveProjectId(activeProjectId) ?? null })}
                     title="New folder"
                   ><FolderPlus size={13} /></button>
                 )}
               </div>
               {activeProjectId === 'all' ? (
-                <p className="px-2 py-4 text-center text-xs text-gray-400 dark:text-slate-500">Select a project to browse folders</p>
+                <p className="px-2 py-4 text-center text-xs text-muted">Select a project to browse folders</p>
               ) : folderTree.length === 0 ? (
-                <p className="px-2 py-4 text-center text-xs text-gray-400 dark:text-slate-500">No folders yet</p>
+                <p className="px-2 py-4 text-center text-xs text-muted">No folders yet</p>
               ) : (
                 <div className="space-y-px">{folderTree.map(n => renderFolder(n))}</div>
               )}
@@ -579,7 +586,7 @@ export default function ProjectsWorkspaceModal({
               {selectedFolderId && (
                 <button
                   type="button"
-                  className="mt-2 flex w-full items-center gap-1.5 rounded-md px-2 py-1 text-xs text-alpine-600 dark:text-alpine-400 hover:bg-alpine-50 dark:hover:bg-alpine-900/30"
+                  className="glass-row mt-2 gap-1.5 py-1 text-xs text-accent"
                   onClick={() => setSelectedFolderId(null)}
                 >
                   <XCircle size={12} />
@@ -591,18 +598,18 @@ export default function ProjectsWorkspaceModal({
 
           {/* Right panel: Notes list */}
           <div className="flex flex-1 flex-col overflow-hidden">
-            <div className="flex items-center justify-between border-b border-gray-100 dark:border-slate-700 px-4 py-2">
-              <div className="text-sm">
-                <span className="font-medium text-gray-800 dark:text-slate-200">{activeProjectName}</span>
+            <div className="flex flex-wrap items-center justify-between gap-2 border-b border-border px-4 py-2">
+              <div className="min-w-0 text-sm">
+                <span className="font-medium text-foreground">{activeProjectName}</span>
                 {selectedFolderId && (
-                  <span className="text-gray-400 dark:text-slate-500"> / {folderMap.get(selectedFolderId)?.name}</span>
+                  <span className="text-muted"> / {folderMap.get(selectedFolderId)?.name}</span>
                 )}
-                <span className="ml-2 text-xs text-gray-400 dark:text-slate-500">{filteredNotes.length} notes</span>
+                <span className="ml-2 text-xs tabular-nums text-muted">{filteredNotes.length} notes</span>
               </div>
               <div className="flex items-center gap-1.5">
                 <button
                   type="button"
-                  className="inline-flex items-center gap-1.5 rounded-md bg-alpine-600 px-2.5 py-1 text-xs font-medium text-white hover:bg-alpine-700 disabled:opacity-50"
+                  className="glass-btn-primary h-8 gap-1.5 px-3 text-xs"
                   onClick={() => handleCreateNote()}
                   disabled={resolveProjectId(activeProjectId) === undefined}
                   title="New text note"
@@ -612,7 +619,7 @@ export default function ProjectsWorkspaceModal({
                 </button>
                 <button
                   type="button"
-                  className="inline-flex items-center gap-1.5 rounded-md border border-gray-200 dark:border-slate-700 px-2.5 py-1 text-xs font-medium text-gray-600 dark:text-slate-300 hover:bg-gray-50 dark:hover:bg-slate-800 disabled:opacity-50"
+                  className="glass-btn h-8 gap-1.5 px-3 text-xs"
                   onClick={() => handleCreateNote('mindmap')}
                   disabled={resolveProjectId(activeProjectId) === undefined}
                   title="New mind map"
@@ -622,7 +629,7 @@ export default function ProjectsWorkspaceModal({
                 </button>
                 <button
                   type="button"
-                  className="inline-flex items-center gap-1.5 rounded-md border border-gray-200 dark:border-slate-700 px-2.5 py-1 text-xs font-medium text-gray-600 dark:text-slate-300 hover:bg-gray-50 dark:hover:bg-slate-800 disabled:opacity-50"
+                  className="glass-btn h-8 gap-1.5 px-3 text-xs"
                   onClick={() => handleCreateNote('drawing')}
                   disabled={resolveProjectId(activeProjectId) === undefined}
                   title="New drawing"
@@ -635,26 +642,26 @@ export default function ProjectsWorkspaceModal({
 
             <div className="flex-1 overflow-y-auto">
               {filteredNotes.length === 0 ? (
-                <div className="flex flex-col items-center justify-center py-16 text-sm text-gray-400 dark:text-slate-500">
-                  <FileText size={32} className="mb-2 text-gray-300 dark:text-slate-600" />
+                <div className="flex flex-col items-center justify-center py-16 text-sm text-muted">
+                  <FileText size={32} className="mb-2 text-muted opacity-40" />
                   {searchTerm ? 'No notes match your search' : 'No notes yet'}
                 </div>
               ) : (
-                <div className="divide-y divide-gray-100 dark:divide-slate-700">
+                <div className="divide-y divide-border">
                   {filteredNotes.map(note => {
                     const folderName = note.folder_id ? folderMap.get(note.folder_id)?.name : null
                     return (
                       <div
                         key={note.id}
-                        className="group flex items-center gap-3 px-4 py-2.5 cursor-pointer hover:bg-gray-50 dark:hover:bg-slate-800 transition-colors"
+                        className="glass-row group cursor-pointer gap-3 rounded-none px-4 py-2.5"
                         onClick={() => handleNoteSelect(note)}
                       >
-                        <span className="flex h-7 w-7 flex-shrink-0 items-center justify-center rounded-md bg-gray-100 dark:bg-slate-800">
+                        <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-[var(--surface-sunken)]">
                           {noteTypeIcon(note.note_type)}
                         </span>
-                        <div className="flex-1 min-w-0">
-                          <p className="truncate text-sm font-medium text-gray-900 dark:text-slate-100">{note.title || 'Untitled'}</p>
-                          <p className="flex items-center gap-2 text-xs text-gray-400 dark:text-slate-500">
+                        <div className="min-w-0 flex-1">
+                          <p className="truncate text-sm font-medium text-foreground">{note.title || 'Untitled'}</p>
+                          <p className="flex items-center gap-2 text-xs text-muted">
                             <span>{updatedAtFormatter.format(new Date(note.updated_at))}</span>
                             {folderName && <span className="flex items-center gap-0.5"><FolderTree size={10} />{folderName}</span>}
                           </p>
@@ -662,14 +669,14 @@ export default function ProjectsWorkspaceModal({
                         {/* Inline actions */}
                         <span className="hidden items-center gap-0.5 group-hover:flex" onClick={e => e.stopPropagation()}>
                           {onDuplicateNote && (
-                            <button type="button" className="rounded p-1 text-gray-400 hover:bg-gray-200 dark:hover:bg-slate-700 hover:text-gray-600 dark:hover:text-slate-200" title="Duplicate" onClick={() => { onDuplicateNote(note); onClose() }}>
+                            <button type="button" className="focus-ring rounded-md p-1 text-muted transition-colors hover:bg-surface-active hover:text-foreground" title="Duplicate" onClick={() => { onDuplicateNote(note); onClose() }}>
                               <Plus size={12} />
                             </button>
                           )}
-                          <button type="button" className="rounded p-1 text-gray-400 hover:bg-gray-200 dark:hover:bg-slate-700 hover:text-gray-600 dark:hover:text-slate-200" title="Move to project" onClick={() => setDialog({ type: 'move', target: { kind: 'note', id: note.id } })}>
+                          <button type="button" className="focus-ring rounded-md p-1 text-muted transition-colors hover:bg-surface-active hover:text-foreground" title="Move to project" onClick={() => setDialog({ type: 'move', target: { kind: 'note', id: note.id } })}>
                             <Target size={12} />
                           </button>
-                          <button type="button" className="rounded p-1 text-red-300 hover:bg-red-50 dark:hover:bg-red-900/30 hover:text-red-500" title="Delete" onClick={() => setDialog({ type: 'delete-note', note })}>
+                          <button type="button" className="focus-ring rounded-md p-1 text-danger transition-colors hover:bg-danger-light" title="Delete" onClick={() => setDialog({ type: 'delete-note', note })}>
                             <Trash2 size={12} />
                           </button>
                         </span>
@@ -688,17 +695,17 @@ export default function ProjectsWorkspaceModal({
         <div
           className={
             asView
-              ? 'absolute inset-0 z-[80] flex items-center justify-center bg-black/30 p-4'
-              : 'fixed inset-0 z-[80] flex items-center justify-center bg-black/40 p-4'
+              ? 'absolute inset-0 z-[80] flex items-center justify-center bg-black/30 p-4 backdrop-blur-md dark:bg-black/60'
+              : 'fixed inset-0 z-[80] flex items-center justify-center bg-black/30 p-4 backdrop-blur-md dark:bg-black/60'
           }
           onClick={() => !actionLoading && setDialog(null)}
         >
-          <div className="w-full max-w-sm rounded-xl border border-gray-200 bg-white p-5 shadow-2xl" onClick={e => e.stopPropagation()}>
+          <div className="glass-strong w-full max-w-sm rounded-3xl p-5" onClick={e => e.stopPropagation()}>
 
             {/* ── Project create/edit ── */}
             {dialog.type === 'project' && (
               <>
-                <h3 className="text-base font-semibold text-gray-900 mb-3">
+                <h3 className="mb-3 text-base font-semibold tracking-[-0.01em] text-foreground">
                   {dialog.mode === 'create' ? 'New Project' : 'Edit Project'}
                 </h3>
                 <div className="space-y-3">
@@ -707,7 +714,7 @@ export default function ProjectsWorkspaceModal({
                     value={formName}
                     onChange={e => setFormName(e.target.value)}
                     placeholder="Project name"
-                    className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm focus:border-alpine-500 focus:outline-none focus:ring-1 focus:ring-alpine-200"
+                    className="glass-input h-10 w-full px-3 text-sm"
                     onKeyDown={e => e.key === 'Enter' && submitProjectDialog()}
                   />
                   <textarea
@@ -715,14 +722,14 @@ export default function ProjectsWorkspaceModal({
                     onChange={e => setFormDescription(e.target.value)}
                     placeholder="Description (optional)"
                     rows={2}
-                    className="w-full resize-none rounded-md border border-gray-300 px-3 py-2 text-sm focus:border-alpine-500 focus:outline-none focus:ring-1 focus:ring-alpine-200"
+                    className="glass-input h-auto w-full resize-none px-3 py-2 text-sm"
                   />
                   <div className="flex gap-1.5">
                     {colorPresets.map(c => (
                       <button
                         key={c}
                         type="button"
-                        className={`h-6 w-6 rounded-full transition ${formColor === c ? 'ring-2 ring-offset-1 ring-alpine-500' : ''}`}
+                        className={`h-6 w-6 rounded-full transition-transform duration-150 hover:scale-110 ${formColor === c ? 'ring-2 ring-accent ring-offset-2 ring-offset-[var(--surface-solid)]' : ''}`}
                         style={{ backgroundColor: c }}
                         onClick={() => setFormColor(c)}
                       >
@@ -732,8 +739,8 @@ export default function ProjectsWorkspaceModal({
                   </div>
                 </div>
                 <div className="mt-4 flex justify-end gap-2">
-                  <button type="button" className="rounded-md px-3 py-1.5 text-sm text-gray-600 hover:bg-gray-100" onClick={() => setDialog(null)} disabled={actionLoading}>Cancel</button>
-                  <button type="button" className="rounded-md bg-alpine-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-alpine-700 disabled:opacity-50" onClick={submitProjectDialog} disabled={actionLoading || !formName.trim()}>
+                  <button type="button" className="glass-btn h-8 px-3 text-xs" onClick={() => setDialog(null)} disabled={actionLoading}>Cancel</button>
+                  <button type="button" className="glass-btn-primary h-8 px-3 text-xs" onClick={submitProjectDialog} disabled={actionLoading || !formName.trim()}>
                     {actionLoading ? 'Saving…' : 'Save'}
                   </button>
                 </div>
@@ -743,7 +750,7 @@ export default function ProjectsWorkspaceModal({
             {/* ── Folder create/rename ── */}
             {dialog.type === 'folder' && (
               <>
-                <h3 className="text-base font-semibold text-gray-900 mb-3">
+                <h3 className="mb-3 text-base font-semibold tracking-[-0.01em] text-foreground">
                   {dialog.mode === 'create' ? 'New Folder' : 'Rename Folder'}
                 </h3>
                 <input
@@ -751,12 +758,12 @@ export default function ProjectsWorkspaceModal({
                   value={formName}
                   onChange={e => setFormName(e.target.value)}
                   placeholder="Folder name"
-                  className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm focus:border-alpine-500 focus:outline-none focus:ring-1 focus:ring-alpine-200"
+                  className="glass-input h-10 w-full px-3 text-sm"
                   onKeyDown={e => e.key === 'Enter' && submitFolderDialog()}
                 />
                 <div className="mt-4 flex justify-end gap-2">
-                  <button type="button" className="rounded-md px-3 py-1.5 text-sm text-gray-600 hover:bg-gray-100" onClick={() => setDialog(null)} disabled={actionLoading}>Cancel</button>
-                  <button type="button" className="rounded-md bg-alpine-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-alpine-700 disabled:opacity-50" onClick={submitFolderDialog} disabled={actionLoading || !formName.trim()}>
+                  <button type="button" className="glass-btn h-8 px-3 text-xs" onClick={() => setDialog(null)} disabled={actionLoading}>Cancel</button>
+                  <button type="button" className="glass-btn-primary h-8 px-3 text-xs" onClick={submitFolderDialog} disabled={actionLoading || !formName.trim()}>
                     {actionLoading ? 'Saving…' : 'Save'}
                   </button>
                 </div>
@@ -766,13 +773,13 @@ export default function ProjectsWorkspaceModal({
             {/* ── Delete confirmations ── */}
             {(dialog.type === 'delete-project' || dialog.type === 'delete-folder' || dialog.type === 'delete-note') && (
               <>
-                <div className="flex items-start gap-3 mb-3">
-                  <div className="rounded-full bg-red-100 p-1.5"><Trash2 size={16} className="text-red-500" /></div>
+                <div className="mb-3 flex items-start gap-3">
+                  <div className="rounded-full bg-danger-light p-1.5 text-danger"><Trash2 size={16} /></div>
                   <div>
-                    <h3 className="text-base font-semibold text-gray-900">
+                    <h3 className="text-base font-semibold tracking-[-0.01em] text-foreground">
                       Delete {dialog.type === 'delete-project' ? 'project' : dialog.type === 'delete-folder' ? 'folder' : 'note'}?
                     </h3>
-                    <p className="mt-1 text-sm text-gray-500">
+                    <p className="mt-1 text-sm leading-6 text-muted">
                       {dialog.type === 'delete-project'
                         ? `Items in "${dialog.project.name}" will move to "No Project".`
                         : dialog.type === 'delete-folder'
@@ -782,8 +789,8 @@ export default function ProjectsWorkspaceModal({
                   </div>
                 </div>
                 <div className="flex justify-end gap-2">
-                  <button type="button" className="rounded-md px-3 py-1.5 text-sm text-gray-600 hover:bg-gray-100" onClick={() => setDialog(null)} disabled={actionLoading}>Cancel</button>
-                  <button type="button" className="rounded-md bg-red-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-red-700 disabled:opacity-50" onClick={confirmDelete} disabled={actionLoading}>
+                  <button type="button" className="glass-btn h-8 px-3 text-xs" onClick={() => setDialog(null)} disabled={actionLoading}>Cancel</button>
+                  <button type="button" className="glass-btn-primary h-8 gap-2 bg-none bg-[var(--danger)] px-3 text-xs text-[var(--accent-foreground)]" onClick={confirmDelete} disabled={actionLoading}>
                     {actionLoading ? 'Deleting…' : 'Delete'}
                   </button>
                 </div>
@@ -798,10 +805,10 @@ export default function ProjectsWorkspaceModal({
                 : (item as Note | undefined)?.project_id ?? null
               return (
                 <>
-                  <h3 className="text-base font-semibold text-gray-900 mb-1">
+                  <h3 className="mb-1 text-base font-semibold tracking-[-0.01em] text-foreground">
                     Move {dialog.target.kind} to project
                   </h3>
-                  <p className="text-xs text-gray-500 mb-3">
+                  <p className="mb-3 text-xs text-muted">
                     Currently in: {currentProjectId ? projectMap.get(currentProjectId)?.name ?? 'Unknown' : 'No Project'}
                   </p>
                   <div className="max-h-48 space-y-1 overflow-y-auto">
@@ -812,8 +819,8 @@ export default function ProjectsWorkspaceModal({
                       <button
                         key={opt.id}
                         type="button"
-                        className={`flex w-full items-center gap-2 rounded-md px-3 py-2 text-sm text-left transition ${
-                          opt.isCurrent ? 'bg-gray-50 text-gray-400 cursor-not-allowed' : 'hover:bg-alpine-50 text-gray-700'
+                        className={`glass-row gap-2 px-2.5 py-2 text-sm ${
+                          opt.isCurrent ? 'cursor-not-allowed text-muted opacity-60' : ''
                         }`}
                         onClick={() => handleMove(opt.id)}
                         disabled={actionLoading || opt.isCurrent}
@@ -821,15 +828,15 @@ export default function ProjectsWorkspaceModal({
                         {opt.color ? (
                           <span className="h-2.5 w-2.5 rounded-full" style={{ backgroundColor: opt.color }} />
                         ) : (
-                          <FolderTree size={12} className="text-gray-400" />
+                          <FolderTree size={12} className="text-muted" />
                         )}
                         <span className="flex-1">{opt.name}</span>
-                        {opt.isCurrent && <span className="text-[10px] text-gray-400">current</span>}
+                        {opt.isCurrent && <span className="text-[10px] text-muted">current</span>}
                       </button>
                     ))}
                   </div>
                   <div className="mt-4 flex justify-end">
-                    <button type="button" className="rounded-md px-3 py-1.5 text-sm text-gray-600 hover:bg-gray-100" onClick={() => setDialog(null)} disabled={actionLoading}>Cancel</button>
+                    <button type="button" className="glass-btn h-8 px-3 text-xs" onClick={() => setDialog(null)} disabled={actionLoading}>Cancel</button>
                   </div>
                 </>
               )

@@ -134,13 +134,13 @@ function dbToLocal(e: BulletJournalEntry): LocalEntry {
 }
 
 const SIGNIFIER_COLORS: Record<BulletSignifier, string> = {
-  task: 'text-gray-800',
-  event: 'text-blue-600',
-  note: 'text-gray-500',
-  completed: 'text-green-600',
-  migrated: 'text-amber-600',
-  scheduled: 'text-indigo-600',
-  irrelevant: 'text-gray-400 line-through',
+  task: 'text-foreground',
+  event: 'text-[color:var(--hue-sky)]',
+  note: 'text-muted',
+  completed: 'text-success',
+  migrated: 'text-warning',
+  scheduled: 'text-[color:var(--hue-violet)]',
+  irrelevant: 'text-muted line-through',
 }
 
 const MONTHS = [
@@ -396,14 +396,14 @@ const BulletJournalEditor = forwardRef<BulletJournalEditorHandle, BulletJournalE
         style={{ paddingLeft: `${entry.indent_level * 24}px` }}
       >
         {/* Drag handle (visual only for now) */}
-        <span className="mt-1.5 cursor-grab text-gray-300 opacity-0 group-hover:opacity-100 transition-opacity">
+        <span className="mt-1.5 cursor-grab text-muted opacity-0 group-hover:opacity-100 transition-opacity">
           <GripVertical size={14} />
         </span>
 
         {/* Signifier bullet */}
         <button
           type="button"
-          className={`mt-1 flex-shrink-0 w-6 h-6 flex items-center justify-center rounded hover:bg-gray-100 font-mono text-base leading-none ${SIGNIFIER_COLORS[entry.signifier]}`}
+          className={`mt-1 flex-shrink-0 w-6 h-6 flex items-center justify-center rounded-md hover:bg-surface-hover font-mono text-base leading-none ${SIGNIFIER_COLORS[entry.signifier]}`}
           title={`${SIGNIFIER_LABELS[entry.signifier]} — Alt+S to cycle`}
           onClick={() => {
             if (entry.signifier === 'task' || entry.signifier === 'completed' || entry.signifier === 'migrated' || entry.signifier === 'scheduled') {
@@ -427,9 +427,9 @@ const BulletJournalEditor = forwardRef<BulletJournalEditorHandle, BulletJournalE
           onChange={e => updateLocalEntry(entry._key, { content: e.target.value })}
           onKeyDown={e => handleKeyDown(e, entry)}
           placeholder="Rapid log..."
-          className={`flex-1 bg-transparent outline-none text-sm py-1 ${
-            entry.signifier === 'completed' ? 'line-through text-gray-400' : ''
-          } ${entry.signifier === 'irrelevant' ? 'line-through text-gray-400' : ''}`}
+          className={`flex-1 bg-transparent outline-none text-sm py-1 placeholder:text-muted ${
+            entry.signifier === 'completed' ? 'line-through text-muted' : ''
+          } ${entry.signifier === 'irrelevant' ? 'line-through text-muted' : ''}`}
           disabled={disabled}
         />
 
@@ -437,7 +437,7 @@ const BulletJournalEditor = forwardRef<BulletJournalEditorHandle, BulletJournalE
         <div className="flex items-center gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity">
           <button
             type="button"
-            className={`p-1 rounded hover:bg-yellow-50 ${entry.is_starred ? 'text-yellow-500' : 'text-gray-300'}`}
+            className={`rounded p-1 hover:bg-[var(--warning-light)] ${entry.is_starred ? 'text-warning' : 'text-muted'}`}
             title="Star"
             onClick={() => updateLocalEntry(entry._key, { is_starred: !entry.is_starred })}
           >
@@ -445,7 +445,7 @@ const BulletJournalEditor = forwardRef<BulletJournalEditorHandle, BulletJournalE
           </button>
           <button
             type="button"
-            className={`p-1 rounded hover:bg-red-50 ${entry.is_priority ? 'text-red-500' : 'text-gray-300'}`}
+            className={`rounded p-1 hover:bg-[var(--danger-light)] ${entry.is_priority ? 'text-danger' : 'text-muted'}`}
             title="Priority"
             onClick={() => updateLocalEntry(entry._key, { is_priority: !entry.is_priority })}
           >
@@ -453,7 +453,7 @@ const BulletJournalEditor = forwardRef<BulletJournalEditorHandle, BulletJournalE
           </button>
           <button
             type="button"
-            className={`p-1 rounded hover:bg-indigo-50 ${entry.is_inspiration ? 'text-indigo-500' : 'text-gray-300'}`}
+            className={`rounded p-1 hover:bg-[var(--accent-light)] ${entry.is_inspiration ? 'text-accent' : 'text-muted'}`}
             title="Inspiration"
             onClick={() => updateLocalEntry(entry._key, { is_inspiration: !entry.is_inspiration })}
           >
@@ -461,7 +461,7 @@ const BulletJournalEditor = forwardRef<BulletJournalEditorHandle, BulletJournalE
           </button>
           <button
             type="button"
-            className="p-1 rounded text-gray-300 hover:text-red-500 hover:bg-red-50"
+            className="rounded p-1 text-muted transition-colors hover:bg-[var(--danger-light)] hover:text-danger"
             title="Remove"
             onClick={() => removeEntry(entry._key)}
           >
@@ -471,9 +471,9 @@ const BulletJournalEditor = forwardRef<BulletJournalEditorHandle, BulletJournalE
 
         {/* Persistent flags shown when active */}
         <div className="flex items-center gap-0.5 group-hover:hidden">
-          {entry.is_starred && <Star size={12} className="text-yellow-500" fill="currentColor" />}
-          {entry.is_priority && <AlertTriangle size={12} className="text-red-500" />}
-          {entry.is_inspiration && <Lightbulb size={12} className="text-indigo-500" />}
+          {entry.is_starred && <Star size={12} className="text-warning" fill="currentColor" />}
+          {entry.is_priority && <AlertTriangle size={12} className="text-danger" />}
+          {entry.is_inspiration && <Lightbulb size={12} className="text-accent" />}
         </div>
       </div>
     )
@@ -481,9 +481,9 @@ const BulletJournalEditor = forwardRef<BulletJournalEditorHandle, BulletJournalE
     // ── Loading state ─────────────────────────────────────────
     if (isLoading) {
       return (
-        <div className="flex items-center justify-center h-full text-gray-400">
+        <div className="flex items-center justify-center h-full text-muted">
           <div className="flex flex-col items-center gap-2">
-            <div className="w-6 h-6 border-2 border-gray-300 border-t-alpine-500 rounded-full animate-spin" />
+            <div className="h-6 w-6 animate-spin rounded-full border-2 border-border border-t-accent" />
             <span className="text-sm">Loading journal…</span>
           </div>
         </div>
@@ -492,17 +492,17 @@ const BulletJournalEditor = forwardRef<BulletJournalEditorHandle, BulletJournalE
 
     // ── Main render ───────────────────────────────────────────
     return (
-      <div className="flex flex-col h-full bg-white">
+      <div className="flex flex-col h-full bg-transparent text-foreground">
         {/* ─── Toolbar / Header ─────────────────────────────── */}
-        <div className="flex items-center justify-between gap-2 px-4 py-2 border-b border-gray-100 bg-gray-50/60">
+        <div className="flex flex-wrap items-center justify-between gap-2 border-b border-border bg-[var(--surface-sunken)] px-4 py-2">
           {/* View tabs */}
-          <div className="flex items-center bg-gray-100 rounded-lg p-0.5">
+          <div className="flex items-center gap-0.5 rounded-full border border-border bg-surface p-0.5">
             {(['daily', 'monthly', 'index'] as SpreadView[]).map(v => (
               <button
                 key={v}
                 onClick={() => setView(v)}
-                className={`px-3 py-1.5 text-xs font-medium rounded-md transition-colors ${
-                  view === v ? 'bg-white shadow-sm text-gray-900' : 'text-gray-500 hover:text-gray-700'
+                className={`px-3 py-1.5 text-xs font-medium rounded-full transition-colors focus-ring ${
+                  view === v ? 'bg-surface-active text-foreground shadow-sm' : 'text-muted hover:text-foreground'
                 }`}
               >
                 {v === 'daily' && <span className="inline-flex items-center gap-1"><Calendar size={12} /> Daily</span>}
@@ -515,13 +515,13 @@ const BulletJournalEditor = forwardRef<BulletJournalEditorHandle, BulletJournalE
           {/* Date nav (daily / monthly) */}
           {view !== 'index' && (
             <div className="flex items-center gap-1">
-              <button onClick={() => navigate(-1)} className="p-1.5 rounded hover:bg-gray-100 text-gray-500">
+              <button onClick={() => navigate(-1)} className="focus-ring rounded-lg p-1.5 text-muted transition-colors hover:bg-surface-hover hover:text-foreground">
                 <ChevronLeft size={16} />
               </button>
-              <button onClick={goToToday} className="px-2 py-1 text-xs font-medium text-alpine-600 hover:bg-alpine-50 rounded">
+              <button onClick={goToToday} className="focus-ring rounded-lg px-2 py-1 text-xs font-medium text-accent transition-colors hover:bg-[var(--accent-light)]">
                 Today
               </button>
-              <button onClick={() => navigate(1)} className="p-1.5 rounded hover:bg-gray-100 text-gray-500">
+              <button onClick={() => navigate(1)} className="focus-ring rounded-lg p-1.5 text-muted transition-colors hover:bg-surface-hover hover:text-foreground">
                 <ChevronRight size={16} />
               </button>
             </div>
@@ -531,12 +531,12 @@ const BulletJournalEditor = forwardRef<BulletJournalEditorHandle, BulletJournalE
         {/* ─── Date label ───────────────────────────────────── */}
         {view !== 'index' && (
           <div className="px-4 pt-4 pb-2">
-            <h2 className="text-lg font-semibold text-gray-800">{dateLabel}</h2>
+            <h2 className="font-display text-lg font-semibold tracking-[-0.01em] text-foreground">{dateLabel}</h2>
             {view === 'monthly' && monthlySummary && (
-              <div className="flex gap-3 mt-1.5 text-xs text-gray-500">
+              <div className="mt-1.5 flex gap-3 text-xs text-muted">
                 <span>{monthlySummary.task} tasks</span>
-                <span className="text-green-600">{monthlySummary.completed} done</span>
-                <span className="text-blue-600">{monthlySummary.event} events</span>
+                <span className="text-success">{monthlySummary.completed} done</span>
+                <span className="text-[color:var(--hue-sky)]">{monthlySummary.event} events</span>
                 <span>{monthlySummary.note} notes</span>
               </div>
             )}
@@ -544,11 +544,11 @@ const BulletJournalEditor = forwardRef<BulletJournalEditorHandle, BulletJournalE
         )}
 
         {/* ─── Entries ──────────────────────────────────────── */}
-        <div className="flex-1 overflow-y-auto px-4 pb-20">
+        <div className="scroll-thin flex-1 overflow-y-auto px-4 pb-20">
           {view === 'index' && groupedByDate ? (
             Object.entries(groupedByDate).map(([date, group]) => (
               <div key={date} className="mb-4">
-                <h3 className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-1">
+                <h3 className="mb-1 text-[11px] font-medium uppercase tracking-[0.08em] text-muted">
                   {date === 'No date' ? date : new Date(date + 'T00:00:00').toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric', year: 'numeric' })}
                 </h3>
                 {group.map(renderEntry)}
@@ -558,8 +558,8 @@ const BulletJournalEditor = forwardRef<BulletJournalEditorHandle, BulletJournalE
             <>
               {visibleEntries.map(renderEntry)}
               {visibleEntries.length === 0 && (
-                <p className="text-sm text-gray-400 py-6 text-center">
-                  No entries yet. Click the button below or press <kbd className="px-1.5 py-0.5 bg-gray-100 rounded text-xs">Enter</kbd> to start logging.
+                <p className="py-6 text-center text-sm text-muted">
+                  No entries yet. Click the button below or press <kbd className="kbd">Enter</kbd> to start logging.
                 </p>
               )}
             </>
@@ -568,24 +568,24 @@ const BulletJournalEditor = forwardRef<BulletJournalEditorHandle, BulletJournalE
 
         {/* ─── Add Entry FAB ────────────────────────────────── */}
         {view !== 'index' && (
-          <div className="sticky bottom-0 px-4 py-3 border-t border-gray-100 bg-white ">
+          <div className="sticky bottom-0 flex flex-wrap items-center gap-x-3 gap-y-1 border-t border-border bg-[var(--surface-sunken)] px-4 py-3">
             <button
               onClick={addNewEntry}
               disabled={disabled}
-              className="inline-flex items-center gap-2 px-4 py-2 text-sm font-medium text-alpine-700 bg-alpine-50 hover:bg-alpine-100 rounded-lg transition-colors disabled:opacity-50"
+              className="glass-btn-primary gap-2 px-4"
             >
               <Plus size={16} />
               Add entry
             </button>
-            <span className="ml-3 text-xs text-gray-400">
+            <span className="text-xs text-muted">
               Enter = new line · Tab = indent · Alt+S = cycle bullet · Alt+X = complete
             </span>
           </div>
         )}
 
         {/* ─── Key / Legend (collapsible) ───────────────────── */}
-        <details className="px-4 py-2 border-t border-gray-100 text-xs text-gray-500">
-          <summary className="cursor-pointer font-medium hover:text-gray-700">Key</summary>
+        <details className="border-t border-border px-4 py-2 text-xs text-muted">
+          <summary className="cursor-pointer font-medium transition-colors hover:text-foreground">Key</summary>
           <div className="grid grid-cols-4 gap-x-4 gap-y-1 mt-1.5">
             {(Object.entries(SIGNIFIER_SYMBOLS) as [BulletSignifier, string][]).map(([sig, sym]) => (
               <span key={sig} className={SIGNIFIER_COLORS[sig]}>

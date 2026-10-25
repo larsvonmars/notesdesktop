@@ -5,7 +5,7 @@ import { type ReactNode } from 'react'
 interface CardProps {
   children: ReactNode
   className?: string
-  /** Glass morphism effect */
+  /** Stronger frost on top of the default glass card */
   glass?: boolean
   /** Remove default padding */
   noPadding?: boolean
@@ -15,10 +15,8 @@ function Card({ children, className = '', glass = false, noPadding = false }: Ca
   return (
     <div
       className={[
-        'rounded-2xl border border-border shadow-sm transition-shadow duration-200',
-        glass
-          ? 'bg-surface/80 backdrop-blur-xl'
-          : 'bg-surface',
+        'glass-card transition-shadow duration-200',
+        glass ? 'backdrop-blur-2xl' : '',
         noPadding ? '' : 'p-5',
         className,
       ].join(' ')}
@@ -30,7 +28,7 @@ function Card({ children, className = '', glass = false, noPadding = false }: Ca
 
 function CardHeader({ children, className = '' }: { children: ReactNode; className?: string }) {
   return (
-    <div className={['flex flex-col gap-1 pb-4', className].join(' ')}>
+    <div className={['flex flex-col gap-1.5 pb-4', className].join(' ')}>
       {children}
     </div>
   )
@@ -38,7 +36,7 @@ function CardHeader({ children, className = '' }: { children: ReactNode; classNa
 
 function CardTitle({ children, className = '' }: { children: ReactNode; className?: string }) {
   return (
-    <h3 className={['text-lg font-semibold text-foreground leading-tight', className].join(' ')}>
+    <h3 className={['font-display text-base font-semibold leading-tight tracking-[-0.01em] text-foreground', className].join(' ')}>
       {children}
     </h3>
   )
@@ -46,7 +44,7 @@ function CardTitle({ children, className = '' }: { children: ReactNode; classNam
 
 function CardDescription({ children, className = '' }: { children: ReactNode; className?: string }) {
   return (
-    <p className={['text-sm text-muted', className].join(' ')}>
+    <p className={['text-sm leading-6 text-muted', className].join(' ')}>
       {children}
     </p>
   )
@@ -58,7 +56,7 @@ function CardBody({ children, className = '' }: { children: ReactNode; className
 
 function CardFooter({ children, className = '' }: { children: ReactNode; className?: string }) {
   return (
-    <div className={['flex items-center gap-2 pt-4 border-t border-border mt-4', className].join(' ')}>
+    <div className={['mt-4 flex items-center gap-2 border-t border-[var(--border)] pt-4', className].join(' ')}>
       {children}
     </div>
   )

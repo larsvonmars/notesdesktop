@@ -1,35 +1,35 @@
 /* ── 12. ContentEditable editor — dark mode ── */
 .dark [contenteditable='true'] h1 {
-  color: #f1f5f9 !important;
-  border-image: linear-gradient(90deg, #22c55e 0%, #38bdf8 45%, transparent 100%) 1 !important;
+  color: #f0effa !important;
+  border-image: linear-gradient(90deg, #8b7dff 0%, #38bdf8 45%, transparent 100%) 1 !important;
 }
 
 .dark [contenteditable='true'] h2 {
-  color: #e2e8f0 !important;
-  border-left-color: #22c55e !important;
+  color: #dcd9ee !important;
+  border-left-color: #8b7dff !important;
 }
 
 .dark [contenteditable='true'] h3 {
-  color: #cbd5e1 !important;
+  color: #c9c6de !important;
   border-left-color: #38bdf8 !important;
 }
 
 .dark [contenteditable='true'] h4 {
-  color: #94a3b8 !important;
+  color: #9b98b4 !important;
 }
 
 .dark [contenteditable='true'] h5 {
-  color: #64748b !important;
+  color: #4d4966 !important;
 }
 
 .dark [contenteditable='true'] h6 {
-  color: #475569 !important;
+  color: #2b2740 !important;
 }
 
 .dark [contenteditable='true'] blockquote {
-  border-left-color: #22c55e !important;
+  border-left-color: #8b7dff !important;
   background: linear-gradient(to right, rgba(34, 197, 94, 0.08), rgba(56, 189, 248, 0.03), transparent) !important;
-  color: #94a3b8 !important;
+  color: #9b98b4 !important;
 }
 
 .dark [contenteditable='true'] blockquote::before {
@@ -58,7 +58,7 @@
 }
 
 .dark [contenteditable='true'] hr {
-  background: linear-gradient(to right, transparent, #334155 25%, #475569 50%, #334155 75%, transparent) !important;
+  background: linear-gradient(to right, transparent, #201d2e 25%, #2b2740 50%, #201d2e 75%, transparent) !important;
 }
 
 .dark [contenteditable='true'] mark {
@@ -83,7 +83,7 @@
 
 /* Custom bullet markers — brighter in dark */
 .dark [contenteditable='true'] ul > li:not(.checklist-item)::before {
-  color: #22c55e !important;
+  color: #8b7dff !important;
   text-shadow: 0 0 10px rgba(34, 197, 94, 0.7) !important;
 }
 
@@ -94,7 +94,7 @@
 
 /* OL counters */
 .dark [contenteditable='true'] ol > li::before {
-  color: #22c55e !important;
+  color: #8b7dff !important;
   text-shadow: 0 0 10px rgba(34, 197, 94, 0.6) !important;
 }
 
@@ -163,7 +163,7 @@
 }
 
 .dark [data-placeholder]:empty:before {
-  color: #475569;
+  color: #2b2740;
 }
 
 /* Dark mode highlight colors */
@@ -189,7 +189,7 @@
 
 /* Dark checklist progress bar — terminal neon fill */
 .dark [contenteditable='true'] .checklist-list[data-checklist-progress]::before {
-  color: #22c55e !important;
+  color: #8b7dff !important;
   text-shadow: 0 0 10px rgba(34, 197, 94, 0.7) !important;
   border-color: rgba(34, 197, 94, 0.25) !important;
   box-shadow: inset 0 0 0 1px rgba(34, 197, 94, 0.1),
@@ -206,7 +206,7 @@
 
 /* Dark checkbox checked strikethrough — neon green fade */
 .dark [contenteditable='true'] li.checklist-item:has(input[type='checkbox']:checked)::after {
-  background: linear-gradient(to right, #22c55e, #0ea5e9, transparent) !important;
+  background: linear-gradient(to right, #8b7dff, #2f9bff, transparent) !important;
   box-shadow: 0 0 8px rgba(34, 197, 94, 0.5) !important;
 }
 
@@ -216,7 +216,7 @@
 }
 
 .dark [contenteditable='true'] li:hover > .list-drag-handle:hover {
-  color: #22c55e !important;
+  color: #8b7dff !important;
   background-color: rgba(34, 197, 94, 0.1) !important;
   box-shadow: 0 0 10px rgba(34, 197, 94, 0.25) !important;
 }
@@ -228,48 +228,48 @@
 }
 
 .dark [contenteditable='true'] .list-item-drop-target {
-  border-top-color: #22c55e !important;
+  border-top-color: #8b7dff !important;
   box-shadow: 0 -2px 16px rgba(34, 197, 94, 0.45) !important;
 }
 
 /* ── Dark hover effects for content types ── */
 
 .dark [contenteditable='true'] h1:hover {
-  color: #f8fafc !important;
+  color: #f7f6ff !important;
   text-shadow: 0 2px 24px rgba(34, 197, 94, 0.25), 0 1px 6px rgba(56, 189, 248, 0.15) !important;
 }
 
 .dark [contenteditable='true'] h2:hover {
-  color: #f1f5f9 !important;
+  color: #f0effa !important;
   border-left-color: #38bdf8 !important;
   padding-left: 1em !important;
 }
 
 .dark [contenteditable='true'] h3:hover {
-  color: #e2e8f0 !important;
-  border-left-color: #22c55e !important;
+  color: #dcd9ee !important;
+  border-left-color: #8b7dff !important;
   padding-left: 0.9em !important;
 }
 
 .dark [contenteditable='true'] h4:hover {
-  color: #cbd5e1 !important;
+  color: #c9c6de !important;
   letter-spacing: 0.13em !important;
 }
 
 .dark [contenteditable='true'] h5:hover {
-  color: #94a3b8 !important;
+  color: #9b98b4 !important;
   letter-spacing: 0.15em !important;
 }
 
 .dark [contenteditable='true'] h6:hover {
-  color: #64748b !important;
+  color: #4d4966 !important;
   letter-spacing: 0.17em !important;
 }
 
 .dark [contenteditable='true'] blockquote:hover {
   border-left-color: #38bdf8 !important;
   background: linear-gradient(to right, rgba(56, 189, 248, 0.1), rgba(34, 197, 94, 0.04), transparent) !important;
-  color: #94a3b8 !important;
+  color: #9b98b4 !important;
   box-shadow: 4px 0 24px -8px rgba(56, 189, 248, 0.2) !important;
 }
 
@@ -310,7 +310,7 @@
 }
 
 .dark [contenteditable='true'] hr:hover {
-  background: linear-gradient(to right, transparent, #475569 15%, #22c55e 50%, #475569 85%, transparent) !important;
+  background: linear-gradient(to right, transparent, #2b2740 15%, #8b7dff 50%, #2b2740 85%, transparent) !important;
 }
 
 .dark [contenteditable='true'] p:hover {
@@ -318,7 +318,7 @@
 }
 
 /* Dark border-l-4 for blockquotes */
-.dark .border-l-4.border-gray-200 { border-left-color: #475569; }
+.dark .border-l-4.border-gray-200 { border-left-color: #2b2740; }
 
 /* ── Dark mode futuristic table overrides ── */
 
@@ -332,8 +332,8 @@
 }
 
 .dark [contenteditable='true'] table th {
-  background: linear-gradient(135deg, #020617 0%, #0a0f1a 100%) !important;
-  color: #22c55e !important;
+  background: linear-gradient(135deg, #070610 0%, #0a0812 100%) !important;
+  color: #8b7dff !important;
   border-right-color: rgba(34, 197, 94, 0.18) !important;
   border-bottom-color: rgba(34, 197, 94, 0.45) !important;
   text-shadow: 0 0 14px rgba(34, 197, 94, 0.6) !important;
@@ -344,7 +344,7 @@
 }
 
 .dark [contenteditable='true'] table td {
-  color: #cbd5e1 !important;
+  color: #c9c6de !important;
   border-right-color: rgba(34, 197, 94, 0.08) !important;
   border-bottom-color: rgba(34, 197, 94, 0.05) !important;
 }
@@ -358,7 +358,7 @@
 }
 
 .dark [contenteditable='true'] table th:hover {
-  background: linear-gradient(135deg, #0f172a 0%, #1e293b 100%) !important;
+  background: linear-gradient(135deg, #0e0c18 0%, #171522 100%) !important;
   color: #38bdf8 !important;
   text-shadow: 0 0 16px rgba(56, 189, 248, 0.65) !important;
 }

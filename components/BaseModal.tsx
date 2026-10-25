@@ -159,28 +159,25 @@ export default function BaseModal({
   // Full-view mode: no overlay, just fill the parent
   if (asView) {
     return (
-      <div className={`h-full w-full flex flex-col overflow-hidden bg-background ${className}`}>
+      <div className={`flex h-full w-full flex-col overflow-hidden bg-background text-foreground ${className}`}>
         {children}
       </div>
     )
   }
 
-  const blurClass = backdropBlur ? 'backdrop-blur-sm' : ''
-
-  const animationCls =
-    animation === 'zoom'
-      ? 'animate-in fade-in zoom-in-95 duration-200'
-      : animation === 'fade'
-        ? 'animate-in fade-in duration-200'
-        : ''
+  // Entrance choreography comes from the glass stylesheet: .animate-fade-in
+  // for the scrim and .animate-rise-in for the zoom variant.
+  const backdropEnter = animation === 'none' ? '' : 'animate-fade-in'
+  const cardEnter =
+    animation === 'none' ? '' : animation === 'zoom' ? 'animate-rise-in' : 'animate-fade-in'
 
   return (
     <div
       className={[
         'fixed inset-0 flex items-center justify-center p-3 sm:p-6',
-        'bg-black/40',
-        blurClass,
-        animationCls,
+        'bg-black/30 dark:bg-black/60',
+        backdropBlur ? 'backdrop-blur-md' : '',
+        backdropEnter,
         backdropClassName,
       ].join(' ')}
       style={{ zIndex }}
@@ -192,11 +189,10 @@ export default function BaseModal({
         aria-modal="true"
         tabIndex={-1}
         className={[
-          'w-full',
-          SIZE_MAP[size],
-          'bg-surface rounded-2xl shadow-xl border border-border',
-          'flex flex-col overflow-hidden',
+          'glass-strong flex w-full flex-col overflow-hidden rounded-3xl',
           'focus:outline-none',
+          SIZE_MAP[size],
+          cardEnter,
           className,
         ].join(' ')}
         style={{ maxHeight }}
@@ -216,7 +212,7 @@ interface ModalHeaderProps {
   closeAriaLabel?: string
   /** Extra classes on the header bar */
   className?: string
-  /** Show gradient background. Default: true */
+  /** Show a subtle gradient sheen. Default: true */
   gradient?: boolean
 }
 
@@ -228,24 +224,24 @@ export function ModalHeader({
   gradient = true,
 }: ModalHeaderProps) {
   const gradientCls = gradient
-    ? 'bg-gradient-to-b from-surface to-surface-hover/50 dark:from-surface dark:to-surface-hover/30'
+    ? 'bg-gradient-to-b from-[var(--surface-hover)] to-transparent'
     : ''
 
   return (
     <div
       className={[
-        'flex items-center justify-between px-5 py-4',
-        'border-b border-border shrink-0',
+        'flex shrink-0 items-center justify-between gap-3 px-5 py-4 sm:px-6',
+        'border-b border-[var(--border)]',
         gradientCls,
         className,
       ].join(' ')}
     >
-      <div className="flex items-center gap-3 min-w-0 flex-1">{children}</div>
+      <div className="flex min-w-0 flex-1 items-center gap-3">{children}</div>
       {onClose && (
         <ModalCloseButton
           onClick={onClose}
           ariaLabel={closeAriaLabel}
-          className="shrink-0 ml-3"
+          className="-mr-1.5 shrink-0"
         />
       )}
     </div>
@@ -261,9 +257,11 @@ interface ModalBodyProps {
 }
 
 export function ModalBody({ children, className = '', noPadding = false }: ModalBodyProps) {
-  const paddingCls = noPadding ? '' : 'px-5 py-5'
+  const paddingCls = noPadding ? '' : 'px-5 py-5 sm:px-6 sm:py-6'
   return (
-    <div className={`flex-1 overflow-y-auto ${paddingCls} ${className}`}>{children}</div>
+    <div className={`scroll-thin flex-1 overflow-y-auto overscroll-contain ${paddingCls} ${className}`}>
+      {children}
+    </div>
   )
 }
 
@@ -276,8 +274,8 @@ export function ModalFooter({ children, className = '' }: ModalFooterProps) {
   return (
     <div
       className={[
-        'border-t border-border px-5 py-4 shrink-0',
-        'bg-surface-hover/30',
+        'shrink-0 border-t border-[var(--border)]',
+        'bg-[var(--surface-sunken)] px-5 py-4 sm:px-6',
         className,
       ].join(' ')}
     >
@@ -294,7 +292,7 @@ interface ModalTitleProps {
 
 export function ModalTitle({ children, className = '' }: ModalTitleProps) {
   return (
-    <h2 className={`text-lg font-semibold text-foreground ${className}`}>
+    <h2 className={`font-display text-base font-semibold leading-tight tracking-[-0.01em] text-foreground ${className}`}>
       {children}
     </h2>
   )

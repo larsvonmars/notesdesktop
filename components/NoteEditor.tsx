@@ -16,6 +16,12 @@ import {
   MoreHorizontal,
   Share2,
   Download,
+  FileText,
+  BookOpen,
+  Table2,
+  FilePenLine,
+  Loader2,
+  type LucideIcon,
 } from 'lucide-react'
 import RichTextEditor, {
   type RichTextCommand,
@@ -84,12 +90,24 @@ import NoteDetailsSidebar from './NoteDetailsSidebar'
 import { Settings } from 'lucide-react'
 import { htmlToMarkdown } from '@/lib/editor/markdownHelpers'
 import type { NoteType } from '@/lib/notes'
+import { getNoteTypePresentation, type NoteTypeIconKey } from '@/lib/note-types'
 import { deleteFile, getFileSignedUrl, uploadImageFile } from '@/lib/file-storage'
+import { AI_ASSISTANT_OPEN_EVENT } from '@/lib/ai/assistant-events'
 
 export type { Note } from '../lib/notes'
 
 // Maximum image file size in bytes (10MB)
 const MAX_IMAGE_SIZE_BYTES = 10 * 1024 * 1024
+
+/** Icons for the note-type chip in the editor header (mirrors lib/note-types). */
+const NOTE_TYPE_CHIP_ICONS: Record<NoteTypeIconKey, LucideIcon> = {
+  'file-text': FileText,
+  'pen-tool': PenTool,
+  network: Network,
+  'book-open': BookOpen,
+  'table-2': Table2,
+  'file-pen-line': FilePenLine,
+}
 
 // Modal-only UI (file browser, knowledge graph, AI assistant, DOCX preview…)
 // is split out of the note-editor chunk: these components pull in large
@@ -2226,6 +2244,25 @@ export default function NoteEditor({
     }
   }, [note?.id, noteType])
 
+  // The assistant can be opened from the shell (top-bar overflow, ⌘J) as well
+  // as from the details panel footer.
+  useEffect(() => {
+    const handleOpen = () => setShowAIAssistant(true)
+    window.addEventListener(AI_ASSISTANT_OPEN_EVENT, handleOpen)
+    return () => window.removeEventListener(AI_ASSISTANT_OPEN_EVENT, handleOpen)
+  }, [])
+
+  // Escape closes the assistant panel.
+  useEffect(() => {
+    if (!showAIAssistant) return
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key !== 'Escape') return
+      setShowAIAssistant(false)
+    }
+    window.addEventListener('keydown', handleKeyDown)
+    return () => window.removeEventListener('keydown', handleKeyDown)
+  }, [showAIAssistant])
+
   const folderPathMap = useMemo(() => {
     const map = new Map<string, string>()
 
@@ -3400,6 +3437,19 @@ export default function NoteEditor({
   const closeCompactDetails = useCallback(() => setCompactDetailsOpen(false), [])
   const handleManualSave = useCallback(() => { void handleSave() }, [handleSave])
 
+  // Editor-chrome presentation only (no behaviour): the note-type chip and the
+  // quiet save indicator that live in the document header.
+  const typePresentation = getNoteTypePresentation(noteType)
+  const TypeChipIcon = NOTE_TYPE_CHIP_ICONS[typePresentation.iconKey]
+  const saveState: { label: string; tone: 'accent' | 'warning' | 'success' } | null =
+    isSaving || isAutosaving
+      ? { label: 'Saving…', tone: 'accent' }
+      : hasChanges
+        ? { label: 'Unsaved', tone: 'warning' }
+        : lastSaveDisplay
+          ? { label: `Saved ${lastSaveDisplay}`, tone: 'success' }
+          : null
+
   return (
     <>
       {/* Right Sidebar — Note Details */}
@@ -3455,14 +3505,43 @@ export default function NoteEditor({
 
       {/* Clean Editor Area */}
       <div
-        className="flex h-full flex-col bg-background text-foreground"
+        className="flex h-full flex-col text-foreground"
         style={!isMobile ? { paddingRight: rightSidebarOffset } : undefined}
       >
-        <div className="flex-1 overflow-hidden px-3 py-2 sm:px-4 sm:py-3 md:px-5 md:py-4">
+        <div className="min-h-0 flex-1">
           <div className="h-full w-full">
-            <div className="relative flex h-full flex-col overflow-hidden rounded-xl border border-border bg-surface">
+            <div className="relative flex h-full flex-col overflow-hidden rounded-3xl shadow-glass">
+              {/* Glass underlay — the blurred surface deliberately sits on a child
+                  element: a backdrop-filtered ancestor would become the containing
+                  block for the editor's fixed popovers (link card, find bar, table
+                  toolbar) and throw their viewport math off. */}
+              <div
+                aria-hidden
+                className="glass pointer-events-none rounded-3xl"
+                style={{ position: 'absolute', inset: 0 }}
+              />
               {/* Document header — inline title (works at every width) */}
-              <div className="flex shrink-0 items-center gap-2 border-b border-border/70 px-3 py-1.5 sm:px-4 sm:py-2">
+              <div className="relative flex shrink-0 items-center gap-2 px-3 py-2 sm:gap-3 sm:px-6">
+                {/* Note type chip — the document's identity at a glance */}
+                <span
+                  className="hidden h-6 shrink-0 items-center gap-1.5 rounded-full border border-border bg-surface pl-1 pr-2.5 sm:flex"
+                  title={typePresentation.label}
+                >
+                  <span className="flex h-4 w-4 items-center justify-center rounded-full bg-surface-hover">
+                    <TypeChipIcon size={10} className={typePresentation.iconClassName} />
+                  </span>
+                  <span className="text-[11px] font-medium tracking-[-0.01em] text-foreground">
+                    {typePresentation.label}
+                  </span>
+                </span>
+                <span
+                  className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full border border-border bg-surface sm:hidden"
+                  title={typePresentation.label}
+                  aria-hidden
+                >
+                  <TypeChipIcon size={12} className={typePresentation.iconClassName} />
+                </span>
+
                 <input
                   type="text"
                   value={title}
@@ -3473,14 +3552,51 @@ export default function NoteEditor({
                   placeholder="Untitled note"
                   aria-label="Note title"
                   disabled={isDeleting}
-                  className="min-w-0 flex-1 truncate border-0 bg-transparent px-0 py-1 text-base font-semibold tracking-tight text-foreground placeholder:text-muted/60 focus:outline-none sm:text-lg"
+                  className="-mx-1 min-w-0 flex-1 truncate rounded-md border-0 bg-transparent px-1 py-0.5 text-[15px] font-semibold tracking-[-0.01em] text-foreground placeholder:text-muted focus:outline-none focus-visible:ring-2 focus-visible:ring-accent-light sm:text-lg"
                 />
-                <div className="flex shrink-0 items-center gap-2">
+
+                {/* Quiet save state — mirrors the details panel, never steals focus */}
+                {saveState && (
+                  <div
+                    className="hidden shrink-0 items-center gap-1.5 md:flex"
+                    title={
+                      saveState.tone === 'accent'
+                        ? 'Saving note'
+                        : saveState.tone === 'warning'
+                          ? 'Unsaved changes'
+                          : `Saved ${lastSaveDisplay ?? ''}`.trim()
+                    }
+                  >
+                    {saveState.tone === 'accent' ? (
+                      <Loader2 size={11} className="animate-spin text-accent" />
+                    ) : (
+                      <span
+                        className={`h-1.5 w-1.5 rounded-full ${
+                          saveState.tone === 'warning' ? 'bg-warning' : 'bg-success'
+                        }`}
+                        aria-hidden
+                      />
+                    )}
+                    <span
+                      className={`text-[11px] font-medium tabular-nums ${
+                        saveState.tone === 'accent'
+                          ? 'text-accent'
+                          : saveState.tone === 'warning'
+                            ? 'text-warning'
+                            : 'text-muted'
+                      }`}
+                    >
+                      {saveState.label}
+                    </span>
+                  </div>
+                )}
+
+                <div className="flex shrink-0 items-center gap-1">
                   {isMobile && (
                     <button
                       type="button"
                       onClick={() => setShowMobileActions(true)}
-                      className="flex h-7 w-7 items-center justify-center rounded-lg text-muted/70 transition-colors hover:bg-surface-hover hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/50"
+                      className="focus-ring flex h-8 w-8 items-center justify-center rounded-full text-muted transition-colors hover:bg-surface-hover hover:text-foreground sm:h-7 sm:w-7"
                       aria-label="Open note actions"
                       title="Note actions"
                     >
@@ -3491,7 +3607,7 @@ export default function NoteEditor({
                     <button
                       type="button"
                       onClick={() => setCompactDetailsOpen(true)}
-                      className="flex h-7 w-7 items-center justify-center rounded-lg text-muted/70 transition-colors hover:bg-surface-hover hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/50"
+                      className="focus-ring flex h-8 w-8 items-center justify-center rounded-full text-muted transition-colors hover:bg-surface-hover hover:text-foreground sm:h-7 sm:w-7"
                       aria-label="Open note details"
                       title="Note details"
                     >
@@ -3500,8 +3616,9 @@ export default function NoteEditor({
                   )}
                 </div>
               </div>
+              <div className="relative mx-3 h-px shrink-0 bg-border sm:mx-6" aria-hidden />
 
-              <div className="min-h-0 flex-1">
+              <div className="relative min-h-0 flex-1">
               {noteType === 'drawing' ? (
                 <ErrorBoundary label="Drawing Editor" inline>
                   <DrawingEditor
@@ -3558,7 +3675,7 @@ export default function NoteEditor({
                 </ErrorBoundary>
               ) : (
                 <ErrorBoundary label="Rich Text Editor" inline>
-                <div className="mx-auto h-full w-full max-w-3xl">
+                <div className="mx-auto h-full w-full max-w-[72ch]">
                 <RichTextEditor
                     ref={editorRef}
                     value={note?.content ?? ''}
@@ -3595,20 +3712,20 @@ export default function NoteEditor({
 
       {/* Word Goal Input Modal */}
       {showWordGoalInput && (
-        <div className="fixed inset-0 z-[70] flex items-center justify-center p-4 bg-black/50">
-          <div className="bg-surface rounded-xl shadow-2xl border border-border max-w-md w-full p-6">
-            <div className="flex items-start gap-4 mb-4">
-              <div className="flex-shrink-0 w-12 h-12 rounded-full bg-accent-light flex items-center justify-center">
-                <Target size={24} className="text-accent" />
+        <div className="fixed inset-0 z-[70] flex items-center justify-center bg-[rgb(14_12_32_/_0.44)] p-4 backdrop-blur-[3px]">
+          <div className="floating-pop-in glass-strong w-full max-w-md rounded-3xl p-6">
+            <div className="mb-4 flex items-start gap-3.5">
+              <div className="flex h-11 w-11 flex-shrink-0 items-center justify-center rounded-2xl bg-accent-light">
+                <Target size={20} className="text-accent" />
               </div>
               <div className="flex-1">
-                <h3 className="text-lg font-semibold text-foreground mb-1">Set Word Goal</h3>
-                <p className="text-sm text-muted">Set a target word count for this note</p>
+                <h3 className="text-lg font-semibold tracking-[-0.01em] text-foreground">Set word goal</h3>
+                <p className="mt-0.5 text-[13px] text-muted">Set a target word count for this note</p>
               </div>
             </div>
             
             <div className="mb-4">
-              <label htmlFor="note-word-goal" className="block text-sm font-medium text-foreground/80 mb-2">
+              <label htmlFor="note-word-goal" className="mb-2 block text-[11px] font-semibold uppercase tracking-[0.08em] text-muted">
                 Target word count
               </label>
               <input
@@ -3629,22 +3746,22 @@ export default function NoteEditor({
                     setShowWordGoalInput(false)
                   }
                 }}
-                className="w-full bg-surface px-3 py-2 border border-border rounded-lg text-foreground focus:ring-2 focus:ring-accent/30 focus:border-accent/50 focus:outline-none"
+                className="focus-ring w-full rounded-xl border border-border bg-surface px-3 py-2 text-sm text-foreground placeholder:text-muted focus:border-accent"
               />
-              <p className="text-xs text-muted/70 mt-1">Current: {stats.words} words</p>
+              <p className="mt-1.5 text-[11px] text-muted">Current: {stats.words} words</p>
             </div>
 
             <div className="flex items-center justify-between gap-2">
               <button
                 onClick={() => handleSetWordGoal(null)}
-                className="px-4 py-2 text-sm font-medium text-danger hover:bg-danger-light rounded-lg transition-colors"
+                className="focus-ring rounded-xl px-3 py-2 text-sm font-medium text-danger transition-colors hover:bg-danger-light"
               >
-                Clear Goal
+                Clear goal
               </button>
               <div className="flex gap-2">
                 <button
                   onClick={() => setShowWordGoalInput(false)}
-                  className="px-4 py-2 text-sm font-medium text-foreground/80 bg-surface border border-border rounded-lg hover:bg-surface-hover transition-colors"
+                  className="glass-btn h-10 rounded-xl px-4 text-sm font-medium"
                 >
                   Cancel
                 </button>
@@ -3657,9 +3774,9 @@ export default function NoteEditor({
                       }
                     }
                   }}
-                  className="px-4 py-2 text-sm font-medium text-accent-foreground bg-accent rounded-lg hover:opacity-90 transition-opacity"
+                  className="glass-btn-primary h-10 rounded-xl px-4 text-sm font-semibold"
                 >
-                  Set Goal
+                  Set goal
                 </button>
               </div>
             </div>
@@ -3738,8 +3855,8 @@ export default function NoteEditor({
         <button
           onMouseDown={(event) => event.preventDefault()}
           onClick={() => editorRef.current?.openSlashMenu()}
-          className={`fixed z-40 rounded-full bg-alpine-600 hover:bg-alpine-700 text-white shadow-lg hover:shadow-xl transition-all duration-200 flex items-center justify-center group ${
-            isMobile ? 'right-4 bottom-20 w-14 h-14 touch-target safe-bottom' : 'bottom-24 w-14 h-14'
+          className={`focus-ring group fixed z-40 flex items-center justify-center rounded-full bg-accent text-accent-foreground shadow-[0_16px_34px_-14px_var(--accent-glow)] transition-all duration-200 hover:-translate-y-0.5 hover:bg-accent-strong hover:shadow-[0_22px_46px_-14px_var(--accent-glow)] active:translate-y-0 ${
+            isMobile ? 'bottom-20 right-4 h-14 w-14 touch-target safe-bottom' : 'bottom-24 h-14 w-14'
           }`}
           style={!isMobile ? { right: `calc(${rightSidebarOffset} + 24px)` } : undefined}
           title="Insert content block"
@@ -3789,16 +3906,16 @@ export default function NoteEditor({
         <div className="fixed inset-0 z-50">
           <button
             onClick={() => setShowAIAssistant(false)}
-            className="absolute inset-0 bg-black/30 -[1px]"
+            className="absolute inset-0 bg-[rgb(14_12_32_/_0.32)] backdrop-blur-[1px]"
             aria-label="Close AI Assistant"
           />
 
-          <div className="absolute bottom-4 right-4 pointer-events-none">
+          <div className="pointer-events-none absolute bottom-3 right-3 sm:bottom-5 sm:right-5">
             <div
-              className={`pointer-events-auto flex flex-col rounded-2xl border border-border bg-surface shadow-2xl overflow-hidden md:resize ${
+              className={`glass-strong animate-rise-in pointer-events-auto flex flex-col overflow-hidden rounded-3xl shadow-glass-lg md:resize ${
                 isAIAssistantLarge
-                  ? 'w-[calc(100vw-1rem)] h-[calc(100dvh-2rem)] sm:w-[min(92vw,860px)] sm:h-[min(88vh,860px)]'
-                  : 'w-[calc(100vw-1rem)] h-[calc(100dvh-2rem)] sm:w-[420px] sm:h-[600px] sm:max-h-[90vh]'
+                  ? 'w-[calc(100vw-1rem)] h-[calc(100dvh-2rem)] sm:w-[min(92vw,880px)] sm:h-[min(88vh,880px)]'
+                  : 'w-[calc(100vw-1rem)] h-[calc(100dvh-2rem)] sm:w-[460px] sm:h-[640px] sm:max-h-[90vh]'
               }`}
               style={{ minHeight: '440px', maxWidth: '92vw', maxHeight: '88vh' }}
             >

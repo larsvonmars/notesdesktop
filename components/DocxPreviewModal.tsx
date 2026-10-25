@@ -4,7 +4,7 @@ import React, { useEffect, useState } from 'react'
 import ModalCloseButton from './ModalCloseButton'
 import { getFileSignedUrl, getFileUrl } from '@/lib/file-storage'
 import DOMPurify from 'dompurify'
-import BaseModal, { ModalHeader } from './BaseModal'
+import BaseModal, { ModalHeader, ModalTitle } from './BaseModal'
 
 interface DocxPreviewModalProps {
   isOpen: boolean
@@ -78,8 +78,8 @@ export default function DocxPreviewModal({
 
   return (
     <BaseModal isOpen={isOpen} onClose={onClose} size="4xl" maxHeight="90vh" animation="zoom">
-        <ModalHeader onClose={onClose} closeAriaLabel="Close preview" gradient={false} className="bg-gray-50 dark:bg-slate-800/50">
-            <div className="flex h-8 w-8 flex-shrink-0 items-center justify-center rounded bg-blue-100 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400">
+        <ModalHeader onClose={onClose} closeAriaLabel="Close preview" gradient={false}>
+            <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-[var(--accent-light)] text-accent">
               <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                 <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
                 <polyline points="14 2 14 8 20 8"/>
@@ -87,14 +87,14 @@ export default function DocxPreviewModal({
                 <line x1="16" y1="17" x2="8" y2="17"/>
                 <polyline points="10 9 9 9 8 9"/>
               </svg>
-            </div>
-            <h3 className="text-sm font-semibold text-gray-900 dark:text-slate-100 truncate">
+            </span>
+            <ModalTitle className="truncate">
               {fileName || 'Word Document'}
-            </h3>
+            </ModalTitle>
             <div className="ml-auto flex items-center gap-2">
               <button
                 onClick={() => downloadUrl && window.open(downloadUrl, '_blank')}
-                className="px-3 py-1.5 text-xs font-medium bg-white dark:bg-slate-800 border border-gray-200 dark:border-slate-700 text-gray-700 dark:text-slate-200 rounded-md hover:bg-gray-50 dark:hover:bg-slate-700 transition-colors"
+                className="glass-btn h-8 shrink-0 px-3 text-xs"
                 disabled={!downloadUrl}
               >
                 Open in new tab
@@ -103,30 +103,30 @@ export default function DocxPreviewModal({
         </ModalHeader>
 
         {/* Content */}
-        <div className="flex-1 overflow-auto bg-gray-100 dark:bg-slate-950 flex justify-center p-4 sm:p-8">
+        <div className="flex flex-1 justify-center overflow-auto bg-[var(--surface-sunken)] p-4 sm:p-8">
           {isLoading ? (
-            <div className="flex flex-col items-center gap-2 text-slate-500 self-center">
-              <div className="h-6 w-6 border-2 border-slate-300 border-t-blue-500 rounded-full animate-spin"></div>
-              <span className="text-sm">Loading Document...</span>
+            <div className="flex flex-col items-center gap-2 self-center text-muted">
+              <div className="h-6 w-6 animate-spin rounded-full border-2 border-border border-t-[var(--accent)]"></div>
+              <span className="text-sm">Loading Document…</span>
             </div>
           ) : error ? (
-            <div className="flex flex-col items-center justify-center p-8 text-center bg-white dark:bg-slate-900 rounded-lg shadow-sm border border-red-100 dark:border-red-900 mx-auto self-center max-w-md">
-              <svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-red-500 mb-3">
+            <div className="mx-auto flex max-w-md flex-col items-center justify-center self-center rounded-2xl border border-border bg-[var(--surface-hover)] p-8 text-center">
+              <svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="mb-3 text-danger">
                 <circle cx="12" cy="12" r="10" />
                 <line x1="12" y1="8" x2="12" y2="12" />
                 <line x1="12" y1="16" x2="12.01" y2="16" />
               </svg>
-              <h3 className="text-lg font-medium text-slate-800 dark:text-slate-200 mb-1">Preview Unavailable</h3>
-              <p className="text-sm text-slate-500 dark:text-slate-400 mb-4">{error}</p>
+              <h3 className="mb-1 text-base font-semibold text-foreground">Preview Unavailable</h3>
+              <p className="mb-4 text-sm text-muted">{error}</p>
               {downloadUrl && (
-                <a href={downloadUrl} download className="px-4 py-2 bg-blue-500 text-white rounded shadow-sm text-sm font-medium hover:bg-blue-600 transition-colors">
+                <a href={downloadUrl} download className="glass-btn-primary h-9 px-4 text-[13px]">
                   Download File
                 </a>
               )}
             </div>
           ) : htmlContent ? (
-            <div 
-              className="prose prose-sm sm:prose-base dark:prose-invert max-w-3xl w-full bg-white dark:bg-slate-900 shadow-md border border-slate-200 dark:border-slate-800 rounded-lg p-8 sm:p-12 min-h-full"
+            <div
+              className="prose prose-sm sm:prose-base dark:prose-invert min-h-full w-full max-w-3xl rounded-2xl border border-border bg-[var(--surface-solid)] p-8 text-foreground shadow-glass sm:p-12"
               dangerouslySetInnerHTML={{ __html: htmlContent }}
             />
           ) : null}

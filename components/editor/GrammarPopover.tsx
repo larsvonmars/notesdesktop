@@ -93,7 +93,7 @@ export default function GrammarPopover({
       data-grammar-popover="true"
       role="dialog"
       aria-label="Grammar suggestion"
-      className="fixed z-50 w-[320px] max-w-[85vw] rounded-xl border border-border bg-surface p-3 shadow-2xl"
+      className="floating-pop-in glass-strong fixed z-50 w-[320px] max-w-[85vw] rounded-2xl p-3"
       style={{
         top: `${position ? position.top : state.anchorBottom + ANCHOR_GAP}px`,
         left: `${position ? position.left : state.anchorLeft}px`,
@@ -104,18 +104,18 @@ export default function GrammarPopover({
         event.preventDefault()
       }}
     >
-      <div className="flex items-start gap-2">
-        <div className="mt-0.5 flex h-6 w-6 flex-shrink-0 items-center justify-center rounded-md bg-surface-hover">
-          <SpellCheck size={14} className="text-muted" />
+      <div className="flex items-start gap-2.5">
+        <div className="mt-0.5 flex h-7 w-7 flex-shrink-0 items-center justify-center rounded-lg bg-accent-light text-accent">
+          <SpellCheck size={14} />
         </div>
 
         <div className="min-w-0 flex-1">
           {issue.kind ? (
-            <p className="text-[11px] font-semibold uppercase tracking-wide text-muted">
+            <p className="text-[10px] font-semibold uppercase tracking-[0.08em] text-muted">
               {issue.kind}
             </p>
           ) : null}
-          <p className="mt-0.5 break-words text-sm text-foreground">
+          <p className="mt-0.5 break-words text-[13px] leading-5 text-foreground">
             {issue.message || `Possible issue with “${issue.text}”`}
           </p>
         </div>
@@ -123,7 +123,7 @@ export default function GrammarPopover({
         <button
           type="button"
           onClick={onDismiss}
-          className="rounded-md p-1 text-muted transition-colors hover:bg-surface-hover hover:text-foreground"
+          className="focus-ring -mr-1 -mt-1 flex h-7 w-7 items-center justify-center rounded-full text-muted transition-colors hover:bg-surface-hover hover:text-foreground"
           aria-label="Dismiss"
           title="Dismiss"
         >
@@ -140,8 +140,8 @@ export default function GrammarPopover({
               onClick={() => onApply(suggestion)}
               className={
                 index === 0
-                  ? 'rounded-lg bg-accent px-2.5 py-1.5 text-sm font-medium text-accent-foreground transition-opacity hover:opacity-90'
-                  : 'rounded-lg bg-surface-hover px-2.5 py-1.5 text-sm font-medium text-foreground transition-colors hover:bg-border'
+                  ? 'focus-ring rounded-full bg-accent px-2.5 py-1 text-xs font-semibold text-accent-foreground transition-colors hover:bg-accent-strong'
+                  : 'focus-ring rounded-full bg-surface-hover px-2.5 py-1 text-xs font-medium text-foreground transition-colors hover:bg-surface-active'
               }
             >
               {suggestion.label}
@@ -151,13 +151,15 @@ export default function GrammarPopover({
       ) : null}
 
       <div className="mt-2.5 flex items-center justify-between border-t border-border pt-2">
-        <span className="truncate text-[11px] text-muted">Harper · on-device</span>
-        <div className="flex items-center gap-1">
+        <span className="truncate text-[10px] font-medium uppercase tracking-[0.08em] text-muted">
+          Harper · on-device
+        </span>
+        <div className="flex items-center gap-0.5">
           {issue.kind === 'Spelling' && SINGLE_WORD_PATTERN.test(issue.text.trim()) ? (
             <button
               type="button"
               onClick={onAddWord}
-              className="rounded-lg px-2 py-1 text-xs font-medium text-muted transition-colors hover:bg-surface-hover hover:text-foreground"
+              className="focus-ring rounded-full px-2 py-1 text-[11px] font-medium text-muted transition-colors hover:bg-surface-hover hover:text-foreground"
               title="Add this word to the dictionary (applies to all notes)"
             >
               Add word
@@ -166,7 +168,7 @@ export default function GrammarPopover({
           <button
             type="button"
             onClick={onIgnore}
-            className="rounded-lg px-2 py-1 text-xs font-medium text-muted transition-colors hover:bg-surface-hover hover:text-foreground"
+            className="focus-ring rounded-full px-2 py-1 text-[11px] font-medium text-muted transition-colors hover:bg-surface-hover hover:text-foreground"
             title="Never suggest this here again"
           >
             Ignore

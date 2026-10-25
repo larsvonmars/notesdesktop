@@ -35,15 +35,18 @@ interface SearchReplaceBarProps {
 }
 
 const TOGGLE_BASE =
-  'inline-flex h-7 w-7 items-center justify-center rounded-md border transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-alpine-500 disabled:pointer-events-none disabled:opacity-40'
+  'inline-flex h-7 w-7 items-center justify-center rounded-full transition-colors focus-ring disabled:pointer-events-none disabled:opacity-40'
 
 const toggleClass = (active: boolean) =>
   [
     TOGGLE_BASE,
     active
-      ? 'border-alpine-300 bg-alpine-50 text-alpine-700 dark:border-alpine-600 dark:bg-alpine-900/50 dark:text-alpine-300'
-      : 'border-transparent text-muted hover:border-border hover:bg-surface-hover hover:text-foreground',
+      ? 'bg-accent-light text-accent'
+      : 'text-muted hover:bg-surface-hover hover:text-foreground',
   ].join(' ')
+
+const FIELD =
+  'focus-ring h-8 rounded-full border border-border bg-surface text-[13px] text-foreground placeholder:text-muted transition-colors focus:border-accent'
 
 /**
  * Non-modal find & replace bar.
@@ -140,15 +143,15 @@ const SearchReplaceBar = memo<SearchReplaceBarProps>(
       <div
         role="search"
         aria-label="Find and replace"
-        className="floating-pop-in fixed inset-x-0 z-50 mx-auto flex w-[min(460px,calc(100vw-24px))] flex-col gap-2 rounded-2xl border border-border bg-surface/95 p-3 shadow-lg backdrop-blur-xl"
+        className="floating-pop-in glass-strong fixed inset-x-0 z-50 mx-auto flex w-[min(460px,calc(100vw_-_24px))] flex-col gap-1.5 rounded-2xl p-2.5"
         style={{ top: 'calc(env(safe-area-inset-top, 0px) + 64px)' }}
         onKeyDown={handleKeyDown}
       >
         {/* Find row */}
-        <div className="flex items-center gap-1.5">
+        <div className="flex items-center gap-1">
           <div className="relative min-w-0 flex-1">
             <Search
-              size={14}
+              size={13}
               className="pointer-events-none absolute left-2.5 top-1/2 -translate-y-1/2 text-muted"
               aria-hidden="true"
             />
@@ -161,13 +164,15 @@ const SearchReplaceBar = memo<SearchReplaceBarProps>(
               aria-label="Search text"
               spellCheck={false}
               autoComplete="off"
-              className="w-full rounded-lg border border-border bg-background py-1.5 pl-8 pr-2 text-sm text-foreground placeholder:text-muted focus:border-alpine-400 focus:outline-none focus:ring-2 focus:ring-alpine-500/40"
+              className={`${FIELD} w-full pl-7 pr-2`}
             />
           </div>
 
           <span
             aria-live="polite"
-            className={`min-w-[58px] text-right text-xs tabular-nums ${hasQuery && !hasMatches ? 'text-danger' : 'text-muted'}`}
+            className={`min-w-[54px] text-right text-[11px] font-medium tabular-nums ${
+              hasQuery && !hasMatches ? 'text-danger' : 'text-muted'
+            }`}
           >
             {counter}
           </span>
@@ -193,6 +198,8 @@ const SearchReplaceBar = memo<SearchReplaceBarProps>(
           >
             <WholeWord size={15} />
           </button>
+
+          <span className="mx-0.5 h-4 w-px shrink-0 bg-border" aria-hidden />
 
           <button
             type="button"
@@ -223,12 +230,12 @@ const SearchReplaceBar = memo<SearchReplaceBarProps>(
             aria-label="Close find and replace"
             onClick={onClose}
           >
-            <X size={16} />
+            <X size={15} />
           </button>
         </div>
 
         {/* Replace row */}
-        <div className="flex items-center gap-1.5">
+        <div className="flex items-center gap-1">
           <input
             ref={replaceInputRef}
             type="text"
@@ -238,7 +245,7 @@ const SearchReplaceBar = memo<SearchReplaceBarProps>(
             aria-label="Replacement text"
             spellCheck={false}
             autoComplete="off"
-            className="min-w-0 flex-1 rounded-lg border border-border bg-background px-2.5 py-1.5 text-sm text-foreground placeholder:text-muted focus:border-alpine-400 focus:outline-none focus:ring-2 focus:ring-alpine-500/40"
+            className={`${FIELD} min-w-0 flex-1 px-3`}
           />
 
           <button
@@ -246,9 +253,9 @@ const SearchReplaceBar = memo<SearchReplaceBarProps>(
             disabled={!hasMatches}
             onClick={handleReplace}
             title="Replace this match (Enter in the field above)"
-            className="inline-flex h-7 items-center gap-1 rounded-md border border-border px-2 text-xs font-medium text-foreground transition-colors hover:bg-surface-hover disabled:pointer-events-none disabled:opacity-40"
+            className="focus-ring inline-flex h-7 items-center gap-1 rounded-full border border-border px-2.5 text-[11px] font-medium text-foreground transition-colors hover:bg-surface-hover disabled:pointer-events-none disabled:opacity-40"
           >
-            <Replace size={13} />
+            <Replace size={12} />
             Replace
           </button>
 
@@ -257,9 +264,9 @@ const SearchReplaceBar = memo<SearchReplaceBarProps>(
             disabled={!hasMatches}
             onClick={handleReplaceAll}
             title="Replace all matches"
-            className="inline-flex h-7 items-center gap-1 rounded-md bg-alpine-600 px-2 text-xs font-medium text-white transition-colors hover:bg-alpine-700 disabled:pointer-events-none disabled:opacity-40"
+            className="focus-ring inline-flex h-7 items-center gap-1 rounded-full bg-accent px-2.5 text-[11px] font-semibold text-accent-foreground transition-colors hover:bg-accent-strong disabled:pointer-events-none disabled:opacity-40"
           >
-            <ReplaceAll size={13} />
+            <ReplaceAll size={12} />
             All
           </button>
         </div>

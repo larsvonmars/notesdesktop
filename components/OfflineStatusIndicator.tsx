@@ -85,15 +85,16 @@ export default function OfflineStatusIndicator() {
           ? `Syncing ${state.pending} change${state.pending === 1 ? '' : 's'}…`
           : 'Synced'
 
-  const tone = state.conflicts > 0 || state.failed > 0
-    ? 'border-amber-400/60 bg-amber-50 text-amber-900 dark:bg-amber-950/70 dark:text-amber-100'
-    : state.online
-      ? 'border-border bg-surface text-foreground'
-      : 'border-slate-400/60 bg-slate-900 text-slate-100'
+  const isAttention = state.conflicts > 0 || state.failed > 0
+  const iconTone = !state.online
+    ? 'bg-[var(--surface-sunken)] text-muted'
+    : isAttention
+      ? 'bg-[var(--warning-light)] text-warning'
+      : 'bg-[var(--accent-light)] text-accent'
 
   const Icon = !state.online
     ? CloudOff
-    : state.conflicts > 0 || state.failed > 0
+    : isAttention
       ? AlertTriangle
       : isSyncing
         ? RefreshCw
@@ -102,23 +103,25 @@ export default function OfflineStatusIndicator() {
   return (
     <div className="fixed bottom-4 right-4 z-[90] max-w-sm text-xs">
       <div
-        className={`flex items-center gap-1 rounded-full border py-1 pl-3 pr-1 shadow-lg backdrop-blur transition-colors ${tone}`}
+        className="glass-strong flex items-center gap-1 rounded-full py-1 pl-1.5 pr-1"
         aria-live="polite"
       >
         <button
           type="button"
           onClick={() => void openDetails()}
-          className="flex items-center gap-2 py-1 text-left"
+          className="focus-ring flex min-w-0 items-center gap-2 rounded-full py-1 pl-0.5 pr-1.5 text-left"
           title="Open offline sync details"
         >
-          <Icon size={14} className={isSyncing ? 'animate-spin' : undefined} />
-          <span className="font-medium">{label}</span>
+          <span className={`flex h-6 w-6 items-center justify-center rounded-full ${iconTone}`} aria-hidden>
+            <Icon size={13} className={isSyncing ? 'animate-spin' : undefined} strokeWidth={2} />
+          </span>
+          <span className="min-w-0 truncate font-medium text-foreground" title={label}>{label}</span>
         </button>
         {state.online && (state.pending > 0 || state.failed > 0) && (
           <button
             type="button"
             onClick={() => void retry()}
-            className="rounded-full border border-current/20 px-2 py-0.5 font-semibold hover:bg-black/5"
+            className="focus-ring rounded-full border border-[var(--border)] px-2 py-1 text-[11px] font-semibold text-foreground transition-colors duration-150 hover:bg-[var(--surface-hover)]"
           >
             Retry
           </button>
@@ -126,15 +129,15 @@ export default function OfflineStatusIndicator() {
       </div>
 
       {showDetails && (
-        <div className="mt-2 rounded-xl border border-border bg-surface p-3 text-foreground shadow-xl">
+        <div className="glass-popover mt-2 animate-rise-in rounded-2xl p-3 text-foreground">
           <div className="mb-2 flex items-center justify-between">
-            <div className="text-[11px] font-semibold uppercase tracking-wider text-muted">
+            <div className="text-[11px] font-medium uppercase tracking-[0.08em] text-muted">
               Offline sync
             </div>
             <button
               type="button"
               onClick={() => setShowDetails(false)}
-              className="rounded p-1 text-muted hover:bg-surface-hover"
+              className="focus-ring rounded-full p-1 text-muted transition-colors duration-150 hover:bg-[var(--surface-hover)] hover:text-foreground"
               aria-label="Close sync details"
             >
               <X size={12} />
@@ -161,7 +164,10 @@ export default function OfflineStatusIndicator() {
                 version to keep.
               </p>
               {conflicts.map((entry) => (
-                <div key={entry.id} className="rounded-lg border border-border/70 p-2">
+                <div
+                  key={entry.id}
+                  className="rounded-xl border border-[var(--border)] bg-[var(--surface-sunken)] p-2"
+                >
                   <div className="mb-1 truncate text-[11px] font-medium" title={conflictLabel(entry)}>
                     {conflictLabel(entry)}
                   </div>
@@ -170,7 +176,7 @@ export default function OfflineStatusIndicator() {
                       type="button"
                       disabled={isSyncing}
                       onClick={() => void resolve(entry.id, 'keep-local')}
-                      className="rounded border border-border px-2 py-1 text-[10px] font-medium hover:bg-surface-hover disabled:opacity-50"
+                      className="focus-ring rounded-lg border border-[var(--border)] bg-[var(--surface)] px-2 py-1 text-[10px] font-medium transition-colors duration-150 hover:bg-[var(--surface-hover)] disabled:opacity-50"
                     >
                       Keep my version
                     </button>
@@ -178,7 +184,7 @@ export default function OfflineStatusIndicator() {
                       type="button"
                       disabled={isSyncing}
                       onClick={() => void resolve(entry.id, 'use-remote')}
-                      className="rounded border border-border px-2 py-1 text-[10px] font-medium hover:bg-surface-hover disabled:opacity-50"
+                      className="focus-ring rounded-lg border border-[var(--border)] bg-[var(--surface)] px-2 py-1 text-[10px] font-medium transition-colors duration-150 hover:bg-[var(--surface-hover)] disabled:opacity-50"
                     >
                       Use server version
                     </button>

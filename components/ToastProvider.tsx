@@ -45,24 +45,24 @@ function resolveDuration(toast: Toast): number {
   return DEFAULT_DURATION
 }
 
-const VARIANT_STYLES: Record<ToastVariant, { card: string; icon: string; Icon: typeof Info }> = {
+const VARIANT_STYLES: Record<ToastVariant, { tint: string; icon: string; Icon: typeof Info }> = {
   info: {
-    card: 'border-border bg-surface text-foreground',
+    tint: 'bg-[var(--accent-light)]',
     icon: 'text-accent',
     Icon: Info,
   },
   success: {
-    card: 'border-success bg-surface text-foreground',
+    tint: 'bg-[var(--success-light)]',
     icon: 'text-success',
     Icon: CheckCircle2,
   },
   warning: {
-    card: 'border-warning bg-surface text-foreground',
+    tint: 'bg-[var(--warning-light)]',
     icon: 'text-warning',
     Icon: AlertTriangle,
   },
   error: {
-    card: 'border-danger bg-surface text-foreground',
+    tint: 'bg-[var(--danger-light)]',
     icon: 'text-danger',
     Icon: XCircle,
   },
@@ -71,7 +71,7 @@ const VARIANT_STYLES: Record<ToastVariant, { card: string; icon: string; Icon: t
 function ToastCard({ toast, onDismiss }: { toast: Toast; onDismiss: (id: string) => void }) {
   const [paused, setPaused] = useState(false)
   const variant = toast.variant ?? 'info'
-  const { card, icon, Icon } = VARIANT_STYLES[variant]
+  const { tint, icon, Icon } = VARIANT_STYLES[variant]
 
   // Hover/focus pauses the countdown so the action stays reachable.
   useEffect(() => {
@@ -83,15 +83,22 @@ function ToastCard({ toast, onDismiss }: { toast: Toast; onDismiss: (id: string)
   return (
     <div
       role={variant === 'error' || variant === 'warning' ? 'alert' : 'status'}
-      className={`pointer-events-auto flex w-full items-start gap-2.5 rounded-xl border px-3 py-2.5 shadow-lg ${card}`}
+      className="glass-strong animate-rise-in pointer-events-auto flex w-full items-start gap-3 rounded-2xl px-3.5 py-3"
       onMouseEnter={() => setPaused(true)}
       onMouseLeave={() => setPaused(false)}
       onFocusCapture={() => setPaused(true)}
       onBlurCapture={() => setPaused(false)}
     >
-      <Icon size={16} className={`mt-0.5 shrink-0 ${icon}`} aria-hidden />
+      <span
+        className={`mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-full ${tint} ${icon}`}
+        aria-hidden
+      >
+        <Icon size={15} strokeWidth={2} />
+      </span>
       <div className="min-w-0 flex-1">
-        {toast.title && <div className="text-sm font-semibold leading-snug">{toast.title}</div>}
+        {toast.title && (
+          <div className="text-[13px] font-semibold leading-snug text-foreground">{toast.title}</div>
+        )}
         {toast.description && (
           <div className="mt-0.5 text-xs leading-relaxed text-muted">{toast.description}</div>
         )}
@@ -102,7 +109,7 @@ function ToastCard({ toast, onDismiss }: { toast: Toast; onDismiss: (id: string)
               toast.action?.onClick()
               onDismiss(toast.id)
             }}
-            className="mt-2 rounded-lg border border-border bg-surface px-2.5 py-1 text-xs font-semibold text-foreground transition-colors hover:bg-surface-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"
+            className="focus-ring mt-2 inline-flex h-7 items-center rounded-full border border-[var(--border)] bg-[var(--surface)] px-2.5 text-[11px] font-semibold text-foreground transition-colors duration-150 hover:bg-[var(--surface-hover)]"
           >
             {toast.action.label}
           </button>
@@ -111,10 +118,10 @@ function ToastCard({ toast, onDismiss }: { toast: Toast; onDismiss: (id: string)
       <button
         type="button"
         onClick={() => onDismiss(toast.id)}
-        className="shrink-0 rounded-md p-0.5 text-muted transition-colors hover:bg-surface-hover hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"
+        className="focus-ring -mr-1 mt-0.5 flex h-6 w-6 shrink-0 items-center justify-center rounded-full text-muted transition-colors duration-150 hover:bg-[var(--surface-hover)] hover:text-foreground"
         aria-label="Dismiss notification"
       >
-        <X size={14} />
+        <X size={13} strokeWidth={2} />
       </button>
     </div>
   )

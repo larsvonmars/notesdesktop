@@ -6,13 +6,13 @@
 
 /* ─── Base typography ─── */
 .share-note-content {
-  color: #334155;
+  color: #201d2e;
   font-size: 1rem;
   line-height: 1.75;
 }
 
 .share-note-content strong {
-  color: #0f172a;
+  color: #0e0c18;
   font-weight: 700;
 }
 
@@ -26,7 +26,7 @@
 /* ─── Paragraphs ─── */
 .share-note-content p {
   margin: 0.25em 0;
-  color: #334155;
+  color: #201d2e;
   line-height: 1.75;
 }
 
@@ -36,7 +36,7 @@
 .share-note-content h1 {
   font-size: 2.2rem;
   font-weight: 800;
-  color: #0f172a;
+  color: #0e0c18;
   margin-top: 1.4em;
   margin-bottom: 0.35em;
   line-height: 1.15;
@@ -44,7 +44,7 @@
   letter-spacing: -0.03em;
   padding-bottom: 0.4em;
   border-bottom: 2px solid transparent;
-  border-image: linear-gradient(90deg, #16a34a 0%, #0ea5e9 45%, transparent 100%) 1;
+  border-image: linear-gradient(90deg, #6757f5 0%, #2f9bff 45%, transparent 100%) 1;
   transition: color 0.2s ease, text-shadow 0.2s ease;
 }
 
@@ -52,14 +52,14 @@
 .share-note-content h2 {
   font-size: 1.65rem;
   font-weight: 700;
-  color: #1e293b;
+  color: #171522;
   margin-top: 1.4em;
   margin-bottom: 0.3em;
   line-height: 1.25;
   scroll-margin-top: 2rem;
   letter-spacing: -0.02em;
   padding-left: 0.75em;
-  border-left: 3px solid #16a34a;
+  border-left: 3px solid #6757f5;
   transition: color 0.2s ease, border-left-color 0.2s ease;
 }
 
@@ -67,14 +67,14 @@
 .share-note-content h3 {
   font-size: 1.3rem;
   font-weight: 700;
-  color: #334155;
+  color: #201d2e;
   margin-top: 1.2em;
   margin-bottom: 0.3em;
   line-height: 1.35;
   scroll-margin-top: 2rem;
   letter-spacing: -0.01em;
   padding-left: 0.65em;
-  border-left: 2px solid #0ea5e9;
+  border-left: 2px solid #2f9bff;
   transition: color 0.2s ease, border-left-color 0.2s ease;
 }
 
@@ -82,7 +82,7 @@
 .share-note-content h4 {
   font-size: 0.875rem;
   font-weight: 700;
-  color: #475569;
+  color: #2b2740;
   margin-top: 1.1em;
   margin-bottom: 0.25em;
   line-height: 1.4;
@@ -95,7 +95,7 @@
 .share-note-content h5 {
   font-size: 0.78rem;
   font-weight: 600;
-  color: #64748b;
+  color: #4d4966;
   margin-top: 1em;
   margin-bottom: 0.2em;
   line-height: 1.5;
@@ -108,7 +108,7 @@
 .share-note-content h6 {
   font-size: 0.72rem;
   font-weight: 500;
-  color: #94a3b8;
+  color: #9b98b4;
   margin-top: 1em;
   margin-bottom: 0.2em;
   line-height: 1.5;
@@ -145,7 +145,7 @@
   position: absolute;
   left: -1.45em;
   top: 0.1em;
-  color: #16a34a;
+  color: #6757f5;
   font-size: 0.8em;
   line-height: 1.6;
   text-shadow: 0 0 8px rgba(22, 163, 74, 0.5);
@@ -175,7 +175,7 @@
   font-size: 0.78em;
   font-weight: 700;
   line-height: 1.75;
-  color: #16a34a;
+  color: #6757f5;
   text-shadow: 0 0 8px rgba(22, 163, 74, 0.45);
   pointer-events: none;
   user-select: none;
@@ -196,7 +196,7 @@
 
 .share-note-content ul ul > li:not(:has(input[type='checkbox']))::before {
   content: '◇';
-  color: #0ea5e9;
+  color: #2f9bff;
   text-shadow: 0 0 8px rgba(14, 165, 233, 0.5);
   font-size: 0.7em;
   top: 0.15em;
@@ -204,7 +204,7 @@
 
 .share-note-content ol ol > li::before {
   content: counter(share-ol, lower-alpha) '.';
-  color: #0ea5e9;
+  color: #2f9bff;
   text-shadow: 0 0 8px rgba(14, 165, 233, 0.45);
 }
 
@@ -219,14 +219,14 @@
 
 .share-note-content ul ul ul > li:not(:has(input[type='checkbox']))::before {
   content: '▪';
-  color: #d97706;
+  color: #f2a33c;
   text-shadow: 0 0 8px rgba(245, 158, 11, 0.5);
   font-size: 0.7em;
 }
 
 .share-note-content ol ol ol > li::before {
   content: counter(share-ol, lower-roman) '.';
-  color: #d97706;
+  color: #f2a33c;
   text-shadow: 0 0 8px rgba(245, 158, 11, 0.45);
 }
 
@@ -239,7 +239,7 @@
 
 .share-note-content ul ul ul ul > li:not(:has(input[type='checkbox']))::before {
   content: '◆';
-  color: #7c3aed;
+  color: #7c6bff;
   text-shadow: 0 0 8px rgba(139, 92, 246, 0.5);
   font-size: 0.6em;
   top: 0.2em;
@@ -253,7 +253,7 @@
 
 .share-note-content ul ul ul ul ul > li:not(:has(input[type='checkbox']))::before {
   content: '▹';
-  color: #db2777;
+  color: #f45d8c;
   text-shadow: 0 0 8px rgba(236, 72, 153, 0.5);
 }
 
@@ -265,7 +265,7 @@
 
 .share-note-content ul ul ul ul ul ul > li:not(:has(input[type='checkbox']))::before {
   content: '◌';
-  color: #0d9488;
+  color: #0fb9b1;
   text-shadow: 0 0 8px rgba(20, 184, 166, 0.5);
 }
 
@@ -275,7 +275,7 @@
   position: relative;
   border-radius: 5px;
   padding: 0.18em 0.5em 0.18em 0.3em;
-  color: #334155;
+  color: #201d2e;
 }
 
 /* ─── Checklist ─── */
@@ -307,7 +307,7 @@
 
 /* Disabled checkbox appearance — neon green accent */
 .share-note-content input[type='checkbox'] {
-  accent-color: #22c55e;
+  accent-color: #8b7dff;
   width: 1.05rem;
   height: 1.05rem;
   flex-shrink: 0;
@@ -330,7 +330,7 @@
   right: 0.6rem;
   top: 50%;
   height: 1.5px;
-  background: linear-gradient(to right, #22c55e, #0ea5e9, transparent);
+  background: linear-gradient(to right, #8b7dff, #2f9bff, transparent);
   border-radius: 2px;
   box-shadow: 0 0 6px rgba(34, 197, 94, 0.4);
   pointer-events: none;
@@ -339,10 +339,10 @@
 /* ─── Blockquote — decorative quote mark ─── */
 .share-note-content blockquote {
   position: relative;
-  border-left: 4px solid #16a34a;
+  border-left: 4px solid #6757f5;
   padding: 0.65em 1.1em 0.65em 1.3em;
   margin: 1em 0;
-  color: #64748b;
+  color: #4d4966;
   font-style: italic;
   background: linear-gradient(to right, rgba(22, 163, 74, 0.06), rgba(14, 165, 233, 0.02), transparent);
   border-radius: 0 8px 8px 0;
@@ -408,7 +408,7 @@
 .share-note-content hr {
   border: none;
   height: 1px;
-  background: linear-gradient(to right, transparent, #cbd5e1 25%, #94a3b8 50%, #cbd5e1 75%, transparent);
+  background: linear-gradient(to right, transparent, #c9c6de 25%, #9b98b4 50%, #c9c6de 75%, transparent);
   margin: 2em 0;
 }
 
@@ -438,7 +438,7 @@
 
 .share-note-content table th {
   background: linear-gradient(135deg, #f0fdf4 0%, #f0f9ff 100%);
-  color: #16a34a;
+  color: #6757f5;
   font-family: 'JetBrains Mono', 'Fira Code', ui-monospace, SFMono-Regular, Menlo, monospace;
   font-size: 0.72rem;
   font-weight: 700;
@@ -463,7 +463,7 @@
 
 .share-note-content table td {
   padding: 0.7em 1em;
-  color: #334155;
+  color: #201d2e;
   border-right: 1px solid rgba(22, 163, 74, 0.06);
   border-bottom: 1px solid rgba(22, 163, 74, 0.04);
   font-size: 0.9375rem;
@@ -516,9 +516,9 @@
 
 /* Text color mappings — data-color attribute */
 .share-note-content span[data-color='red'] { color: #dc2626; }
-.share-note-content span[data-color='green'] { color: #16a34a; }
+.share-note-content span[data-color='green'] { color: #6757f5; }
 .share-note-content span[data-color='blue'] { color: #2563eb; }
-.share-note-content span[data-color='purple'] { color: #7c3aed; }
+.share-note-content span[data-color='purple'] { color: #7c6bff; }
 .share-note-content span[data-color='orange'] { color: #ea580c; }
 
 /* Font size mappings — data-font-size attribute */
@@ -555,54 +555,54 @@
    ══════════════════════════════════════════════════════ */
 
 :is(.dark) .share-note-content {
-  color: #cbd5e1;
+  color: #c9c6de;
 }
 
 :is(.dark) .share-note-content strong {
-  color: #f1f5f9;
+  color: #f0effa;
 }
 
 :is(.dark) .share-note-content p {
-  color: #cbd5e1;
+  color: #c9c6de;
 }
 
 :is(.dark) .share-note-content li {
-  color: #cbd5e1;
+  color: #c9c6de;
 }
 
 /* Dark headings */
 :is(.dark) .share-note-content h1 {
-  color: #f1f5f9;
-  border-image: linear-gradient(90deg, #22c55e 0%, #38bdf8 45%, transparent 100%) 1;
+  color: #f0effa;
+  border-image: linear-gradient(90deg, #8b7dff 0%, #38bdf8 45%, transparent 100%) 1;
 }
 
 :is(.dark) .share-note-content h2 {
-  color: #e2e8f0;
-  border-left-color: #22c55e;
+  color: #dcd9ee;
+  border-left-color: #8b7dff;
 }
 
 :is(.dark) .share-note-content h3 {
-  color: #cbd5e1;
+  color: #c9c6de;
   border-left-color: #38bdf8;
 }
 
 :is(.dark) .share-note-content h4 {
-  color: #94a3b8;
+  color: #9b98b4;
 }
 
 :is(.dark) .share-note-content h5 {
-  color: #64748b;
+  color: #4d4966;
 }
 
 :is(.dark) .share-note-content h6 {
-  color: #475569;
+  color: #2b2740;
 }
 
 /* Dark blockquote */
 :is(.dark) .share-note-content blockquote {
-  border-left-color: #22c55e;
+  border-left-color: #8b7dff;
   background: linear-gradient(to right, rgba(34, 197, 94, 0.08), rgba(56, 189, 248, 0.03), transparent);
-  color: #94a3b8;
+  color: #9b98b4;
 }
 
 :is(.dark) .share-note-content blockquote::before {
@@ -634,7 +634,7 @@
 
 /* Dark hr */
 :is(.dark) .share-note-content hr {
-  background: linear-gradient(to right, transparent, #334155 25%, #475569 50%, #334155 75%, transparent);
+  background: linear-gradient(to right, transparent, #201d2e 25%, #2b2740 50%, #201d2e 75%, transparent);
 }
 
 /* Dark mark */
@@ -651,12 +651,12 @@
 }
 
 :is(.dark) .share-note-content ul > li:not(:has(input[type='checkbox']))::before {
-  color: #22c55e;
+  color: #8b7dff;
   text-shadow: 0 0 10px rgba(34, 197, 94, 0.7);
 }
 
 :is(.dark) .share-note-content ol > li::before {
-  color: #22c55e;
+  color: #8b7dff;
   text-shadow: 0 0 10px rgba(34, 197, 94, 0.6);
 }
 
@@ -702,11 +702,11 @@
 }
 
 :is(.dark) .share-note-content [data-checklist='true'] li:has(input[type='checkbox']:checked) {
-  color: #64748b;
+  color: #4d4966;
 }
 
 :is(.dark) .share-note-content [data-checklist='true'] li:has(input[type='checkbox']:checked)::after {
-  background: linear-gradient(to right, #22c55e, #0ea5e9, transparent);
+  background: linear-gradient(to right, #8b7dff, #2f9bff, transparent);
   box-shadow: 0 0 8px rgba(34, 197, 94, 0.5);
 }
 
@@ -721,8 +721,8 @@
 }
 
 :is(.dark) .share-note-content table th {
-  background: linear-gradient(135deg, #020617 0%, #0a0f1a 100%);
-  color: #22c55e;
+  background: linear-gradient(135deg, #070610 0%, #0a0812 100%);
+  color: #8b7dff;
   border-right-color: rgba(34, 197, 94, 0.18);
   border-bottom-color: rgba(34, 197, 94, 0.45);
   text-shadow: 0 0 14px rgba(34, 197, 94, 0.6);
@@ -733,7 +733,7 @@
 }
 
 :is(.dark) .share-note-content table td {
-  color: #cbd5e1;
+  color: #c9c6de;
   border-right-color: rgba(34, 197, 94, 0.08);
   border-bottom-color: rgba(34, 197, 94, 0.05);
 }

@@ -860,11 +860,11 @@ const DrawingEditor = forwardRef<DrawingEditorHandle, DrawingEditorProps>(
 
     const isPhoneLayout = viewportWidth > 0 ? viewportWidth < 640 : false
     const isCompactLayout = isMobile || (viewportWidth > 0 && viewportWidth < 1180)
-    const iconButtonClass = `${isCompactLayout ? 'p-2 touch-target' : 'p-1.5'} rounded transition-colors disabled:opacity-30 disabled:cursor-not-allowed text-gray-700`
+    const iconButtonClass = `${isCompactLayout ? 'p-2 touch-target' : 'p-1.5'} rounded-lg transition-colors disabled:opacity-30 disabled:cursor-not-allowed text-muted hover:bg-surface-hover hover:text-foreground`
     const iconSize = isCompactLayout ? 18 : 16
     const colorSwatchClass = `${isCompactLayout ? 'w-8 h-8 touch-target' : 'w-5 h-5'} rounded border transition-all`
-    const rangeClass = `${isCompactLayout ? 'w-28 h-2.5' : 'w-20 h-1.5'} accent-alpine-600`
-    const pressureRangeClass = `${isCompactLayout ? 'w-20 h-2.5' : 'w-16 h-1.5'} accent-alpine-600`
+    const rangeClass = `${isCompactLayout ? 'w-28 h-2.5' : 'w-20 h-1.5'} accent-[var(--accent)]`
+    const pressureRangeClass = `${isCompactLayout ? 'w-20 h-2.5' : 'w-16 h-1.5'} accent-[var(--accent)]`
     const sizeStep = sizeBounds.step
 
     // Expose methods via ref
@@ -885,15 +885,15 @@ const DrawingEditor = forwardRef<DrawingEditorHandle, DrawingEditorProps>(
     }))
 
     return (
-      <div className="flex flex-col h-full bg-white">
+      <div className="flex flex-col h-full bg-transparent text-foreground">
         {/* Compact Toolbar */}
-        <div className="flex flex-wrap items-center gap-1.5 px-2 py-2 border-b border-gray-200 bg-gray-50">
+        <div className="flex flex-wrap items-center gap-1.5 border-b border-border bg-[var(--surface-sunken)] px-2 py-2">
           {/* Tools */}
           <div className="flex items-center gap-1 shrink-0">
             <button
               onClick={() => selectTool('pen')}
-              className={`${iconButtonClass} hover:bg-gray-200 ${
-                currentTool === 'pen' ? 'bg-alpine-100 text-alpine-600' : ''
+              className={`${iconButtonClass} ${
+                currentTool === 'pen' ? 'bg-[var(--accent-light)] text-accent' : ''
               }`}
               title="Pen"
               disabled={disabled}
@@ -906,8 +906,8 @@ const DrawingEditor = forwardRef<DrawingEditorHandle, DrawingEditorProps>(
             </button>
             <button
               onClick={() => selectTool('highlighter')}
-              className={`${iconButtonClass} hover:bg-gray-200 ${
-                currentTool === 'highlighter' ? 'bg-alpine-100 text-alpine-600' : ''
+              className={`${iconButtonClass} ${
+                currentTool === 'highlighter' ? 'bg-[var(--accent-light)] text-accent' : ''
               }`}
               title="Highlighter"
               disabled={disabled}
@@ -919,8 +919,8 @@ const DrawingEditor = forwardRef<DrawingEditorHandle, DrawingEditorProps>(
             </button>
             <button
               onClick={() => selectTool('eraser')}
-              className={`${iconButtonClass} hover:bg-gray-200 ${
-                currentTool === 'eraser' ? 'bg-alpine-100 text-alpine-600' : ''
+              className={`${iconButtonClass} ${
+                currentTool === 'eraser' ? 'bg-[var(--accent-light)] text-accent' : ''
               }`}
               title="Eraser"
               disabled={disabled}
@@ -933,7 +933,7 @@ const DrawingEditor = forwardRef<DrawingEditorHandle, DrawingEditorProps>(
             </button>
           </div>
 
-          <div className={isCompactLayout ? 'hidden' : 'w-px h-5 bg-gray-300'} />
+          <div className={isCompactLayout ? 'hidden' : 'w-px h-5 bg-border-strong'} />
 
           {/* Colors */}
           {currentTool !== 'eraser' && (
@@ -944,8 +944,8 @@ const DrawingEditor = forwardRef<DrawingEditorHandle, DrawingEditorProps>(
                   onClick={() => setCurrentColor(color.value)}
                   className={`${colorSwatchClass} ${
                     currentColor === color.value
-                      ? 'border-alpine-500 ring-1 ring-alpine-300'
-                      : 'border-gray-300 hover:border-gray-400'
+                      ? 'border-accent ring-2 ring-[color:var(--accent-glow)]'
+                      : 'border-border-strong hover:border-muted'
                   }`}
                   style={{ backgroundColor: color.value }}
                   title={color.name}
@@ -955,13 +955,13 @@ const DrawingEditor = forwardRef<DrawingEditorHandle, DrawingEditorProps>(
             </div>
           )}
 
-          <div className={isCompactLayout ? 'hidden' : 'w-px h-5 bg-gray-300'} />
+          <div className={isCompactLayout ? 'hidden' : 'w-px h-5 bg-border-strong'} />
 
           {/* Size */}
           <div className="flex items-center gap-1.5 shrink-0">
             <button
               onClick={() => updateToolSize(currentSize - sizeStep)}
-              className={`${isCompactLayout ? 'px-2 py-1.5 touch-target text-sm' : 'px-1 py-0.5 text-xs'} rounded hover:bg-gray-200 transition-colors disabled:opacity-30 disabled:cursor-not-allowed text-gray-700 font-medium`}
+              className={`${isCompactLayout ? 'px-2 py-1.5 touch-target text-sm' : 'px-1 py-0.5 text-xs'} rounded-lg hover:bg-surface-hover transition-colors disabled:opacity-30 disabled:cursor-not-allowed text-muted font-medium`}
               title="Decrease Size"
               disabled={disabled || currentSize <= sizeBounds.min}
             >
@@ -980,18 +980,18 @@ const DrawingEditor = forwardRef<DrawingEditorHandle, DrawingEditorProps>(
             />
             <button
               onClick={() => updateToolSize(currentSize + sizeStep)}
-              className={`${isCompactLayout ? 'px-2 py-1.5 touch-target text-sm' : 'px-1 py-0.5 text-xs'} rounded hover:bg-gray-200 transition-colors disabled:opacity-30 disabled:cursor-not-allowed text-gray-700 font-medium`}
+              className={`${isCompactLayout ? 'px-2 py-1.5 touch-target text-sm' : 'px-1 py-0.5 text-xs'} rounded-lg hover:bg-surface-hover transition-colors disabled:opacity-30 disabled:cursor-not-allowed text-muted font-medium`}
               title="Increase Size"
               disabled={disabled || currentSize >= sizeBounds.max}
             >
               +
             </button>
-            <span className={`${isCompactLayout ? 'w-10 text-xs' : 'w-8 text-[11px]'} text-gray-700 text-right tabular-nums`}>
+            <span className={`${isCompactLayout ? 'w-10 text-xs' : 'w-8 text-[11px]'} text-muted text-right tabular-nums`}>
               {currentSize.toFixed(1)}
             </span>
           </div>
 
-          <div className={isCompactLayout ? 'hidden' : 'w-px h-5 bg-gray-300'} />
+          <div className={isCompactLayout ? 'hidden' : 'w-px h-5 bg-border-strong'} />
 
           {isCompactLayout && <div className="basis-full h-0" />}
 
@@ -999,16 +999,16 @@ const DrawingEditor = forwardRef<DrawingEditorHandle, DrawingEditorProps>(
           {currentTool === 'pen' && (
             <>
               <div className="flex items-center gap-1.5 shrink-0">
-                <span className={`${isCompactLayout ? 'text-xs' : 'text-[11px]'} text-gray-700 font-medium`}>
+                <span className={`${isCompactLayout ? 'text-xs' : 'text-[11px]'} text-muted font-medium`}>
                   Feel
                 </span>
-                <div className="flex items-center gap-1 rounded-md bg-gray-100 p-1">
+                <div className="flex items-center gap-1 rounded-full border border-border bg-surface p-1">
                   <button
                     onClick={() => selectPenProfile('technical')}
                     className={`${isCompactLayout ? 'px-2 py-1 text-xs' : 'px-1.5 py-0.5 text-[11px]'} rounded transition-colors ${
                       penProfile === 'technical'
-                        ? 'bg-white text-alpine-700 shadow-sm'
-                        : 'text-gray-600 hover:text-gray-800'
+                        ? 'bg-surface-active text-foreground shadow-sm'
+                        : 'text-muted hover:text-foreground'
                     }`}
                     disabled={disabled}
                     title="Technical pen: finer and more precise"
@@ -1019,8 +1019,8 @@ const DrawingEditor = forwardRef<DrawingEditorHandle, DrawingEditorProps>(
                     onClick={() => selectPenProfile('natural')}
                     className={`${isCompactLayout ? 'px-2 py-1 text-xs' : 'px-1.5 py-0.5 text-[11px]'} rounded transition-colors ${
                       penProfile === 'natural'
-                        ? 'bg-white text-alpine-700 shadow-sm'
-                        : 'text-gray-600 hover:text-gray-800'
+                        ? 'bg-surface-active text-foreground shadow-sm'
+                        : 'text-muted hover:text-foreground'
                     }`}
                     disabled={disabled}
                     title="Natural pen: smoother handwriting"
@@ -1030,10 +1030,10 @@ const DrawingEditor = forwardRef<DrawingEditorHandle, DrawingEditorProps>(
                 </div>
               </div>
 
-              <div className={isCompactLayout ? 'hidden' : 'w-px h-5 bg-gray-300'} />
+              <div className={isCompactLayout ? 'hidden' : 'w-px h-5 bg-border-strong'} />
 
               <div className="flex items-center gap-1.5 shrink-0">
-                <span className={`${isCompactLayout ? 'text-xs' : 'text-[11px]'} text-gray-700 font-medium`}>Pressure</span>
+                <span className={`${isCompactLayout ? 'text-xs' : 'text-[11px]'} text-muted font-medium`}>Pressure</span>
                 <input
                   type="range"
                   min={MIN_PRESSURE_SENSITIVITY}
@@ -1045,12 +1045,12 @@ const DrawingEditor = forwardRef<DrawingEditorHandle, DrawingEditorProps>(
                   title={`Pressure Sensitivity: ${Math.round(pressureSensitivity * 100)}%`}
                   disabled={disabled}
                 />
-                <span className={`${isCompactLayout ? 'w-11 text-xs' : 'w-10 text-[11px]'} text-gray-700 text-right tabular-nums`}>
+                <span className={`${isCompactLayout ? 'w-11 text-xs' : 'w-10 text-[11px]'} text-muted text-right tabular-nums`}>
                   {Math.round(pressureSensitivity * 100)}%
                 </span>
               </div>
 
-              <div className={isCompactLayout ? 'hidden' : 'w-px h-5 bg-gray-300'} />
+              <div className={isCompactLayout ? 'hidden' : 'w-px h-5 bg-border-strong'} />
             </>
           )}
 
@@ -1058,8 +1058,8 @@ const DrawingEditor = forwardRef<DrawingEditorHandle, DrawingEditorProps>(
           <div className="flex items-center gap-1 shrink-0">
             <button
               onClick={() => changeBackground('none')}
-              className={`${iconButtonClass} hover:bg-gray-200 ${
-                backgroundType === 'none' ? 'bg-alpine-100 text-alpine-600' : ''
+              className={`${iconButtonClass} ${
+                backgroundType === 'none' ? 'bg-[var(--accent-light)] text-accent' : ''
               }`}
               title="No Background"
               disabled={disabled}
@@ -1070,8 +1070,8 @@ const DrawingEditor = forwardRef<DrawingEditorHandle, DrawingEditorProps>(
             </button>
             <button
               onClick={() => changeBackground('grid')}
-              className={`${iconButtonClass} hover:bg-gray-200 ${
-                backgroundType === 'grid' ? 'bg-alpine-100 text-alpine-600' : ''
+              className={`${iconButtonClass} ${
+                backgroundType === 'grid' ? 'bg-[var(--accent-light)] text-accent' : ''
               }`}
               title="Grid"
               disabled={disabled}
@@ -1085,8 +1085,8 @@ const DrawingEditor = forwardRef<DrawingEditorHandle, DrawingEditorProps>(
             </button>
             <button
               onClick={() => changeBackground('lines')}
-              className={`${iconButtonClass} hover:bg-gray-200 ${
-                backgroundType === 'lines' ? 'bg-alpine-100 text-alpine-600' : ''
+              className={`${iconButtonClass} ${
+                backgroundType === 'lines' ? 'bg-[var(--accent-light)] text-accent' : ''
               }`}
               title="Lines"
               disabled={disabled}
@@ -1099,8 +1099,8 @@ const DrawingEditor = forwardRef<DrawingEditorHandle, DrawingEditorProps>(
             </button>
             <button
               onClick={() => changeBackground('dots')}
-              className={`${iconButtonClass} hover:bg-gray-200 ${
-                backgroundType === 'dots' ? 'bg-alpine-100 text-alpine-600' : ''
+              className={`${iconButtonClass} ${
+                backgroundType === 'dots' ? 'bg-[var(--accent-light)] text-accent' : ''
               }`}
               title="Dots"
               disabled={disabled}
@@ -1126,7 +1126,7 @@ const DrawingEditor = forwardRef<DrawingEditorHandle, DrawingEditorProps>(
             <button
               onClick={undo}
               disabled={disabled || historyIndex === 0}
-              className={`${iconButtonClass} hover:bg-gray-200`}
+              className={iconButtonClass}
               title="Undo"
             >
               <svg width={iconSize} height={iconSize} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
@@ -1137,7 +1137,7 @@ const DrawingEditor = forwardRef<DrawingEditorHandle, DrawingEditorProps>(
             <button
               onClick={redo}
               disabled={disabled || historyIndex === history.length - 1}
-              className={`${iconButtonClass} hover:bg-gray-200`}
+              className={iconButtonClass}
               title="Redo"
             >
               <svg width={iconSize} height={iconSize} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
@@ -1148,7 +1148,7 @@ const DrawingEditor = forwardRef<DrawingEditorHandle, DrawingEditorProps>(
             <button
               onClick={clear}
               disabled={disabled || currentPage.strokes.length === 0}
-              className={`${iconButtonClass} hover:bg-red-100 hover:text-red-600`}
+              className={`${iconButtonClass} hover:bg-[var(--danger-light)] hover:text-danger`}
               title="Clear Page"
             >
               <svg width={iconSize} height={iconSize} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
@@ -1159,14 +1159,14 @@ const DrawingEditor = forwardRef<DrawingEditorHandle, DrawingEditorProps>(
             </button>
           </div>
 
-          <div className={isCompactLayout ? 'hidden' : 'w-px h-5 bg-gray-300'} />
+          <div className={isCompactLayout ? 'hidden' : 'w-px h-5 bg-border-strong'} />
 
           {/* Page Navigation */}
           <div className="flex items-center gap-1 shrink-0">
             <button
               onClick={previousPage}
               disabled={disabled || currentPageIndex === 0}
-              className={`${iconButtonClass} hover:bg-gray-200`}
+              className={iconButtonClass}
               title="Previous Page"
             >
               <svg width={iconSize} height={iconSize} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
@@ -1174,14 +1174,14 @@ const DrawingEditor = forwardRef<DrawingEditorHandle, DrawingEditorProps>(
               </svg>
             </button>
             
-            <div className={`${isCompactLayout ? 'px-2 text-sm min-w-[58px]' : 'px-1.5 text-xs min-w-[45px]'} text-gray-700 font-medium text-center`}>
+            <div className={`${isCompactLayout ? 'px-2 text-sm min-w-[58px]' : 'px-1.5 text-xs min-w-[45px]'} text-muted font-medium text-center`}>
               {currentPageIndex + 1}/{drawingData.pages.length}
             </div>
 
             <button
               onClick={nextPage}
               disabled={disabled || currentPageIndex === drawingData.pages.length - 1}
-              className={`${iconButtonClass} hover:bg-gray-200`}
+              className={iconButtonClass}
               title="Next Page"
             >
               <svg width={iconSize} height={iconSize} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
@@ -1192,7 +1192,7 @@ const DrawingEditor = forwardRef<DrawingEditorHandle, DrawingEditorProps>(
             <button
               onClick={addPage}
               disabled={disabled}
-              className={`${iconButtonClass} hover:bg-green-100 hover:text-green-600`}
+              className={`${iconButtonClass} hover:bg-[var(--success-light)] hover:text-success`}
               title="Add New Page"
             >
               <svg width={iconSize} height={iconSize} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
@@ -1204,7 +1204,7 @@ const DrawingEditor = forwardRef<DrawingEditorHandle, DrawingEditorProps>(
             <button
               onClick={deletePage}
               disabled={disabled || drawingData.pages.length <= 1}
-              className={`${iconButtonClass} hover:bg-red-100 hover:text-red-600`}
+              className={`${iconButtonClass} hover:bg-[var(--danger-light)] hover:text-danger`}
               title="Delete Page"
             >
               <svg width={iconSize} height={iconSize} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
@@ -1217,14 +1217,14 @@ const DrawingEditor = forwardRef<DrawingEditorHandle, DrawingEditorProps>(
             </button>
           </div>
 
-          <div className={isCompactLayout ? 'hidden' : 'w-px h-5 bg-gray-300'} />
+          <div className={isCompactLayout ? 'hidden' : 'w-px h-5 bg-border-strong'} />
 
           {/* Export Button */}
           <div className="relative shrink-0">
             <button
               onClick={() => setShowExportMenu(!showExportMenu)}
               disabled={disabled || currentPage.strokes.length === 0}
-              className={`${iconButtonClass} hover:bg-green-100 hover:text-green-600`}
+              className={`${iconButtonClass} hover:bg-[var(--success-light)] hover:text-success`}
               title="Export"
             >
               <svg width={iconSize} height={iconSize} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
@@ -1236,16 +1236,16 @@ const DrawingEditor = forwardRef<DrawingEditorHandle, DrawingEditorProps>(
 
             {/* Export Menu */}
             {showExportMenu && !isPhoneLayout && (
-              <div className="absolute right-0 top-full mt-2 bg-white border border-gray-200 rounded-lg shadow-lg py-1 z-50 min-w-[120px]">
+              <div className="floating-pop-in glass-strong absolute right-0 top-full z-50 mt-2 min-w-[120px] rounded-2xl p-1">
                 <button
                   onClick={exportToPNG}
-                  className="w-full px-3 py-2 text-left text-sm hover:bg-gray-100 transition-colors text-gray-700"
+                  className="glass-row px-3 py-2 text-sm"
                 >
                   PNG
                 </button>
                 <button
                   onClick={exportToSVG}
-                  className="w-full px-3 py-2 text-left text-sm hover:bg-gray-100 transition-colors text-gray-700"
+                  className="glass-row px-3 py-2 text-sm"
                 >
                   SVG
                 </button>
@@ -1255,27 +1255,27 @@ const DrawingEditor = forwardRef<DrawingEditorHandle, DrawingEditorProps>(
         </div>
 
         {showExportMenu && isPhoneLayout && (
-          <div className="fixed inset-0 z-50 bg-black/40 flex items-end" onClick={() => setShowExportMenu(false)}>
+          <div className="fixed inset-0 z-50 flex items-end bg-black/30 backdrop-blur-sm dark:bg-black/60" onClick={() => setShowExportMenu(false)}>
             <div
-              className="w-full bg-white rounded-t-2xl border-t border-gray-200 p-4 space-y-2"
+              className="animate-rise-in glass-strong w-full space-y-2 rounded-t-3xl p-4"
               onClick={(e) => e.stopPropagation()}
             >
-              <h3 className="text-sm font-semibold text-gray-900">Export current page</h3>
+              <h3 className="text-sm font-semibold text-foreground">Export current page</h3>
               <button
                 onClick={exportToPNG}
-                className="w-full px-4 py-3 text-left text-sm rounded-lg bg-gray-100 hover:bg-gray-200 transition-colors text-gray-700"
+                className="glass-row w-full px-4 py-3 text-sm"
               >
                 Export PNG
               </button>
               <button
                 onClick={exportToSVG}
-                className="w-full px-4 py-3 text-left text-sm rounded-lg bg-gray-100 hover:bg-gray-200 transition-colors text-gray-700"
+                className="glass-row w-full px-4 py-3 text-sm"
               >
                 Export SVG
               </button>
               <button
                 onClick={() => setShowExportMenu(false)}
-                className="w-full px-4 py-3 text-center text-sm rounded-lg border border-gray-300 hover:bg-gray-100 transition-colors text-gray-700"
+                className="glass-btn h-auto w-full justify-center px-4 py-3 text-sm"
               >
                 Cancel
               </button>
@@ -1284,10 +1284,10 @@ const DrawingEditor = forwardRef<DrawingEditorHandle, DrawingEditorProps>(
         )}
 
         {/* Canvas */}
-        <div className="flex-1 overflow-auto bg-gray-100 px-2 py-3 sm:px-4 sm:py-4 lg:px-6">
+        <div className="scroll-thin flex-1 overflow-auto bg-[var(--surface-sunken)] px-2 py-3 sm:px-4 sm:py-4 lg:px-6">
           <div className="flex h-full w-full items-center justify-center">
             <div
-              className="relative w-full max-w-full rounded-lg shadow-lg bg-white overflow-hidden"
+              className="relative w-full max-w-full overflow-hidden rounded-xl border border-border bg-white shadow-glass"
               style={{ maxWidth: MAX_CANVAS_DISPLAY_WIDTH }}
             >
               <div
@@ -1323,12 +1323,12 @@ const DrawingEditor = forwardRef<DrawingEditorHandle, DrawingEditorProps>(
 
         {/* Delete Confirmation Modal */}
         {showDeleteModal && (
-          <div className={`fixed inset-0 bg-black/50 z-50 ${isPhoneLayout ? 'flex items-end' : 'flex items-center justify-center p-4'}`}>
-            <div className={`bg-white shadow-xl ${isPhoneLayout ? 'w-full rounded-t-2xl p-4 max-h-[88vh] overflow-auto' : 'rounded-lg p-6 max-w-md w-full'}`}>
-              <h3 className="text-lg font-semibold text-gray-900 mb-2">
+          <div className={`fixed inset-0 z-50 bg-black/40 backdrop-blur-md dark:bg-black/70 ${isPhoneLayout ? 'flex items-end' : 'flex items-center justify-center p-4'}`}>
+            <div className={`animate-rise-in glass-strong shadow-glass-lg ${isPhoneLayout ? 'w-full max-h-[88vh] overflow-auto rounded-t-3xl p-4' : 'w-full max-w-md rounded-3xl p-6'}`}>
+              <h3 className="mb-2 font-display text-lg font-semibold tracking-[-0.01em] text-foreground">
                 Delete Page?
               </h3>
-              <p className="text-sm text-gray-600 mb-6">
+              <p className="mb-6 text-sm text-muted">
                 What would you like to delete?
               </p>
               
@@ -1337,10 +1337,10 @@ const DrawingEditor = forwardRef<DrawingEditorHandle, DrawingEditorProps>(
                 {drawingData.pages.length > 1 && (
                   <button
                     onClick={deleteCurrentPageOnly}
-                    className="w-full px-4 py-4 text-left rounded-lg border-2 border-orange-200 hover:border-orange-400 hover:bg-orange-50 transition-colors"
+                    className="w-full rounded-xl border border-border bg-[var(--surface-sunken)] px-4 py-4 text-left transition-colors hover:border-[color:var(--warning)] hover:bg-[var(--warning-light)]"
                   >
-                    <div className="font-medium text-gray-900">Delete Current Page Only</div>
-                    <div className="text-sm text-gray-600 mt-1">
+                    <div className="font-medium text-foreground">Delete Current Page Only</div>
+                    <div className="text-sm text-muted mt-1">
                       Remove page {currentPageIndex + 1} of {drawingData.pages.length}
                     </div>
                   </button>
@@ -1349,10 +1349,10 @@ const DrawingEditor = forwardRef<DrawingEditorHandle, DrawingEditorProps>(
                 {/* Delete All Pages (Clear Everything) */}
                 <button
                   onClick={deleteAllPages}
-                  className="w-full px-4 py-4 text-left rounded-lg border-2 border-red-200 hover:border-red-400 hover:bg-red-50 transition-colors"
+                  className="w-full rounded-xl border border-border bg-[var(--surface-sunken)] px-4 py-4 text-left transition-colors hover:border-[color:var(--danger)] hover:bg-[var(--danger-light)]"
                 >
-                  <div className="font-medium text-gray-900">Delete All Pages</div>
-                  <div className="text-sm text-gray-600 mt-1">
+                  <div className="font-medium text-foreground">Delete All Pages</div>
+                  <div className="text-sm text-muted mt-1">
                     Clear entire drawing ({drawingData.pages.length} {drawingData.pages.length === 1 ? 'page' : 'pages'})
                   </div>
                 </button>
@@ -1360,7 +1360,7 @@ const DrawingEditor = forwardRef<DrawingEditorHandle, DrawingEditorProps>(
                 {/* Cancel */}
                 <button
                   onClick={() => setShowDeleteModal(false)}
-                  className="w-full px-4 py-2 text-center rounded-lg border border-gray-300 hover:bg-gray-100 transition-colors text-gray-700"
+                  className="glass-btn w-full px-4"
                 >
                   Cancel
                 </button>

@@ -1,4 +1,4 @@
-﻿'use client'
+'use client'
 
 import { useEffect, useMemo, useState } from 'react'
 import type { FormEvent, KeyboardEvent, ReactNode } from 'react'
@@ -16,6 +16,7 @@ import {
   FolderOpen,
   Inbox,
   Layers,
+  ListTodo,
   Network,
   PenTool,
   Plus,
@@ -39,6 +40,7 @@ import {
   getNoteTypePresentation,
   getOrderedNoteTypePresentations,
   type NoteTypeIconKey,
+  type NoteTypePresentation,
 } from '@/lib/note-types'
 import { formatModShortcut } from '@/lib/platform'
 import {
@@ -84,6 +86,15 @@ const PRIORITY_DOT: Record<Task['priority'], string> = {
   low: 'bg-muted opacity-40',
 }
 
+/** Theme-aware tint for note-type accents (adaptive, never hardcoded). */
+function typeTint(presentation: NoteTypePresentation): string {
+  return `color-mix(in srgb, ${presentation.graphStroke} 16%, transparent)`
+}
+
+function typeInk(presentation: NoteTypePresentation): string {
+  return `color-mix(in srgb, ${presentation.graphStroke} 72%, var(--foreground))`
+}
+
 type TypeFilter = 'all' | NoteType
 
 export interface HomeDashboardProps {
@@ -108,16 +119,25 @@ interface SectionHeaderProps {
   title: string
   iconClassName: string
   children?: ReactNode
+  className?: string
 }
 
-function SectionHeader({ icon: Icon, title, iconClassName, children }: SectionHeaderProps) {
+function SectionHeader({
+  icon: Icon,
+  title,
+  iconClassName,
+  children,
+  className = '',
+}: SectionHeaderProps) {
   return (
-    <div className="flex flex-wrap items-center justify-between gap-2 border-b border-border px-4 py-3 sm:px-5">
-      <div className="flex min-w-0 items-center gap-2">
-        <span className={`flex h-6 w-6 shrink-0 items-center justify-center rounded-md ${iconClassName}`}>
-          <Icon size={13} />
+    <div className={`flex flex-wrap items-center justify-between gap-2 px-5 pb-3 pt-4 ${className}`}>
+      <div className="flex min-w-0 items-center gap-2.5">
+        <span
+          className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-xl ${iconClassName}`}
+        >
+          <Icon size={14} />
         </span>
-        <h2 className="truncate text-sm font-semibold text-foreground">{title}</h2>
+        <h2 className="truncate text-sm font-semibold tracking-[-0.01em] text-foreground">{title}</h2>
       </div>
       {children}
     </div>
@@ -126,9 +146,9 @@ function SectionHeader({ icon: Icon, title, iconClassName, children }: SectionHe
 
 function Metric({ label, value }: { label: string; value: number }) {
   return (
-    <div className="rounded-lg bg-surface-hover px-2.5 py-2">
+    <div className="rounded-xl bg-surface-hover px-3 py-2">
       <div className="text-base font-semibold tabular-nums text-foreground">{value}</div>
-      <div className="text-[10px] font-medium uppercase tracking-wider text-muted">{label}</div>
+      <div className="text-[10px] font-medium uppercase tracking-[0.08em] text-muted">{label}</div>
     </div>
   )
 }
@@ -144,12 +164,12 @@ function AgendaTaskRow({ task, now, onComplete, onOpen }: AgendaTaskRowProps) {
   const hasTarget = Boolean(task.note_id || task.project_id)
 
   return (
-    <li className="group flex items-center gap-2.5 rounded-lg px-1.5 py-1.5 transition-colors hover:bg-surface-hover">
+    <li className="group flex items-center gap-2.5 rounded-xl px-2 py-2 transition-colors hover:bg-surface-hover">
       <button
         type="button"
         onClick={() => onComplete(task)}
         aria-label={`Complete ${task.title}`}
-        className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full border border-border-strong text-transparent transition-colors hover:border-accent hover:bg-accent-light hover:text-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"
+        className="focus-ring flex h-[18px] w-[18px] shrink-0 items-center justify-center rounded-full border border-border-strong text-transparent transition-colors hover:border-accent hover:bg-accent-light hover:text-accent"
       >
         <Check size={11} />
       </button>
@@ -158,19 +178,23 @@ function AgendaTaskRow({ task, now, onComplete, onOpen }: AgendaTaskRowProps) {
         <button
           type="button"
           onClick={() => onOpen(task)}
-          className="min-w-0 flex-1 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"
+          className="focus-ring min-w-0 flex-1 text-left"
         >
           <span className="block truncate text-[13px] font-medium leading-tight text-foreground">
             {task.title}
           </span>
-          <span className="mt-0.5 block text-[10px] text-muted">{formatDueLabel(task.due_date, now)}</span>
+          <span className="mt-0.5 block text-[10px] text-muted">
+            {formatDueLabel(task.due_date, now)}
+          </span>
         </button>
       ) : (
         <span className="min-w-0 flex-1">
           <span className="block truncate text-[13px] font-medium leading-tight text-foreground">
             {task.title}
           </span>
-          <span className="mt-0.5 block text-[10px] text-muted">{formatDueLabel(task.due_date, now)}</span>
+          <span className="mt-0.5 block text-[10px] text-muted">
+            {formatDueLabel(task.due_date, now)}
+          </span>
         </span>
       )}
 
@@ -192,7 +216,7 @@ function AgendaEventRow({ event, now, onOpen }: AgendaEventRowProps) {
   const hasTarget = Boolean(event.note_id || event.project_id)
 
   return (
-    <li className="flex items-center gap-2.5 rounded-lg px-1.5 py-1.5 transition-colors hover:bg-surface-hover">
+    <li className="flex items-center gap-2.5 rounded-xl px-2 py-2 transition-colors hover:bg-surface-hover">
       <span className="w-12 shrink-0 text-[10px] font-medium tabular-nums text-muted">
         {formatEventTime(event.start_time, event.is_all_day)}
       </span>
@@ -204,7 +228,7 @@ function AgendaEventRow({ event, now, onOpen }: AgendaEventRowProps) {
         <button
           type="button"
           onClick={() => onOpen(event)}
-          className="min-w-0 flex-1 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"
+          className="focus-ring min-w-0 flex-1 text-left"
         >
           <span className="block truncate text-[13px] font-medium text-foreground">{event.title}</span>
           <span className="block text-[10px] text-muted">{formatEventDay(event.start_time, now)}</span>
@@ -221,13 +245,19 @@ function AgendaEventRow({ event, now, onOpen }: AgendaEventRowProps) {
 
 function RecentSkeleton() {
   return (
-    <div className="space-y-3 px-5 py-4">
+    <div className="mt-4 grid grid-cols-1 gap-2.5 sm:grid-cols-2">
       {Array.from({ length: 4 }).map((_, index) => (
-        <div key={index} className="flex items-center gap-3">
-          <div className="h-8 w-8 shrink-0 animate-pulse rounded-lg bg-surface-hover" />
-          <div className="flex-1 space-y-1.5">
-            <div className="h-3 w-3/5 animate-pulse rounded bg-surface-hover" />
-            <div className="h-2.5 w-1/3 animate-pulse rounded bg-surface-hover" />
+        <div key={index} className="glass-card p-3.5">
+          <div className="flex items-start gap-2.5">
+            <div className="skeleton-shimmer h-9 w-9 shrink-0 rounded-xl" />
+            <div className="flex-1 space-y-2 pt-0.5">
+              <div className="skeleton-shimmer h-3 w-3/5 rounded-full" />
+              <div className="skeleton-shimmer h-2.5 w-2/5 rounded-full" />
+            </div>
+          </div>
+          <div className="mt-4 flex items-center justify-between">
+            <div className="skeleton-shimmer h-2.5 w-16 rounded-full" />
+            <div className="skeleton-shimmer h-2.5 w-10 rounded-full" />
           </div>
         </div>
       ))}
@@ -561,64 +591,66 @@ export default function HomeDashboard({
   return (
     <div className="h-full overflow-y-auto scroll-thin">
       <div className="mx-auto w-full max-w-7xl px-4 pb-24 pt-6 sm:px-6 lg:px-8 lg:pb-12">
-        <header className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
-          <div className="min-w-0">
-            <p className="text-[11px] font-semibold uppercase tracking-[0.2em] text-muted">
-              {formatHomeDate(now)}
-            </p>
-            <h1 className="mt-1 flex flex-wrap items-center gap-x-2 text-2xl font-semibold tracking-tight text-foreground sm:text-3xl">
-              <span>
-                {greeting.text}
-                {userName ? `, ${userName}` : ''}
-              </span>
-              <span aria-hidden>{greeting.emoji}</span>
-            </h1>
-            <p className="mt-1 text-sm text-muted">
-              Here&apos;s what deserves your attention today.
-            </p>
-          </div>
-
-          <div className="flex w-full flex-col gap-2 sm:flex-row lg:w-auto">
-            <button
-              type="button"
-              onClick={onOpenSearch}
-              className="group flex min-w-0 items-center gap-2 rounded-xl border border-border bg-surface px-3 py-2.5 text-sm text-muted shadow-sm transition-colors hover:border-border-strong hover:bg-surface-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent sm:min-w-[240px]"
-            >
-              <Search size={15} className="shrink-0" />
-              <span className="flex-1 truncate text-left">Search notes, folders, projects…</span>
-              <kbd className="shrink-0 rounded border border-border bg-surface-hover px-1.5 py-0.5 text-[10px] font-medium text-muted">
-                {formatModShortcut('K')}
-              </kbd>
-            </button>
-
-            <Button
-              type="button"
-              variant="primary"
-              size="md"
-              icon={Plus}
-              onClick={onNewNote}
-              className="shrink-0"
-            >
-              New note
-            </Button>
-          </div>
+        <header className="animate-rise-in">
+          <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-muted">
+            {formatHomeDate(now)}
+          </p>
+          <h1 className="mt-1.5 flex flex-wrap items-baseline gap-x-1 font-display text-[28px] font-semibold tracking-[-0.02em] text-foreground sm:text-3xl">
+            <span className="text-gradient">
+              {greeting.text}
+              {userName ? `, ${userName}` : ''}
+            </span>
+            <span aria-hidden className="text-2xl">
+              {greeting.emoji}
+            </span>
+          </h1>
+          <p className="mt-1.5 max-w-xl text-sm leading-6 text-muted">
+            Here&apos;s what deserves your attention today.
+          </p>
         </header>
 
-        <section className="mt-6 overflow-hidden rounded-2xl border border-border bg-surface shadow-sm">
-          <div className="flex flex-wrap items-center justify-between gap-2 border-b border-border px-4 py-3 sm:px-5">
-            <div className="flex items-center gap-2">
-              <span className="flex h-6 w-6 items-center justify-center rounded-md bg-accent-light text-accent">
-                <Zap size={13} />
+        <div className="animate-rise-in mt-5 flex flex-wrap items-center gap-2">
+          <button type="button" onClick={onNewNote} className="glass-btn-primary h-11 sm:h-9">
+            <Plus size={15} />
+            New note
+          </button>
+          <button type="button" onClick={onCreateProject} className="glass-btn h-11 sm:h-9">
+            <Layers size={14} />
+            New project
+          </button>
+          <button type="button" onClick={onOpenSearch} className="glass-btn h-11 sm:h-9">
+            <Search size={14} />
+            Search
+            <kbd className="kbd">{formatModShortcut('K')}</kbd>
+          </button>
+          <button type="button" onClick={onOpenTasks} className="glass-btn h-11 sm:h-9">
+            <ListTodo size={14} />
+            Tasks
+            {dueTodayCount > 0 && (
+              <span className="rounded-full bg-accent-light px-1.5 py-0.5 text-[10px] font-semibold tabular-nums text-accent">
+                {dueTodayCount}
               </span>
-              <h2 className="text-sm font-semibold text-foreground">Quick capture</h2>
-              <span className="hidden text-xs text-muted sm:inline">Saved to Unfiled</span>
+            )}
+          </button>
+        </div>
+
+        <section className="glass-card animate-rise-in mt-6 overflow-hidden">
+          <div className="flex flex-wrap items-center justify-between gap-2 px-5 pt-4">
+            <div className="flex min-w-0 items-center gap-2.5">
+              <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-xl bg-accent-light text-accent">
+                <Zap size={14} />
+              </span>
+              <h2 className="text-sm font-semibold tracking-[-0.01em] text-foreground">
+                Quick capture
+              </h2>
+              <span className="hidden text-[11px] text-muted sm:inline">Saved to Unfiled</span>
             </div>
 
             {unfiledCount > 0 && (
               <button
                 type="button"
                 onClick={onOpenUnfiled}
-                className="inline-flex items-center gap-1 rounded-lg px-2 py-1 text-[11px] font-medium text-muted transition-colors hover:bg-surface-hover hover:text-foreground"
+                className="glass-btn-ghost w-auto gap-1 px-2.5 text-[11px]"
               >
                 <Inbox size={12} />
                 {unfiledCount} unfiled
@@ -627,7 +659,7 @@ export default function HomeDashboard({
             )}
           </div>
 
-          <div className="px-4 py-4 sm:px-5">
+          <div className="px-5 pb-4 pt-3">
             <form onSubmit={handleCaptureSubmit}>
               <label htmlFor="home-quick-capture" className="sr-only">
                 Capture a thought
@@ -639,9 +671,9 @@ export default function HomeDashboard({
                 onKeyDown={handleCaptureKeyDown}
                 placeholder="What's on your mind? Capture it before it disappears…"
                 rows={2}
-                className="w-full resize-none rounded-xl border border-border bg-background px-3.5 py-3 text-sm text-foreground placeholder:text-muted focus:border-accent focus:outline-none focus:ring-2 focus:ring-accent"
+                className="glass-input h-auto min-h-[76px] w-full resize-none px-3.5 py-3 text-sm leading-6"
               />
-              <div className="mt-2 flex flex-col-reverse gap-2 sm:flex-row sm:items-center sm:justify-between">
+              <div className="mt-2.5 flex flex-col-reverse gap-2 sm:flex-row sm:items-center sm:justify-between">
                 <p className="text-[11px] text-muted">
                   The first line becomes the title. Press {formatModShortcut('Enter')} to save.
                 </p>
@@ -660,8 +692,10 @@ export default function HomeDashboard({
             </form>
           </div>
 
-          <div className="flex flex-wrap items-center gap-1.5 border-t border-border bg-surface-hover px-4 py-2.5 sm:px-5">
-            <span className="mr-1 text-[10px] font-semibold uppercase tracking-wider text-muted">
+          <div className="glass-divider" />
+
+          <div className="flex flex-wrap items-center gap-1.5 px-5 py-3">
+            <span className="mr-1 text-[11px] font-semibold uppercase tracking-[0.08em] text-muted">
               Start new
             </span>
             {getOrderedNoteTypePresentations().map((presentation) => {
@@ -671,9 +705,9 @@ export default function HomeDashboard({
                   key={presentation.id}
                   type="button"
                   onClick={() => onCreateNote(presentation.id)}
-                  className="inline-flex items-center gap-1.5 rounded-lg border border-border bg-surface px-2.5 py-1 text-[11px] font-medium text-muted transition-colors hover:border-accent hover:bg-accent-light hover:text-foreground"
+                  className="glass-btn h-9 gap-1.5 px-2.5 text-[11px] font-medium"
                 >
-                  <Icon size={12} className={presentation.iconClassName} />
+                  <Icon size={12} style={{ color: typeInk(presentation) }} />
                   {presentation.pickerLabel}
                 </button>
               )
@@ -683,11 +717,11 @@ export default function HomeDashboard({
 
         <div className="mt-5 grid gap-5 lg:grid-cols-12">
           <div className="min-w-0 space-y-5 lg:col-span-7">
-            <section className="overflow-hidden rounded-2xl border border-border bg-surface shadow-sm">
+            <section className="glass-card overflow-hidden">
               <SectionHeader
                 icon={Clock3}
                 title="Continue where you left off"
-                iconClassName="bg-peak-100 text-peak-700 dark:bg-peak-900/40 dark:text-peak-300"
+                iconClassName="bg-accent-light text-accent"
               >
                 {continueNote && (
                   <span className="text-[11px] text-muted">
@@ -699,21 +733,25 @@ export default function HomeDashboard({
               </SectionHeader>
 
               {continueNote ? (
-                <div className="p-4 sm:p-5">
+                <div className="px-5 pb-5">
                   <div className="flex items-start gap-3">
                     {(() => {
                       const presentation = getNoteTypePresentation(continueNote.note_type)
                       const Icon = NOTE_TYPE_ICON_MAP[presentation.iconKey]
                       return (
                         <span
-                          className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-xl ${presentation.iconBgClassName}`}
+                          className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl"
+                          style={{
+                            backgroundColor: typeTint(presentation),
+                            color: typeInk(presentation),
+                          }}
                         >
-                          <Icon size={18} />
+                          <Icon size={19} />
                         </span>
                       )
                     })()}
                     <div className="min-w-0 flex-1">
-                      <h3 className="truncate text-lg font-semibold leading-tight text-foreground">
+                      <h3 className="truncate font-display text-lg font-semibold leading-tight tracking-[-0.01em] text-foreground">
                         {continueNote.title || 'Untitled'}
                       </h3>
                       <p className="mt-0.5 truncate text-xs text-muted">
@@ -722,7 +760,7 @@ export default function HomeDashboard({
                     </div>
                   </div>
 
-                  <p className="mt-3 line-clamp-3 text-sm leading-relaxed text-muted">
+                  <p className="mt-3 line-clamp-3 text-sm leading-6 text-muted">
                     {isPreviewLoading
                       ? 'Loading a preview…'
                       : preview ||
@@ -730,7 +768,7 @@ export default function HomeDashboard({
                   </p>
 
                   <div className="mt-4 flex items-center justify-between gap-3">
-                    <span className="inline-flex items-center gap-1.5 rounded-full bg-surface-hover px-2.5 py-1 text-[11px] font-medium text-muted">
+                    <span className="inline-flex items-center gap-1.5 rounded-full bg-surface-hover px-2.5 py-1 text-[10px] font-medium uppercase tracking-[0.06em] text-muted">
                       {getNoteTypePresentation(continueNote.note_type).label}
                     </span>
                     <Button
@@ -745,26 +783,26 @@ export default function HomeDashboard({
                   </div>
                 </div>
               ) : isLoading ? (
-                <div className="space-y-3 p-4 sm:p-5">
+                <div className="space-y-3 px-5 pb-5">
                   <div className="flex items-center gap-3">
-                    <div className="h-10 w-10 animate-pulse rounded-xl bg-surface-hover" />
+                    <div className="skeleton-shimmer h-11 w-11 shrink-0 rounded-2xl" />
                     <div className="flex-1 space-y-2">
-                      <div className="h-4 w-1/2 animate-pulse rounded bg-surface-hover" />
-                      <div className="h-3 w-1/3 animate-pulse rounded bg-surface-hover" />
+                      <div className="skeleton-shimmer h-4 w-1/2 rounded-full" />
+                      <div className="skeleton-shimmer h-3 w-1/3 rounded-full" />
                     </div>
                   </div>
-                  <div className="h-3 w-full animate-pulse rounded bg-surface-hover" />
-                  <div className="h-3 w-4/5 animate-pulse rounded bg-surface-hover" />
+                  <div className="skeleton-shimmer h-3 w-full rounded-full" />
+                  <div className="skeleton-shimmer h-3 w-4/5 rounded-full" />
                 </div>
               ) : (
-                <div className="flex flex-col items-center px-6 py-10 text-center">
+                <div className="flex flex-col items-center px-6 pb-9 text-center">
                   <span className="flex h-12 w-12 items-center justify-center rounded-2xl bg-accent-light text-accent">
                     <Sparkles size={22} />
                   </span>
                   <h3 className="mt-3 text-base font-semibold text-foreground">
                     Your workspace is ready
                   </h3>
-                  <p className="mt-1 max-w-sm text-sm text-muted">
+                  <p className="mt-1 max-w-sm text-sm leading-6 text-muted">
                     Capture a thought above or start with one of the note types. Everything you
                     create will show up here.
                   </p>
@@ -782,36 +820,36 @@ export default function HomeDashboard({
               )}
             </section>
 
-            <section className="overflow-hidden rounded-2xl border border-border bg-surface shadow-sm">
-              <SectionHeader
-                icon={FileText}
-                title="Recent notes"
-                iconClassName="bg-alpine-100 text-alpine-700 dark:bg-alpine-900/40 dark:text-alpine-300"
-              >
+            <section className="min-w-0">
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <div className="flex min-w-0 items-center gap-2.5">
+                  <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-xl bg-surface-hover text-muted">
+                    <FileText size={14} />
+                  </span>
+                  <h2 className="text-sm font-semibold tracking-[-0.01em] text-foreground">
+                    Recent notes
+                  </h2>
+                </div>
                 <button
                   type="button"
                   onClick={onOpenSearch}
-                  className="inline-flex items-center gap-1 rounded-lg px-2 py-1 text-[11px] font-medium text-muted transition-colors hover:bg-surface-hover hover:text-foreground"
+                  className="glass-btn-ghost w-auto gap-1 px-2.5 text-[11px]"
                 >
                   Find a note
                   <ArrowUpRight size={12} />
                 </button>
-              </SectionHeader>
+              </div>
 
               {recentSource.length > 0 && (
-                <div className="flex gap-1.5 overflow-x-auto border-b border-border px-4 py-2.5 scrollbar-hide">
+                <div className="segmented mt-3 w-full overflow-x-auto scrollbar-hide">
                   <button
                     type="button"
                     onClick={() => setTypeFilter('all')}
                     aria-pressed={typeFilter === 'all'}
-                    className={`inline-flex shrink-0 items-center gap-1.5 rounded-full px-2.5 py-1 text-[11px] font-medium transition-colors ${
-                      typeFilter === 'all'
-                        ? 'bg-accent text-accent-foreground'
-                        : 'bg-surface-hover text-muted hover:text-foreground'
-                    }`}
+                    className="segmented-item h-9 shrink-0"
                   >
                     All
-                    <span className="tabular-nums opacity-70">{recentSource.length}</span>
+                    <span className="tabular-nums opacity-60">{recentSource.length}</span>
                   </button>
 
                   {availableTypeFilters.map((presentation) => {
@@ -823,15 +861,11 @@ export default function HomeDashboard({
                         type="button"
                         onClick={() => setTypeFilter(presentation.id)}
                         aria-pressed={active}
-                        className={`inline-flex shrink-0 items-center gap-1.5 rounded-full px-2.5 py-1 text-[11px] font-medium transition-colors ${
-                          active
-                            ? 'bg-accent text-accent-foreground'
-                            : 'bg-surface-hover text-muted hover:text-foreground'
-                        }`}
+                        className="segmented-item h-9 shrink-0"
                       >
                         <Icon size={12} />
                         {presentation.label}
-                        <span className="tabular-nums opacity-70">
+                        <span className="tabular-nums opacity-60">
                           {typeCounts.get(presentation.id) ?? 0}
                         </span>
                       </button>
@@ -843,11 +877,14 @@ export default function HomeDashboard({
               {isLoading && recentSource.length === 0 ? (
                 <RecentSkeleton />
               ) : visibleRecentNotes.length === 0 ? (
-                <div className="px-5 py-8 text-center">
-                  <p className="text-sm font-medium text-foreground">
+                <div className="glass-card mt-4 px-6 py-9 text-center">
+                  <span className="mx-auto flex h-11 w-11 items-center justify-center rounded-2xl bg-surface-hover text-muted">
+                    <FileText size={19} />
+                  </span>
+                  <p className="mt-3 text-sm font-semibold text-foreground">
                     {recentSource.length === 0 ? 'No other recent notes' : 'No notes of this type'}
                   </p>
-                  <p className="mt-1 text-xs text-muted">
+                  <p className="mt-1 text-xs leading-5 text-muted">
                     {recentSource.length === 0
                       ? 'New notes and edits will appear here so you can jump back in.'
                       : 'Try another filter or open a new note.'}
@@ -856,52 +893,65 @@ export default function HomeDashboard({
                     <button
                       type="button"
                       onClick={() => setTypeFilter('all')}
-                      className="mt-3 text-xs font-medium text-accent hover:underline"
+                      className="focus-ring mt-3 rounded-lg text-xs font-medium text-accent hover:underline"
                     >
                       Show all recent notes
                     </button>
                   )}
                 </div>
               ) : (
-                <div className="pb-2">
+                <div className="mt-4 space-y-4">
                   {recentGroups.map((group) => (
                     <div key={group.key}>
-                      <div className="px-5 pb-1 pt-3 text-[10px] font-semibold uppercase tracking-wider text-muted">
+                      <div className="mb-2 px-0.5 text-[11px] font-semibold uppercase tracking-[0.08em] text-muted">
                         {group.label}
                       </div>
-                      <ul>
+                      <ul className="grid grid-cols-1 gap-2.5 sm:grid-cols-2">
                         {group.notes.map((note) => {
                           const presentation = getNoteTypePresentation(note.note_type)
                           const Icon = NOTE_TYPE_ICON_MAP[presentation.iconKey]
                           return (
-                            <li key={note.id}>
+                            <li key={note.id} className="min-w-0">
                               <button
                                 type="button"
                                 onClick={() => onSelectNote(note)}
-                                className="group flex w-full items-center gap-3 px-4 py-2.5 text-left transition-colors hover:bg-surface-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-accent sm:px-5"
+                                className="glass-card hover-lift focus-ring group flex h-full w-full flex-col gap-3 p-3.5 text-left"
                               >
-                                <span
-                                  className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-lg ${presentation.iconBgClassName}`}
-                                >
-                                  <Icon size={14} />
-                                </span>
-                                <span className="min-w-0 flex-1">
-                                  <span className="block truncate text-[13px] font-medium text-foreground">
-                                    {note.title || 'Untitled'}
+                                <div className="flex w-full items-start gap-2.5">
+                                  <span
+                                    className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl"
+                                    style={{
+                                      backgroundColor: typeTint(presentation),
+                                      color: typeInk(presentation),
+                                    }}
+                                  >
+                                    <Icon size={16} />
                                   </span>
-                                  <span className="mt-0.5 flex items-center gap-1.5 text-[10px] text-muted">
-                                    <span className="truncate">{getNoteContext(note)}</span>
-                                    <span className="text-muted">·</span>
-                                    <span className="shrink-0">{presentation.label}</span>
+                                  <span className="min-w-0 flex-1">
+                                    <span className="block truncate text-[13px] font-medium leading-snug text-foreground">
+                                      {note.title || 'Untitled'}
+                                    </span>
+                                    <span className="mt-0.5 block truncate text-[11px] text-muted">
+                                      {getNoteContext(note)}
+                                    </span>
                                   </span>
-                                </span>
-                                <span className="shrink-0 text-[10px] tabular-nums text-muted">
-                                  {relativeTime(note.updated_at, now.getTime())}
-                                </span>
-                                <ArrowUpRight
-                                  size={13}
-                                  className="shrink-0 text-transparent transition-colors group-hover:text-muted"
-                                />
+                                  <ArrowUpRight
+                                    size={13}
+                                    className="mt-0.5 shrink-0 text-muted opacity-0 transition-opacity group-hover:opacity-100"
+                                  />
+                                </div>
+                                <div className="mt-auto flex w-full items-center justify-between gap-2">
+                                  <span className="inline-flex min-w-0 items-center gap-1.5 text-[10px] font-medium text-muted">
+                                    <span
+                                      className="h-1.5 w-1.5 shrink-0 rounded-full"
+                                      style={{ backgroundColor: presentation.graphStroke }}
+                                    />
+                                    <span className="truncate">{presentation.label}</span>
+                                  </span>
+                                  <span className="shrink-0 text-[10px] tabular-nums text-muted">
+                                    {relativeTime(note.updated_at, now.getTime())}
+                                  </span>
+                                </div>
                               </button>
                             </li>
                           )
@@ -915,20 +965,20 @@ export default function HomeDashboard({
           </div>
 
           <div className="min-w-0 space-y-5 lg:col-span-5">
-            <section className="overflow-hidden rounded-2xl border border-border bg-surface shadow-sm">
+            <section className="glass-card overflow-hidden">
               <SectionHeader
                 icon={CalendarDays}
                 title="Today"
-                iconClassName="bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-300"
+                iconClassName="bg-warning-light text-warning"
               >
-                <div className="flex items-center gap-2">
-                  <span className="text-[11px] text-muted">
+                <div className="flex items-center gap-1.5">
+                  <span className="rounded-full bg-surface-hover px-2 py-0.5 text-[10px] font-medium text-muted">
                     {dueTodayCount > 0 ? `${dueTodayCount} due` : 'Nothing due'}
                   </span>
                   <button
                     type="button"
                     onClick={onOpenTasks}
-                    className="inline-flex items-center gap-1 rounded-lg px-2 py-1 text-[11px] font-medium text-muted transition-colors hover:bg-surface-hover hover:text-foreground"
+                    className="glass-btn-ghost w-auto gap-1 px-2 text-[11px]"
                   >
                     View all
                     <ArrowUpRight size={12} />
@@ -936,13 +986,13 @@ export default function HomeDashboard({
                 </div>
               </SectionHeader>
 
-              <div className="p-4 sm:p-5">
+              <div className="px-3 pb-4">
                 {isLoadingAgenda ? (
-                  <div className="space-y-2.5">
+                  <div className="space-y-2.5 px-2">
                     {Array.from({ length: 3 }).map((_, index) => (
                       <div key={index} className="flex items-center gap-2.5">
-                        <div className="h-5 w-5 animate-pulse rounded-full bg-surface-hover" />
-                        <div className="h-3 flex-1 animate-pulse rounded bg-surface-hover" />
+                        <div className="skeleton-shimmer h-[18px] w-[18px] shrink-0 rounded-full" />
+                        <div className="skeleton-shimmer h-3 flex-1 rounded-full" />
                       </div>
                     ))}
                   </div>
@@ -952,7 +1002,7 @@ export default function HomeDashboard({
                       <button
                         type="button"
                         onClick={onOpenTasks}
-                        className="mb-3 flex w-full items-center gap-2 rounded-lg border border-warning bg-warning-light px-3 py-2 text-left text-[11px] font-medium text-warning transition-opacity hover:opacity-80"
+                        className="focus-ring mb-3 flex w-full items-center gap-2 rounded-xl border border-warning bg-warning-light px-3 py-2 text-left text-[11px] font-medium text-warning transition-opacity hover:opacity-80"
                       >
                         <AlertTriangle size={12} className="shrink-0" />
                         Some agenda data couldn&apos;t be loaded. Open Tasks to retry.
@@ -963,7 +1013,7 @@ export default function HomeDashboard({
                       <>
                         {overdueTasks.length > 0 && (
                           <div className="mb-3">
-                            <div className="mb-1 flex items-center gap-1.5 px-1.5 text-[10px] font-semibold uppercase tracking-wider text-danger">
+                            <div className="mb-1 flex items-center gap-1.5 px-2 text-[11px] font-semibold uppercase tracking-[0.08em] text-danger">
                               <AlertTriangle size={11} />
                               Overdue
                             </div>
@@ -981,11 +1031,11 @@ export default function HomeDashboard({
                           </div>
                         )}
 
-                        <div className="mb-1 px-1.5 text-[10px] font-semibold uppercase tracking-wider text-muted">
+                        <div className="mb-1 px-2 text-[11px] font-semibold uppercase tracking-[0.08em] text-muted">
                           Due today
                         </div>
                         {todayTasks.length === 0 ? (
-                          <p className="px-1.5 py-1 text-xs text-muted">Nothing due today.</p>
+                          <p className="px-2 py-1 text-xs text-muted">Nothing due today.</p>
                         ) : (
                           <ul>
                             {todayTasks.slice(0, 4).map((task) => (
@@ -1004,7 +1054,7 @@ export default function HomeDashboard({
 
                     {upcomingTasks.length > 0 && (
                       <div className="mt-3 border-t border-border pt-3">
-                        <div className="mb-1 px-1.5 text-[10px] font-semibold uppercase tracking-wider text-muted">
+                        <div className="mb-1 px-2 text-[11px] font-semibold uppercase tracking-[0.08em] text-muted">
                           Next 7 days
                         </div>
                         <ul>
@@ -1023,7 +1073,7 @@ export default function HomeDashboard({
 
                     {upcomingEvents.length > 0 && (
                       <div className="mt-3 border-t border-border pt-3">
-                        <div className="mb-1 px-1.5 text-[10px] font-semibold uppercase tracking-wider text-muted">
+                        <div className="mb-1 px-2 text-[11px] font-semibold uppercase tracking-[0.08em] text-muted">
                           Agenda
                         </div>
                         <ul>
@@ -1040,7 +1090,7 @@ export default function HomeDashboard({
                     )}
 
                     {!hasAgendaItems && !agendaUnavailable && (
-                      <div className="mt-3 rounded-xl border border-dashed border-border px-4 py-5 text-center">
+                      <div className="mt-2 rounded-2xl border border-dashed border-border px-4 py-6 text-center">
                         <p className="text-sm font-medium text-foreground">A clear day.</p>
                         <p className="mt-0.5 text-xs text-muted">
                           Plan it in a journal or keep capturing ideas above.
@@ -1048,7 +1098,7 @@ export default function HomeDashboard({
                         <button
                           type="button"
                           onClick={() => onCreateNote('bullet-journal')}
-                          className="mt-3 text-xs font-medium text-accent hover:underline"
+                          className="focus-ring mt-3 rounded-lg text-xs font-medium text-accent hover:underline"
                         >
                           Open a journal
                         </button>
@@ -1059,25 +1109,18 @@ export default function HomeDashboard({
               </div>
             </section>
 
-            <section className="overflow-hidden rounded-2xl border border-border bg-surface shadow-sm">
+            <section className="glass-card overflow-hidden">
               <SectionHeader
                 icon={Layers}
                 title="Projects"
-                iconClassName="bg-alpine-100 text-alpine-700 dark:bg-alpine-900/40 dark:text-alpine-300"
+                iconClassName="bg-accent-light text-accent"
               >
-                <button
-                  type="button"
-                  onClick={onCreateProject}
-                  className="inline-flex items-center gap-1 rounded-lg px-2 py-1 text-[11px] font-medium text-muted transition-colors hover:bg-surface-hover hover:text-foreground"
-                >
-                  <Plus size={12} />
-                  New
-                </button>
+                <span className="text-[11px] tabular-nums text-muted">{projectStats.length}</span>
               </SectionHeader>
 
-              <div className="p-4 sm:p-5">
+              <div className="px-4 pb-4">
                 {projectStats.length === 0 ? (
-                  <div className="rounded-xl border border-dashed border-border px-4 py-5 text-center">
+                  <div className="rounded-2xl border border-dashed border-border px-4 py-6 text-center">
                     <p className="text-sm font-medium text-foreground">Big efforts deserve a home.</p>
                     <p className="mt-0.5 text-xs text-muted">
                       Group notes, folders, and tasks into a project.
@@ -1085,77 +1128,80 @@ export default function HomeDashboard({
                     <button
                       type="button"
                       onClick={onCreateProject}
-                      className="mt-3 text-xs font-medium text-accent hover:underline"
+                      className="focus-ring mt-3 rounded-lg text-xs font-medium text-accent hover:underline"
                     >
                       Create a project
                     </button>
                   </div>
                 ) : (
-                  <ul className="space-y-2">
-                    {projectStats.slice(0, 4).map(({ project, noteCount, openTaskCount, lastActivity }) => (
-                      <li key={project.id}>
+                  <div className="flex flex-wrap gap-2">
+                    {projectStats.slice(0, 6).map(
+                      ({ project, noteCount, openTaskCount, lastActivity }) => (
                         <button
+                          key={project.id}
                           type="button"
                           onClick={() => onOpenProject(project.id)}
-                          className="group flex w-full items-center gap-3 rounded-xl border border-border px-3 py-2.5 text-left transition-colors hover:border-accent hover:bg-surface-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"
+                          title={`${noteCount} ${noteCount === 1 ? 'note' : 'notes'}${
+                            openTaskCount > 0
+                              ? ` · ${openTaskCount} open ${openTaskCount === 1 ? 'task' : 'tasks'}`
+                              : ''
+                          } · active ${relativeTime(new Date(lastActivity).toISOString(), now.getTime())}`}
+                          className="glass-btn h-9 max-w-full gap-2 px-3"
                         >
-                          <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-surface-hover">
-                            <span
-                              className="h-2.5 w-2.5 rounded-full"
-                              style={{ backgroundColor: project.color }}
-                            />
-                          </span>
-                          <span className="min-w-0 flex-1">
-                            <span className="block truncate text-[13px] font-semibold text-foreground">
-                              {project.name}
-                            </span>
-                            <span className="mt-0.5 block truncate text-[10px] text-muted">
-                              {noteCount} {noteCount === 1 ? 'note' : 'notes'}
-                              {openTaskCount > 0
-                                ? ` · ${openTaskCount} open ${openTaskCount === 1 ? 'task' : 'tasks'}`
-                                : ''}
-                            </span>
-                          </span>
-                          <span className="shrink-0 text-[10px] tabular-nums text-muted">
-                            {lastActivity ? relativeTime(new Date(lastActivity).toISOString(), now.getTime()) : 'New'}
-                          </span>
-                          <ChevronRight
-                            size={13}
-                            className="shrink-0 text-muted transition-transform group-hover:translate-x-0.5"
+                          <span
+                            className="h-2.5 w-2.5 shrink-0 rounded-full"
+                            style={{ backgroundColor: project.color }}
                           />
+                          <span className="min-w-0 truncate text-xs font-medium text-foreground">
+                            {project.name}
+                          </span>
+                          <span className="shrink-0 rounded-full bg-surface-hover px-1.5 py-0.5 text-[10px] font-semibold tabular-nums text-muted">
+                            {noteCount}
+                          </span>
                         </button>
-                      </li>
-                    ))}
-                  </ul>
+                      ),
+                    )}
+                    <button
+                      type="button"
+                      onClick={onCreateProject}
+                      className="focus-ring inline-flex h-9 items-center gap-1.5 rounded-full border border-dashed border-border px-3 text-xs font-medium text-muted transition-colors hover:border-accent hover:text-accent"
+                    >
+                      <Plus size={12} />
+                      New
+                    </button>
+                  </div>
                 )}
               </div>
             </section>
 
-            <section className="rounded-2xl border border-border bg-surface p-4 shadow-sm sm:p-5">
+            <section className="glass-card p-4 sm:p-5">
               <div className="flex items-center justify-between gap-2">
-                <div className="flex items-center gap-2">
-                  <span className="flex h-6 w-6 items-center justify-center rounded-md bg-accent-light text-accent">
-                    <TrendingUp size={13} />
+                <div className="flex items-center gap-2.5">
+                  <span className="flex h-7 w-7 items-center justify-center rounded-xl bg-accent-light text-accent">
+                    <TrendingUp size={14} />
                   </span>
-                  <h2 className="text-sm font-semibold text-foreground">Last 7 days</h2>
+                  <h2 className="text-sm font-semibold tracking-[-0.01em] text-foreground">
+                    Last 7 days
+                  </h2>
                 </div>
                 <span className="text-[11px] text-muted">{touchedThisWeek} touched</span>
               </div>
 
-              <div className="mt-4 flex h-[72px] items-end gap-1.5">
+              <div className="mt-4 flex h-[76px] items-end gap-1.5">
                 {weekActivity.map((day) => (
                   <div
                     key={day.iso}
                     className="flex flex-1 flex-col items-center gap-1.5"
                     title={`${day.fullLabel}: ${day.count} ${day.count === 1 ? 'note' : 'notes'}`}
                   >
-                    <div className="flex h-14 w-full items-end overflow-hidden rounded-md bg-surface-hover">
+                    <div className="flex h-14 w-full items-end overflow-hidden rounded-lg bg-surface-hover">
                       <div
-                        className={`w-full rounded-md transition-[height] ${
-                          day.isToday ? 'bg-accent' : 'bg-accent opacity-40'
+                        className={`w-full rounded-lg transition-[height] duration-300 ${
+                          day.isToday ? '' : 'opacity-40'
                         }`}
                         style={{
                           height: `${day.count === 0 ? 4 : Math.max(14, (day.count / weekMax) * 100)}%`,
+                          background: day.isToday ? 'var(--accent-gradient)' : 'var(--accent)',
                         }}
                       />
                     </div>
@@ -1178,14 +1224,14 @@ export default function HomeDashboard({
             </section>
 
             {staleNotes.length > 0 && (
-              <section className="overflow-hidden rounded-2xl border border-border bg-surface shadow-sm">
+              <section className="glass-card overflow-hidden">
                 <SectionHeader
                   icon={RotateCcw}
                   title="Worth another look"
-                  iconClassName="bg-purple-100 text-purple-700 dark:bg-purple-900/40 dark:text-purple-300"
+                  iconClassName="bg-surface-hover text-muted"
                 />
 
-                <ul className="p-2">
+                <ul className="px-2 pb-2">
                   {staleNotes.map((note) => {
                     const presentation = getNoteTypePresentation(note.note_type)
                     const Icon = NOTE_TYPE_ICON_MAP[presentation.iconKey]
@@ -1194,10 +1240,14 @@ export default function HomeDashboard({
                         <button
                           type="button"
                           onClick={() => onSelectNote(note)}
-                          className="group flex w-full items-center gap-2.5 rounded-xl px-2 py-2 text-left transition-colors hover:bg-surface-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"
+                          className="glass-row group gap-2.5 px-2.5 py-2"
                         >
                           <span
-                            className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-lg ${presentation.iconBgClassName}`}
+                            className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg"
+                            style={{
+                              backgroundColor: typeTint(presentation),
+                              color: typeInk(presentation),
+                            }}
                           >
                             <Icon size={14} />
                           </span>
@@ -1212,7 +1262,7 @@ export default function HomeDashboard({
                           </span>
                           <ArrowUpRight
                             size={13}
-                            className="shrink-0 text-muted transition-colors group-hover:text-muted"
+                            className="shrink-0 text-muted opacity-60 transition-opacity group-hover:opacity-100"
                           />
                         </button>
                       </li>
@@ -1223,9 +1273,8 @@ export default function HomeDashboard({
             )}
 
             <p className="px-1 text-center text-[10px] leading-relaxed text-muted">
-              Tip: use <kbd className="rounded border border-border px-1 py-0.5">{formatModShortcut('K')}</kbd>{' '}
-              to search everything, or open <FolderOpen size={10} className="inline" /> Files for your
-              documents.
+              Tip: use <kbd className="kbd">{formatModShortcut('K')}</kbd> to search everything, or
+              open <FolderOpen size={10} className="inline align-[-1px]" /> Files for your documents.
             </p>
           </div>
         </div>
@@ -1233,4 +1282,3 @@ export default function HomeDashboard({
     </div>
   )
 }
-

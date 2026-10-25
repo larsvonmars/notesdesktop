@@ -93,10 +93,10 @@ export default function SidebarContextMenu({
   onOpenMovePicker,
   onClose,
 }: SidebarContextMenuProps) {
-  const menuItem = 'flex w-full items-center gap-2.5 px-3 py-[7px] text-left text-[13px] transition-colors'
-  const menuItemNormal = `${menuItem} text-foreground/80 hover:bg-surface-hover`
+  const menuItem = 'glass-row h-8 w-full gap-2.5 px-2 text-[13px]'
+  const menuItemNormal = `${menuItem} text-foreground`
   const menuItemDanger = `${menuItem} text-danger hover:bg-danger-light`
-  const menuDivider = 'mx-2 my-1 border-t border-border/60'
+  const menuDivider = 'glass-divider my-1'
 
   return (
     <>
@@ -110,7 +110,7 @@ export default function SidebarContextMenu({
             }}
             className={menuItemNormal}
           >
-            <Edit3 size={14} className="shrink-0 text-muted/70" />
+            <Edit3 size={14} className="shrink-0 text-muted" />
             <span className="font-medium">Rename project</span>
           </button>
           {onUpdateProjectColor && (
@@ -122,7 +122,7 @@ export default function SidebarContextMenu({
               }}
               className={menuItemNormal}
             >
-              <Palette size={14} className="shrink-0 text-muted/70" />
+              <Palette size={14} className="shrink-0 text-muted" />
               <span className="font-medium">Change color</span>
             </button>
           )}
@@ -134,7 +134,7 @@ export default function SidebarContextMenu({
               }}
               className={menuItemNormal}
             >
-              <LayoutDashboard size={14} className="shrink-0 text-muted/70" />
+              <LayoutDashboard size={14} className="shrink-0 text-muted" />
               <span className="font-medium">Open dashboard</span>
             </button>
           )}
@@ -146,7 +146,7 @@ export default function SidebarContextMenu({
               }}
               className={menuItemNormal}
             >
-              <Archive size={14} className="shrink-0 text-muted/70" />
+              <Archive size={14} className="shrink-0 text-muted" />
               <span className="font-medium">Archive project</span>
             </button>
           )}
@@ -155,14 +155,14 @@ export default function SidebarContextMenu({
             onClick={() => { onCreateFolder(null, contextMenu.id); onClose() }}
             className={menuItemNormal}
           >
-            <FolderPlus size={14} className="shrink-0 text-muted/70" />
+            <FolderPlus size={14} className="shrink-0 text-muted" />
             <span className="font-medium">New folder</span>
           </button>
           <button
             onClick={() => { onNewNote(undefined, null, contextMenu.id); onClose() }}
             className={menuItemNormal}
           >
-            <FileText size={14} className="shrink-0 text-muted/70" />
+            <FileText size={14} className="shrink-0 text-muted" />
             <span className="font-medium">New note</span>
           </button>
           {onDeleteProject && (
@@ -193,21 +193,21 @@ export default function SidebarContextMenu({
             }}
             className={menuItemNormal}
           >
-            <Edit3 size={14} className="shrink-0 text-muted/70" />
+            <Edit3 size={14} className="shrink-0 text-muted" />
             <span className="font-medium">Rename</span>
           </button>
           <button
             onClick={() => { onCreateFolder(contextMenu.id, contextMenu.projectId); onClose() }}
             className={menuItemNormal}
           >
-            <FolderPlus size={14} className="shrink-0 text-muted/70" />
+            <FolderPlus size={14} className="shrink-0 text-muted" />
             <span className="font-medium">New subfolder</span>
           </button>
           <button
             onClick={() => { onNewNote(undefined, contextMenu.id, contextMenu.projectId); onClose() }}
             className={menuItemNormal}
           >
-            <FileText size={14} className="shrink-0 text-muted/70" />
+            <FileText size={14} className="shrink-0 text-muted" />
             <span className="font-medium">New note here</span>
           </button>
           {(onMoveFolderToProject || onMoveFolder) && projects.length > 0 && (
@@ -220,7 +220,7 @@ export default function SidebarContextMenu({
                 }}
                 className={menuItemNormal}
               >
-                <FolderInput size={14} className="shrink-0 text-muted/70" />
+                <FolderInput size={14} className="shrink-0 text-muted" />
                 <span className="font-medium">Move to project…</span>
               </button>
             </>
@@ -251,7 +251,7 @@ export default function SidebarContextMenu({
               }}
               className={menuItemNormal}
             >
-              <Copy size={14} className="shrink-0 text-muted/70" />
+              <Copy size={14} className="shrink-0 text-muted" />
               <span className="font-medium">Duplicate note</span>
             </button>
           )}
@@ -263,7 +263,7 @@ export default function SidebarContextMenu({
               }}
               className={menuItemNormal}
             >
-              <FolderInput size={14} className="shrink-0 text-muted/70" />
+              <FolderInput size={14} className="shrink-0 text-muted" />
               <span className="font-medium">Move to folder…</span>
             </button>
           )}
@@ -275,7 +275,7 @@ export default function SidebarContextMenu({
               }}
               className={menuItemNormal}
             >
-              <ArrowRightLeft size={14} className="shrink-0 text-muted/70" />
+              <ArrowRightLeft size={14} className="shrink-0 text-muted" />
               <span className="font-medium">Move to project…</span>
             </button>
           )}

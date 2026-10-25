@@ -3,7 +3,7 @@
 import { forwardRef, type ButtonHTMLAttributes, type ReactNode } from 'react'
 import { Loader2, type LucideIcon } from 'lucide-react'
 
-type ButtonVariant = 'primary' | 'secondary' | 'ghost' | 'danger'
+type ButtonVariant = 'primary' | 'secondary' | 'ghost' | 'danger' | 'glass' | 'glassPrimary'
 type ButtonSize = 'sm' | 'md' | 'lg'
 
 interface ButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
@@ -14,27 +14,45 @@ interface ButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
   children?: ReactNode
 }
 
+/**
+ * Glass design-system buttons.
+ *
+ * - `primary` / `glassPrimary` — accent gradient CTA (.glass-btn-primary)
+ * - `secondary` / `glass`      — neutral frosted button (.glass-btn)
+ * - `ghost`                    — borderless icon action (.glass-btn-ghost)
+ * - `danger`                   — destructive, solid token colour
+ */
 const variantClasses: Record<ButtonVariant, string> = {
   primary:
-    'bg-accent text-accent-foreground hover:opacity-90 active:opacity-80 shadow-sm',
+    'glass-btn-primary font-semibold text-accent-foreground',
+  glassPrimary:
+    'glass-btn-primary font-semibold text-accent-foreground',
   secondary:
-    'bg-surface border border-border text-foreground hover:bg-surface-hover active:bg-surface-active',
+    'glass-btn text-foreground',
+  glass:
+    'glass-btn text-foreground',
   ghost:
-    'text-foreground hover:bg-surface-hover active:bg-surface-active',
+    'glass-btn-ghost text-foreground',
   danger:
-    'bg-danger text-white hover:opacity-90 active:opacity-80 shadow-sm',
+    'bg-danger font-semibold text-accent-foreground shadow-sm hover:brightness-105 active:brightness-95',
 }
 
 const sizeClasses: Record<ButtonSize, string> = {
-  sm: 'px-3 py-1.5 text-xs gap-1.5 rounded-lg',
-  md: 'px-4 py-2 text-sm gap-2 rounded-xl',
-  lg: 'px-5 py-2.5 text-base gap-2.5 rounded-xl',
+  sm: 'h-8 gap-1.5 rounded-full px-3 text-xs',
+  md: 'h-9 gap-2 rounded-full px-3.5 text-[13px]',
+  lg: 'h-11 gap-2 rounded-full px-5 text-sm',
 }
 
 const iconOnlySizeClasses: Record<ButtonSize, string> = {
-  sm: 'p-1.5 rounded-lg',
-  md: 'p-2 rounded-xl',
-  lg: 'p-2.5 rounded-xl',
+  sm: 'h-8 w-8 rounded-full',
+  md: 'h-9 w-9 rounded-full',
+  lg: 'h-11 w-11 rounded-full',
+}
+
+const iconSizeClasses: Record<ButtonSize, string> = {
+  sm: 'h-3.5 w-3.5',
+  md: 'h-4 w-4',
+  lg: 'h-[18px] w-[18px]',
 }
 
 const Button = forwardRef<HTMLButtonElement, ButtonProps>(
@@ -51,28 +69,31 @@ const Button = forwardRef<HTMLButtonElement, ButtonProps>(
     },
     ref,
   ) => {
-    const isIconOnly = Icon && !children
+    const isIconOnly = Boolean(Icon) && !children
     const isDisabled = disabled || loading
 
     return (
       <button
         ref={ref}
         disabled={isDisabled}
+        aria-busy={loading || undefined}
         className={[
-          'inline-flex items-center justify-center font-medium transition-all duration-200',
-          'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/50 focus-visible:ring-offset-1',
-          'disabled:opacity-50 disabled:cursor-not-allowed',
-          'select-none touch-target',
+          'inline-flex select-none items-center justify-center whitespace-nowrap font-medium',
+          'transition-[background-color,box-shadow,transform,color,opacity] duration-200 ease-out',
+          'active:scale-[0.985]',
+          'disabled:cursor-not-allowed disabled:opacity-50 disabled:active:scale-100',
+          'max-sm:min-h-[44px] max-sm:min-w-[44px]',
           variantClasses[variant],
           isIconOnly ? iconOnlySizeClasses[size] : sizeClasses[size],
+          variant === 'ghost' && !isIconOnly ? 'w-auto' : '',
           className,
         ].join(' ')}
         {...props}
       >
         {loading ? (
-          <Loader2 className="h-4 w-4 animate-spin shrink-0" />
+          <Loader2 className={`${iconSizeClasses[size]} shrink-0 animate-spin`} aria-hidden />
         ) : Icon ? (
-          <Icon className="h-4 w-4 shrink-0" />
+          <Icon className={`${iconSizeClasses[size]} shrink-0`} strokeWidth={1.9} aria-hidden />
         ) : null}
         {children}
       </button>

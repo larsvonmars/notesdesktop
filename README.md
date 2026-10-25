@@ -73,6 +73,39 @@ npm run check:webview
 
 This checks for common WebView compatibility issues. See [WEBVIEW_COMPATIBILITY.md](./WEBVIEW_COMPATIBILITY.md) for detailed information about WebView support.
 
+## UI Architecture
+
+The interface is a glassmorphic app shell. Everything is built from two layers:
+
+- **Design system** — `app/styles/tokens.css` (semantic colours, glass material,
+  shell geometry) and `app/styles/glass.css` (`.glass`, `.glass-card`,
+  `.glass-row`, `.glass-btn*`, `.glass-input`, `.nav-pill`, `.segmented`, `.kbd`,
+  aurora background). Tailwind exposes the same tokens and a few extras
+  (`font-display`, `shadow-glass`, `ease-soft`, `animate-rise-in`, `max-w-reading`).
+  Both light and dark themes are first-class; surfaces are intentionally
+  translucent so they read as frosted glass over the aurora field.
+- **Shell** — `components/shell/` contains the presentational navigation
+  (68px `AppRail`, `TopBar` with breadcrumbs + history, `NoteListPane`,
+  `MobileTabBar`, `EmptyEditorPane`, `ShellBackground`).
+  `components/WorkspaceShell.tsx` owns the state, routing and wiring.
+
+Navigation model: **rail → library → note list → editor → details**.
+`lib/navigation/nav-history.ts` provides in-memory back/forward over
+`{ view, folderId, projectId, noteId }`, and `lib/workspace/view-navigation.ts`
+is the single source of truth for destinations and shortcuts.
+
+Keyboard shortcuts: `⌘/Ctrl+K` command palette, `⌘/Ctrl+N` new note,
+`⌘/Ctrl+J` AI assistant, `⌘/Ctrl+1..4` Home/Notes/Tasks/Files, `⌘/Ctrl+\` toggle
+library, `⌘/Ctrl+[` and `⌘/Ctrl+]` back/forward.
+
+The **AI assistant** (`components/AIAssistant.tsx` with markdown rendering in
+`components/ai/AIMarkdown.tsx`) is a floating glass copilot panel: streaming
+transcript with collapsible reasoning, context picker, quick actions, chat
+history and structured suggestions. Open it from the note details footer, the
+top-bar overflow menu, or `⌘/Ctrl+J`; `Escape` closes it.
+
+The full design contract lives in [UI_REDESIGN_SPEC.md](./md-docs/UI_REDESIGN_SPEC.md).
+
 ## Build
 
 Build the application for production:

@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import {
   BookOpen,
+  CornerDownLeft,
   FilePenLine,
   FileText,
   FolderOpen,
@@ -10,6 +11,7 @@ import {
   Keyboard,
   LayoutDashboard,
   ListTodo,
+  Loader2,
   Network,
   PenTool,
   Search,
@@ -209,7 +211,8 @@ export default function CommandPalette({
     ].filter((item) => matchesPaletteQuery(item.label, item.hint, query))
 
     return [
-      { title: 'Notes', items: limit(noteItems, MAX_IDLE_NOTES) },      { title: 'Folders', items: limit(folderItems, MAX_IDLE_FOLDERS) },
+      { title: 'Notes', items: limit(noteItems, MAX_IDLE_NOTES) },
+      { title: 'Folders', items: limit(folderItems, MAX_IDLE_FOLDERS) },
       { title: 'Projects', items: limit(projectItems, MAX_IDLE_PROJECTS) },
       { title: 'Create', items: createItems },
       { title: 'Navigate', items: navigateItems },
@@ -277,10 +280,11 @@ export default function CommandPalette({
   }
 
   let optionIndex = -1
+  const resultCount = flatItems.length
 
   return (
     <div
-      className="fixed inset-0 z-[110] flex items-start justify-center bg-black/40 px-3 pt-[12vh] backdrop-blur-sm"
+      className="fixed inset-0 z-[110] flex animate-fade-in items-start justify-center bg-black/35 px-3 pt-[14vh] backdrop-blur-lg dark:bg-black/60 sm:px-6"
       onMouseDown={(event) => {
         if (event.target === event.currentTarget) onClose()
       }}
@@ -289,10 +293,16 @@ export default function CommandPalette({
         role="dialog"
         aria-modal="true"
         aria-label="Command palette"
-        className="w-full max-w-xl overflow-hidden rounded-2xl border border-border bg-surface shadow-2xl"
+        className="glass-popover flex w-full max-w-2xl animate-rise-in flex-col overflow-hidden rounded-3xl"
       >
-        <div className="flex items-center gap-2.5 border-b border-border px-3.5">
-          <Search size={16} className="shrink-0 text-muted" aria-hidden />
+        {/* Search field */}
+        <div className="flex shrink-0 items-center gap-3 border-b border-[var(--border)] px-4 sm:px-5">
+          <span
+            className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-[var(--accent-light)] text-accent"
+            aria-hidden
+          >
+            <Search size={15} strokeWidth={1.9} />
+          </span>
           <input
             type="text"
             role="combobox"
@@ -308,29 +318,38 @@ export default function CommandPalette({
             }}
             onKeyDown={handleKeyDown}
             placeholder="Search notes, folders, projects or run a command…"
-            className="h-12 min-w-0 flex-1 bg-transparent text-sm text-foreground placeholder:text-muted focus:outline-none"
+            className="h-[54px] min-w-0 flex-1 bg-transparent text-[15px] text-foreground placeholder:text-muted focus:outline-none"
           />
-          <kbd className="hidden shrink-0 rounded border border-border px-1.5 py-0.5 text-[10px] font-medium text-muted sm:block">
-            Esc
-          </kbd>
+          {isSearchingContent ? (
+            <Loader2 className="h-4 w-4 shrink-0 animate-spin text-muted" aria-hidden />
+          ) : (
+            <kbd className="kbd hidden shrink-0 sm:inline-flex">Esc</kbd>
+          )}
         </div>
 
+        {/* Results */}
         <div
           id="command-palette-results"
           role="listbox"
           aria-label="Results"
-          className="max-h-[min(60vh,28rem)] overflow-y-auto py-1"
+          className="scroll-thin max-h-[min(58vh,30rem)] overflow-y-auto overscroll-contain px-2 py-2"
         >
           {groups.length === 0 && (
-            <div className="px-4 py-10 text-center">
+            <div className="px-4 py-14 text-center">
+              <div
+                className="mx-auto mb-3 flex h-11 w-11 items-center justify-center rounded-2xl bg-[var(--surface-sunken)] text-muted"
+                aria-hidden
+              >
+                <Search size={17} strokeWidth={1.8} />
+              </div>
               <p className="text-sm font-medium text-foreground">No matches</p>
               <p className="mt-1 text-xs text-muted">Try a note title, folder, project, or “new”.</p>
             </div>
           )}
 
           {groups.map((group) => (
-            <div key={group.title} className="py-1">
-              <div className="px-3.5 pb-1 pt-1 text-[10px] font-semibold uppercase tracking-wider text-muted">
+            <div key={group.title} role="group" aria-label={group.title} className="pb-1.5 last:pb-0">
+              <div className="px-3 pb-1 pt-2.5 text-[11px] font-medium uppercase tracking-[0.08em] text-muted">
                 {group.title}
               </div>
               {group.items.map((item) => {
@@ -348,17 +367,36 @@ export default function CommandPalette({
                     tabIndex={-1}
                     onMouseEnter={() => setActiveIndex(index)}
                     onClick={() => runItem(item)}
-                    className={`flex w-full items-center gap-2.5 px-3.5 py-2 text-left transition-colors ${
-                      isActive ? 'bg-surface-hover text-foreground' : 'text-foreground hover:bg-surface-hover'
-                    }`}
+                    className={[
+                      'glass-row flex w-full items-center gap-2.5 rounded-xl px-2.5 py-2 text-left',
+                      'transition-colors duration-100',
+                      isActive ? 'is-active' : '',
+                    ].join(' ')}
                   >
-                    <Icon size={15} className={`shrink-0 ${item.iconClass ?? 'text-muted'}`} aria-hidden />
-                    <span className="min-w-0 flex-1">
-                      <span className="block truncate text-sm">{item.label}</span>
-                      {item.hint && (
-                        <span className="block truncate text-[11px] text-muted">{item.hint}</span>
-                      )}
+                    <span
+                      className={[
+                        'flex h-7 w-7 shrink-0 items-center justify-center rounded-lg transition-colors duration-100',
+                        isActive
+                          ? 'bg-[var(--accent-light)] text-accent'
+                          : 'bg-[var(--surface-sunken)] text-muted',
+                      ].join(' ')}
+                      aria-hidden
+                    >
+                      <Icon size={14} strokeWidth={1.9} className={item.iconClass} />
                     </span>
+                    <span
+                      className="min-w-0 flex-1 truncate text-[13px] font-medium text-foreground"
+                    >
+                      {item.label}
+                    </span>
+                    {item.hint && (
+                      <span className="hidden max-w-[45%] shrink-0 truncate text-[11px] text-muted sm:block">
+                        {item.hint}
+                      </span>
+                    )}
+                    {isActive && (
+                      <CornerDownLeft size={13} className="hidden shrink-0 text-accent sm:block" aria-hidden />
+                    )}
                   </button>
                 )
               })}
@@ -366,9 +404,26 @@ export default function CommandPalette({
           ))}
         </div>
 
-        <div className="flex items-center justify-between border-t border-border bg-surface-hover px-3.5 py-1.5 text-[10px] text-muted">
-          <span>{isSearchingContent ? 'Searching note text…' : '↑↓ navigate · ↵ open'}</span>
-          <span className="hidden sm:inline">{formatModShortcut('K')}</span>
+        {/* Footer: status + keyboard hints */}
+        <div className="flex shrink-0 items-center justify-between gap-3 border-t border-[var(--border)] bg-[var(--surface-sunken)] px-4 py-2 text-[11px] text-muted sm:px-5">
+          <span className="flex min-w-0 items-center gap-1.5 truncate">
+            {isSearchingContent ? (
+              <>
+                <Loader2 className="h-3 w-3 shrink-0 animate-spin" aria-hidden />
+                Searching note text…
+              </>
+            ) : (
+              <>
+                <span className="font-medium text-foreground">{resultCount}</span>
+                {resultCount === 1 ? 'result' : 'results'}
+                <span className="hidden text-muted sm:inline">· ↑↓ navigate · ↵ open</span>
+              </>
+            )}
+          </span>
+          <span className="hidden shrink-0 items-center gap-1 sm:flex">
+            <kbd className="kbd">{formatModShortcut('K')}</kbd>
+            <span>palette</span>
+          </span>
         </div>
       </div>
     </div>

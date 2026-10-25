@@ -693,7 +693,7 @@ export default function BlockControls({
     >
       {dropTop !== null && (
         <div
-          className="absolute left-1 right-3 h-0.5 rounded-full bg-alpine-500"
+          className="absolute left-1 right-3 h-0.5 rounded-full bg-accent"
           style={{ top: dropTop }}
           aria-hidden="true"
         />
@@ -702,7 +702,7 @@ export default function BlockControls({
       {selectionActive && selectionRect && (
         <div
           data-testid="block-selection-highlight"
-          className="absolute left-0 right-2 rounded-md bg-alpine-500/10 ring-1 ring-inset ring-alpine-500/30"
+          className="absolute left-0 right-2 rounded-lg bg-accent-light ring-1 ring-inset ring-accent"
           style={{ top: selectionRect.top, height: selectionRect.height }}
           aria-hidden="true"
         />
@@ -715,7 +715,7 @@ export default function BlockControls({
           tabIndex={-1}
           title={handleTitle}
           aria-label={handleTitle}
-          className={`pointer-events-auto absolute left-0 flex h-7 w-7 items-center justify-center gap-0.5 rounded-md border border-transparent text-[10px] font-semibold text-muted opacity-70 transition-colors hover:border-border hover:bg-surface-hover hover:text-foreground hover:opacity-100 ${
+          className={`focus-ring pointer-events-auto absolute left-0 flex h-7 w-7 items-center justify-center gap-0.5 rounded-lg border border-transparent text-[10px] font-semibold text-muted opacity-70 transition-colors hover:border-border hover:bg-surface hover:text-foreground hover:opacity-100 hover:shadow-glass-sm ${
             handleDragBlocked ? 'cursor-pointer' : 'cursor-grab active:cursor-grabbing'
           }`}
           style={{ top: activeHandle.top }}
@@ -784,12 +784,12 @@ export default function BlockControls({
             role="menu"
             tabIndex={-1}
             aria-label="Block options"
-            className="pointer-events-auto fixed z-50 flex max-h-[336px] flex-col overflow-y-auto rounded-xl border border-border bg-surface/98 p-1 shadow-xl backdrop-blur-xl"
+            className="pointer-events-auto floating-pop-in glass-strong fixed z-50 flex max-h-[336px] flex-col overflow-y-auto rounded-2xl p-1"
             style={{ top: menu.top, left: menu.left, width: MENU_WIDTH }}
             onKeyDown={handleMenuKeys}
           >
             {isMulti && (
-              <div className="px-2 pb-1 pt-1.5 text-[10px] font-semibold uppercase tracking-wide text-muted">
+              <div className="px-2 pb-1 pt-1.5 text-[10px] font-semibold uppercase tracking-[0.08em] text-muted">
                 {menu.blocks.length} blocks selected
               </div>
             )}
@@ -801,7 +801,7 @@ export default function BlockControls({
                   role="menuitem"
                   data-testid="block-menu-collapse"
                   onClick={() => runAction('toggle-collapse')}
-                  className="flex w-full items-center gap-2 rounded-lg px-2 py-1.5 text-left text-sm text-foreground transition-colors hover:bg-surface-hover"
+                  className="focus-ring flex w-full items-center gap-2 rounded-[10px] px-2 py-1.5 text-left text-[13px] text-foreground transition-colors hover:bg-surface-hover"
                 >
                   {menu.collapsed ? (
                     <ChevronRight size={15} strokeWidth={2} />
@@ -816,7 +816,7 @@ export default function BlockControls({
 
             {showTurnInto && (
               <>
-                <div className="px-2 pb-1 pt-1.5 text-[10px] font-semibold uppercase tracking-wide text-muted">
+                <div className="px-2 pb-1 pt-1.5 text-[10px] font-semibold uppercase tracking-[0.08em] text-muted">
                   Turn into
                 </div>
                 {TURN_INTO_ENTRIES.map(({ id, label, Icon, matches }) => {
@@ -827,9 +827,9 @@ export default function BlockControls({
                       type="button"
                       role="menuitem"
                       onClick={() => runAction(id)}
-                      className={`flex w-full items-center gap-2 rounded-lg px-2 py-1.5 text-left text-sm transition-colors ${
+                      className={`focus-ring flex w-full items-center gap-2 rounded-[10px] px-2 py-1.5 text-left text-[13px] transition-colors ${
                         active
-                          ? 'bg-alpine-50 font-medium text-alpine-700 dark:bg-alpine-900/40 dark:text-alpine-300'
+                          ? 'bg-accent-light font-medium text-accent'
                           : 'text-foreground hover:bg-surface-hover'
                       }`}
                     >
@@ -848,9 +848,9 @@ export default function BlockControls({
                 type="button"
                 role="menuitem"
                 onClick={() => runAction(id)}
-                className={`flex w-full items-center gap-2 rounded-lg px-2 py-1.5 text-left text-sm transition-colors ${
+                className={`focus-ring flex w-full items-center gap-2 rounded-[10px] px-2 py-1.5 text-left text-[13px] transition-colors ${
                   id === 'delete'
-                    ? 'text-danger hover:bg-danger-light/60'
+                    ? 'text-danger hover:bg-danger-light'
                     : 'text-foreground hover:bg-surface-hover'
                 }`}
               >
@@ -866,7 +866,7 @@ export default function BlockControls({
                   type="button"
                   role="menuitem"
                   onClick={() => runAction('clear-selection')}
-                  className="flex w-full items-center gap-2 rounded-lg px-2 py-1.5 text-left text-sm text-muted transition-colors hover:bg-surface-hover hover:text-foreground"
+                  className="focus-ring flex w-full items-center gap-2 rounded-[10px] px-2 py-1.5 text-left text-[13px] text-muted transition-colors hover:bg-surface-hover hover:text-foreground"
                 >
                   <X size={15} strokeWidth={2} />
                   <span className="flex-1 truncate">Clear selection</span>

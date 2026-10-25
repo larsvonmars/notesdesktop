@@ -115,6 +115,19 @@ const NOTE_TYPE_ICON_MAP: Record<NoteTypeIconKey, LucideIcon> = {
   'file-pen-line': FilePenLine,
 }
 
+/** Quiet meta label used above every group in the panel. */
+const META = 'text-[10px] font-semibold uppercase tracking-[0.08em] text-muted'
+
+/** Shared pill icon button for the panel header / footer. */
+const ICON_BUTTON =
+  'focus-ring flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-muted transition-colors hover:bg-surface-hover hover:text-foreground'
+
+const ROW_BUTTON =
+  'focus-ring flex w-full items-center gap-2.5 rounded-xl px-2.5 py-1.5 text-left text-xs font-medium text-foreground transition-colors hover:bg-surface-hover hover:text-foreground'
+
+const FILE_ROW =
+  'focus-ring flex w-full items-center gap-3 px-3.5 py-2.5 text-xs text-foreground transition-colors hover:bg-surface-hover hover:text-foreground'
+
 function NoteDetailsSidebar({
   noteId,
   isNewNote,
@@ -209,57 +222,66 @@ function NoteDetailsSidebar({
     if (overlay) return null
 
     return (
-      <aside className="fixed inset-y-0 right-0 z-30 hidden w-12 border-l border-border/40 bg-surface  transition-all duration-300 md:flex md:flex-col" title={displayName}>
+      <aside
+        className="glass-subtle fixed bottom-0 right-0 top-[var(--topbar-height,56px)] z-30 hidden w-12 flex-col border-l border-border transition-all duration-300 md:flex"
+        title={displayName}
+      >
         <div className="flex items-center justify-center px-2 py-4">
           <button
             onClick={onToggleCollapsed}
-            className="rounded-xl p-2 text-muted/70 transition-all duration-200 hover:bg-surface-hover/70 hover:text-foreground min-h-[36px] min-w-[36px]"
+            className="focus-ring flex h-8 w-8 items-center justify-center rounded-full text-muted transition-colors hover:bg-surface-hover hover:text-foreground"
             aria-label="Expand details"
             title="Expand details"
           >
-            <ChevronLeft size={18} />
+            <ChevronLeft size={17} />
           </button>
         </div>
-        <nav className="flex-1 flex flex-col items-center gap-2.5 px-1.5 py-3">
+        <nav className="flex flex-1 flex-col items-center gap-1.5 px-1.5 py-3" aria-label="Note details actions">
           {/* Save indicator */}
           {isSaving ? (
-            <div className="p-1.5 text-alpine-500" title="Saving...">
+            <div className="flex h-8 w-8 items-center justify-center text-accent" title="Saving...">
               <Loader2 size={16} className="animate-spin" />
             </div>
           ) : hasChanges ? (
             <button
               onClick={onSave}
               disabled={!title.trim()}
-              className="p-1.5 rounded-lg text-amber-500 hover:bg-surface-hover transition-colors"
+              className="focus-ring flex h-8 w-8 items-center justify-center rounded-full text-warning transition-colors hover:bg-warning-light disabled:opacity-50"
               title="Save (unsaved changes)"
+              aria-label="Save note"
             >
               <Save size={16} />
             </button>
           ) : lastSaveDisplay ? (
-            <div className="p-1.5 text-green-500" title={`Saved ${lastSaveDisplay}`}>
+            <div className="flex h-8 w-8 items-center justify-center text-success" title={`Saved ${lastSaveDisplay}`}>
               <Check size={16} />
             </div>
           ) : null}
           {/* Note type icon */}
-          <div className={`p-1.5 ${typePresentation.iconClassName}`} title={typePresentation.label}>
-            <TypeIcon size={16} />
+          <div
+            className={`flex h-8 w-8 items-center justify-center rounded-full bg-surface-hover ${typePresentation.iconClassName}`}
+            title={typePresentation.label}
+          >
+            <TypeIcon size={15} />
           </div>
           {/* TOC icon - only for rich-text */}
           {noteType === 'rich-text' && headings.length > 0 && (
             <button
               onClick={onToggleCollapsed}
-              className="p-1.5 rounded-xl text-muted/70 hover:bg-surface-hover/60 hover:text-foreground transition-all duration-200"
+              className={`${ICON_BUTTON}`}
               title={`${headings.length} headings`}
+              aria-label="Show table of contents"
             >
-              <ListTree size={16} />
+              <ListTree size={15} />
             </button>
           )}
           {/* AI Assistant */}
           {onOpenAIAssistant && (
             <button
               onClick={onOpenAIAssistant}
-              className="p-1.5 rounded-xl text-muted/70 hover:bg-surface-hover/60 hover:text-alpine-500 transition-all duration-200"
+              className={`${ICON_BUTTON} hover:text-accent`}
               title="Open AI Assistant"
+              aria-label="Open AI Assistant"
             >
               <Sparkles size={14} />
             </button>
@@ -267,8 +289,9 @@ function NoteDetailsSidebar({
           {/* Settings */}
           <button
             onClick={onOpenSettings}
-            className="p-1.5 rounded-xl text-muted/70 hover:bg-surface-hover/60 hover:text-foreground transition-all duration-200"
+            className={ICON_BUTTON}
             title="Settings"
+            aria-label="Open settings"
           >
             <Settings size={14} />
           </button>
@@ -276,11 +299,12 @@ function NoteDetailsSidebar({
           {/* File (export/share) */}
           {hasFileActions && (
             <>
-              <div className="mt-1.5 h-px w-5 bg-border/40 rounded-full" />
+              <div className="my-1 h-px w-5 rounded-full bg-border" />
               <button
                 onClick={() => { onToggleCollapsed(); setTimeout(() => setShowFileModal(true), 200) }}
-                className="p-1.5 rounded-xl text-muted/70 hover:bg-surface-hover/60 hover:text-foreground transition-all duration-200"
+                className={ICON_BUTTON}
                 title="File actions"
+                aria-label="File actions"
               >
                 <FileOutput size={14} />
               </button>
@@ -291,8 +315,9 @@ function NoteDetailsSidebar({
           {onOpenConnections && (
             <button
               onClick={onOpenConnections}
-              className="p-1.5 rounded-xl text-muted/70 hover:bg-surface-hover/60 hover:text-foreground transition-all duration-200"
+              className={ICON_BUTTON}
               title={`Connections (${connectionsCount})`}
+              aria-label={`Connections (${connectionsCount})`}
             >
               <Network size={14} />
             </button>
@@ -307,7 +332,7 @@ function NoteDetailsSidebar({
     <>
     {overlay && (
       <div
-        className="fixed inset-0 z-40 bg-black/40 backdrop-blur-sm"
+        className="fixed inset-0 z-40 bg-[rgb(14_12_32_/_0.42)] backdrop-blur-[2px]"
         onClick={onToggleCollapsed}
         aria-hidden
       />
@@ -315,36 +340,37 @@ function NoteDetailsSidebar({
     <aside
       className={
         overlay
-          ? 'fixed inset-y-0 right-0 z-50 flex w-[320px] max-w-[85vw] flex-col border-l border-border/40 bg-surface shadow-2xl'
-          : 'fixed inset-y-0 right-0 z-30 hidden w-[280px] border-l border-border/40 bg-surface transition-all duration-300 md:flex md:flex-col'
+          ? 'glass-strong floating-pop-in fixed inset-y-0 right-0 z-50 flex w-[320px] max-w-[85vw] flex-col rounded-l-3xl rounded-r-none border-l border-border max-md:bottom-[var(--mobile-bar-height,60px)]'
+          : 'glass fixed bottom-0 right-0 top-[var(--topbar-height,56px)] z-30 hidden w-[280px] flex-col rounded-none border-l border-border transition-all duration-300 md:flex'
       }
       aria-label="Note details"
     >
       {/* Header */}
-      <div className="flex items-center justify-between px-4 py-3.5">
+      <div className="flex shrink-0 items-center justify-between gap-2 px-4 pb-3 pt-4">
         <div className="min-w-0">
-          <div className="text-[10px] font-semibold text-muted uppercase tracking-widest">Details</div>
-          <div className="truncate text-[13px] font-bold text-foreground tracking-tight mt-0.5" title={displayName}>{displayName}</div>
+          <div className={META}>Details</div>
+          <div className="mt-1 truncate text-[13px] font-semibold tracking-[-0.01em] text-foreground" title={displayName}>{displayName}</div>
         </div>
         <button
           onClick={onToggleCollapsed}
-          className="rounded-xl p-1.5 text-muted/70 transition-all duration-200 hover:bg-surface-hover/70 hover:text-foreground"
+          className={ICON_BUTTON}
           aria-label={overlay ? 'Close details' : 'Collapse details'}
           title={overlay ? 'Close details' : 'Collapse details'}
         >
           {overlay ? <X size={16} /> : <ChevronRight size={15} />}
         </button>
       </div>
+      <div className="mx-4 h-px shrink-0 bg-border" aria-hidden />
 
       {/* Scrollable Content */}
-      <div className="flex-1 overflow-y-auto">
+      <div className="scroll-thin flex-1 overflow-y-auto">
         {/* Save Section */}
-        <div className="px-4 py-3">
-          <div className="flex items-center gap-2 mb-2.5">
+        <div className="px-4 py-3.5">
+          <div className="flex items-center gap-2">
             <button
               onClick={onSave}
               disabled={isSaving || !title.trim()}
-              className="flex-1 flex items-center justify-center gap-1.5 px-3 py-2 text-xs font-semibold text-white bg-gradient-to-r from-alpine-700 to-alpine-600 rounded-xl hover:from-alpine-700 hover:to-alpine-600 hover:shadow-md disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-200"
+              className="glass-btn-primary inline-flex h-9 flex-1 items-center justify-center gap-1.5 rounded-xl text-xs font-semibold disabled:cursor-not-allowed disabled:opacity-50"
             >
               {isSaving ? (
                 <>
@@ -362,80 +388,83 @@ function NoteDetailsSidebar({
               <button
                 onClick={onDelete}
                 disabled={isDeleting}
-                className="flex items-center justify-center gap-1.5 px-3 py-2 text-xs font-medium text-danger bg-danger-light/60 rounded-xl hover:bg-danger hover:text-white disabled:opacity-50 transition-all duration-200"
+                className="focus-ring flex h-9 w-9 items-center justify-center rounded-xl border border-danger bg-danger-light text-danger transition-colors hover:bg-danger-light disabled:opacity-50"
                 title="Delete note"
+                aria-label="Delete note"
               >
                 {isDeleting ? (
                   <Loader2 size={12} className="animate-spin" />
                 ) : (
-                  <Trash2 size={12} />
+                  <Trash2 size={13} />
                 )}
               </button>
             )}
           </div>
           {/* Save status */}
-          <div className="flex items-center gap-1.5 text-xs">
+          <div className="mt-2.5 flex items-center gap-1.5 text-[11px]">
             {isSaving ? (
               <>
-                <Loader2 size={10} className="animate-spin text-alpine-500" />
-                <span className="text-alpine-600 font-medium">Saving...</span>
+                <Loader2 size={10} className="animate-spin text-accent" />
+                <span className="font-medium text-accent">Saving...</span>
               </>
             ) : hasChanges ? (
               <>
-                <span className="w-1.5 h-1.5 bg-amber-500 rounded-full animate-pulse" />
-                <span className="text-amber-600 dark:text-amber-400 font-medium">Unsaved changes</span>
+                <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-warning" />
+                <span className="font-medium text-warning">Unsaved changes</span>
               </>
             ) : lastSaveDisplay ? (
               <>
-                <Check size={10} className="text-green-500" />
-                <span className="text-green-600 dark:text-green-400 font-medium">Saved {lastSaveDisplay}</span>
+                <Check size={11} className="text-success" />
+                <span className="font-medium text-success">Saved {lastSaveDisplay}</span>
               </>
             ) : isNewNote ? (
-              <span className="text-muted italic">New note — not yet saved</span>
+              <span className="italic text-muted">New note — not yet saved</span>
             ) : null}
           </div>
         </div>
 
         {/* Metadata Section */}
-        <div className="px-4 py-3 space-y-2.5">
-          <div className="text-[10px] font-semibold text-muted uppercase tracking-widest block">Details</div>
+        <div className="border-t border-border px-4 py-3.5">
+          <div className={`${META} mb-2.5 block`}>Details</div>
           
-          {/* Note Type */}
-          <div className="flex items-center gap-2 text-xs">
-            <TypeIcon size={13} className={typePresentation.iconClassName} />
-            <span className="text-foreground/80">{typePresentation.label}</span>
-          </div>
-
-          {/* Folder Path */}
-          <div className="flex items-center gap-2 text-xs">
-            <FolderOpen size={13} className="text-muted flex-shrink-0" />
-            <span className="text-foreground/80 truncate">{folderPath}</span>
-          </div>
-
-          {/* Project */}
-          {projectInfo && (
-            <div className="flex items-center gap-2 text-xs">
-              <div
-                className="w-2.5 h-2.5 rounded-full flex-shrink-0"
-                style={{ backgroundColor: projectInfo.color }}
-              />
-              <span className="text-foreground/80">{projectInfo.name}</span>
+          <div className="space-y-1">
+            {/* Note Type */}
+            <div className="flex items-center gap-2 rounded-lg px-1 py-1 text-xs">
+              <TypeIcon size={13} className={typePresentation.iconClassName} />
+              <span className="truncate text-foreground">{typePresentation.label}</span>
             </div>
-          )}
+
+            {/* Folder Path */}
+            <div className="flex items-center gap-2 rounded-lg px-1 py-1 text-xs">
+              <FolderOpen size={13} className="flex-shrink-0 text-muted" />
+              <span className="truncate text-foreground">{folderPath}</span>
+            </div>
+
+            {/* Project */}
+            {projectInfo && (
+              <div className="flex items-center gap-2 rounded-lg px-1 py-1 text-xs">
+                <div
+                  className="h-2.5 w-2.5 flex-shrink-0 rounded-full ring-1 ring-inset ring-border"
+                  style={{ backgroundColor: projectInfo.color }}
+                />
+                <span className="truncate text-foreground">{projectInfo.name}</span>
+              </div>
+            )}
+          </div>
         </div>
 
         {/* Stats Section (rich-text only) */}
         {noteType === 'rich-text' && (
-          <div className="px-4 py-3">
-            <div className="text-[10px] font-semibold text-muted uppercase tracking-widest mb-2.5 block">Statistics</div>
+          <div className="border-t border-border px-4 py-3.5">
+            <div className={`${META} mb-2.5 block`}>Statistics</div>
             
-            <div className="grid grid-cols-2 gap-2 mb-2.5">
-              <div className="bg-surface-hover/30 rounded-xl px-2.5 py-2.5 text-center">
-                <div className="text-sm font-bold text-foreground">{stats.words}</div>
+            <div className="mb-2.5 grid grid-cols-2 gap-2">
+              <div className="rounded-xl border border-border bg-surface-sunken px-2.5 py-2 text-center">
+                <div className="text-sm font-semibold tabular-nums text-foreground">{stats.words}</div>
                 <div className="text-[10px] text-muted">{stats.words === 1 ? 'word' : 'words'}</div>
               </div>
-              <div className="bg-surface-hover/30 rounded-xl px-2.5 py-2.5 text-center">
-                <div className="text-sm font-bold text-foreground">{stats.characters}</div>
+              <div className="rounded-xl border border-border bg-surface-sunken px-2.5 py-2 text-center">
+                <div className="text-sm font-semibold tabular-nums text-foreground">{stats.characters}</div>
                 <div className="text-[10px] text-muted">{stats.characters === 1 ? 'char' : 'chars'}</div>
               </div>
             </div>
@@ -443,24 +472,25 @@ function NoteDetailsSidebar({
             {/* Word Goal */}
             {wordGoal && wordGoalProgress ? (
               <div className="space-y-1.5">
-                <div className="flex items-center justify-between text-xs">
-                  <span className={wordGoalProgress.isComplete ? 'text-green-600 dark:text-green-400 font-medium' : 'text-foreground/80'}>
+                <div className="flex items-center justify-between text-[11px]">
+                  <span className={wordGoalProgress.isComplete ? 'font-medium text-success' : 'text-foreground'}>
                     {stats.words}/{wordGoal} words
                   </span>
                   <button
                     onClick={openWordGoalInput}
-                    className="text-muted hover:text-foreground transition-colors"
+                    className="focus-ring flex h-6 w-6 items-center justify-center rounded-full text-muted transition-colors hover:bg-surface-hover hover:text-foreground"
                     title="Edit goal"
+                    aria-label="Edit word goal"
                   >
-                    <Edit2 size={10} />
+                    <Edit2 size={11} />
                   </button>
                 </div>
-                <div className="relative w-full h-2.5 bg-surface-hover/50 rounded-full overflow-hidden">
+                <div className="relative h-2 w-full overflow-hidden rounded-full bg-surface-hover">
                   <div
-                    className={`absolute left-0 top-0 h-full transition-all duration-300 rounded-full ${
+                    className={`absolute left-0 top-0 h-full rounded-full transition-all duration-300 ${
                       wordGoalProgress.isComplete
-                        ? 'bg-gradient-to-r from-green-400 to-green-500'
-                        : 'bg-gradient-to-r from-alpine-400 to-alpine-500'
+                        ? 'bg-success'
+                        : 'bg-accent'
                     }`}
                     style={{ width: `${wordGoalProgress.percentage}%` }}
                   />
@@ -469,7 +499,7 @@ function NoteDetailsSidebar({
             ) : (
               <button
                 onClick={openWordGoalInput}
-                className="flex items-center gap-1.5 text-xs text-alpine-500 hover:text-alpine-600 transition-colors font-medium"
+                className="focus-ring inline-flex items-center gap-1.5 rounded-full py-0.5 text-[11px] font-medium text-accent transition-colors hover:text-accent-strong"
               >
                 <Target size={12} />
                 <span>Set word goal</span>
@@ -486,7 +516,8 @@ function NoteDetailsSidebar({
                   value={wordGoalValue}
                   onChange={(e) => setWordGoalValue(e.target.value)}
                   placeholder="e.g. 500"
-                  className="flex-1 px-2 py-1 text-xs border border-border rounded-md bg-surface focus:outline-none focus:ring-1 focus:ring-alpine-500 text-foreground"
+                  aria-label="Word goal"
+                  className="focus-ring min-w-0 flex-1 rounded-lg border border-border bg-surface px-2 py-1 text-xs text-foreground placeholder:text-muted focus:border-accent"
                   onKeyDown={(e) => {
                     if (e.key === 'Enter') handleWordGoalSubmit()
                     if (e.key === 'Escape') setShowWordGoalInput(false)
@@ -494,15 +525,16 @@ function NoteDetailsSidebar({
                 />
                 <button
                   onClick={handleWordGoalSubmit}
-                  className="px-2 py-1 text-xs font-medium text-white bg-alpine-600 rounded-md hover:bg-alpine-700"
+                  className="focus-ring rounded-lg bg-accent px-2 py-1 text-xs font-semibold text-accent-foreground transition-colors hover:bg-accent-strong"
                 >
                   Set
                 </button>
                 {wordGoal && (
                   <button
                     onClick={() => { onSetWordGoal(null); setShowWordGoalInput(false) }}
-                    className="px-1.5 py-1 text-xs text-danger hover:bg-danger-light rounded-md transition-colors"
+                    className="focus-ring rounded-lg p-1 text-danger transition-colors hover:bg-danger-light"
                     title="Remove goal"
+                    aria-label="Remove word goal"
                   >
                     <X size={12} />
                   </button>
@@ -512,7 +544,7 @@ function NoteDetailsSidebar({
 
             {/* Heading count */}
             {headings.length > 0 && (
-              <div className="mt-2 text-xs text-muted">
+              <div className="mt-2 text-[11px] text-muted">
                 {headings.length} {headings.length === 1 ? 'heading' : 'headings'}
               </div>
             )}
@@ -521,18 +553,19 @@ function NoteDetailsSidebar({
 
         {/* Table of Contents (rich-text only) */}
         {noteType === 'rich-text' && headings.length > 0 && (
-          <div className="px-4 py-3">
+          <div className="border-t border-border px-4 py-3.5">
             <button
               onClick={() => setTocExpanded(prev => !prev)}
-              className="flex items-center gap-1.5 w-full text-left mb-2"
+              className="focus-ring mb-1.5 flex w-full items-center gap-1.5 rounded-lg text-left"
+              aria-expanded={tocExpanded}
             >
               <ChevronRight
                 size={12}
                 className={`text-muted transition-transform duration-200 ${tocExpanded ? 'rotate-90' : ''}`}
               />
-              <ListTree size={13} className="text-muted" />
-              <span className="text-[10px] font-semibold text-muted uppercase tracking-wider">Contents</span>
-              <span className="ml-auto text-[10px] text-muted">{headings.length}</span>
+              <ListTree size={12} className="text-muted" />
+              <span className={META}>Contents</span>
+              <span className="ml-auto text-[10px] tabular-nums text-muted">{headings.length}</span>
             </button>
             {tocExpanded && (
               <div className="space-y-0.5">
@@ -540,8 +573,8 @@ function NoteDetailsSidebar({
                   <button
                     key={heading.id || `${heading.level}-${heading.text}-${index}`}
                     onClick={() => onScrollToHeading?.(heading.id)}
-                    className="w-full text-left px-2.5 py-1.5 rounded-xl text-xs hover:bg-surface-hover/60 text-foreground/70 hover:text-foreground transition-all duration-200 truncate"
-                    style={{ paddingLeft: `${(heading.level - 1) * 12 + 8}px` }}
+                    className="focus-ring w-full truncate rounded-lg px-2 py-1 text-left text-[11px] leading-5 text-foreground transition-colors hover:bg-surface-hover hover:text-foreground"
+                    style={{ paddingLeft: `${(heading.level - 1) * 10 + 8}px` }}
                     title={heading.text}
                   >
                     <span className={`${heading.level === 1 ? 'font-semibold' : heading.level === 2 ? 'font-medium' : ''}`}>
@@ -556,14 +589,14 @@ function NoteDetailsSidebar({
 
         {/* Connections */}
         {onOpenConnections && (
-          <div className="px-4 py-3">
+          <div className="border-t border-border px-4 py-3.5">
             <button
               onClick={onOpenConnections}
-              className="mb-2.5 flex w-full items-center gap-1.5 text-left"
+              className="focus-ring mb-1.5 flex w-full items-center gap-1.5 rounded-lg text-left"
             >
-              <Network size={13} className="text-muted/70" />
-              <span className="text-[10px] font-semibold text-muted uppercase tracking-widest">Connections</span>
-              <span className="ml-auto text-[10px] text-muted">{connectionsCount}</span>
+              <Network size={12} className="text-muted" />
+              <span className={META}>Connections</span>
+              <span className="ml-auto text-[10px] tabular-nums text-muted">{connectionsCount}</span>
             </button>
 
             {backlinks.length > 0 ? (
@@ -572,7 +605,7 @@ function NoteDetailsSidebar({
                   <button
                     key={item.id}
                     onClick={() => onSelectBacklink?.(item.id)}
-                    className="w-full rounded-xl px-2.5 py-1.5 text-left text-xs text-foreground/70 transition-all duration-200 hover:bg-surface-hover/60 hover:text-foreground"
+                    className="focus-ring w-full rounded-lg px-2 py-1 text-left text-[11px] text-foreground transition-colors hover:bg-surface-hover hover:text-foreground"
                     title={`${item.title}${item.folderPath ? ` · ${item.folderPath}` : ''}`}
                   >
                     <div className="truncate font-medium">{item.title || 'Untitled note'}</div>
@@ -586,19 +619,19 @@ function NoteDetailsSidebar({
                 )}
               </div>
             ) : (
-              <div className="text-xs text-muted">No backlinks yet</div>
+              <div className="px-1 text-[11px] text-muted">No backlinks yet</div>
             )}
 
             {/* Outgoing Links */}
-            <div className="mt-4">
-              <div className="text-[10px] font-semibold text-muted uppercase tracking-widest mb-1.5">Outgoing Links</div>
+            <div className="mt-3.5">
+              <div className={`${META} mb-1.5`}>Outgoing links</div>
               {outgoingLinks.length > 0 ? (
                 <div className="space-y-0.5">
                   {outgoingLinks.slice(0, 8).map((item) => (
                     <button
                       key={item.id}
                       onClick={() => onSelectOutgoing?.(item.id)}
-                      className="w-full rounded-xl px-2.5 py-1.5 text-left text-xs text-foreground/70 transition-all duration-200 hover:bg-surface-hover/60 hover:text-foreground"
+                      className="focus-ring w-full rounded-lg px-2 py-1 text-left text-[11px] text-foreground transition-colors hover:bg-surface-hover hover:text-foreground"
                       title={`${item.title}${item.folderPath ? ` · ${item.folderPath}` : ''}`}
                     >
                       <div className="truncate font-medium">{item.title || 'Untitled note'}</div>
@@ -612,7 +645,7 @@ function NoteDetailsSidebar({
                   )}
                 </div>
               ) : (
-                <div className="text-xs text-muted">No outgoing links</div>
+                <div className="px-1 text-[11px] text-muted">No outgoing links</div>
               )}
             </div>
           </div>
@@ -620,17 +653,17 @@ function NoteDetailsSidebar({
       </div>
 
       {/* Footer */}
-      <div className="px-4 py-3 space-y-1">
+      <div className="shrink-0 space-y-0.5 border-t border-border px-3 py-2.5">
         {hasFileActions && (
           <button
             onClick={() => setShowFileModal(true)}
-            className="group flex w-full items-center gap-2.5 rounded-xl px-2.5 py-2 text-xs font-medium text-muted transition-all duration-200 hover:bg-surface-hover/60 hover:text-foreground"
+            className={ROW_BUTTON}
           >
             <FileOutput className="h-3.5 w-3.5 shrink-0" />
             <span>File</span>
             {shareUrl && (
-              <span className="ml-auto flex h-4 w-4 items-center justify-center rounded-full bg-alpine-100 dark:bg-alpine-900/40">
-                <Globe size={9} className="text-alpine-600 dark:text-alpine-400" />
+              <span className="ml-auto flex h-4 w-4 items-center justify-center rounded-full bg-accent-light">
+                <Globe size={9} className="text-accent" />
               </span>
             )}
           </button>
@@ -638,7 +671,7 @@ function NoteDetailsSidebar({
         {onOpenAIAssistant && (
           <button
             onClick={onOpenAIAssistant}
-            className="group flex w-full items-center gap-2.5 rounded-xl px-2.5 py-2 text-xs font-medium text-muted transition-all duration-200 hover:bg-surface-hover/60 hover:text-alpine-500"
+            className={`${ROW_BUTTON} hover:text-accent`}
           >
             <Sparkles className="h-3.5 w-3.5 shrink-0" />
             <span>AI Assistant</span>
@@ -646,7 +679,7 @@ function NoteDetailsSidebar({
         )}
         <button
           onClick={onOpenSettings}
-          className="group flex w-full items-center gap-2.5 rounded-xl px-2.5 py-2 text-xs font-medium text-muted transition-all duration-200 hover:bg-surface-hover/60 hover:text-foreground"
+          className={ROW_BUTTON}
         >
           <Settings className="h-3.5 w-3.5 shrink-0" />
           <span>Settings</span>
@@ -656,118 +689,123 @@ function NoteDetailsSidebar({
 
     {/* ---- FILE MODAL (Export / Import / Share) ---- */}
     {showFileModal && (
-      <div className="fixed inset-0 z-[70] flex items-center justify-center p-4 bg-black/40 " onClick={() => setShowFileModal(false)}>
+      <div
+        className="fixed inset-0 z-[70] flex items-center justify-center bg-[rgb(14_12_32_/_0.44)] p-4 backdrop-blur-[3px]"
+        onClick={() => setShowFileModal(false)}
+      >
         <div
-          className="bg-surface  rounded-2xl shadow-2xl border border-border/40 w-full max-w-md overflow-hidden"
+          className="floating-pop-in glass-strong w-full max-w-md overflow-hidden rounded-3xl"
           onClick={(e) => e.stopPropagation()}
         >
           {/* Modal Header */}
           <div className="flex items-center justify-between px-5 py-4">
             <div className="flex items-center gap-2.5">
-              <div className="flex h-8 w-8 items-center justify-center rounded-xl bg-surface-hover/60">
-                <FileOutput size={15} className="text-foreground/70" />
+              <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-accent-light text-accent">
+                <FileOutput size={15} />
               </div>
-              <div>
-                <h3 className="text-sm font-bold text-foreground tracking-tight">File</h3>
-                <p className="text-[11px] text-muted mt-0.5 truncate max-w-[260px]">{displayName}</p>
+              <div className="min-w-0">
+                <h3 className="text-sm font-semibold tracking-[-0.01em] text-foreground">File</h3>
+                <p className="mt-0.5 max-w-[240px] truncate text-[11px] text-muted">{displayName}</p>
               </div>
             </div>
             <button
               onClick={() => setShowFileModal(false)}
-              className="rounded-xl p-1.5 text-muted/60 hover:bg-surface-hover/60 hover:text-foreground transition-all duration-200"
+              className={ICON_BUTTON}
+              aria-label="Close file actions"
             >
               <X size={16} />
             </button>
           </div>
+          <div className="mx-5 h-px bg-border" aria-hidden />
 
           {/* Modal Body */}
-          <div className="px-5 pb-5 space-y-5 max-h-[70vh] overflow-y-auto">
+          <div className="scroll-thin max-h-[70vh] space-y-5 overflow-y-auto px-5 py-4">
             {/* Export / Import Section */}
             {(onExportMarkdown || onExportPdf || onExportDocx || onExportHtml || onExportPlainText || onImportDocx) && (
               <div>
-                <div className="text-[10px] font-semibold text-muted uppercase tracking-widest mb-2 block">Export &amp; Import</div>
-                <div className="rounded-2xl border border-border/40 bg-surface-hover/20 divide-y divide-border/30 overflow-hidden">
+                <div className={`${META} mb-2 block`}>Export &amp; import</div>
+                <div className="divide-y divide-border overflow-hidden rounded-2xl border border-border bg-surface">
                   {onExportPdf && (
                     <button
                       onClick={() => { onExportPdf(); setShowFileModal(false) }}
-                      className="flex w-full items-center gap-3 px-4 py-3 text-xs text-foreground/80 transition-all duration-200 hover:bg-surface-hover/50 hover:text-foreground"
+                      className={FILE_ROW}
                     >
-                      <div className="flex h-8 w-8 items-center justify-center rounded-xl bg-red-50 dark:bg-red-900/30">
-                        <Download size={14} className="text-red-600 dark:text-red-400" />
+                      <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-xl bg-danger-light">
+                        <Download size={14} className="text-danger" />
                       </div>
                       <div className="text-left">
                         <div className="font-medium">Export as PDF</div>
-                        <div className="text-[10px] text-muted mt-0.5">Styled .pdf with page numbers</div>
+                        <div className="mt-0.5 text-[10px] text-muted">Styled .pdf with page numbers</div>
                       </div>
                     </button>
                   )}
                   {onExportDocx && (
                     <button
                       onClick={() => { onExportDocx(); setShowFileModal(false) }}
-                      className="flex w-full items-center gap-3 px-4 py-3 text-xs text-foreground/80 transition-all duration-200 hover:bg-surface-hover/50 hover:text-foreground"
+                      className={FILE_ROW}
                     >
-                      <div className="flex h-8 w-8 items-center justify-center rounded-xl bg-indigo-50 dark:bg-indigo-900/30">
-                        <FileDown size={14} className="text-indigo-600 dark:text-indigo-400" />
+                      <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-xl bg-accent-light">
+                        <FileDown size={14} className="text-accent" />
                       </div>
                       <div className="text-left">
                         <div className="font-medium">Export as DOCX</div>
-                        <div className="text-[10px] text-muted mt-0.5">Word document with title &amp; date</div>
+                        <div className="mt-0.5 text-[10px] text-muted">Word document with title &amp; date</div>
                       </div>
                     </button>
                   )}
                   {onExportMarkdown && (
                     <button
                       onClick={() => { onExportMarkdown(); setShowFileModal(false) }}
-                      className="flex w-full items-center gap-3 px-4 py-3 text-xs text-foreground/80 transition-all duration-200 hover:bg-surface-hover/50 hover:text-foreground"
+                      className={FILE_ROW}
                     >
-                      <div className="flex h-8 w-8 items-center justify-center rounded-xl bg-blue-50 dark:bg-blue-900/30">
-                        <FileText size={14} className="text-blue-600 dark:text-blue-400" />
+                      <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-xl bg-surface-hover">
+                        <FileText size={14} className="text-foreground" />
                       </div>
                       <div className="text-left">
                         <div className="font-medium">Export as Markdown</div>
-                        <div className="text-[10px] text-muted mt-0.5">.md with tables &amp; task lists</div>
+                        <div className="mt-0.5 text-[10px] text-muted">.md with tables &amp; task lists</div>
                       </div>
                     </button>
                   )}
                   {onExportHtml && (
                     <button
                       onClick={() => { onExportHtml(); setShowFileModal(false) }}
-                      className="flex w-full items-center gap-3 px-4 py-3 text-xs text-foreground/80 transition-all duration-200 hover:bg-surface-hover/50 hover:text-foreground"
+                      className={FILE_ROW}
                     >
-                      <div className="flex h-8 w-8 items-center justify-center rounded-xl bg-emerald-50 dark:bg-emerald-900/30">
-                        <FileText size={14} className="text-emerald-600 dark:text-emerald-400" />
+                      <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-xl bg-success-light">
+                        <FileText size={14} className="text-success" />
                       </div>
                       <div className="text-left">
                         <div className="font-medium">Export as HTML</div>
-                        <div className="text-[10px] text-muted mt-0.5">Standalone web page with styles</div>
+                        <div className="mt-0.5 text-[10px] text-muted">Standalone web page with styles</div>
                       </div>
                     </button>
                   )}
                   {onExportPlainText && (
                     <button
                       onClick={() => { onExportPlainText(); setShowFileModal(false) }}
-                      className="flex w-full items-center gap-3 px-4 py-3 text-xs text-foreground/80 transition-all duration-200 hover:bg-surface-hover/50 hover:text-foreground"
+                      className={FILE_ROW}
                     >
-                      <div className="flex h-8 w-8 items-center justify-center rounded-xl bg-gray-50 dark:bg-gray-800/50">
-                        <FileText size={14} className="text-gray-600 dark:text-gray-400" />
+                      <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-xl bg-surface-hover">
+                        <FileText size={14} className="text-muted" />
                       </div>
                       <div className="text-left">
                         <div className="font-medium">Export as Plain Text</div>
-                        <div className="text-[10px] text-muted mt-0.5">.txt without formatting</div>
+                        <div className="mt-0.5 text-[10px] text-muted">.txt without formatting</div>
                       </div>
                     </button>
                   )}
                   {onImportDocx && (
                     <button
                       onClick={() => { onImportDocx(); setShowFileModal(false) }}
-                      className="flex w-full items-center gap-3 px-4 py-3 text-xs text-foreground/80 transition-all duration-200 hover:bg-surface-hover/50 hover:text-foreground"
+                      className={FILE_ROW}
                     >
-                      <div className="flex h-8 w-8 items-center justify-center rounded-xl bg-amber-50 dark:bg-amber-900/30">
-                        <FileUp size={14} className="text-amber-600 dark:text-amber-400" />
+                      <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-xl bg-warning-light">
+                        <FileUp size={14} className="text-warning" />
                       </div>
                       <div className="text-left">
                         <div className="font-medium">Import from DOCX</div>
-                        <div className="text-[10px] text-muted mt-0.5">Replace content from Word file</div>
+                        <div className="mt-0.5 text-[10px] text-muted">Replace content from Word file</div>
                       </div>
                     </button>
                   )}
@@ -778,11 +816,11 @@ function NoteDetailsSidebar({
             {/* Share Section */}
             {(onPublish || shareUrl || shareHint) && (
               <div>
-                <div className="text-[10px] font-semibold text-muted uppercase tracking-widest mb-2 block">Share</div>
-                <div className="rounded-2xl border border-border/40 bg-surface-hover/20 p-4">
+                <div className={`${META} mb-2 block`}>Share</div>
+                <div className="rounded-2xl border border-border bg-surface p-3.5">
                   <div className="flex items-start gap-3">
-                    <div className={`flex h-9 w-9 items-center justify-center rounded-xl ${shareUrl ? 'bg-alpine-100 dark:bg-alpine-900/30' : 'bg-surface-hover/60'}`}>
-                      <Globe size={15} className={shareUrl ? 'text-alpine-600 dark:text-alpine-400' : 'text-muted/70'} />
+                    <div className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-xl ${shareUrl ? 'bg-accent-light text-accent' : 'bg-surface-hover text-muted'}`}>
+                      <Globe size={15} />
                     </div>
                     <div className="min-w-0 flex-1">
                       <div className="text-xs font-semibold text-foreground">
@@ -797,7 +835,7 @@ function NoteDetailsSidebar({
                   </div>
 
                   {shareUrl && (
-                    <div className="mt-3 rounded-xl border border-border/30 bg-surface/70 px-3 py-2.5 text-[11px] text-foreground/60 truncate font-mono">
+                    <div className="mt-3 truncate rounded-xl border border-border bg-surface px-3 py-2 font-mono text-[11px] text-muted">
                       {shareUrl}
                     </div>
                   )}
@@ -807,7 +845,7 @@ function NoteDetailsSidebar({
                       <button
                         onClick={onPublish}
                         disabled={!canPublish || isPublishing || isUnpublishing}
-                        className="inline-flex items-center gap-1.5 rounded-xl bg-gradient-to-r from-alpine-700 to-alpine-600 px-3.5 py-2 text-xs font-semibold text-white transition-all duration-200 hover:from-alpine-700 hover:to-alpine-600 hover:shadow-md disabled:cursor-not-allowed disabled:opacity-50"
+                        className="glass-btn-primary inline-flex items-center gap-1.5 rounded-xl px-3 py-1.5 text-[11px] font-semibold disabled:cursor-not-allowed disabled:opacity-50"
                       >
                         {isPublishing ? <Loader2 size={12} className="animate-spin" /> : <Globe size={12} />}
                         <span>{shareUrl ? 'Update share' : 'Publish note'}</span>
@@ -816,7 +854,7 @@ function NoteDetailsSidebar({
                     {shareUrl && onCopyShareLink && (
                       <button
                         onClick={onCopyShareLink}
-                        className="inline-flex items-center gap-1.5 rounded-xl border border-border/40 px-3.5 py-2 text-xs font-medium text-foreground/70 transition-all duration-200 hover:bg-surface-hover/50 hover:text-foreground"
+                        className="glass-btn inline-flex items-center gap-1.5 rounded-xl px-3 py-1.5 text-[11px] font-medium"
                       >
                         <Copy size={12} />
                         <span>Copy link</span>
@@ -825,7 +863,7 @@ function NoteDetailsSidebar({
                     {shareUrl && onOpenSharePage && (
                       <button
                         onClick={onOpenSharePage}
-                        className="inline-flex items-center gap-1.5 rounded-xl border border-border/40 px-3.5 py-2 text-xs font-medium text-foreground/70 transition-all duration-200 hover:bg-surface-hover/50 hover:text-foreground"
+                        className="glass-btn inline-flex items-center gap-1.5 rounded-xl px-3 py-1.5 text-[11px] font-medium"
                       >
                         <ExternalLink size={12} />
                         <span>Open page</span>
@@ -835,7 +873,7 @@ function NoteDetailsSidebar({
                       <button
                         onClick={onUnpublish}
                         disabled={isPublishing || isUnpublishing}
-                        className="inline-flex items-center gap-1.5 rounded-xl border border-danger/20 px-3.5 py-2 text-xs font-medium text-danger transition-all duration-200 hover:bg-danger-light/60 disabled:cursor-not-allowed disabled:opacity-50"
+                        className="focus-ring inline-flex items-center gap-1.5 rounded-xl border border-danger px-3 py-1.5 text-[11px] font-medium text-danger transition-colors hover:bg-danger-light disabled:cursor-not-allowed disabled:opacity-50"
                       >
                         {isUnpublishing ? <Loader2 size={12} className="animate-spin" /> : <X size={12} />}
                         <span>Unpublish</span>

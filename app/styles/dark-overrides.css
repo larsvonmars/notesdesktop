@@ -8,18 +8,18 @@
 /* Dark mode legacy overrides – individual Tailwind class remappings */
 
 /* ── 1. Background colors ── */
-.dark .bg-white          { background-color: #1e293b; }
+.dark .bg-white          { background-color: #171522; }
 .dark .bg-white\/80      { background-color: rgba(30, 41, 59, 0.80); }
 .dark .bg-white\/90      { background-color: rgba(30, 41, 59, 0.90); }
 .dark .bg-white\/70      { background-color: rgba(30, 41, 59, 0.70); }
 .dark .bg-white\/60      { background-color: rgba(30, 41, 59, 0.60); }
 .dark .bg-white\/50      { background-color: rgba(30, 41, 59, 0.50); }
-.dark .bg-gray-50        { background-color: #1e293b; }
-.dark .bg-gray-100       { background-color: #334155; }
-.dark .bg-gray-200       { background-color: #475569; }
-.dark .bg-gray-300       { background-color: #64748b; }
-.dark .bg-slate-50       { background-color: #1e293b; }
-.dark .bg-slate-100      { background-color: #334155; }
+.dark .bg-gray-50        { background-color: #171522; }
+.dark .bg-gray-100       { background-color: #201d2e; }
+.dark .bg-gray-200       { background-color: #2b2740; }
+.dark .bg-gray-300       { background-color: #4d4966; }
+.dark .bg-slate-50       { background-color: #171522; }
+.dark .bg-slate-100      { background-color: #201d2e; }
 
 /* Alpine surface variants */
 .dark .bg-alpine-50      { background-color: rgba(23, 41, 84, 0.2); }
@@ -60,8 +60,8 @@
 .dark .bg-violet-200     { background-color: rgba(76, 29, 149, 0.4); }
 
 /* Additional slate backgrounds used by MindmapEditor */
-.dark .bg-slate-200      { background-color: #475569; }
-.dark .bg-slate-300      { background-color: #64748b; }
+.dark .bg-slate-200      { background-color: #2b2740; }
+.dark .bg-slate-300      { background-color: #4d4966; }
 .dark .bg-slate-900\/50  { background-color: rgba(15, 23, 42, 0.5); }
 .dark .bg-slate-50\/60   { background-color: rgba(30, 41, 59, 0.6); }
 
@@ -69,19 +69,19 @@
 .dark .bg-yellow-200     { background-color: rgba(161, 98, 7, 0.35); }
 
 /* ── 2. Text colors ── */
-.dark .text-black        { color: #f8fafc; }
-.dark .text-gray-900     { color: #f1f5f9; }
-.dark .text-gray-800     { color: #e2e8f0; }
-.dark .text-gray-700     { color: #cbd5e1; }
-.dark .text-gray-600     { color: #94a3b8; }
-.dark .text-gray-500     { color: #94a3b8; }
-.dark .text-gray-400     { color: #64748b; }
-.dark .text-gray-300     { color: #64748b; }
-.dark .text-slate-900    { color: #f1f5f9; }
-.dark .text-slate-800    { color: #e2e8f0; }
-.dark .text-slate-700    { color: #cbd5e1; }
-.dark .text-slate-600    { color: #94a3b8; }
-.dark .text-slate-500    { color: #94a3b8; }
+.dark .text-black        { color: #f7f6ff; }
+.dark .text-gray-900     { color: #f0effa; }
+.dark .text-gray-800     { color: #dcd9ee; }
+.dark .text-gray-700     { color: #c9c6de; }
+.dark .text-gray-600     { color: #9b98b4; }
+.dark .text-gray-500     { color: #9b98b4; }
+.dark .text-gray-400     { color: #4d4966; }
+.dark .text-gray-300     { color: #4d4966; }
+.dark .text-slate-900    { color: #f0effa; }
+.dark .text-slate-800    { color: #dcd9ee; }
+.dark .text-slate-700    { color: #c9c6de; }
+.dark .text-slate-600    { color: #9b98b4; }
+.dark .text-slate-500    { color: #9b98b4; }
 
 /* Alpine accent text — lighten for contrast */
 .dark .text-alpine-600   { color: #60AFFA; }
@@ -114,18 +114,18 @@
 .dark .text-teal-700     { color: #2dd4bf; }
 
 /* Placeholder text */
-.dark .placeholder\:text-gray-300::placeholder { color: #475569; }
-.dark .placeholder\:text-gray-400::placeholder { color: #475569; }
-.dark .placeholder\:text-gray-500::placeholder { color: #64748b; }
+.dark .placeholder\:text-gray-300::placeholder { color: #2b2740; }
+.dark .placeholder\:text-gray-400::placeholder { color: #2b2740; }
+.dark .placeholder\:text-gray-500::placeholder { color: #4d4966; }
 
 /* ── 3. Border colors ── */
-.dark .border-gray-100   { border-color: #1e293b; }
-.dark .border-gray-200   { border-color: #334155; }
-.dark .border-gray-300   { border-color: #475569; }
-.dark .border-gray-400   { border-color: #64748b; }
-.dark .border-slate-100  { border-color: #1e293b; }
-.dark .border-slate-200  { border-color: #334155; }
-.dark .border-slate-300  { border-color: #475569; }
+.dark .border-gray-100   { border-color: #171522; }
+.dark .border-gray-200   { border-color: #201d2e; }
+.dark .border-gray-300   { border-color: #2b2740; }
+.dark .border-gray-400   { border-color: #4d4966; }
+.dark .border-slate-100  { border-color: #171522; }
+.dark .border-slate-200  { border-color: #201d2e; }
+.dark .border-slate-300  { border-color: #2b2740; }
 
 .dark .border-alpine-100 { border-color: rgba(23, 41, 84, 0.4); }
 .dark .border-alpine-200 { border-color: rgba(37, 99, 235, 0.25); }
@@ -142,18 +142,18 @@
 .dark .border-orange-200 { border-color: rgba(249, 115, 22, 0.3); }
 
 /* ── 4. Divide colors ── */
-.dark .divide-gray-100 > :not([hidden]) ~ :not([hidden]) { border-color: #1e293b; }
-.dark .divide-gray-200 > :not([hidden]) ~ :not([hidden]) { border-color: #334155; }
+.dark .divide-gray-100 > :not([hidden]) ~ :not([hidden]) { border-color: #171522; }
+.dark .divide-gray-200 > :not([hidden]) ~ :not([hidden]) { border-color: #201d2e; }
 
 /* ── 5. Ring / outline colors ── */
-.dark .ring-gray-200     { --tw-ring-color: #334155; }
-.dark .ring-gray-300     { --tw-ring-color: #475569; }
+.dark .ring-gray-200     { --tw-ring-color: #201d2e; }
+.dark .ring-gray-300     { --tw-ring-color: #2b2740; }
 
 /* ── 6. Hover state overrides ── */
-.dark .hover\:bg-gray-50:hover     { background-color: #334155; }
+.dark .hover\:bg-gray-50:hover     { background-color: #201d2e; }
 .dark .hover\:bg-gray-100:hover    { background-color: #3b4a5e; }
-.dark .hover\:bg-gray-200:hover    { background-color: #475569; }
-.dark .hover\:bg-white:hover       { background-color: #1e293b; }
+.dark .hover\:bg-gray-200:hover    { background-color: #2b2740; }
+.dark .hover\:bg-white:hover       { background-color: #171522; }
 .dark .hover\:bg-white\/80:hover   { background-color: rgba(30, 41, 59, 0.8); }
 
 .dark .hover\:bg-red-50:hover      { background-color: rgba(127, 29, 29, 0.25); }
@@ -167,20 +167,20 @@
 .dark .hover\:bg-emerald-100:hover { background-color: rgba(6, 78, 59, 0.35); }
 .dark .hover\:bg-amber-100:hover   { background-color: rgba(120, 53, 15, 0.35); }
 .dark .hover\:bg-slate-100:hover   { background-color: #3b4a5e; }
-.dark .hover\:bg-slate-50:hover    { background-color: #334155; }
+.dark .hover\:bg-slate-50:hover    { background-color: #201d2e; }
 
-.dark .hover\:text-gray-900:hover  { color: #f1f5f9; }
-.dark .hover\:text-gray-700:hover  { color: #cbd5e1; }
+.dark .hover\:text-gray-900:hover  { color: #f0effa; }
+.dark .hover\:text-gray-700:hover  { color: #c9c6de; }
 .dark .hover\:text-red-600:hover   { color: #f87171; }
-.dark .hover\:text-slate-900:hover { color: #f1f5f9; }
+.dark .hover\:text-slate-900:hover { color: #f0effa; }
 
-.dark .hover\:border-gray-300:hover  { border-color: #475569; }
-.dark .hover\:border-gray-400:hover  { border-color: #64748b; }
+.dark .hover\:border-gray-300:hover  { border-color: #2b2740; }
+.dark .hover\:border-gray-400:hover  { border-color: #4d4966; }
 .dark .hover\:border-alpine-300:hover { border-color: rgba(37, 99, 235, 0.5); }
 
 /* ── 7. Focus state overrides ── */
-.dark .focus\:ring-gray-300:focus  { --tw-ring-color: #475569; }
-.dark .focus\:border-gray-400:focus { border-color: #64748b; }
+.dark .focus\:ring-gray-300:focus  { --tw-ring-color: #2b2740; }
+.dark .focus\:border-gray-400:focus { border-color: #4d4966; }
 
 /* ── 8. Shadows — darker to remain visible ── */
 .dark .shadow-sm   { --tw-shadow: 0 1px 2px 0 rgba(0,0,0,0.3); box-shadow: var(--tw-ring-offset-shadow, 0 0 #0000), var(--tw-ring-shadow, 0 0 #0000), var(--tw-shadow); }
@@ -191,18 +191,18 @@
 .dark .shadow-2xl  { --tw-shadow: 0 25px 50px -12px rgba(0,0,0,0.5); box-shadow: var(--tw-ring-offset-shadow, 0 0 #0000), var(--tw-ring-shadow, 0 0 #0000), var(--tw-shadow); }
 
 /* ── 9. Gradient overrides ── */
-.dark .from-slate-50   { --tw-gradient-from: #1e293b; }
-.dark .from-white      { --tw-gradient-from: #1e293b; }
-.dark .via-white       { --tw-gradient-via: #1e293b; }
+.dark .from-slate-50   { --tw-gradient-from: #171522; }
+.dark .from-white      { --tw-gradient-from: #171522; }
+.dark .via-white       { --tw-gradient-via: #171522; }
 .dark .to-alpine-50    { --tw-gradient-to: rgba(23, 41, 84, 0.3); }
-.dark .to-white        { --tw-gradient-to: #1e293b; }
+.dark .to-white        { --tw-gradient-to: #171522; }
 .dark .from-alpine-600 { --tw-gradient-from: #2570EB; }
 .dark .to-alpine-700   { --tw-gradient-to: #1D5BD8; }
 
 /* ── 10. Scrollbar & selection in dark mode ── */
 .dark ::selection {
   background: rgba(59, 143, 246, 0.35);
-  color: #f1f5f9;
+  color: #f0effa;
 }
 
 /* Scrollbar in dark mode is handled by the CSS variable tokens (--border-strong, --muted)
@@ -218,8 +218,8 @@
 .dark input:not([type="checkbox"]):not([type="radio"]):not([class*="bg-"]),
 .dark textarea:not([class*="bg-"]),
 .dark select:not([class*="bg-"]) {
-  background-color: #1e293b;
-  color: #e2e8f0;
+  background-color: #171522;
+  color: #dcd9ee;
 }
 
 /* ── 13. Alpine surface class — dark variant ── */
@@ -229,5 +229,5 @@
 }
 
 /* ── 14. Gradient card backgrounds ── */
-.dark .bg-gradient-to-br.from-slate-50 { background-image: linear-gradient(to bottom right, #1e293b, var(--tw-gradient-to, #1e293b)); }
+.dark .bg-gradient-to-br.from-slate-50 { background-image: linear-gradient(to bottom right, #171522, var(--tw-gradient-to, #171522)); }
 .dark .bg-gradient-to-r.from-alpine-600 { background-image: linear-gradient(to right, #2570EB, var(--tw-gradient-to, #1D5BD8)); }

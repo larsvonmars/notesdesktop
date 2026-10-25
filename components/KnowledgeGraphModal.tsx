@@ -6,7 +6,7 @@ import type { Note } from '@/lib/notes'
 import { getNotes } from '@/lib/notes'
 import type { FolderNode } from '@/lib/folders'
 import { getNoteTypePresentation, getOrderedNoteTypePresentations } from '@/lib/note-types'
-import BaseModal, { ModalHeader } from './BaseModal'
+import BaseModal, { ModalHeader, ModalTitle } from './BaseModal'
 
 interface KnowledgeGraphModalProps {
   isOpen: boolean
@@ -725,73 +725,67 @@ export default function KnowledgeGraphModal({
   return (
     <BaseModal isOpen={isOpen} onClose={onClose} size="full" maxHeight="90vh">
         <ModalHeader onClose={onClose} closeAriaLabel="Close knowledge graph" gradient={false}>
-            <div className="flex items-start gap-4 flex-1">
-              <div>
-                <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-alpine-50 dark:bg-alpine-900/30 text-alpine-700 dark:text-alpine-300 text-xs font-semibold uppercase tracking-wide">
-                  Knowledge Graph
-                </div>
-                <div className="mt-2 flex items-center gap-4 text-sm text-gray-700 dark:text-slate-200" style={{ fontFamily: 'Inter, system-ui, sans-serif' }}>
-                  <span>{stats.totalNotes} notes</span>
-                  <span>•</span>
-                  <span>{stats.totalLinks} links</span>
-                  <span>•</span>
-                  <span>{stats.connectedNotes} connected</span>
-                </div>
-              </div>
-
-              <div className="flex items-center gap-2 ml-auto">
-                <FolderTree size={16} className="text-gray-500 dark:text-slate-400" />
-                <select
-                  value={filterFolderId === null ? 'root' : filterFolderId}
-                  onChange={(e) => {
-                    const value = e.target.value
-                    if (value === 'all') setFilterFolderId('all')
-                    else if (value === 'root') setFilterFolderId(null)
-                    else setFilterFolderId(value)
-                  }}
-                  className="text-sm px-3 py-1.5 border border-gray-300 dark:border-slate-600 rounded-md bg-white dark:bg-slate-800 text-gray-700 dark:text-slate-200 hover:border-gray-400 dark:hover:border-slate-500 focus:outline-none focus:ring-2 focus:ring-alpine-500 focus:border-transparent"
+          <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-[var(--accent-light)] text-accent">
+            <FolderTree size={17} strokeWidth={1.9} aria-hidden />
+          </span>
+          <div className="min-w-0 flex-1">
+            <ModalTitle className="truncate">Knowledge Graph</ModalTitle>
+            <p className="mt-0.5 truncate text-xs leading-5 text-muted">
+              {stats.totalNotes} notes · {stats.totalLinks} links · {stats.connectedNotes} connected
+            </p>
+          </div>
+          <div className="ml-auto flex shrink-0 items-center gap-2">
+            <select
+              value={filterFolderId === null ? 'root' : filterFolderId}
+              onChange={(e) => {
+                const value = e.target.value
+                if (value === 'all') setFilterFolderId('all')
+                else if (value === 'root') setFilterFolderId(null)
+                else setFilterFolderId(value)
+              }}
+              aria-label="Filter by folder"
+              className="glass-input h-8 w-24 cursor-pointer pl-2.5 pr-1.5 text-xs sm:w-auto sm:max-w-[220px]"
+            >
+              {folderOptions.map(option => (
+                <option
+                  key={option.id === null ? 'root' : option.id}
+                  value={option.id === null ? 'root' : option.id}
                 >
-                  {folderOptions.map(option => (
-                    <option
-                      key={option.id === null ? 'root' : option.id}
-                      value={option.id === null ? 'root' : option.id}
-                    >
-                      {'\u00A0'.repeat(option.depth * 2)}{option.name}
-                    </option>
-                  ))}
-                </select>
-                <button
-                  onClick={() => setHasAutoFit(false)}
-                  className="p-2 rounded-md border border-gray-200 dark:border-slate-700 text-gray-600 dark:text-slate-300 hover:border-gray-300 dark:hover:border-slate-600 hover:text-gray-800 dark:hover:text-slate-100"
-                  title="Re-center graph"
-                >
-                  <Crosshair size={16} />
-                </button>
-              </div>
-            </div>
+                  {'\u00A0'.repeat(option.depth * 2)}{option.name}
+                </option>
+              ))}
+            </select>
+            <button
+              onClick={() => setHasAutoFit(false)}
+              className="glass-btn-ghost h-8 w-8"
+              title="Re-center graph"
+            >
+              <Crosshair size={16} />
+            </button>
+          </div>
         </ModalHeader>
 
         {/* Graph Canvas */}
-        <div ref={containerRef} className="flex-1 relative bg-gray-50 dark:bg-slate-800/50">
+        <div ref={containerRef} className="relative flex-1 bg-[var(--surface-sunken)]">
           {isLoadingNotes ? (
             <div className="absolute inset-0 flex items-center justify-center">
               <div className="text-center">
-                <Loader2 size={48} className="animate-spin text-alpine-500 mx-auto mb-4" />
-                <p className="text-gray-600 dark:text-slate-300">Loading all notes...</p>
+                <Loader2 size={40} className="mx-auto mb-4 animate-spin text-accent" />
+                <p className="text-sm text-muted">Loading all notes…</p>
               </div>
             </div>
           ) : loadError ? (
             <div className="absolute inset-0 flex items-center justify-center">
-              <div className="text-center text-red-600">
-                <p className="font-medium mb-2">Error loading notes</p>
-                <p className="text-sm">{loadError}</p>
+              <div className="max-w-xs text-center text-danger">
+                <p className="mb-1.5 text-sm font-medium">Error loading notes</p>
+                <p className="text-xs">{loadError}</p>
               </div>
             </div>
           ) : allNotes.length === 0 ? (
             <div className="absolute inset-0 flex items-center justify-center">
-              <div className="text-center text-gray-500">
-                <p className="font-medium mb-2">No notes found</p>
-                <p className="text-sm">Create some notes to see the knowledge graph</p>
+              <div className="max-w-xs text-center">
+                <p className="mb-1.5 text-sm font-medium text-foreground">No notes found</p>
+                <p className="text-xs text-muted">Create some notes to see the knowledge graph</p>
               </div>
             </div>
           ) : (
@@ -809,53 +803,42 @@ export default function KnowledgeGraphModal({
 
         {!isLoadingNotes && !loadError && allNotes.length > 0 && (
           <>
-            <div className="absolute bottom-4 right-4 flex flex-col gap-1.5">
-              <button
-                onClick={handleZoomIn}
-                className="p-1.5 bg-white dark:bg-slate-800 rounded-md shadow-lg hover:bg-gray-50 dark:hover:bg-slate-700 transition-colors"
-                title="Zoom In"
-              >
+            <div className="absolute bottom-3 right-3 flex flex-col gap-1.5 sm:bottom-4 sm:right-4">
+              <button onClick={handleZoomIn} className="glass-btn h-9 w-9 p-0" title="Zoom In">
                 <ZoomIn size={16} />
               </button>
-              <button
-                onClick={handleZoomOut}
-                className="p-1.5 bg-white dark:bg-slate-800 rounded-md shadow-lg hover:bg-gray-50 dark:hover:bg-slate-700 transition-colors"
-                title="Zoom Out"
-              >
+              <button onClick={handleZoomOut} className="glass-btn h-9 w-9 p-0" title="Zoom Out">
                 <ZoomOut size={16} />
               </button>
-              <button
-                onClick={handleReset}
-                className="p-1.5 bg-white dark:bg-slate-800 rounded-md shadow-lg hover:bg-gray-50 dark:hover:bg-slate-700 transition-colors"
-                title="Reset View"
-              >
+              <button onClick={handleReset} className="glass-btn h-9 w-9 p-0" title="Reset View">
                 <Maximize2 size={16} />
               </button>
             </div>
 
-            <div className="absolute bottom-4 left-4 bg-white dark:bg-slate-800 rounded-lg shadow-lg p-3 text-xs max-w-[200px]">
-              <div className="font-medium text-gray-900 dark:text-slate-100 mb-1.5 text-xs">Legend</div>
+            <div className="glass absolute bottom-3 left-3 max-w-[210px] rounded-2xl p-3 text-xs sm:bottom-4 sm:left-4">
+              <div className="mb-2 text-[11px] font-medium uppercase tracking-[0.08em] text-muted">Legend</div>
               <div className="space-y-1">
                 <div className="flex items-center gap-1.5">
-                  <div className="w-2.5 h-2.5 rounded-full bg-yellow-100 border-[1.5px] border-orange-500 flex-shrink-0"></div>
-                  <span className="text-gray-600 dark:text-slate-300">Current Note</span>
+                  <div className="h-2.5 w-2.5 shrink-0 rounded-full border-[1.5px] border-[var(--hue-amber)] bg-warning-light"></div>
+                  <span className="text-muted">Current Note</span>
                 </div>
                 {NOTE_TYPE_LEGEND.map((noteTypePresentation) => (
                   <div key={noteTypePresentation.id} className="flex items-center gap-1.5">
                     <div
-                      className="w-2.5 h-2.5 rounded-full flex-shrink-0"
+                      className="h-2.5 w-2.5 shrink-0 rounded-full"
                       style={{
                         backgroundColor: noteTypePresentation.graphFill,
                         border: `1.5px solid ${noteTypePresentation.graphStroke}`,
                       }}
                     ></div>
-                    <span className="text-gray-600 dark:text-slate-300">{noteTypePresentation.pickerLabel}</span>
+                    <span className="text-muted">{noteTypePresentation.pickerLabel}</span>
                   </div>
                 ))}
               </div>
-              <div className="mt-2 pt-2 border-t border-gray-200 dark:border-slate-700 text-[10px] text-gray-500 dark:text-slate-400">
+              <div className="glass-divider my-2" />
+              <div className="text-[10px] leading-5 text-muted">
                 <div>Larger nodes = more connections</div>
-                <div className="mt-0.5">Drag to pan · Scroll to zoom · Click to open</div>
+                <div>Drag to pan · Scroll to zoom · Click to open</div>
               </div>
             </div>
           </>

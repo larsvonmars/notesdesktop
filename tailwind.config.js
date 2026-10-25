@@ -14,12 +14,15 @@ module.exports = {
         background: 'var(--background)',
         foreground: 'var(--foreground)',
         surface: 'var(--surface)',
+        'surface-solid': 'var(--surface-solid)',
         'surface-hover': 'var(--surface-hover)',
         'surface-active': 'var(--surface-active)',
+        'surface-sunken': 'var(--surface-sunken)',
         border: 'var(--border)',
         'border-strong': 'var(--border-strong)',
         muted: 'var(--muted)',
         accent: 'var(--accent)',
+        'accent-strong': 'var(--accent-strong)',
         'accent-light': 'var(--accent-light)',
         'accent-foreground': 'var(--accent-foreground)',
         success: 'var(--success)',
@@ -28,11 +31,7 @@ module.exports = {
         'warning-light': 'var(--warning-light)',
         danger: 'var(--danger)',
         'danger-light': 'var(--danger-light)',
-        // `slate` is remapped to a pure-neutral scale (no cool/blue tint).
-        // The app's semantic dark tokens are neutral/stone; keeping slate
-        // blue-tinted caused panels like the File Explorer to clash with the
-        // near-black theme in dark mode. All existing `slate-*` utilities now
-        // resolve to these neutral values.
+        // Neutral scale (used by editors and legacy surfaces)
         slate: {
           50:  '#fafafa',
           100: '#f5f5f5',
@@ -72,6 +71,67 @@ module.exports = {
           900: '#134E4A',
           950: '#042F2E',
         },
+      },
+      backgroundImage: {
+        'accent-gradient': 'var(--accent-gradient)',
+        'glass-sheen': 'linear-gradient(180deg, var(--glass-sheen), transparent 46%)',
+      },
+      fontFamily: {
+        sans: ['var(--font-inter)', 'Inter', 'ui-sans-serif', 'system-ui', 'sans-serif'],
+        display: ['var(--font-manrope)', 'Manrope', 'var(--font-inter)', 'ui-sans-serif', 'system-ui', 'sans-serif'],
+        mono: ['ui-monospace', 'SFMono-Regular', 'Menlo', 'Consolas', 'monospace'],
+      },
+      borderRadius: {
+        '4xl': '2rem',
+        '5xl': '2.5rem',
+      },
+      boxShadow: {
+        glass: 'var(--glass-shadow)',
+        'glass-lg': 'var(--glass-shadow-lg)',
+        'glass-sm': 'var(--glass-shadow-sm)',
+        glow: '0 0 0 3px var(--accent-glow)',
+        'glow-sm': '0 0 18px -4px var(--accent-glow)',
+        lift: '0 18px 40px -24px rgb(23 22 43 / 0.35)',
+      },
+      backdropBlur: {
+        xs: '2px',
+        '4xl': '80px',
+      },
+      transitionTimingFunction: {
+        soft: 'cubic-bezier(0.22, 1, 0.36, 1)',
+        spring: 'cubic-bezier(0.34, 1.3, 0.64, 1)',
+      },
+      keyframes: {
+        'fade-in': {
+          from: { opacity: '0' },
+          to: { opacity: '1' },
+        },
+        'rise-in': {
+          from: { opacity: '0', transform: 'translateY(8px) scale(0.985)' },
+          to: { opacity: '1', transform: 'translateY(0) scale(1)' },
+        },
+        'slide-in-left': {
+          from: { opacity: '0', transform: 'translateX(-12px)' },
+          to: { opacity: '1', transform: 'translateX(0)' },
+        },
+        float: {
+          '0%, 100%': { transform: 'translateY(0)' },
+          '50%': { transform: 'translateY(-4px)' },
+        },
+        'pulse-soft': {
+          '0%, 100%': { opacity: '1' },
+          '50%': { opacity: '0.55' },
+        },
+      },
+      animation: {
+        'fade-in': 'fade-in 200ms cubic-bezier(0.22, 1, 0.36, 1) both',
+        'rise-in': 'rise-in 260ms cubic-bezier(0.22, 1, 0.36, 1) both',
+        'slide-in-left': 'slide-in-left 240ms cubic-bezier(0.22, 1, 0.36, 1) both',
+        float: 'float 5s ease-in-out infinite',
+        'pulse-soft': 'pulse-soft 2.4s ease-in-out infinite',
+      },
+      maxWidth: {
+        reading: '72ch',
       },
     },
   },

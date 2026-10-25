@@ -71,9 +71,11 @@ import {
   type TaskViewFilter,
 } from '@/lib/task-agenda'
 
-const FIELD_CLASS =
-  'w-full rounded-xl border border-border bg-surface px-3.5 py-2.5 text-sm text-foreground placeholder:text-muted focus:border-accent focus:outline-none focus:ring-1 focus:ring-accent'
-const LABEL_CLASS = 'mb-1 block text-sm font-medium text-foreground'
+const FIELD_CLASS = 'glass-input h-10 px-3.5 text-sm'
+const TEXTAREA_CLASS =
+  'glass-input h-auto min-h-[88px] w-full resize-none px-3.5 py-2.5 text-sm leading-6'
+const LABEL_CLASS =
+  'mb-1.5 block text-[11px] font-semibold uppercase tracking-[0.08em] text-muted'
 
 const PRIORITY_META: Record<TaskPriority, { label: string; className: string; dot: string }> = {
   urgent: { label: 'Urgent', className: 'text-danger', dot: 'bg-danger' },
@@ -88,6 +90,14 @@ const STATUS_LABELS: Record<TaskStatus, string> = {
   waiting: 'Waiting',
   completed: 'Completed',
   cancelled: 'Cancelled',
+}
+
+const STATUS_PILL: Record<TaskStatus, string> = {
+  todo: 'bg-surface-hover text-muted',
+  in_progress: 'bg-accent-light text-accent',
+  waiting: 'bg-warning-light text-warning',
+  completed: 'bg-success-light text-success',
+  cancelled: 'bg-surface-hover text-muted',
 }
 
 const TASK_FILTERS: { key: TaskViewFilter; label: string }[] = [
@@ -205,12 +215,12 @@ function TaskRow({
   const priority = PRIORITY_META[task.priority]
 
   return (
-    <li className="group flex items-start gap-3 px-3 py-2.5 transition-colors hover:bg-surface-hover sm:px-4">
+    <li className="group flex items-start gap-3 rounded-xl px-2.5 py-2.5 transition-colors hover:bg-surface-hover">
       <button
         type="button"
         onClick={() => onToggleComplete(task)}
         aria-label={completed ? `Reopen ${task.title}` : `Complete ${task.title}`}
-        className={`mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent ${
+        className={`focus-ring mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full transition-colors ${
           completed
             ? 'bg-accent text-accent-foreground'
             : 'border border-border-strong text-transparent hover:border-accent hover:bg-accent-light hover:text-accent'
@@ -223,7 +233,7 @@ function TaskRow({
         <button
           type="button"
           onClick={() => onEdit(task)}
-          className="block w-full text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"
+          className="focus-ring block w-full rounded-md text-left"
         >
           <span
             className={`block text-[13px] font-medium leading-snug ${
@@ -265,14 +275,18 @@ function TaskRow({
           {task.status !== 'todo' &&
             task.status !== 'completed' &&
             task.status !== 'cancelled' && (
-              <span className="text-muted">{STATUS_LABELS[task.status]}</span>
+              <span
+                className={`inline-flex items-center gap-1 rounded-full px-1.5 py-0.5 font-medium ${STATUS_PILL[task.status]}`}
+              >
+                {STATUS_LABELS[task.status]}
+              </span>
             )}
 
           {project && (
             <button
               type="button"
               onClick={() => onOpenProject(project.id)}
-              className="inline-flex max-w-[160px] items-center gap-1 rounded px-1 py-0.5 text-muted transition-colors hover:bg-surface-active hover:text-foreground"
+              className="focus-ring inline-flex max-w-[160px] items-center gap-1 rounded-md px-1 py-0.5 text-muted transition-colors hover:bg-surface-active hover:text-foreground"
               title={`Open project ${project.name}`}
             >
               <Layers size={10} />
@@ -284,7 +298,7 @@ function TaskRow({
             <button
               type="button"
               onClick={() => onOpenNote(note)}
-              className="inline-flex max-w-[180px] items-center gap-1 rounded px-1 py-0.5 text-muted transition-colors hover:bg-surface-active hover:text-foreground"
+              className="focus-ring inline-flex max-w-[180px] items-center gap-1 rounded-md px-1 py-0.5 text-muted transition-colors hover:bg-surface-active hover:text-foreground"
               title={`Open note ${note.title || 'Untitled'}`}
             >
               <FileText size={10} />
@@ -299,10 +313,10 @@ function TaskRow({
           type="button"
           onClick={() => onToggleStar(task)}
           aria-label={task.is_starred ? `Unstar ${task.title}` : `Star ${task.title}`}
-          className={`flex h-7 w-7 items-center justify-center rounded-lg transition-colors hover:bg-surface-active focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent ${
+          className={`focus-ring flex h-7 w-7 items-center justify-center rounded-lg transition-colors hover:bg-surface-active ${
             task.is_starred
               ? 'text-amber-500'
-              : 'text-transparent group-hover:text-muted focus-visible:text-muted'
+              : 'text-muted sm:text-transparent sm:group-hover:text-muted focus-visible:text-muted'
           }`}
         >
           <Star size={13} fill={task.is_starred ? 'currentColor' : 'none'} />
@@ -311,7 +325,7 @@ function TaskRow({
           type="button"
           onClick={() => onEdit(task)}
           aria-label={`Edit ${task.title}`}
-          className="flex h-7 w-7 items-center justify-center rounded-lg text-transparent transition-colors hover:bg-surface-active hover:text-foreground focus-visible:text-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent group-hover:text-muted"
+          className="focus-ring flex h-7 w-7 items-center justify-center rounded-lg text-muted transition-colors hover:bg-surface-active hover:text-foreground focus-visible:text-muted sm:text-transparent sm:group-hover:text-muted"
         >
           <Pencil size={13} />
         </button>
@@ -331,7 +345,7 @@ interface EventRowProps {
 
 function EventRow({ event, project, note, onEdit, onOpenProject, onOpenNote }: EventRowProps) {
   return (
-    <li className="group flex items-start gap-3 px-3 py-2.5 transition-colors hover:bg-surface-hover sm:px-4">
+    <li className="group flex items-start gap-3 rounded-xl px-2.5 py-2.5 transition-colors hover:bg-surface-hover">
       <div className="w-16 shrink-0 pt-0.5 text-right">
         <div className="text-[11px] font-semibold tabular-nums text-foreground">
           {event.is_all_day ? 'All day' : formatEventTime(event.start_time)}
@@ -352,7 +366,7 @@ function EventRow({ event, project, note, onEdit, onOpenProject, onOpenNote }: E
         <button
           type="button"
           onClick={() => onEdit(event)}
-          className="block w-full text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"
+          className="focus-ring block w-full rounded-md text-left"
         >
           <span className="block truncate text-[13px] font-medium text-foreground">
             {event.title}
@@ -365,7 +379,7 @@ function EventRow({ event, project, note, onEdit, onOpenProject, onOpenNote }: E
             <button
               type="button"
               onClick={() => onOpenProject(project.id)}
-              className="inline-flex max-w-[140px] items-center gap-1 rounded px-1 py-0.5 text-muted transition-colors hover:bg-surface-active hover:text-foreground"
+              className="focus-ring inline-flex max-w-[140px] items-center gap-1 rounded-md px-1 py-0.5 text-muted transition-colors hover:bg-surface-active hover:text-foreground"
               title={`Open project ${project.name}`}
             >
               <Layers size={10} />
@@ -376,7 +390,7 @@ function EventRow({ event, project, note, onEdit, onOpenProject, onOpenNote }: E
             <button
               type="button"
               onClick={() => onOpenNote(note)}
-              className="inline-flex max-w-[160px] items-center gap-1 rounded px-1 py-0.5 text-muted transition-colors hover:bg-surface-active hover:text-foreground"
+              className="focus-ring inline-flex max-w-[160px] items-center gap-1 rounded-md px-1 py-0.5 text-muted transition-colors hover:bg-surface-active hover:text-foreground"
               title={`Open note ${note.title || 'Untitled'}`}
             >
               <FileText size={10} />
@@ -390,7 +404,7 @@ function EventRow({ event, project, note, onEdit, onOpenProject, onOpenNote }: E
         type="button"
         onClick={() => onEdit(event)}
         aria-label={`Edit ${event.title}`}
-        className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg text-transparent transition-colors hover:bg-surface-active hover:text-foreground focus-visible:text-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent group-hover:text-muted"
+        className="focus-ring flex h-7 w-7 shrink-0 items-center justify-center rounded-lg text-muted transition-colors hover:bg-surface-active hover:text-foreground focus-visible:text-muted sm:text-transparent sm:group-hover:text-muted"
       >
         <Pencil size={13} />
       </button>
@@ -841,26 +855,30 @@ export default function TasksView({
   const renderTaskGroups = () => {
     if (filter === 'completed') {
       return (
-        <div className="overflow-hidden rounded-2xl border border-border bg-surface shadow-sm">
-          <div className="flex items-center justify-between border-b border-border bg-surface-hover px-4 py-3">
-            <div className="flex items-center gap-2">
-              <CheckCircle2 size={14} className="text-accent" />
-              <h2 className="text-sm font-semibold text-foreground">Completed</h2>
+        <div className="glass-card overflow-hidden">
+          <div className="flex items-center justify-between px-4 pb-2 pt-4">
+            <div className="flex items-center gap-2.5">
+              <span className="flex h-7 w-7 items-center justify-center rounded-xl bg-success-light text-success">
+                <CheckCircle2 size={14} />
+              </span>
+              <h2 className="text-sm font-semibold tracking-[-0.01em] text-foreground">
+                Completed
+              </h2>
             </div>
-            <span className="rounded-full bg-surface-active px-2 py-0.5 text-[10px] font-semibold tabular-nums text-muted">
+            <span className="rounded-full bg-surface-hover px-2 py-0.5 text-[10px] font-semibold tabular-nums text-muted">
               {completedTasks.length}
             </span>
           </div>
 
           {completedTasks.length === 0 ? (
-            <div className="px-6 py-12 text-center">
+            <div className="px-6 pb-12 pt-6 text-center">
               <p className="text-sm font-medium text-foreground">Nothing completed yet</p>
-              <p className="mt-1 text-xs text-muted">
+              <p className="mt-1 text-xs leading-5 text-muted">
                 Finished tasks will collect here so you can see what you shipped.
               </p>
             </div>
           ) : (
-            <ul className="divide-y divide-border">
+            <ul className="px-2 pb-2">
               {completedTasks.map((task) => (
                 <TaskRow
                   key={task.id}
@@ -883,7 +901,7 @@ export default function TasksView({
 
     if (visibleGroups.length === 0) {
       return (
-        <div className="rounded-2xl border border-border bg-surface px-6 py-14 text-center shadow-sm">
+        <div className="glass-card px-6 py-14 text-center">
           <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-2xl bg-accent-light text-accent">
             <ListTodo size={22} />
           </div>
@@ -894,7 +912,7 @@ export default function TasksView({
                 ? 'The next 7 days are clear'
                 : 'No open tasks'}
           </p>
-          <p className="mt-1 text-xs text-muted">
+          <p className="mt-1 text-xs leading-5 text-muted">
             {filter === 'today'
               ? 'A clear day. Add a task if something comes up.'
               : filter === 'week'
@@ -916,14 +934,14 @@ export default function TasksView({
     }
 
     return (
-      <div className="overflow-hidden rounded-2xl border border-border bg-surface shadow-sm">
+      <div className="glass-card overflow-hidden">
         {visibleGroups.map((group, index) => (
           <section key={group.key} className={index > 0 ? 'border-t border-border' : ''}>
-            <div className="flex items-center justify-between bg-surface-hover px-4 py-2.5">
+            <div className="flex items-center justify-between px-4 pb-1.5 pt-3">
               <div className="flex items-center gap-1.5">
                 {group.key === 'overdue' && <AlertTriangle size={12} className="text-danger" />}
                 <h2
-                  className={`text-[10px] font-semibold uppercase tracking-wider ${
+                  className={`text-[11px] font-semibold uppercase tracking-[0.08em] ${
                     group.key === 'overdue' ? 'text-danger' : 'text-muted'
                   }`}
                 >
@@ -934,7 +952,7 @@ export default function TasksView({
                 {group.tasks.length}
               </span>
             </div>
-            <ul className="divide-y divide-border">
+            <ul className="px-1.5 pb-1.5">
               {group.tasks.map((task) => (
                 <TaskRow
                   key={task.id}
@@ -959,12 +977,12 @@ export default function TasksView({
   const renderAgenda = () => {
     if (eventGroups.length === 0) {
       return (
-        <div className="rounded-2xl border border-border bg-surface px-6 py-14 text-center shadow-sm">
-          <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-2xl bg-alpine-100 text-alpine-700 dark:bg-alpine-900/40 dark:text-alpine-300">
+        <div className="glass-card px-6 py-14 text-center">
+          <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-2xl bg-warning-light text-warning">
             <CalendarDays size={22} />
           </div>
           <p className="mt-3 text-sm font-semibold text-foreground">No upcoming events</p>
-          <p className="mt-1 text-xs text-muted">
+          <p className="mt-1 text-xs leading-5 text-muted">
             Turn a task into a meeting, or plan a block of focused time.
           </p>
           <Button
@@ -984,14 +1002,13 @@ export default function TasksView({
     return (
       <div className="space-y-4">
         {eventGroups.map((group) => (
-          <section
-            key={group.key}
-            className="overflow-hidden rounded-2xl border border-border bg-surface shadow-sm"
-          >
-            <div className="flex items-center justify-between bg-surface-hover px-4 py-2.5">
+          <section key={group.key} className="glass-card overflow-hidden">
+            <div className="flex items-center justify-between px-4 pb-2 pt-3.5">
               <div className="flex items-center gap-2">
-                <CalendarDays size={13} className="text-accent" />
-                <h2 className="text-[11px] font-semibold uppercase tracking-wider text-foreground">
+                <span className="flex h-7 w-7 items-center justify-center rounded-xl bg-accent-light text-accent">
+                  <CalendarDays size={14} />
+                </span>
+                <h2 className="text-[11px] font-semibold uppercase tracking-[0.08em] text-foreground">
                   {group.label}
                 </h2>
               </div>
@@ -1004,7 +1021,7 @@ export default function TasksView({
                 </span>
               )}
             </div>
-            <ul className="divide-y divide-border">
+            <ul className="px-2 pb-2">
               {group.events.map((event) => (
                 <EventRow
                   key={event.id}
@@ -1026,15 +1043,15 @@ export default function TasksView({
   return (
     <div className="h-full overflow-y-auto scroll-thin">
       <div className="mx-auto w-full max-w-6xl px-4 pb-24 pt-6 sm:px-6 lg:px-8 lg:pb-12">
-        <header className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
+        <header className="animate-rise-in flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
           <div className="min-w-0">
-            <p className="text-[11px] font-semibold uppercase tracking-[0.2em] text-muted">
+            <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-muted">
               Plan and review
             </p>
-            <h1 className="mt-1 text-2xl font-semibold tracking-tight text-foreground sm:text-3xl">
+            <h1 className="mt-1.5 font-display text-[28px] font-semibold tracking-[-0.02em] text-foreground sm:text-3xl">
               Tasks &amp; agenda
             </h1>
-            <p className="mt-1 text-sm text-muted">
+            <p className="mt-1.5 text-sm leading-6 text-muted">
               {openTasks.length} open {openTasks.length === 1 ? 'task' : 'tasks'}
               {upcomingEventCount > 0
                 ? ` · ${upcomingEventCount} upcoming ${upcomingEventCount === 1 ? 'event' : 'events'}`
@@ -1064,43 +1081,40 @@ export default function TasksView({
           </div>
         </header>
 
-        <div className="mt-5 flex gap-1 rounded-xl border border-border bg-surface p-1 shadow-sm">
-          {([
-            { key: 'tasks' as const, label: 'Tasks', icon: ListTodo, count: openTasks.length },
-            {
-              key: 'agenda' as const,
-              label: 'Agenda',
-              icon: CalendarDays,
-              count: upcomingEventCount,
-            },
-          ]).map(({ key, label, icon: Icon, count }) => (
+        <div
+          className="segmented animate-rise-in mt-5 w-full sm:w-auto"
+          role="tablist"
+          aria-label="Tasks and agenda views"
+        >
+          {(
+            [
+              { key: 'tasks' as const, label: 'Tasks', icon: ListTodo, count: openTasks.length },
+              {
+                key: 'agenda' as const,
+                label: 'Agenda',
+                icon: CalendarDays,
+                count: upcomingEventCount,
+              },
+            ]
+          ).map(({ key, label, icon: Icon, count }) => (
             <button
               key={key}
               type="button"
               role="tab"
               aria-selected={tab === key}
+              data-active={tab === key}
               onClick={() => setTab(key)}
-              className={`flex flex-1 items-center justify-center gap-2 rounded-lg px-3 py-2 text-sm font-medium transition-colors ${
-                tab === key
-                  ? 'bg-accent text-accent-foreground shadow-sm'
-                  : 'text-muted hover:bg-surface-hover hover:text-foreground'
-              }`}
+              className="segmented-item h-9 flex-1 gap-2 px-4 text-sm sm:flex-none"
             >
               <Icon size={15} />
               {label}
-              <span
-                className={`rounded-full px-1.5 py-0.5 text-[10px] font-semibold tabular-nums ${
-                  tab === key ? 'bg-white text-accent' : 'bg-surface-hover text-muted'
-                }`}
-              >
-                {count}
-              </span>
+              <span className="tabular-nums opacity-60">{count}</span>
             </button>
           ))}
         </div>
 
         {loadError && (
-          <div className="mt-4 flex flex-wrap items-center justify-between gap-3 rounded-xl border border-danger bg-danger-light px-4 py-3 text-sm text-danger">
+          <div className="mt-4 flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-danger bg-danger-light px-4 py-3 text-sm text-danger">
             <span className="flex items-center gap-2">
               <AlertTriangle size={15} />
               {loadError}
@@ -1121,9 +1135,9 @@ export default function TasksView({
           <div className="mt-5">
             <form
               onSubmit={handleQuickAdd}
-              className="flex flex-col gap-2 rounded-2xl border border-border bg-surface p-3 shadow-sm sm:flex-row sm:items-center"
+              className="glass flex flex-col gap-2 p-2 sm:flex-row sm:items-center"
             >
-              <div className="flex min-w-0 flex-1 items-center gap-2 px-1">
+              <div className="flex min-w-0 flex-1 items-center gap-2 px-2">
                 <Plus size={15} className="shrink-0 text-muted" />
                 <label htmlFor="quick-task-title" className="sr-only">
                   Quick add a task
@@ -1133,7 +1147,7 @@ export default function TasksView({
                   value={quickTitle}
                   onChange={(event) => setQuickTitle(event.target.value)}
                   placeholder="Quick add a task and press Enter…"
-                  className="min-w-0 flex-1 bg-transparent py-1 text-sm text-foreground placeholder:text-muted focus:outline-none"
+                  className="focus-ring min-w-0 flex-1 rounded-lg bg-transparent py-1.5 text-sm text-foreground placeholder:text-muted focus:outline-none"
                 />
               </div>
               <Button
@@ -1148,34 +1162,30 @@ export default function TasksView({
               </Button>
             </form>
 
-            <div className="mt-4 flex gap-1.5 overflow-x-auto pb-1 scrollbar-hide">
+            <div className="segmented mt-4 w-full overflow-x-auto scrollbar-hide">
               {TASK_FILTERS.map(({ key, label }) => (
                 <button
                   key={key}
                   type="button"
                   onClick={() => setFilter(key)}
                   aria-pressed={filter === key}
-                  className={`inline-flex shrink-0 items-center gap-1.5 rounded-full px-3 py-1.5 text-[11px] font-medium transition-colors ${
-                    filter === key
-                      ? 'bg-accent text-accent-foreground'
-                      : 'bg-surface-hover text-muted hover:text-foreground'
-                  }`}
+                  className="segmented-item h-9 shrink-0"
                 >
                   {label}
-                  <span className="tabular-nums opacity-80">{filterCounts[key]}</span>
+                  <span className="tabular-nums opacity-60">{filterCounts[key]}</span>
                 </button>
               ))}
             </div>
 
             <div className="mt-4">
               {isLoading ? (
-                <div className="space-y-3 rounded-2xl border border-border bg-surface p-5 shadow-sm">
+                <div className="glass-card space-y-3.5 p-5">
                   {Array.from({ length: 5 }).map((_, index) => (
                     <div key={index} className="flex items-center gap-3">
-                      <div className="h-5 w-5 animate-pulse rounded-full bg-surface-hover" />
+                      <div className="skeleton-shimmer h-5 w-5 shrink-0 rounded-full" />
                       <div className="flex-1 space-y-1.5">
-                        <div className="h-3 w-2/5 animate-pulse rounded bg-surface-hover" />
-                        <div className="h-2.5 w-1/4 animate-pulse rounded bg-surface-hover" />
+                        <div className="skeleton-shimmer h-3 w-2/5 rounded-full" />
+                        <div className="skeleton-shimmer h-2.5 w-1/4 rounded-full" />
                       </div>
                     </div>
                   ))}
@@ -1188,7 +1198,7 @@ export default function TasksView({
         ) : (
           <div className="mt-5">
             {agendaError && (
-              <div className="mb-4 flex flex-wrap items-center justify-between gap-3 rounded-xl border border-danger bg-danger-light px-4 py-3 text-sm text-danger">
+              <div className="mb-4 flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-danger bg-danger-light px-4 py-3 text-sm text-danger">
                 <span className="flex items-center gap-2">
                   <AlertTriangle size={15} />
                   Agenda could not be loaded. Check your connection and try again.
@@ -1206,13 +1216,13 @@ export default function TasksView({
             )}
 
             {isLoading ? (
-              <div className="space-y-3 rounded-2xl border border-border bg-surface p-5 shadow-sm">
+              <div className="glass-card space-y-3.5 p-5">
                 {Array.from({ length: 4 }).map((_, index) => (
                   <div key={index} className="flex items-center gap-3">
-                    <div className="h-8 w-16 animate-pulse rounded bg-surface-hover" />
+                    <div className="skeleton-shimmer h-8 w-16 shrink-0 rounded-lg" />
                     <div className="flex-1 space-y-1.5">
-                      <div className="h-3 w-2/5 animate-pulse rounded bg-surface-hover" />
-                      <div className="h-2.5 w-1/4 animate-pulse rounded bg-surface-hover" />
+                      <div className="skeleton-shimmer h-3 w-2/5 rounded-full" />
+                      <div className="skeleton-shimmer h-2.5 w-1/4 rounded-full" />
                     </div>
                   </div>
                 ))}
@@ -1257,7 +1267,7 @@ export default function TasksView({
                 }
                 rows={3}
                 placeholder="Add context, links, or a definition of done…"
-                className={`${FIELD_CLASS} resize-none`}
+                className={TEXTAREA_CLASS}
               />
             </div>
 
@@ -1363,7 +1373,7 @@ export default function TasksView({
                   </option>
                 ))}
               </select>
-              <p className="mt-1 text-[11px] text-muted">
+              <p className="mt-1.5 text-[11px] text-muted">
                 Links the task to the note where the work happens.
               </p>
             </div>
@@ -1527,7 +1537,7 @@ export default function TasksView({
                 }
                 rows={3}
                 placeholder="Agenda, preparation, or notes…"
-                className={`${FIELD_CLASS} resize-none`}
+                className={TEXTAREA_CLASS}
               />
             </div>
 

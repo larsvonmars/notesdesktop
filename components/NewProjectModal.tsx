@@ -57,23 +57,28 @@ export default function NewProjectModal({ isOpen, onClose, onCreate }: NewProjec
       onClose={onClose}
       size="md"
       zIndex={60}
+      animation="zoom"
       closeOnBackdropClick={!submitting}
       closeOnEscape={!submitting}
     >
       <ModalHeader onClose={submitting ? undefined : onClose}>
-        <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-accent/10 text-accent">
-          <FolderPlus size={17} />
+        <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-[var(--accent-light)] text-accent">
+          <FolderPlus size={17} strokeWidth={1.9} />
         </span>
         <div className="min-w-0">
-          <h2 className="text-lg font-semibold text-foreground">New project</h2>
-          <p className="text-xs text-muted">Name it and choose a color. You can change both later.</p>
+          <h2 className="font-display text-base font-semibold leading-tight tracking-[-0.01em] text-foreground">
+            New project
+          </h2>
+          <p className="mt-0.5 text-xs leading-5 text-muted">
+            Name it and choose a color. You can change both later.
+          </p>
         </div>
       </ModalHeader>
 
       <ModalBody>
         <label
           htmlFor="new-project-name"
-          className="mb-1.5 block text-xs font-semibold uppercase tracking-wider text-muted"
+          className="mb-1.5 block text-[11px] font-medium uppercase tracking-[0.08em] text-muted"
         >
           Name
         </label>
@@ -84,7 +89,7 @@ export default function NewProjectModal({ isOpen, onClose, onCreate }: NewProjec
           value={name}
           onChange={(e) => setName(e.target.value)}
           placeholder="e.g. Research, Client work, Travel plans"
-          className="w-full rounded-xl border border-border bg-surface px-3.5 py-2.5 text-sm text-foreground placeholder:text-muted/60 focus:border-accent focus:outline-none focus:ring-2 focus:ring-accent/30"
+          className="glass-input h-11 w-full rounded-xl px-3.5 text-sm text-foreground placeholder:text-muted"
           onKeyDown={(e) => {
             if (e.key === 'Enter') {
               e.preventDefault()
@@ -94,7 +99,7 @@ export default function NewProjectModal({ isOpen, onClose, onCreate }: NewProjec
         />
 
         <div className="mt-5" role="group" aria-label="Project color">
-          <span className="mb-2 block text-xs font-semibold uppercase tracking-wider text-muted">
+          <span className="mb-2.5 block text-[11px] font-medium uppercase tracking-[0.08em] text-muted">
             Color
           </span>
           <div className="grid grid-cols-6 gap-2.5 sm:grid-cols-9">
@@ -107,21 +112,27 @@ export default function NewProjectModal({ isOpen, onClose, onCreate }: NewProjec
                   onClick={() => setColor(preset)}
                   aria-label={`Project color ${preset}`}
                   aria-pressed={isSelected}
-                  className={`flex h-8 w-8 items-center justify-center justify-self-center rounded-full transition-transform hover:scale-110 focus:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-surface ${
-                    isSelected ? 'ring-2 ring-accent ring-offset-2 ring-offset-surface' : ''
+                  className={`focus-ring flex h-8 w-8 items-center justify-center justify-self-center rounded-full transition-transform duration-150 hover:scale-110 ${
+                    isSelected
+                      ? 'ring-2 ring-accent ring-offset-2 ring-offset-[var(--surface-solid)]'
+                      : ''
                   }`}
                   style={{ backgroundColor: preset }}
                 >
-                  {isSelected && <Check size={14} className="text-white drop-shadow" strokeWidth={3} />}
+                  {isSelected && (
+                    <span className="flex h-4 w-4 items-center justify-center rounded-full bg-[var(--surface-solid)] text-foreground shadow-sm">
+                      <Check size={10} strokeWidth={3} />
+                    </span>
+                  )}
                 </button>
               )
             })}
           </div>
         </div>
 
-        <div className="mt-5 flex items-center gap-2.5 rounded-xl border border-dashed border-border bg-surface-hover/40 px-3.5 py-2.5">
+        <div className="glass mt-5 flex items-center gap-2.5 rounded-xl px-3.5 py-2.5">
           <span className="h-3 w-3 shrink-0 rounded-full" style={{ backgroundColor: color }} />
-          <span className={`truncate text-sm font-medium ${trimmedName ? 'text-foreground' : 'text-muted/60'}`}>
+          <span className={`truncate text-sm font-medium ${trimmedName ? 'text-foreground' : 'text-muted'}`}>
             {trimmedName || 'Untitled project'}
           </span>
         </div>
@@ -132,7 +143,7 @@ export default function NewProjectModal({ isOpen, onClose, onCreate }: NewProjec
           type="button"
           onClick={onClose}
           disabled={submitting}
-          className="rounded-xl border border-border px-4 py-2 text-sm font-medium text-muted transition hover:bg-surface-hover hover:text-foreground disabled:opacity-50"
+          className="glass-btn inline-flex h-9 items-center justify-center rounded-full px-4 text-[13px] font-medium text-foreground transition-colors duration-150 disabled:opacity-50"
         >
           Cancel
         </button>
@@ -140,7 +151,7 @@ export default function NewProjectModal({ isOpen, onClose, onCreate }: NewProjec
           type="button"
           onClick={() => void handleSubmit()}
           disabled={!canSubmit}
-          className="inline-flex items-center gap-2 rounded-xl bg-accent px-4 py-2 text-sm font-medium text-accent-foreground transition hover:opacity-90 disabled:opacity-50"
+          className="glass-btn-primary inline-flex h-9 items-center justify-center gap-2 rounded-full px-4 text-[13px] text-accent-foreground transition-[filter,transform] duration-200 hover:brightness-105 active:scale-[0.985] disabled:cursor-not-allowed disabled:opacity-50"
         >
           {submitting && <Loader2 size={14} className="animate-spin" />}
           {submitting ? 'Creating…' : 'Create project'}

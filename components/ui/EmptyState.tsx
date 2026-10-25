@@ -19,15 +19,23 @@ function EmptyState({
   className = '',
 }: EmptyStateProps) {
   return (
-    <div className={['flex flex-col items-center justify-center text-center py-16 px-4', className].join(' ')}>
-      <div className="rounded-2xl bg-surface-hover p-4 mb-4">
-        <Icon className="h-8 w-8 text-muted" />
+    <div className={['flex flex-col items-center justify-center px-6 py-16 text-center', className].join(' ')}>
+      <div className="relative mb-5">
+        <div
+          className="absolute inset-0 rounded-2xl bg-[var(--accent-light)] blur-xl"
+          aria-hidden
+        />
+        <div className="glass relative flex h-14 w-14 items-center justify-center rounded-2xl text-accent">
+          <Icon className="h-6 w-6" strokeWidth={1.7} />
+        </div>
       </div>
-      <h3 className="text-lg font-semibold text-foreground mb-1">{title}</h3>
+      <h3 className="font-display text-base font-semibold tracking-[-0.01em] text-foreground">
+        {title}
+      </h3>
       {description && (
-        <p className="text-sm text-muted max-w-sm mb-4">{description}</p>
+        <p className="mt-1.5 max-w-sm text-sm leading-6 text-muted">{description}</p>
       )}
-      {action}
+      {action && <div className="mt-5">{action}</div>}
     </div>
   )
 }

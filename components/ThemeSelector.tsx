@@ -16,60 +16,47 @@ const ICON_BY_THEME: Record<Theme, typeof Sun> = {
 
 export default function ThemeSelector({ compact = false, onSelect }: ThemeSelectorProps) {
   const { theme, setTheme, resolvedTheme } = useTheme()
+  const activeOption = THEME_OPTIONS.find((option) => option.value === theme) ?? THEME_OPTIONS[2]
 
   return (
-    <div className={compact ? 'space-y-2' : 'space-y-2'}>
-      {THEME_OPTIONS.map(({ value, label, description }) => {
-        const isActive = theme === value
-        const Icon = ICON_BY_THEME[value]
-        return (
-          <button
-            key={value}
-            onClick={() => {
-              setTheme(value)
-              onSelect?.()
-            }}
-            className={`w-full flex items-center ${compact ? 'gap-3 px-3 py-2.5' : 'gap-4 px-4 py-3'} rounded-xl border text-left transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/50 ${
-              isActive
-                ? 'border-accent bg-accent-light ring-2 ring-accent/20'
-                : 'border-border hover:border-border-strong hover:bg-surface-hover'
-            }`}
-          >
-            <div
-              className={`flex-shrink-0 rounded-full flex items-center justify-center ${
-                compact ? 'w-8 h-8' : 'w-10 h-10'
-              } ${
-                isActive
-                  ? 'bg-accent-light text-accent'
-                  : 'bg-surface-hover text-muted'
-              }`}
+    <div className="space-y-2.5">
+      <div className="segmented w-full" role="group" aria-label="Appearance">
+        {THEME_OPTIONS.map(({ value, label }) => {
+          const isActive = theme === value
+          const Icon = ICON_BY_THEME[value]
+          return (
+            <button
+              key={value}
+              type="button"
+              aria-pressed={isActive}
+              onClick={() => {
+                setTheme(value)
+                onSelect?.()
+              }}
+              className={[
+                'segmented-item flex-1 justify-center rounded-full',
+                'transition-colors duration-150 ease-out',
+                compact ? 'h-8 px-2.5 text-xs' : 'h-9 px-3 text-[13px]',
+              ].join(' ')}
             >
-              <Icon size={compact ? 16 : 20} />
-            </div>
+              <Icon size={compact ? 13 : 15} strokeWidth={1.9} aria-hidden />
+              <span>{label}</span>
+            </button>
+          )
+        })}
+      </div>
 
-            <div className="flex-1 min-w-0">
-              <div className={`text-sm font-medium ${isActive ? 'text-accent' : 'text-foreground'}`}>
-                {label}
-              </div>
-              <div className="text-xs text-muted">{description}</div>
-            </div>
-
-            {isActive && !compact && (
-              <div className="flex-shrink-0 w-5 h-5 rounded-full bg-accent flex items-center justify-center">
-                <svg className="w-3 h-3 text-accent-foreground" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}>
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
-                </svg>
-              </div>
-            )}
-          </button>
-        )
-      })}
-
-      {theme === 'system' && (
-        <p className={`text-xs text-muted ${compact ? 'px-1 pt-1' : 'mt-2 px-1'}`}>
-          Currently using <span className="font-medium text-foreground">{getResolvedThemeLabel(resolvedTheme)}</span> based on your system preference.
-        </p>
-      )}
+      <p className="px-0.5 text-xs leading-5 text-muted">
+        {theme === 'system' ? (
+          <>
+            Currently using{' '}
+            <span className="font-medium text-foreground">{getResolvedThemeLabel(resolvedTheme)}</span>{' '}
+            based on your system preference.
+          </>
+        ) : (
+          activeOption.description
+        )}
+      </p>
     </div>
   )
 }

@@ -6,15 +6,17 @@ import { useEffect } from 'react'
 import {
   ArrowRight,
   Bot,
+  Check,
   FileText,
   FolderTree,
   LayoutDashboard,
-  Maximize2,
-  Minus,
-  Move,
+  ListChecks,
+  Loader2,
   Network,
   PenSquare,
   Plus,
+  Search,
+  Settings,
   ShieldCheck,
   Sparkles,
 } from 'lucide-react'
@@ -23,30 +25,53 @@ import { useAuth } from '@/lib/auth-context'
 
 const features = [
   {
-    title: 'Multi-format notes',
-    description: 'Create rich text docs, mind maps, bullet journals, project dashboards, and annotated PDFs in one workspace.',
+    title: 'Every kind of note',
+    description:
+      'Rich text, mind maps, journals, data sheets, drawings, and annotated PDFs live in one library — no app-hopping required.',
     icon: PenSquare,
+    tile: 'bg-violet-500/10 text-violet-600 ring-violet-500/20 dark:bg-violet-400/10 dark:text-violet-300 dark:ring-violet-400/20',
   },
   {
-    title: 'Mindmap editor',
-    description: 'Drag ideas into visual clusters, create branches, and evolve complex thinking without losing structure.',
+    title: 'Think in mind maps',
+    description:
+      'Grow ideas into draggable branches, then keep the structure as the thinking evolves.',
     icon: Network,
+    tile: 'bg-sky-500/10 text-sky-600 ring-sky-500/20 dark:bg-sky-400/10 dark:text-sky-300 dark:ring-sky-400/20',
   },
   {
-    title: 'Organized knowledge graph',
-    description: 'Structure notes with folders, projects, links, and visual relationships so context is always one click away.',
+    title: 'Organised by context',
+    description:
+      'Folders, projects, and linked notes keep related work one click away from where you are.',
     icon: FolderTree,
+    tile: 'bg-teal-500/10 text-teal-600 ring-teal-500/20 dark:bg-teal-400/10 dark:text-teal-300 dark:ring-teal-400/20',
   },
   {
-    title: 'Smart writing support',
-    description: 'Use the integrated AI assistant to summarize, draft, and iterate ideas directly next to your notes.',
+    title: 'AI beside your notes',
+    description:
+      'Summarise, draft, and reshape ideas in a panel next to the page — without leaving your train of thought.',
     icon: Bot,
+    tile: 'bg-amber-500/10 text-amber-600 ring-amber-500/20 dark:bg-amber-400/10 dark:text-amber-300 dark:ring-amber-400/20',
   },
   {
-    title: 'Safe and private by default',
-    description: 'Safety and authentication features are built in through Supabase. Your data is stored safely in the Supabase cloud.',
+    title: 'Private by default',
+    description:
+      'Authentication and storage run through Supabase. Your workspace stays yours, and publishing is opt-in.',
     icon: ShieldCheck,
+    tile: 'bg-rose-500/10 text-rose-600 ring-rose-500/20 dark:bg-rose-400/10 dark:text-rose-300 dark:ring-rose-400/20',
   },
+]
+
+const noteRows = [
+  { title: 'Launch retrospective', meta: 'Product · 4m', active: true },
+  { title: 'Q4 planning', meta: 'Work · 1h', active: false },
+  { title: 'Reading notes — Shape Up', meta: 'Personal · Yesterday', active: false },
+  { title: 'Onboarding audit', meta: 'Design · Mon', active: false },
+]
+
+const checklist = [
+  { label: 'Finalise the onboarding checklist', done: true },
+  { label: 'Link the release dashboard', done: true },
+  { label: 'Draft the launch brief with AI summary', done: false },
 ]
 
 export default function Home() {
@@ -59,262 +84,417 @@ export default function Home() {
     }
   }, [loading, user, router])
 
-  if (loading || user) {
+  // Signed-in visitors go straight to their workspace. The marketing page is
+  // intentionally not blocked by the initial session check so it can be opened
+  // and shared without authentication.
+  if (user) {
     return (
-      <main className="min-h-screen bg-[radial-gradient(circle_at_20%_0%,#dbfce7_0%,#f8fafc_38%,#eef2ff_100%)] dark:bg-[radial-gradient(circle_at_20%_0%,#14532d_0%,#020617_45%,#0f172a_100%)]">
+      <main className="page-aurora flex min-h-screen items-center justify-center px-6">
         <ThemeToggle />
-        <div className="mx-auto flex min-h-screen max-w-4xl items-center justify-center px-6">
-          <div className="rounded-full border border-white/80 bg-white/85 px-5 py-3 text-sm font-medium text-slate-700 shadow-lg backdrop-blur dark:border-slate-600 dark:bg-slate-900/90 dark:text-slate-100">
-            Opening your workspace...
-          </div>
+        <div className="glass-card animate-fade-in flex items-center gap-3 rounded-full px-5 py-3 text-sm font-medium text-foreground">
+          <Loader2 className="h-4 w-4 animate-spin text-accent" />
+          Opening your workspace…
         </div>
       </main>
     )
   }
 
   return (
-    <main className="min-h-screen overflow-x-hidden bg-[radial-gradient(circle_at_20%_0%,#dcfce7_0%,#f8fafc_38%,#dbeafe_100%)] text-slate-900 dark:bg-[radial-gradient(circle_at_20%_0%,#14532d_0%,#020617_45%,#0f172a_100%)] dark:text-slate-100">
+    <main
+      aria-busy={loading || undefined}
+      className="page-aurora relative min-h-screen overflow-x-hidden text-foreground"
+    >
       <ThemeToggle />
 
-      <section className="relative isolate px-6 pb-16 pt-24 sm:pb-20 sm:pt-28">
-        <div className="pointer-events-none absolute inset-0 -z-10 overflow-hidden">
-          <div className="absolute -left-24 top-8 h-56 w-56 rounded-full bg-emerald-300/35 blur-3xl dark:bg-emerald-500/25" />
-          <div className="absolute right-0 top-20 h-64 w-64 rounded-full bg-sky-300/35 blur-3xl dark:bg-cyan-500/20" />
-          <div className="absolute bottom-4 left-1/3 h-48 w-48 rounded-full bg-amber-200/35 blur-3xl dark:bg-amber-400/15" />
+      {/* ── Header ─────────────────────────────────────────── */}
+      <header className="relative z-10 mx-auto flex w-full max-w-6xl items-center justify-between gap-4 px-5 pb-4 pt-6 sm:px-8 sm:pt-8">
+        <Link
+          href="/"
+          aria-label="MindViz Notes home"
+          className="focus-ring group inline-flex items-center gap-2.5 rounded-2xl"
+        >
+          <img
+            src="/icon-192.png"
+            alt=""
+            className="h-9 w-9 rounded-[10px] object-contain shadow-[0_10px_30px_-14px_var(--accent-glow)] ring-1 ring-black/5 transition-transform duration-200 group-hover:scale-[1.04] dark:ring-white/10"
+          />
+          <span className="flex flex-col leading-none">
+            <span className="font-display text-[15px] font-semibold tracking-[-0.01em]">
+              MindViz Notes
+            </span>
+            <span className="mt-1 hidden text-[11px] font-medium text-muted sm:block">
+              Desktop knowledge workspace
+            </span>
+          </span>
+        </Link>
+
+        <div className="flex items-center gap-2 pr-10 sm:gap-2.5 sm:pr-14">
+          <Link href="/login" className="glass-btn focus-ring hidden sm:inline-flex">
+            Sign in
+          </Link>
+          <Link href="/signup" className="glass-btn-primary focus-ring">
+            Get started
+            <ArrowRight className="h-3.5 w-3.5" />
+          </Link>
         </div>
+      </header>
 
-        <div className="mx-auto max-w-6xl">
-          <header className="flex flex-col items-start justify-between gap-6 sm:flex-row sm:items-center">
-            <div className="flex items-center gap-3">
-              <img src="/icon-192.png" alt="MindViz Notes" className="h-10 w-10" />
-              <div>
-                <p className="text-xs font-semibold uppercase tracking-[0.24em] text-slate-700 dark:text-slate-200">MindViz Notes</p>
-                <p className="text-sm text-slate-600 dark:text-slate-300">Desktop knowledge workspace</p>
-              </div>
-            </div>
+      {/* ── Hero ───────────────────────────────────────────── */}
+      <section className="relative z-10 mx-auto w-full max-w-6xl px-5 pb-14 pt-8 sm:px-8 sm:pb-20 sm:pt-12 lg:pt-16">
+        <div className="grid items-center gap-12 lg:grid-cols-[minmax(0,1.02fr)_minmax(0,0.98fr)] lg:gap-10 xl:gap-14">
+          <div className="animate-rise-in">
+            <span className="inline-flex items-center gap-2 rounded-full bg-accent-light px-3 py-1.5 text-[11px] font-semibold uppercase tracking-[0.08em] text-accent">
+              <Sparkles className="h-3.5 w-3.5" />
+              A calmer workspace
+            </span>
 
-            <div className="flex items-center gap-3">
-              <Link
-                href="/login"
-                className="rounded-full border border-slate-300/80 bg-white/80 px-4 py-2 text-sm font-medium text-slate-700 backdrop-blur transition hover:border-slate-400 hover:bg-white dark:border-slate-600 dark:bg-slate-900/85 dark:text-slate-100 dark:hover:border-slate-500 dark:hover:bg-slate-800"
-              >
-                Sign in
-              </Link>
-              <Link
-                href="/signup"
-                className="inline-flex items-center gap-2 rounded-full bg-slate-900 px-5 py-2 text-sm font-semibold text-white transition hover:bg-slate-800 dark:bg-emerald-500 dark:text-emerald-950 dark:hover:bg-emerald-400"
-              >
-                Create account
+            <h1 className="mt-6 text-balance font-display text-[2.6rem] font-bold leading-[1.04] tracking-[-0.035em] text-foreground sm:text-5xl lg:text-[2.9rem] xl:text-[3.5rem]">
+              Your notes, maps, and plans —{' '}
+              <span className="text-gradient">in one calm place</span>.
+            </h1>
+
+            <p className="mt-6 max-w-xl text-base leading-7 text-muted sm:text-lg sm:leading-8">
+              MindViz Notes is a desktop workspace for writing, thinking visually, and staying
+              organised. Keep every format, project, and idea in one home that responds at the
+              speed of thought.
+            </p>
+
+            <div className="mt-8 flex flex-col gap-3 sm:flex-row sm:items-center">
+              <Link href="/signup" className="glass-btn-primary focus-ring h-12 px-6 text-sm">
+                Start free
                 <ArrowRight className="h-4 w-4" />
               </Link>
-            </div>
-          </header>
-
-          <div className="mt-14 grid items-center gap-12 lg:grid-cols-[1.05fr_0.95fr] landing-fade-up">
-            <div className="landing-fade-up" style={{ animationDelay: '80ms' }}>
-              <p className="mb-5 inline-flex items-center gap-2 rounded-full border border-emerald-200 bg-emerald-50 px-3 py-1 text-xs font-semibold uppercase tracking-[0.2em] text-emerald-700 dark:border-emerald-500/40 dark:bg-emerald-500/20 dark:text-emerald-200">
-                <Sparkles className="h-4 w-4" />
-                Everything for serious note-taking
-              </p>
-              <h1 className="text-balance text-4xl font-semibold leading-tight text-slate-950 dark:text-white sm:text-5xl">
-                Build your second brain with notes, structure, and visual thinking.
-              </h1>
-              <p className="mt-6 max-w-2xl text-base leading-7 text-slate-700 dark:text-slate-200 sm:text-lg">
-                MindViz Notes combines writing, diagrams, planning tools, and AI assistance in a single workspace designed for deep work.
-              </p>
-
-              <div className="mt-8 flex flex-wrap gap-3">
-                <Link
-                  href="/signup"
-                  className="inline-flex items-center gap-2 rounded-2xl bg-emerald-600 px-5 py-3 text-sm font-semibold text-white shadow-lg shadow-emerald-600/20 transition hover:-translate-y-0.5 hover:bg-emerald-700 dark:bg-emerald-500 dark:text-emerald-950 dark:hover:bg-emerald-400"
-                >
-                  Start free
-                  <ArrowRight className="h-4 w-4" />
-                </Link>
-                <Link
-                  href="/login"
-                  className="inline-flex items-center gap-2 rounded-2xl border border-slate-300 bg-white/85 px-5 py-3 text-sm font-semibold text-slate-700 transition hover:border-slate-400 hover:bg-white dark:border-slate-600 dark:bg-slate-900/90 dark:text-slate-100 dark:hover:border-slate-500 dark:hover:bg-slate-800"
-                >
-                  <LayoutDashboard className="h-4 w-4" />
-                  Open dashboard
-                </Link>
-              </div>
+              <Link href="/login" className="glass-btn focus-ring h-12 px-5 text-sm">
+                <LayoutDashboard className="h-4 w-4" />
+                Open your workspace
+              </Link>
             </div>
 
-            <div className="rounded-[2rem] border border-white/80 bg-white/85 p-6 shadow-[0_40px_120px_-50px_rgba(15,23,42,0.5)] backdrop-blur sm:p-8 dark:border-slate-700 dark:bg-slate-900/85 dark:shadow-[0_40px_120px_-50px_rgba(2,6,23,0.95)] landing-fade-up" style={{ animationDelay: '160ms' }}>
-              <p className="text-xs font-semibold uppercase tracking-[0.22em] text-slate-600 dark:text-slate-300">Live feature preview</p>
-              <div className="mt-5 rounded-2xl border border-slate-200/80 bg-slate-50/80 p-4 dark:border-slate-700 dark:bg-slate-800/60">
-                <div className="mb-4 flex items-center gap-2 text-xs font-semibold uppercase tracking-[0.16em] text-slate-500 dark:text-slate-300">
-                  <FileText className="h-4 w-4" />
-                  Text Note Demo
-                </div>
-                <div className="rounded-xl border border-slate-200 bg-white p-4 dark:border-slate-600 dark:bg-slate-900">
-                  <h2 className="text-base font-semibold text-slate-900 dark:text-white">Sprint Planning - Week 12</h2>
-                  <p className="mt-2 text-sm text-slate-700 dark:text-slate-300">Objectives</p>
-                  <ul className="mt-2 space-y-2 text-sm text-slate-800 dark:text-slate-100">
-                    <li className="flex items-start gap-2">
-                      <span className="mt-1 h-1.5 w-1.5 rounded-full bg-emerald-500" />
-                      Finalize onboarding checklist and create guidance docs
-                    </li>
-                    <li className="flex items-start gap-2">
-                      <span className="mt-1 h-1.5 w-1.5 rounded-full bg-emerald-500" />
-                      Link related notes and decisions to release dashboard
-                    </li>
-                    <li className="flex items-start gap-2">
-                      <span className="mt-1 h-1.5 w-1.5 rounded-full bg-emerald-500" />
-                      Draft launch brief with AI-assisted summary
-                    </li>
-                  </ul>
-                </div>
-              </div>
-            </div>
+            <ul className="mt-8 flex flex-wrap gap-x-6 gap-y-2 text-[13px] text-muted">
+              <li className="inline-flex items-center gap-1.5">
+                <Check className="h-4 w-4 text-accent" />
+                Free to start
+              </li>
+              <li className="inline-flex items-center gap-1.5">
+                <Check className="h-4 w-4 text-accent" />
+                No credit card
+              </li>
+              <li className="inline-flex items-center gap-1.5">
+                <Check className="h-4 w-4 text-accent" />
+                Publish only when you choose
+              </li>
+            </ul>
           </div>
-        </div>
-      </section>
 
-      <section className="px-6 pb-20">
-        <div className="mx-auto max-w-6xl">
-          <h2 className="text-2xl font-semibold text-slate-950 dark:text-white sm:text-3xl">Feature demos</h2>
-          <p className="mt-3 max-w-3xl text-sm leading-7 text-slate-700 dark:text-slate-200 sm:text-base">
-            The workspace is built for writing and visual thinking together. 
-          </p>
+          {/* Product preview — composed panels, illustrative only */}
+          <div className="relative mt-2 lg:mt-0">
+            <div
+              aria-hidden
+              className="pointer-events-none absolute -inset-8 -z-10 rounded-[40px] opacity-70 blur-3xl"
+              style={{ background: 'var(--aurora-1)' }}
+            />
 
-          <div className="mt-8 grid gap-6 lg:grid-cols-[0.95fr_1.05fr]">
-            <article className="rounded-3xl border border-slate-200/80 bg-white/90 p-6 shadow-[0_20px_60px_-40px_rgba(15,23,42,0.45)] backdrop-blur dark:border-slate-700 dark:bg-slate-900/85 dark:shadow-[0_20px_60px_-40px_rgba(2,6,23,0.9)] landing-fade-up" style={{ animationDelay: '240ms' }}>
-              <div className="mb-4 inline-flex items-center gap-2 rounded-full border border-slate-200 bg-slate-50 px-3 py-1 text-xs font-semibold uppercase tracking-[0.14em] text-slate-600 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-200">
-                <FileText className="h-4 w-4" />
-                Text Notes Editor
-              </div>
-              <h3 className="text-lg font-semibold text-slate-950 dark:text-white">Write structured notes quickly</h3>
-              <p className="mt-2 text-sm leading-6 text-slate-700 dark:text-slate-200">
-                Rich formatting, checklists, linked references, and project tags let you move from rough ideas to clean plans.
-              </p>
-              <div className="mt-4 rounded-2xl border border-slate-200 bg-white p-4 dark:border-slate-600 dark:bg-slate-950">
-                <div className="flex items-center gap-2 border-b border-slate-200 pb-3 text-xs text-slate-500 dark:border-slate-700 dark:text-slate-300">
-                  <span className="rounded-md bg-slate-100 px-2 py-1 font-medium dark:bg-slate-800 dark:text-slate-100">H1</span>
-                  <span className="rounded-md bg-slate-100 px-2 py-1 font-medium dark:bg-slate-800 dark:text-slate-100">Bold</span>
-                  <span className="rounded-md bg-slate-100 px-2 py-1 font-medium dark:bg-slate-800 dark:text-slate-100">Checklist</span>
-                  <span className="rounded-md bg-slate-100 px-2 py-1 font-medium dark:bg-slate-800 dark:text-slate-100">Link Note</span>
+            <div
+              role="img"
+              aria-label="Product preview: a MindViz note called Launch retrospective with a checklist, a note list, and an AI summary panel."
+              className="glass-card animate-rise-in relative overflow-hidden"
+              style={{ animationDelay: '120ms' }}
+            >
+              {/* Window chrome */}
+              <div className="flex items-center gap-2 border-b border-border px-3.5 py-2.5">
+                <span aria-hidden className="flex items-center gap-1.5">
+                  <span className="h-2.5 w-2.5 rounded-full bg-rose-400/80" />
+                  <span className="h-2.5 w-2.5 rounded-full bg-amber-400/80" />
+                  <span className="h-2.5 w-2.5 rounded-full bg-emerald-400/80" />
+                </span>
+                <div className="ml-2 hidden min-w-0 flex-1 items-center gap-2 rounded-full bg-surface-sunken px-3 py-1.5 text-[11px] text-muted sm:flex">
+                  <Search className="h-3 w-3 shrink-0" />
+                  <span className="truncate">Search notes, projects, people</span>
+                  <kbd className="kbd ml-auto">⌘K</kbd>
                 </div>
-                <h4 className="mt-4 text-sm font-semibold text-slate-900 dark:text-white">Launch Retrospective</h4>
-                <p className="mt-2 text-sm text-slate-700 dark:text-slate-200">
-                  This sprint showed stronger handoff quality after linking requirements and design notes directly inside the editor.
+                <span className="ml-auto inline-flex h-6 w-6 items-center justify-center rounded-lg bg-accent-light text-accent sm:ml-0">
+                  <Plus className="h-3.5 w-3.5" />
+                </span>
+              </div>
+
+              <div className="flex">
+                {/* Rail */}
+                <div className="hidden w-12 shrink-0 flex-col items-center gap-1.5 border-r border-border py-3 sm:flex">
+                  <span className="inline-flex h-7 w-7 items-center justify-center rounded-[9px] text-muted">
+                    <LayoutDashboard className="h-4 w-4" />
+                  </span>
+                  <span className="inline-flex h-7 w-7 items-center justify-center rounded-[9px] bg-accent-light text-accent">
+                    <FileText className="h-4 w-4" />
+                  </span>
+                  <span className="inline-flex h-7 w-7 items-center justify-center rounded-[9px] text-muted">
+                    <ListChecks className="h-4 w-4" />
+                  </span>
+                  <span className="inline-flex h-7 w-7 items-center justify-center rounded-[9px] text-muted">
+                    <FolderTree className="h-4 w-4" />
+                  </span>
+                  <span className="mt-auto inline-flex h-7 w-7 items-center justify-center rounded-[9px] text-muted">
+                    <Settings className="h-4 w-4" />
+                  </span>
+                </div>
+
+                {/* Note list */}
+                <div className="hidden w-[150px] shrink-0 border-r border-border p-2.5 xl:block">
+                  <p className="px-1.5 pb-1.5 text-[10px] font-semibold uppercase tracking-[0.08em] text-muted">
+                    Today
+                  </p>
+                  <div className="space-y-0.5">
+                    {noteRows.map((row) => (
+                      <div
+                        key={row.title}
+                        className={`min-w-0 rounded-lg px-2 py-1.5 ${
+                          row.active ? 'bg-accent-light' : ''
+                        }`}
+                      >
+                        <p
+                          className={`truncate text-[11px] font-medium leading-4 ${
+                            row.active ? 'text-accent' : 'text-foreground'
+                          }`}
+                        >
+                          {row.title}
+                        </p>
+                        <p className="truncate text-[10px] leading-4 text-muted">{row.meta}</p>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+
+                {/* Editor */}
+                <div className="min-w-0 flex-1 p-3.5 sm:p-4">
+                  <div className="flex items-center gap-1.5 text-[10px] font-medium text-muted">
+                    <span>Notes</span>
+                    <span className="text-border-strong">/</span>
+                    <span>Product</span>
+                    <span className="text-border-strong">/</span>
+                    <span className="truncate text-foreground">Launch retrospective</span>
+                  </div>
+
+                  <h3 className="mt-2.5 truncate font-display text-[15px] font-semibold tracking-[-0.01em] text-foreground">
+                    Launch retrospective
+                  </h3>
+
+                  <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
+                    <span className="rounded-full bg-accent-light px-2 py-0.5 text-[10px] font-medium text-accent">
+                      Work
+                    </span>
+                    <span className="rounded-full bg-surface-sunken px-2 py-0.5 text-[10px] font-medium text-muted">
+                      Week 12
+                    </span>
+                    <span className="text-[10px] text-muted">Edited 4m ago</span>
+                  </div>
+
+                  <p className="mt-3 text-[11px] leading-[1.65] text-muted">
+                    The launch landed smoothly. Three decisions came out of the retro, and two of
+                    them need owners before Friday.
+                  </p>
+
+                  <div className="mt-3 space-y-1.5">
+                    {checklist.map((item) => (
+                      <div key={item.label} className="flex items-start gap-2">
+                        <span
+                          className={`mt-[1px] inline-flex h-3.5 w-3.5 shrink-0 items-center justify-center rounded-[4px] ${
+                            item.done
+                              ? 'bg-accent text-accent-foreground'
+                              : 'border border-border-strong'
+                          }`}
+                        >
+                          {item.done ? <Check className="h-2.5 w-2.5" /> : null}
+                        </span>
+                        <span
+                          className={`text-[11px] leading-4 ${
+                            item.done ? 'text-muted line-through' : 'text-foreground'
+                          }`}
+                        >
+                          {item.label}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+
+                  <div className="mt-3.5 flex items-center gap-1.5 border-t border-border pt-2.5 text-[10px] text-muted">
+                    <span className="inline-flex h-4 w-4 items-center justify-center rounded bg-surface-sunken text-muted">
+                      <Sparkles className="h-2.5 w-2.5" />
+                    </span>
+                    Linked: Onboarding checklist · Release dashboard
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* Floating AI panel */}
+            <div className="absolute -bottom-7 -left-3 z-10 hidden w-56 -rotate-1 xl:block">
+              <div className="glass-strong animate-rise-in p-3.5" style={{ animationDelay: '300ms' }}>
+                <div className="flex items-center gap-1.5 text-[10px] font-semibold uppercase tracking-[0.08em] text-muted">
+                  <Sparkles className="h-3 w-3 text-accent" />
+                  AI summary
+                </div>
+                <p className="mt-1.5 text-[11px] leading-[1.6] text-foreground">
+                  Three decisions, two owners, one open question — the launch is on track for
+                  Friday.
                 </p>
-                <div className="mt-3 space-y-2 text-sm text-slate-700 dark:text-slate-100">
-                  <p className="flex items-center gap-2">
-                    <span className="h-4 w-4 rounded border border-emerald-500 bg-emerald-500/10" />
-                    Keep shared checklists for QA and release owners
-                  </p>
-                  <p className="flex items-center gap-2">
-                    <span className="h-4 w-4 rounded border border-slate-300 bg-white dark:border-slate-500 dark:bg-slate-900" />
-                    Add one-click links to architecture notes
-                  </p>
+                <div className="mt-2 flex items-center justify-between rounded-md bg-surface-sunken px-2 py-1 text-[10px] text-muted">
+                  <span>Ask about this note…</span>
+                  <kbd className="kbd">↵</kbd>
                 </div>
               </div>
-            </article>
+            </div>
 
-            <article className="rounded-3xl border border-slate-200/80 bg-white/90 p-6 shadow-[0_30px_90px_-50px_rgba(15,23,42,0.55)] backdrop-blur dark:border-slate-700 dark:bg-slate-900/90 dark:shadow-[0_30px_90px_-50px_rgba(2,6,23,0.95)] landing-fade-up" style={{ animationDelay: '320ms' }}>
-              <div className="mb-4 inline-flex items-center gap-2 rounded-full border border-sky-200 bg-sky-50 px-3 py-1 text-xs font-semibold uppercase tracking-[0.14em] text-sky-700 dark:border-cyan-500/40 dark:bg-cyan-500/20 dark:text-cyan-200">
-                <Network className="h-4 w-4" />
-                Mindmap Editor Demo
-              </div>
-              <h3 className="text-lg font-semibold text-slate-950 dark:text-white">Map strategy visually with draggable branches</h3>
-              <p className="mt-2 text-sm leading-6 text-slate-700 dark:text-slate-200">
-                Expand ideas, create child nodes, and see relationships instantly. This is ideal for planning sessions and research breakdowns.
-              </p>
-
-              <div className="mt-5 overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-inner dark:border-slate-600 dark:bg-slate-950">
-                <div className="flex items-center justify-between border-b border-slate-200 bg-slate-50/90 px-3 py-2 dark:border-slate-700 dark:bg-slate-900">
-                  <div className="flex items-center gap-2 text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-500 dark:text-slate-200">
-                    <span className="rounded-md border border-slate-200 bg-white px-2 py-1 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100">Select</span>
-                    <span className="rounded-md border border-slate-200 bg-white px-2 py-1 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100">Node</span>
-                    <span className="rounded-md border border-slate-200 bg-white px-2 py-1 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100">Branch</span>
-                    <span className="rounded-md border border-slate-200 bg-white px-2 py-1 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100">Color</span>
-                  </div>
-                  <div className="flex items-center gap-1.5 text-slate-500 dark:text-slate-200">
-                    <button type="button" aria-label="Zoom out" className="rounded-md border border-slate-200 bg-white p-1.5 shadow-sm dark:border-slate-600 dark:bg-slate-800">
-                      <Minus className="h-3.5 w-3.5" />
-                    </button>
-                    <span className="rounded-md border border-slate-200 bg-white px-2 py-1 text-xs font-semibold text-slate-600 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100">125%</span>
-                    <button type="button" aria-label="Zoom in" className="rounded-md border border-slate-200 bg-white p-1.5 shadow-sm dark:border-slate-600 dark:bg-slate-800">
-                      <Plus className="h-3.5 w-3.5" />
-                    </button>
-                    <button type="button" aria-label="Fit map" className="rounded-md border border-slate-200 bg-white p-1.5 shadow-sm dark:border-slate-600 dark:bg-slate-800">
-                      <Maximize2 className="h-3.5 w-3.5" />
-                    </button>
-                  </div>
+            {/* Floating mind map panel */}
+            <div className="absolute -right-3 top-10 z-10 hidden w-44 rotate-1 xl:block">
+              <div className="glass-strong animate-rise-in p-3" style={{ animationDelay: '420ms' }}>
+                <div className="flex items-center gap-1.5 text-[10px] font-semibold uppercase tracking-[0.08em] text-muted">
+                  <Network className="h-3 w-3 text-accent" />
+                  Launch map
                 </div>
-
-                <div className="relative h-[300px] bg-[linear-gradient(to_right,#f1f5f9_1px,transparent_1px),linear-gradient(to_bottom,#f1f5f9_1px,transparent_1px)] bg-[size:24px_24px] p-4 dark:bg-[linear-gradient(to_right,#1e293b_1px,transparent_1px),linear-gradient(to_bottom,#1e293b_1px,transparent_1px)]">
-                  <svg className="pointer-events-none absolute inset-0 h-full w-full text-slate-400 dark:text-slate-500" viewBox="0 0 600 340" fill="none" aria-hidden>
-                    <path className="landing-link-draw" style={{ animationDelay: '320ms' }} d="M292 170 C 330 170, 350 110, 395 95" stroke="currentColor" strokeWidth="2.5" />
-                    <path className="landing-link-draw" style={{ animationDelay: '420ms' }} d="M292 170 C 340 170, 356 170, 412 170" stroke="currentColor" strokeWidth="2.5" />
-                    <path className="landing-link-draw" style={{ animationDelay: '520ms' }} d="M292 170 C 330 175, 350 240, 395 255" stroke="currentColor" strokeWidth="2.5" />
-                    <path className="landing-link-draw" style={{ animationDelay: '620ms' }} d="M212 170 C 180 170, 156 116, 116 95" stroke="currentColor" strokeWidth="2.5" />
-                    <path className="landing-link-draw" style={{ animationDelay: '720ms' }} d="M212 170 C 176 170, 156 236, 116 252" stroke="currentColor" strokeWidth="2.5" />
-                  </svg>
-
-                  <div className="absolute left-[220px] top-[116px] rounded-xl border border-emerald-300 bg-emerald-100 px-4 py-2 text-sm font-semibold text-emerald-900 shadow-[0_10px_20px_-12px_rgba(5,150,105,0.8)] dark:border-emerald-400 dark:bg-emerald-400 dark:text-emerald-950 landing-node-pop" style={{ animationDelay: '680ms' }}>
-                    Product Launch
-                    <span className="absolute -right-2 top-1/2 h-3 w-3 -translate-y-1/2 rounded-full border border-emerald-400 bg-white dark:border-emerald-300 dark:bg-emerald-950" />
-                    <span className="absolute -left-2 top-1/2 h-3 w-3 -translate-y-1/2 rounded-full border border-emerald-400 bg-white dark:border-emerald-300 dark:bg-emerald-950" />
-                  </div>
-                  <div className="absolute left-[410px] top-[58px] rounded-xl border border-sky-300 bg-sky-100 px-3 py-2 text-xs font-semibold text-sky-900 shadow-sm dark:border-cyan-300 dark:bg-cyan-300 dark:text-cyan-950 landing-node-pop" style={{ animationDelay: '820ms' }}>
-                    Messaging
-                  </div>
-                  <div className="absolute left-[430px] top-[132px] rounded-xl border border-indigo-300 bg-indigo-100 px-3 py-2 text-xs font-semibold text-indigo-900 shadow-sm dark:border-indigo-300 dark:bg-indigo-300 dark:text-indigo-950 landing-node-pop" style={{ animationDelay: '900ms' }}>
-                    Channels
-                  </div>
-                  <div className="absolute left-[398px] top-[218px] rounded-xl border border-amber-300 bg-amber-100 px-3 py-2 text-xs font-semibold text-amber-900 shadow-sm dark:border-amber-300 dark:bg-amber-300 dark:text-amber-950 landing-node-pop" style={{ animationDelay: '980ms' }}>
-                    Metrics
-                  </div>
-                  <div className="absolute left-[64px] top-[58px] rounded-xl border border-teal-300 bg-teal-100 px-3 py-2 text-xs font-semibold text-teal-900 shadow-sm dark:border-teal-300 dark:bg-teal-300 dark:text-teal-950 landing-node-pop" style={{ animationDelay: '1060ms' }}>
-                    Research
-                  </div>
-                  <div className="absolute left-[76px] top-[215px] rounded-xl border border-rose-300 bg-rose-100 px-3 py-2 text-xs font-semibold text-rose-900 shadow-sm dark:border-rose-300 dark:bg-rose-300 dark:text-rose-950 landing-node-pop" style={{ animationDelay: '1140ms' }}>
-                    Risks
-                  </div>
-
-                  <div className="absolute bottom-3 left-3 inline-flex items-center gap-2 rounded-full border border-slate-200 bg-white/90 px-3 py-1 text-xs font-semibold text-slate-600 shadow-sm dark:border-slate-600 dark:bg-slate-900/95 dark:text-slate-100 landing-fade-up" style={{ animationDelay: '1200ms' }}>
-                    <Move className="h-3.5 w-3.5" />
-                    Drag canvas
-                  </div>
-
-                  <div className="absolute bottom-3 right-3 w-28 rounded-lg border border-slate-200 bg-white/95 p-2 shadow-sm dark:border-slate-600 dark:bg-slate-900/95 landing-fade-up" style={{ animationDelay: '1260ms' }}>
-                    <p className="mb-1 text-[10px] font-semibold uppercase tracking-[0.14em] text-slate-500 dark:text-slate-200">Mini map</p>
-                    <div className="relative h-14 rounded border border-slate-200 bg-slate-50 dark:border-slate-600 dark:bg-slate-800">
-                      <span className="absolute left-[10px] top-[8px] h-1.5 w-6 rounded bg-slate-300 dark:bg-slate-500" />
-                      <span className="absolute left-[18px] top-[22px] h-1.5 w-8 rounded bg-slate-300 dark:bg-slate-500" />
-                      <span className="absolute left-[38px] top-[38px] h-1.5 w-5 rounded bg-slate-300 dark:bg-slate-500" />
-                      <span className="absolute left-[22px] top-[14px] h-6 w-10 rounded border border-emerald-300 dark:border-emerald-400" />
+                <div className="mt-2 space-y-1">
+                  <span className="inline-flex rounded-md bg-accent-light px-1.5 py-0.5 text-[10px] font-medium text-accent">
+                    Launch
+                  </span>
+                  <div className="ml-2 space-y-1 border-l border-border pl-2">
+                    <div>
+                      <span className="inline-flex rounded-md bg-surface-sunken px-1.5 py-0.5 text-[10px] text-muted">
+                        Messaging
+                      </span>
+                    </div>
+                    <div>
+                      <span className="inline-flex rounded-md bg-surface-sunken px-1.5 py-0.5 text-[10px] text-muted">
+                        Metrics
+                      </span>
+                    </div>
+                    <div>
+                      <span className="inline-flex rounded-md bg-surface-sunken px-1.5 py-0.5 text-[10px] text-muted">
+                        Research
+                      </span>
                     </div>
                   </div>
                 </div>
               </div>
-            </article>
+            </div>
           </div>
-
-          <div className="mt-8 grid gap-5 sm:grid-cols-2">
-            {features.map((feature) => {
-              const Icon = feature.icon
-
-              return (
-                <article
-                  key={feature.title}
-                  className="group rounded-3xl border border-slate-200/80 bg-white/80 p-6 shadow-[0_20px_60px_-40px_rgba(15,23,42,0.45)] backdrop-blur transition hover:-translate-y-0.5 hover:border-slate-300 dark:border-slate-700 dark:bg-slate-900/85 dark:shadow-[0_20px_60px_-40px_rgba(2,6,23,0.9)] dark:hover:border-slate-500"
-                >
-                  <div className="mb-4 inline-flex h-11 w-11 items-center justify-center rounded-2xl bg-slate-100 text-slate-700 transition group-hover:bg-slate-900 group-hover:text-white dark:bg-slate-800 dark:text-slate-100 dark:group-hover:bg-emerald-400 dark:group-hover:text-emerald-950">
-                    <Icon className="h-5 w-5" />
-                  </div>
-                  <h3 className="text-lg font-semibold text-slate-950 dark:text-white">{feature.title}</h3>
-                  <p className="mt-2 text-sm leading-6 text-slate-700 dark:text-slate-200">{feature.description}</p>
-                </article>
-              )
-            })}
-          </div>
-
         </div>
       </section>
+
+      {/* ── Features ───────────────────────────────────────── */}
+      <section
+        id="features"
+        className="relative z-10 mx-auto w-full max-w-6xl scroll-mt-8 px-5 pb-16 sm:px-8 sm:pb-20"
+      >
+        <div className="max-w-2xl">
+          <p className="text-[11px] font-medium uppercase tracking-[0.08em] text-muted">
+            Built for deep work
+          </p>
+          <h2 className="mt-3 text-balance font-display text-3xl font-semibold tracking-[-0.025em] text-foreground sm:text-4xl">
+            One workspace. Every kind of thinking.
+          </h2>
+          <p className="mt-3 text-sm leading-6 text-muted sm:text-base sm:leading-7">
+            Move from a quick capture to a structured plan without changing tools — the format
+            changes, the workspace stays the same.
+          </p>
+        </div>
+
+        <div className="mt-8 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+          {features.map((feature, index) => {
+            const Icon = feature.icon
+            const isFeatureSpotlight = index === 0
+
+            return (
+              <article
+                key={feature.title}
+                className={`glass-card hover-lift animate-fade-in flex flex-col p-5 sm:p-6 ${
+                  isFeatureSpotlight ? 'sm:col-span-2 lg:col-span-2' : ''
+                }`}
+                style={{ animationDelay: `${80 + index * 60}ms` }}
+              >
+                <span
+                  className={`inline-flex h-11 w-11 items-center justify-center rounded-2xl ring-1 ring-inset ${feature.tile}`}
+                >
+                  <Icon className="h-5 w-5" />
+                </span>
+                <h3 className="mt-4 text-base font-semibold tracking-[-0.01em] text-foreground">
+                  {feature.title}
+                </h3>
+                <p className="mt-1.5 max-w-xl text-[13px] leading-6 text-muted">
+                  {feature.description}
+                </p>
+
+                {isFeatureSpotlight ? (
+                  <div className="mt-auto flex flex-wrap gap-1.5 pt-5">
+                    {['Rich text', 'Mind maps', 'Journal', 'Data sheet', 'Drawing', 'PDF notes'].map(
+                      (label) => (
+                        <span
+                          key={label}
+                          className="rounded-full border border-border bg-surface-sunken px-2.5 py-1 text-[11px] font-medium text-muted"
+                        >
+                          {label}
+                        </span>
+                      ),
+                    )}
+                  </div>
+                ) : null}
+              </article>
+            )
+          })}
+        </div>
+      </section>
+
+      {/* ── Closing CTA ────────────────────────────────────── */}
+      <section className="relative z-10 mx-auto w-full max-w-6xl px-5 pb-12 sm:px-8">
+        <div className="glass-card relative overflow-hidden px-6 py-10 text-center sm:px-10 sm:py-14">
+          <div
+            aria-hidden
+            className="pointer-events-none absolute inset-x-0 -top-24 h-48 opacity-60 blur-3xl"
+            style={{ background: 'var(--aurora-1)' }}
+          />
+          <div className="relative">
+            <div className="flex justify-center">
+              <img
+                src="/icon-192.png"
+                alt=""
+                className="h-12 w-12 rounded-2xl object-contain ring-1 ring-black/5 dark:ring-white/10"
+              />
+            </div>
+            <h2 className="mt-5 text-balance font-display text-2xl font-semibold tracking-[-0.025em] text-foreground sm:text-3xl">
+              Start with one note. Build from there.
+            </h2>
+            <p className="mx-auto mt-3 max-w-md text-sm leading-6 text-muted sm:text-base">
+              A calm home for everything between the first idea and the finished plan.
+            </p>
+            <div className="mt-6 flex flex-col items-center justify-center gap-3 sm:flex-row">
+              <Link href="/signup" className="glass-btn-primary focus-ring h-12 px-6 text-sm">
+                Create your workspace
+                <ArrowRight className="h-4 w-4" />
+              </Link>
+              <Link href="/login" className="glass-btn focus-ring h-12 px-5 text-sm">
+                Sign in
+              </Link>
+            </div>
+            <p className="mt-4 text-xs text-muted">Free to start · No credit card required</p>
+          </div>
+        </div>
+      </section>
+
+      {/* ── Footer ─────────────────────────────────────────── */}
+      <footer className="relative z-10 mx-auto flex w-full max-w-6xl flex-col items-center justify-between gap-3 px-5 pb-10 pt-4 text-xs text-muted sm:flex-row sm:px-8">
+        <div className="flex items-center gap-2">
+          <img src="/icon-192.png" alt="" className="h-5 w-5 rounded-md object-contain ring-1 ring-black/5 dark:ring-white/10" />
+          <span>MindViz Notes · Desktop knowledge workspace</span>
+        </div>
+        <nav aria-label="Footer" className="flex items-center gap-5">
+          <Link href="/login" className="focus-ring rounded transition-colors hover:text-foreground">
+            Sign in
+          </Link>
+          <Link href="/signup" className="focus-ring rounded transition-colors hover:text-foreground">
+            Create account
+          </Link>
+          <Link href="#features" className="focus-ring rounded transition-colors hover:text-foreground">
+            Features
+          </Link>
+        </nav>
+      </footer>
     </main>
   )
 }

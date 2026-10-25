@@ -3,9 +3,10 @@
 import { useState, useCallback, useRef, useEffect, useMemo } from 'react'
 import {
   ChevronRight,
-  ChevronLeft,
   ChevronDown,
   FolderTree as FolderTreeIcon,
+  Folder,
+  FolderOpen,
   FileText,
   PenTool,
   Network,
@@ -21,7 +22,6 @@ import {
   Home,
   X,
   LayoutDashboard,
-  FolderOpen,
   Hash,
   Clock,
   Inbox,
@@ -29,6 +29,9 @@ import {
   Layers,
   Settings,
   ListTodo,
+  PanelLeftClose,
+  PanelLeftOpen,
+  Check,
   type LucideIcon,
 } from 'lucide-react'
 import SidebarContextMenu from './sidebar/SidebarContextMenu'
@@ -45,6 +48,110 @@ const NOTE_TYPE_ICON_MAP: Record<NoteTypeIconKey, LucideIcon> = {
   'book-open': BookOpen,
   'table-2': Table2,
   'file-pen-line': FilePenLine,
+}
+
+// Soft, theme-aware tint behind each note type icon. Tints are built from the
+// standard palette (not from semantic tokens) so the alpha modifiers are safe.
+const NOTE_TYPE_TILE_CLASS: Record<NoteTypeIconKey, string> = {
+  'file-text': 'bg-sky-500/10 text-sky-600 dark:bg-sky-400/15 dark:text-sky-300',
+  'pen-tool': 'bg-violet-500/10 text-violet-600 dark:bg-violet-400/15 dark:text-violet-300',
+  network: 'bg-emerald-500/10 text-emerald-600 dark:bg-emerald-400/15 dark:text-emerald-300',
+  'book-open': 'bg-amber-500/10 text-amber-600 dark:bg-amber-400/15 dark:text-amber-300',
+  'table-2': 'bg-cyan-500/10 text-cyan-600 dark:bg-cyan-400/15 dark:text-cyan-300',
+  'file-pen-line': 'bg-rose-500/10 text-rose-600 dark:bg-rose-400/15 dark:text-rose-300',
+}
+
+function noteTypeTileClass(size: 'xs' | 'sm' | 'md'): string {
+  if (size === 'xs') return 'h-4 w-4 rounded-[5px]'
+  if (size === 'md') return 'h-[22px] w-[22px] rounded-[7px]'
+  return 'h-5 w-5 rounded-md'
+}
+
+/** Pick an ink colour with enough contrast for text/checks over a project colour. */
+function readableOnColor(hex: string): string {
+  const value = hex.replace('#', '')
+  if (value.length !== 6) return '#ffffff'
+  const r = parseInt(value.slice(0, 2), 16)
+  const g = parseInt(value.slice(2, 4), 16)
+  const b = parseInt(value.slice(4, 6), 16)
+  const luminance = (0.299 * r + 0.587 * g + 0.114 * b) / 255
+  return luminance > 0.62 ? '#0b0a15' : '#ffffff'
+}
+
+/** First two grapheme-ish characters, safe for emoji/unicode workspace names. */
+function projectInitials(name: string): string {
+  return Array.from(name.trim()).slice(0, 2).join('').toUpperCase()
+}
+
+function NoteTypeGlyph({
+  noteType,
+  size = 'sm',
+  className = '',
+}: {
+  noteType?: NoteType
+  size?: 'xs' | 'sm' | 'md'
+  className?: string
+}) {
+  const presentation = getNoteTypePresentation(noteType)
+  const Icon = NOTE_TYPE_ICON_MAP[presentation.iconKey]
+  const glyph = size === 'xs' ? 10 : size === 'md' ? 13 : 11
+  return (
+    <span
+      aria-hidden="true"
+      className={`flex shrink-0 items-center justify-center ${noteTypeTileClass(size)} ${NOTE_TYPE_TILE_CLASS[presentation.iconKey]} ${className}`}
+    >
+      <Icon size={glyph} strokeWidth={2} />
+    </span>
+  )
+}
+
+function ProjectGlyph({
+  color,
+  name,
+  size = 'sm',
+}: {
+  color: string
+  name: string
+  size?: 'sm' | 'md'
+}) {
+  return (
+    <span
+      aria-hidden="true"
+      className={`flex shrink-0 items-center justify-center font-extrabold leading-none tracking-[0.02em] shadow-[inset_0_1px_0_rgb(255_255_255_/_0.28)] ${
+        size === 'md' ? 'h-6 w-6 rounded-lg text-[9px]' : 'h-5 w-5 rounded-[6px] text-[8.5px]'
+      }`}
+      style={{ backgroundColor: color, color: readableOnColor(color) }}
+    >
+      {projectInitials(name)}
+    </span>
+  )
+}
+
+function UnfiledGlyph({ size = 'sm' }: { size?: 'sm' | 'md' }) {
+  return (
+    <span
+      aria-hidden="true"
+      className={`flex shrink-0 items-center justify-center bg-surface-active text-muted ${
+        size === 'md' ? 'h-6 w-6 rounded-lg' : 'h-5 w-5 rounded-[6px]'
+      }`}
+    >
+      <Inbox size={size === 'md' ? 13 : 11} />
+    </span>
+  )
+}
+
+/**
+ * A quiet solid layer inside floating glass surfaces. Dense sidebar rows behind
+ * a popover are otherwise visible through the translucent material and compete
+ * with the popover's own labels (especially in dark mode).
+ */
+function GlassSurfaceScrim() {
+  return (
+    <span
+      aria-hidden="true"
+      className="pointer-events-none absolute inset-0 -z-10 rounded-[inherit] bg-surface-solid opacity-50"
+    />
+  )
 }
 
 // Drag data types
@@ -159,6 +266,8 @@ export default function SidebarTree({
   const [filterProjectIds, setFilterProjectIds] = useState<Set<string>>(() => new Set())
   const [showFilterPanel, setShowFilterPanel] = useState(false)
   const searchInputRef = useRef<HTMLInputElement>(null)
+  const searchAreaRef = useRef<HTMLDivElement>(null)
+  const filterPanelRef = useRef<HTMLDivElement>(null)
 
   // Drag-and-drop state
   const [dropTarget, setDropTarget] = useState<DropTarget>(null)
@@ -306,13 +415,15 @@ export default function SidebarTree({
     return () => document.removeEventListener('mousedown', handler)
   }, [newMenuOpen])
 
-  // Close filter panel on outside click
+  // Close filter panel on outside click. The whole search cluster (field + toggle)
+  // and the panel itself count as "inside" so interacting with them doesn't dismiss it.
   useEffect(() => {
     if (!showFilterPanel) return
     const handler = (e: MouseEvent) => {
-      if (searchInputRef.current && !searchInputRef.current.contains(e.target as Node)) {
-        setShowFilterPanel(false)
-      }
+      const target = e.target as Node
+      if (searchAreaRef.current?.contains(target)) return
+      if (filterPanelRef.current?.contains(target)) return
+      setShowFilterPanel(false)
     }
     document.addEventListener('mousedown', handler)
     return () => document.removeEventListener('mousedown', handler)
@@ -702,25 +813,25 @@ export default function SidebarTree({
     setInlineRename(null)
   }, [inlineRename, onRenameFolder, onRenameProject])
 
-  // ---- NOTE TYPE ICON ----
-
-  const NoteIcon = ({ noteType, size = 15, className = '' }: { noteType?: NoteType; size?: number; className?: string }) => {
-    const presentation = getNoteTypePresentation(noteType)
-    const Icon = NOTE_TYPE_ICON_MAP[presentation.iconKey]
-    return <Icon size={size} className={`${presentation.iconClassName} ${className}`} />
-  }
-
   // ---- SHARED VISUAL HELPERS ----
-  const rowHeightCls = dense ? 'h-7' : 'min-h-[44px]'
-  // Actions become visible on hover for dense (desktop) rows; always visible on touch.
+
+  // Rows are 30px on desktop and a comfortable 42px on touch; .glass-row owns the
+  // radius/padding/hover/active treatment, these only tune density.
+  const rowHeightCls = dense ? 'h-[30px] py-1' : 'h-[42px] py-2'
+  // Actions appear on hover for dense (desktop) rows; always visible on touch.
   const revealActionsCls = dense
     ? 'opacity-0 group-hover:opacity-100 group-focus-within:opacity-100 focus-visible:opacity-100 transition-opacity'
     : 'opacity-100'
 
-  const actionBtnCls = `flex h-6 w-6 items-center justify-center rounded-md text-muted/70 transition-colors hover:bg-surface-active/70 hover:text-foreground ${revealActionsCls}`
+  const actionBtnCls = `focus-ring flex h-6 w-6 shrink-0 items-center justify-center rounded-md text-muted transition-colors hover:bg-surface-active hover:text-foreground ${revealActionsCls}`
   // Two-line result rows (name + location subtitle) need auto height, not the
   // fixed single-line row height.
-  const searchRowCls = dense ? 'min-h-[34px] py-[5px]' : 'min-h-[52px] py-2'
+  const searchRowCls = dense ? 'min-h-[42px] py-1.5' : 'min-h-[50px] py-2'
+  const sectionLabelCls = 'flex items-center gap-1.5 px-2 pb-1 pt-2 text-[11px] font-medium uppercase tracking-[0.08em] text-muted'
+  const countCls = 'shrink-0 text-[10.5px] font-medium tabular-nums text-muted'
+  // Reserve a stable action zone so counts line up on every tree row, even
+  // before the hover-revealed buttons appear.
+  const actionGroupCls = 'flex w-[50px] shrink-0 items-center justify-end gap-0.5'
 
   // ==================================================================
   // NOTE ROW
@@ -730,7 +841,6 @@ export default function SidebarTree({
     const isActive = selectedNoteId === n.id
     const noteProject = projects.find(p => p.id === n.project_id)
     const isDragging = dragPayload?.type === 'note' && dragPayload.id === n.id
-    const presentation = getNoteTypePresentation(n.note_type)
     return (
       <div
         role="button"
@@ -746,17 +856,13 @@ export default function SidebarTree({
         }}
         onContextMenu={(e) => handleNoteContextMenu(e, n)}
         title={n.title || 'Untitled'}
-        className={`group relative flex w-full cursor-pointer items-center gap-2 rounded-md pr-1.5 transition-colors ${rowHeightCls} ${
-          isDragging ? 'opacity-40' : ''
-        } ${
-          isActive
-            ? 'bg-surface-active/70 font-medium text-foreground'
-            : 'text-foreground/70 hover:bg-surface-hover hover:text-foreground'
+        className={`glass-row group relative cursor-pointer ${rowHeightCls} ${isDragging ? 'opacity-40' : ''} ${
+          isActive ? 'is-active' : ''
         }`}
-        style={{ paddingLeft: `${indent}px` }}
+        style={indent ? { paddingLeft: indent } : undefined}
       >
-        <NoteIcon noteType={n.note_type} size={15} className={isActive ? '' : 'opacity-80'} />
-        <span className={`flex-1 truncate text-[13px] leading-none ${isActive ? '' : ''}`}>
+        <NoteTypeGlyph noteType={n.note_type} />
+        <span className="min-w-0 flex-1 truncate text-[13px] leading-none">
           {n.title || 'Untitled'}
         </span>
         {!isActive && noteProject && (
@@ -787,11 +893,15 @@ export default function SidebarTree({
     const folderNotes = getNotesForFolder(folder.id)
     const totalCount = countNotesRecursive(folder)
     const isOnActivePath = activeFolderAncestors.has(folder.id)
-    const folderProject = projects.find(p => p.id === folder.project_id)
     const isRenaming = inlineRename?.type === 'folder' && inlineRename.id === folder.id
     const isDragging = dragPayload?.type === 'folder' && dragPayload.id === folder.id
     const isDropTarget = isDropHighlighted({ kind: 'folder', id: folder.id })
     const canExpand = hasChildren || folderNotes.length > 0
+    const folderIconCls = isSelected
+      ? 'text-accent'
+      : isExpanded || isOnActivePath
+        ? 'text-foreground'
+        : 'text-muted group-hover:text-foreground'
 
     const folderRow = (
       <div
@@ -799,6 +909,7 @@ export default function SidebarTree({
         tabIndex={0}
         draggable={!isRenaming}
         aria-expanded={canExpand ? isExpanded : undefined}
+        aria-current={isSelected ? 'page' : undefined}
         onDragStart={(e) => handleDragStart(e, { type: 'folder', id: folder.id })}
         onDragEnd={handleDragEnd}
         onClick={() => { if (!isRenaming) toggleFolder(folder.id) }}
@@ -813,22 +924,24 @@ export default function SidebarTree({
         onKeyDown={(e) => {
           if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); toggleFolder(folder.id) }
         }}
-        className={`group relative flex w-full cursor-pointer items-center gap-1.5 rounded-md pr-1.5 transition-colors ${rowHeightCls} ${
-          isSelected
-            ? 'bg-surface-active/70 font-medium text-foreground'
-            : 'text-foreground/75 hover:bg-surface-hover hover:text-foreground'
-        } ${isDropTarget ? 'ring-2 ring-accent/40 bg-accent/5' : ''} ${isDragging ? 'opacity-40' : ''}`}
+        className={`glass-row group relative cursor-pointer gap-1.5 ${rowHeightCls} ${
+          isSelected ? 'is-active font-medium' : ''
+        } ${isDropTarget ? 'ring-2 ring-accent bg-accent-light' : ''} ${isDragging ? 'opacity-40' : ''}`}
       >
         <ChevronRight
-          size={14}
-          className={`shrink-0 transition-transform duration-200 ${
-            isExpanded ? 'rotate-90 text-foreground/70' : canExpand ? 'text-muted/40 group-hover:text-muted/70' : 'text-transparent'
+          size={12}
+          strokeWidth={2.25}
+          className={`h-3 w-3 shrink-0 transition-transform duration-200 ${
+            isExpanded ? 'rotate-90' : ''
+          } ${canExpand ? 'text-muted group-hover:text-foreground' : 'text-transparent'} ${
+            isSelected ? 'text-accent' : ''
           }`}
         />
-        <FolderTreeIcon
-          size={15}
-          className={`shrink-0 ${isSelected || isExpanded || isOnActivePath ? 'text-foreground/70' : 'text-muted/45'}`}
-        />
+        {isExpanded ? (
+          <FolderOpen size={14} className={`shrink-0 ${folderIconCls}`} />
+        ) : (
+          <Folder size={14} className={`shrink-0 ${folderIconCls}`} />
+        )}
 
         {isRenaming ? (
           <input
@@ -843,22 +956,19 @@ export default function SidebarTree({
               e.stopPropagation()
             }}
             onClick={(e) => e.stopPropagation()}
-            className="min-w-0 flex-1 rounded-md border border-accent/40 bg-surface px-1.5 py-0.5 text-[13px] focus:outline-none focus:ring-1 focus:ring-accent"
+            aria-label="Rename folder"
+            className="glass-input h-7 min-w-0 flex-1 px-2 text-[13px]"
           />
         ) : (
-          <span className={`flex-1 truncate text-[13px] ${isOnActivePath ? 'font-medium text-foreground' : ''}`}>
+          <span className={`min-w-0 flex-1 truncate text-[13px] ${isOnActivePath && !isSelected ? 'font-medium' : ''}`}>
             {folder.name}
           </span>
         )}
 
         {!isRenaming && (
           <>
-            {totalCount > 0 && (
-              <span className={`shrink-0 text-[11px] font-medium tabular-nums text-muted ${revealActionsCls}`}>
-                {totalCount}
-              </span>
-            )}
-            <div className="flex shrink-0 items-center gap-0.5">
+            {totalCount > 0 && <span className={countCls}>{totalCount}</span>}
+            <div className={actionGroupCls}>
               <button
                 onClick={(e) => { e.stopPropagation(); onNewNote(undefined, folder.id, folder.project_id) }}
                 className={actionBtnCls}
@@ -885,9 +995,9 @@ export default function SidebarTree({
       <div key={folder.id}>
         {folderRow}
 
-        {/* Expanded children with indent guide */}
+        {/* Expanded children with a hairline indent guide */}
         {isExpanded && (hasChildren || folderNotes.length > 0) && (
-          <div className="relative ml-[15px] space-y-0.5 border-l border-border/40 pl-[7px]">
+          <div className="relative ml-[15px] space-y-0.5 border-l border-border pl-1">
             {hasChildren && (
               <div className="space-y-0.5">
                 {folder.children.map(child => renderFolder(child, level + 1))}
@@ -928,10 +1038,6 @@ export default function SidebarTree({
     if (searchQuery && totalItems === 0) return null
 
     const hasChildren = totalItems > 0
-    const glyph =
-      node.project
-        ? node.project.name.slice(0, 2).toUpperCase()
-        : null
 
     return (
       <div key={projectKey}>
@@ -940,6 +1046,7 @@ export default function SidebarTree({
           role="button"
           tabIndex={0}
           aria-expanded={hasChildren ? isExpanded : undefined}
+          aria-current={isSelectedProject ? 'page' : undefined}
           onClick={() => { if (!isRenaming) toggleProject(projectKey) }}
           onDoubleClick={() => {
             if (node.project) {
@@ -954,29 +1061,23 @@ export default function SidebarTree({
           onKeyDown={(e) => {
             if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); toggleProject(projectKey) }
           }}
-          className={`group relative flex w-full cursor-pointer items-center gap-2 rounded-md pr-1.5 transition-colors ${rowHeightCls} ${
-            isActiveProject || isSelectedProject
-              ? 'bg-surface-active/70 font-medium text-foreground'
-              : 'text-foreground/75 hover:bg-surface-hover hover:text-foreground'
-          } ${isDropHere ? 'ring-2 ring-accent/40 bg-accent/5' : ''}`}
+          className={`glass-row group relative cursor-pointer gap-1.5 ${rowHeightCls} ${
+            isSelectedProject ? 'is-active' : isActiveProject ? 'font-medium' : ''
+          } ${isDropHere ? 'ring-2 ring-accent bg-accent-light' : ''}`}
         >
           <ChevronRight
-            size={14}
-            className={`shrink-0 transition-transform duration-200 ${
-              isExpanded ? 'rotate-90 text-foreground/70' : hasChildren ? 'text-muted/40 group-hover:text-muted/70' : 'text-transparent'
+            size={12}
+            strokeWidth={2.25}
+            className={`h-3 w-3 shrink-0 transition-transform duration-200 ${
+              isExpanded ? 'rotate-90' : ''
+            } ${hasChildren ? 'text-muted group-hover:text-foreground' : 'text-transparent'} ${
+              isSelectedProject ? 'text-accent' : ''
             }`}
           />
           {node.project ? (
-            <span
-              className="flex h-[18px] w-[18px] shrink-0 items-center justify-center rounded-[5px] text-[8px] font-bold text-white"
-              style={{ backgroundColor: projectColor }}
-            >
-              {glyph}
-            </span>
+            <ProjectGlyph color={projectColor} name={node.project.name} />
           ) : (
-            <span className="flex h-[18px] w-[18px] shrink-0 items-center justify-center rounded-[5px] bg-surface-active text-muted">
-              <Inbox size={11} />
-            </span>
+            <UnfiledGlyph />
           )}
 
           {isRenaming ? (
@@ -992,48 +1093,47 @@ export default function SidebarTree({
                 e.stopPropagation()
               }}
               onClick={(e) => e.stopPropagation()}
-              className="min-w-0 flex-1 rounded-md border border-accent/40 bg-surface px-1.5 py-0.5 text-[13px] font-medium focus:outline-none focus:ring-1 focus:ring-accent"
+              aria-label="Rename project"
+              className="glass-input h-7 min-w-0 flex-1 px-2 text-[13px] font-medium"
             />
           ) : (
-            <span className="flex-1 truncate text-[13px]">
+            <span className="min-w-0 flex-1 truncate text-[13px] font-semibold tracking-[-0.005em]">
               {projectName}
             </span>
           )}
 
           {!isRenaming && (
-            <div className="flex shrink-0 items-center gap-0.5">
-              {totalNoteCount > 0 && (
-                <span className={`text-[11px] font-medium tabular-nums text-muted ${revealActionsCls}`}>
-                  {totalNoteCount}
-                </span>
-              )}
-              {node.project && onOpenProjectDashboard && (
-                <button
-                  onClick={(e) => { e.stopPropagation(); onOpenProjectDashboard(node.project!.id) }}
-                  className={actionBtnCls}
-                  title={`Open ${projectName} dashboard`}
-                  aria-label="Open project dashboard"
-                >
-                  <LayoutDashboard size={14} />
-                </button>
-              )}
-              {node.project && (
-                <button
-                  onClick={(e) => { e.stopPropagation(); handleProjectContextMenu(e, node.project!) }}
-                  className={actionBtnCls}
-                  title="Project options"
-                  aria-label="Project options"
-                >
-                  <MoreHorizontal size={14} />
-                </button>
-              )}
-            </div>
+            <>
+              {totalNoteCount > 0 && <span className={countCls}>{totalNoteCount}</span>}
+              <div className={actionGroupCls}>
+                {node.project && onOpenProjectDashboard && (
+                  <button
+                    onClick={(e) => { e.stopPropagation(); onOpenProjectDashboard(node.project!.id) }}
+                    className={actionBtnCls}
+                    title={`Open ${projectName} dashboard`}
+                    aria-label="Open project dashboard"
+                  >
+                    <LayoutDashboard size={14} />
+                  </button>
+                )}
+                {node.project && (
+                  <button
+                    onClick={(e) => { e.stopPropagation(); handleProjectContextMenu(e, node.project!) }}
+                    className={actionBtnCls}
+                    title="Project options"
+                    aria-label="Project options"
+                  >
+                    <MoreHorizontal size={14} />
+                  </button>
+                )}
+              </div>
+            </>
           )}
         </div>
 
         {/* Project content (expanded) */}
         {isExpanded && hasChildren && (
-          <div className="relative ml-[17px] space-y-0.5 border-l border-border/40 pl-[7px]">
+          <div className="relative ml-[15px] space-y-0.5 border-l border-border pl-1">
             {node.folders.map(folder => renderFolder(folder, 0))}
             {node.notes.length > 0 && (
               <div className="space-y-0.5">
@@ -1053,9 +1153,10 @@ export default function SidebarTree({
     if (recentNotes.length === 0) return null
     return (
       <section>
-        <div className="flex items-center gap-1.5 px-2 pb-1 pt-2">
-          <Clock size={11} className="text-muted/40" />
-          <span className="text-[11px] font-medium uppercase tracking-wider text-muted">Recent</span>
+        <div className={sectionLabelCls}>
+          <Clock size={11} className="text-muted opacity-70" />
+          <span>Recent</span>
+          <span className={`ml-auto ${countCls} normal-case tracking-normal`}>{recentNotes.length}</span>
         </div>
         <div className="space-y-0.5">
           {recentNotes.map(note => {
@@ -1069,16 +1170,12 @@ export default function SidebarTree({
                 aria-current={isActive ? 'page' : undefined}
                 onClick={() => onSelectNote(note)}
                 onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onSelectNote(note) } }}
-                className={`group relative flex w-full cursor-pointer items-center gap-2 rounded-md pr-1.5 transition-colors ${rowHeightCls} ${
-                  isActive
-                    ? 'bg-surface-active/70 font-medium text-foreground'
-                    : 'text-foreground/70 hover:bg-surface-hover hover:text-foreground'
-                }`}
+                className={`glass-row group relative cursor-pointer ${rowHeightCls} ${isActive ? 'is-active' : ''}`}
                 title={note.title || 'Untitled'}
               >
-                <NoteIcon noteType={note.note_type} size={15} className="opacity-80" />
-                <span className="flex-1 truncate text-[13px]">{note.title || 'Untitled'}</span>
-                {noteProject && (
+                <NoteTypeGlyph noteType={note.note_type} />
+                <span className="min-w-0 flex-1 truncate text-[13px]">{note.title || 'Untitled'}</span>
+                {!isActive && noteProject && (
                   <span
                     className="h-1.5 w-1.5 shrink-0 rounded-full opacity-60"
                     style={{ backgroundColor: noteProject.color ?? NEUTRAL_DOT }}
@@ -1095,19 +1192,19 @@ export default function SidebarTree({
   // ==================================================================
   // SEARCH RESULTS
   // ==================================================================
-  const sectionLabel = 'px-2 pb-1 pt-2 text-[11px] font-medium uppercase tracking-wider text-muted'
-
   const renderSearchResults = () => {
     if (totalResultCount === 0) {
       return (
-        <div className="px-3 py-10 text-center">
-          <Search size={18} className="mx-auto mb-2 text-muted/40" />
-          <div className="text-[13px] text-muted">No results found</div>
-          <div className="mt-0.5 text-xs text-muted">Try a different search or clear your filters</div>
+        <div className="px-2 py-12 text-center">
+          <div className="mx-auto mb-3 flex h-10 w-10 items-center justify-center rounded-2xl bg-surface-active text-muted">
+            <Search size={17} />
+          </div>
+          <div className="text-[13px] font-medium text-foreground">No results found</div>
+          <div className="mt-1 text-[11.5px] leading-4 text-muted">Try a different search or clear your filters.</div>
           {activeFilterCount > 0 && (
             <button
               onClick={clearAllFilters}
-              className="mt-3 rounded-md border border-border px-3 py-1.5 text-xs font-medium text-muted transition-colors hover:bg-surface-hover hover:text-foreground"
+              className="glass-btn mt-3 h-8 px-3 text-xs"
             >
               Clear filters
             </button>
@@ -1121,10 +1218,10 @@ export default function SidebarTree({
         {/* PROJECT RESULTS */}
         {filteredProjects.length > 0 && (
           <div>
-            <div className={`flex items-center gap-1.5 ${sectionLabel}`}>
-              <Hash size={11} className="text-muted/40" />
+            <div className={sectionLabelCls}>
+              <Hash size={11} className="text-muted opacity-70" />
               <span>Projects</span>
-              <span className="text-[11px] text-muted">{filteredProjects.length}</span>
+              <span className={`ml-auto ${countCls} normal-case tracking-normal`}>{filteredProjects.length}</span>
             </div>
             <div className="space-y-0.5">
               {filteredProjects.map(project => {
@@ -1147,21 +1244,12 @@ export default function SidebarTree({
                     }}
                     onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); if (onOpenProjectDashboard) onOpenProjectDashboard(project.id) } }}
                     onContextMenu={(e) => handleProjectContextMenu(e, project)}
-                    className={`group flex w-full cursor-pointer items-center gap-2 rounded-md pr-1.5 transition-colors ${searchRowCls} ${
-                      isActive
-                        ? 'bg-surface-active/70 font-medium text-foreground'
-                        : 'text-foreground/75 hover:bg-surface-hover hover:text-foreground'
-                    }`}
+                    className={`glass-row group cursor-pointer ${searchRowCls} ${isActive ? 'is-active' : ''}`}
                   >
-                    <span
-                      className="flex h-[18px] w-[18px] shrink-0 items-center justify-center rounded-[5px] text-[8px] font-bold text-white"
-                      style={{ backgroundColor: project.color ?? NEUTRAL_DOT }}
-                    >
-                      {project.name.slice(0, 2).toUpperCase()}
-                    </span>
+                    <ProjectGlyph color={project.color ?? NEUTRAL_DOT} name={project.name} />
                     <div className="min-w-0 flex-1">
-                      <div className="truncate text-[13px]">{project.name}</div>
-                      <div className="truncate text-[11px] text-muted">
+                      <div className="truncate text-[13px] font-medium">{project.name}</div>
+                      <div className="mt-0.5 truncate text-[11px] text-muted">
                         {project.description || `${folderCount} folder${folderCount !== 1 ? 's' : ''} · ${noteCount} note${noteCount !== 1 ? 's' : ''}`}
                       </div>
                     </div>
@@ -1182,10 +1270,10 @@ export default function SidebarTree({
         {/* FOLDER RESULTS */}
         {filteredFolders.length > 0 && (
           <div>
-            <div className={`flex items-center gap-1.5 ${sectionLabel}`}>
-              <FolderTreeIcon size={11} className="text-muted/40" />
+            <div className={sectionLabelCls}>
+              <FolderTreeIcon size={11} className="text-muted opacity-70" />
               <span>Folders</span>
-              <span className="text-[11px] text-muted">{filteredFolders.length}</span>
+              <span className={`ml-auto ${countCls} normal-case tracking-normal`}>{filteredFolders.length}</span>
             </div>
             <div className="space-y-0.5">
               {filteredFolders.map(({ folder, depth, projectName, projectColor }) => {
@@ -1223,24 +1311,23 @@ export default function SidebarTree({
                     }}
                     onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onSelectFolder(folder.id) } }}
                     onContextMenu={(e) => handleFolderContextMenu(e, folder.id, folder.name, folder.project_id)}
-                    className={`group flex w-full cursor-pointer items-center gap-2 rounded-md pr-1.5 transition-colors ${searchRowCls} ${
-                      isActive
-                        ? 'bg-surface-active/70 font-medium text-foreground'
-                        : 'text-foreground/75 hover:bg-surface-hover hover:text-foreground'
-                    }`}
+                    className={`glass-row group cursor-pointer ${searchRowCls} ${isActive ? 'is-active' : ''}`}
                   >
-                    <FolderTreeIcon size={15} className="shrink-0 text-muted/45" />
+                    <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-md bg-surface-active text-muted" aria-hidden="true">
+                      <FolderTreeIcon size={12} />
+                    </span>
                     <div className="min-w-0 flex-1">
-                      <div className="truncate text-[13px]">{folder.name}</div>
-                      <div className="flex items-center gap-1 truncate text-[11px] text-muted">
-                        <span className="shrink-0 font-medium" style={{ color: projectColor }}>{projectName}</span>
+                      <div className="truncate text-[13px] font-medium">{folder.name}</div>
+                      <div className="mt-0.5 flex items-center gap-1 truncate text-[11px] text-muted">
+                        <span className="h-1.5 w-1.5 shrink-0 rounded-full" style={{ backgroundColor: projectColor }} />
+                        <span className="shrink-0 font-medium">{projectName}</span>
                         {depth > 0 && (
                           <>
-                            <ChevronRight size={9} className="shrink-0 text-muted/40" />
-                            <span>nested</span>
+                            <ChevronRight size={9} className="shrink-0 opacity-60" />
+                            <span className="shrink-0">nested</span>
                           </>
                         )}
-                        <span className="shrink-0">{noteCount} note{noteCount !== 1 ? 's' : ''}</span>
+                        <span className="shrink-0">· {noteCount} note{noteCount !== 1 ? 's' : ''}</span>
                       </div>
                     </div>
                     <button
@@ -1260,10 +1347,10 @@ export default function SidebarTree({
         {/* NOTE RESULTS */}
         {filteredNotes.length > 0 && (
           <div>
-            <div className={`flex items-center gap-1.5 ${sectionLabel}`}>
-              <FileText size={11} className="text-muted/40" />
+            <div className={sectionLabelCls}>
+              <FileText size={11} className="text-muted opacity-70" />
               <span>Notes</span>
-              <span className="text-[11px] text-muted">{filteredNotes.length}</span>
+              <span className={`ml-auto ${countCls} normal-case tracking-normal`}>{filteredNotes.length}</span>
             </div>
             <div className="space-y-0.5">
               {filteredNotes.map(note => {
@@ -1281,20 +1368,17 @@ export default function SidebarTree({
                     onClick={() => onSelectNote(note)}
                     onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onSelectNote(note) } }}
                     onContextMenu={(e) => handleNoteContextMenu(e, note)}
-                    className={`group flex w-full cursor-pointer items-center gap-2 rounded-md pr-1.5 transition-colors ${searchRowCls} ${
-                      isActive
-                        ? 'bg-surface-active/70 font-medium text-foreground'
-                        : 'text-foreground/75 hover:bg-surface-hover hover:text-foreground'
-                    }`}
+                    className={`glass-row group cursor-pointer ${searchRowCls} ${isActive ? 'is-active' : ''}`}
                   >
-                    <NoteIcon noteType={note.note_type} size={15} className="opacity-80" />
+                    <NoteTypeGlyph noteType={note.note_type} />
                     <div className="min-w-0 flex-1">
-                      <div className="truncate text-[13px]">{note.title || 'Untitled'}</div>
-                      <div className="flex items-center gap-1 truncate text-[11px] text-muted">
-                        <span className="shrink-0 font-medium" style={{ color: projectColor }}>{projectName}</span>
+                      <div className="truncate text-[13px] font-medium">{note.title || 'Untitled'}</div>
+                      <div className="mt-0.5 flex items-center gap-1 truncate text-[11px] text-muted">
+                        <span className="h-1.5 w-1.5 shrink-0 rounded-full" style={{ backgroundColor: projectColor }} />
+                        <span className="shrink-0 font-medium">{projectName}</span>
                         {folderPath && (
                           <>
-                            <ChevronRight size={9} className="shrink-0 text-muted/40" />
+                            <ChevronRight size={9} className="shrink-0 opacity-60" />
                             <span className="truncate">{folderPath}</span>
                           </>
                         )}
@@ -1321,34 +1405,37 @@ export default function SidebarTree({
   // COLLAPSED RAIL
   // ==================================================================
   if (collapsed) {
-    const railBtn = 'flex h-9 w-9 items-center justify-center rounded-lg text-muted/70 transition-colors hover:bg-surface-hover hover:text-foreground'
-    const railDotBtn = 'relative flex h-9 w-9 items-center justify-center rounded-lg transition-colors hover:bg-surface-hover'
+    const railBtn = 'glass-btn-ghost focus-ring h-9 w-9 rounded-xl'
+    const railActiveCls = 'bg-surface-active text-foreground'
     const activeNoteProject = activeNote ? projects.find(p => p.id === activeNote.project_id) : undefined
 
     return (
       <>
         <div className="flex h-full w-full flex-col items-center">
-          {/* Logo */}
-          <div className="flex flex-col items-center px-1.5 pt-3 pb-2">
+          {/* Brand + expand affordance */}
+          <div className="flex flex-col items-center px-1.5 pb-2 pt-3">
             <img
               src="/icon-192.png"
               alt="MindViz Notes"
-              className="h-8 w-8 rounded-lg object-contain"
+              className="h-8 w-8 rounded-[10px] object-contain shadow-glass-sm ring-1 ring-black/5 dark:ring-white/10"
             />
             <button
               onClick={onToggleCollapsed}
-              className="mt-1 rounded-xl p-2 text-muted/70 transition-all duration-200 hover:bg-surface-hover/70 hover:text-foreground"
+              className="glass-btn-ghost focus-ring mt-1.5 h-8 w-8 rounded-lg"
               aria-label="Expand sidebar"
               title="Expand sidebar"
             >
-              <ChevronRight size={18} />
+              <PanelLeftOpen size={16} />
             </button>
           </div>
 
-          <div className="w-8 border-t border-border/40" />
+          <div className="glass-divider w-8" />
 
           {/* Projects rail */}
-          <nav className="flex w-full flex-1 flex-col items-center gap-0.5 overflow-y-auto px-1.5 py-2.5 scrollbar-hide">
+          <nav
+            aria-label="Projects"
+            className="flex w-full flex-1 flex-col items-center gap-1 overflow-y-auto px-1.5 py-2.5 scrollbar-hide"
+          >
             {projects.map(p => {
               const color = p.color ?? NEUTRAL_DOT
               const isActive = p.id === activeNote?.project_id
@@ -1361,13 +1448,14 @@ export default function SidebarTree({
                     if (onOpenProjectDashboard) onOpenProjectDashboard(p.id)
                   }}
                   title={p.name}
-                  className={railDotBtn}
+                  aria-label={p.name}
+                  className={`focus-ring relative flex h-9 w-9 items-center justify-center rounded-xl transition-colors hover:bg-surface-hover ${isActive ? railActiveCls : ''}`}
                 >
                   <span
-                    className="flex h-[26px] w-[26px] items-center justify-center rounded-md text-[9px] font-bold text-white transition-transform group-hover:scale-105"
-                    style={{ backgroundColor: color, boxShadow: isActive ? '0 0 0 2px color-mix(in srgb, ' + color + ' 35%, transparent)' : undefined }}
+                    className="flex h-[26px] w-[26px] items-center justify-center rounded-[8px] text-[9px] font-extrabold leading-none shadow-[inset_0_1px_0_rgb(255_255_255_/_0.28)]"
+                    style={{ backgroundColor: color, color: readableOnColor(color) }}
                   >
-                    {p.name.slice(0, 2).toUpperCase()}
+                    {projectInitials(p.name)}
                   </span>
                 </button>
               )
@@ -1377,14 +1465,17 @@ export default function SidebarTree({
             <button
               onClick={() => { onToggleCollapsed(); onSelectFolder(null) }}
               title="Unfiled"
-              className={`${railDotBtn} ${!activeNoteProject ? 'bg-surface-active/70 text-foreground' : ''}`}
+              aria-label="Unfiled"
+              className={`focus-ring relative flex h-9 w-9 items-center justify-center rounded-xl transition-colors hover:bg-surface-hover ${
+                !activeNoteProject ? railActiveCls : 'text-muted'
+              }`}
             >
               <Inbox size={17} />
             </button>
           </nav>
 
           {/* Bottom actions */}
-          <div className="flex flex-col items-center gap-0.5 border-t border-border/40 px-1.5 py-2">
+          <div className="flex w-full flex-col items-center gap-1 border-t border-border px-1.5 py-2">
             {onOpenCommandPalette && (
               <button
                 onClick={onOpenCommandPalette}
@@ -1397,7 +1488,7 @@ export default function SidebarTree({
             )}
             <button
               onClick={() => { onToggleCollapsed(); onNewNote() }}
-              className="flex h-9 w-9 items-center justify-center rounded-lg text-muted/80 transition-colors hover:bg-surface-hover hover:text-foreground"
+              className="focus-ring mt-0.5 flex h-9 w-9 items-center justify-center rounded-xl bg-accent text-accent-foreground shadow-[0_10px_22px_-12px_var(--accent-glow)] transition-[filter,transform] hover:brightness-105 active:scale-95"
               title="New note"
               aria-label="New note"
             >
@@ -1463,10 +1554,12 @@ export default function SidebarTree({
             <div
               role="menu"
               tabIndex={-1}
-              className="fixed z-[60] min-w-[220px] overflow-y-auto rounded-lg border border-border/70 bg-surface py-1 shadow-xl"
+              aria-label={`${contextMenu.type} actions`}
+              className="glass-strong animate-rise-in fixed z-[60] isolate min-w-[232px] overflow-y-auto rounded-2xl p-1.5"
               style={{ left: contextMenu.x, top: contextMenu.y }}
             >
               {renderContextMenu()}
+              <GlassSurfaceScrim />
             </div>
           </>
         )}
@@ -1479,68 +1572,83 @@ export default function SidebarTree({
   // EXPANDED VIEW
   // ==================================================================
   const hasAnyContent = projectTree.some(pt => pt.folders.length > 0 || pt.notes.length > 0)
+  const showFooterPrimary = Boolean(onOpenFileExplorer || (showHeader && (onOpenWelcome || onOpenTasks)))
+  const showFooterSecondary = Boolean(onOpenArchive || onOpenSettings)
+  const footerRowCls = 'glass-row h-8 w-full gap-2.5 px-2 text-[13px] text-muted hover:text-foreground'
 
   return (
     <>
       <div className="flex h-full w-full flex-col overflow-hidden">
         {/* ==== Workspace header ==== */}
         {showHeader && (
-          <div className="flex shrink-0 items-center justify-between gap-0.5 px-2 pb-1.5 pt-2.5">
-            <div className="flex min-w-0 flex-1 items-center gap-2 rounded-md px-1.5 py-1">
-              <img
-                src="/icon-192.png"
-                alt="MindViz Notes"
-                className="h-[22px] w-[22px] shrink-0 rounded-[6px] object-contain"
-              />
-              <span className="truncate text-[13px] font-semibold text-foreground/90">MindViz Notes</span>
+          <div className="flex h-[var(--topbar-height,56px)] shrink-0 items-center gap-2 px-3">
+            <div className="min-w-0 flex-1">
+              <div className="truncate text-[13px] font-semibold tracking-[-0.01em] text-foreground">
+                MindViz Notes
+              </div>
+              <div className="mt-px truncate text-[10px] font-medium uppercase tracking-[0.12em] text-muted">
+                Library
+              </div>
             </div>
             <button
               onClick={onToggleCollapsed}
-              className="shrink-0 rounded-xl p-1.5 text-muted/70 transition-all duration-200 hover:bg-surface-hover/70 hover:text-foreground"
+              className="glass-btn-ghost focus-ring h-8 w-8 shrink-0 rounded-lg"
               aria-label="Collapse sidebar"
               title="Collapse sidebar"
             >
-              <ChevronLeft size={15} />
+              <PanelLeftClose size={16} />
             </button>
           </div>
         )}
 
         {/* ==== Search ==== */}
-        <div className="relative shrink-0 px-2 pb-1.5">
-          <div className="flex items-center gap-1">
+        <div className="relative shrink-0 px-3 pb-2">
+          <div ref={searchAreaRef} className="flex items-center gap-1.5">
             <div className="relative min-w-0 flex-1">
-              <Search size={13} className="pointer-events-none absolute left-2.5 top-1/2 -translate-y-1/2 text-muted/50" />
+              <Search size={13} className="pointer-events-none absolute left-2.5 top-1/2 -translate-y-1/2 text-muted" />
               <input
                 ref={searchInputRef}
                 type="text"
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
                 placeholder="Search…"
-                className="h-8 w-full rounded-lg border border-transparent bg-surface-hover/80 pl-8 pr-7 text-[13px] text-foreground placeholder:text-muted transition-colors focus:border-accent/30 focus:bg-surface focus:outline-none focus:ring-2 focus:ring-accent/15"
+                aria-label="Search library"
+                className="glass-input h-8 pl-8 pr-12 text-[13px]"
               />
-              {searchQuery && (
+              {searchQuery ? (
                 <button
                   onClick={() => setSearchQuery('')}
-                  className="absolute right-2 top-1/2 -translate-y-1/2 rounded p-0.5 text-muted/60 hover:text-foreground"
+                  className="focus-ring absolute right-1.5 top-1/2 flex h-6 w-6 -translate-y-1/2 items-center justify-center rounded-md text-muted transition-colors hover:bg-surface-hover hover:text-foreground"
                   aria-label="Clear search"
                 >
-                  <X size={12} />
+                  <X size={13} />
                 </button>
-              )}
+              ) : onOpenCommandPalette ? (
+                <button
+                  type="button"
+                  onClick={onOpenCommandPalette}
+                  className="kbd absolute right-1.5 top-1/2 -translate-y-1/2 transition-colors hover:border-border-strong hover:text-foreground"
+                  aria-label="Open command palette"
+                  title={`Search everything (${formatModShortcut('K')})`}
+                >
+                  {formatModShortcut('K')}
+                </button>
+              ) : null}
             </div>
             <button
               onClick={() => setShowFilterPanel(v => !v)}
               title="Filter results"
               aria-label="Toggle filters"
-              className={`relative flex h-8 w-8 shrink-0 items-center justify-center rounded-lg transition-colors ${
+              aria-pressed={showFilterPanel}
+              className={`focus-ring relative flex h-8 w-8 shrink-0 items-center justify-center rounded-lg transition-colors ${
                 showFilterPanel || activeFilterCount > 0
-                  ? 'bg-surface-active/60 text-foreground'
+                  ? 'bg-accent-light text-accent'
                   : 'text-muted hover:bg-surface-hover hover:text-foreground'
               }`}
             >
               <SlidersHorizontal size={14} />
               {activeFilterCount > 0 && (
-                <span className="absolute -right-0.5 -top-0.5 flex h-3.5 min-w-[14px] items-center justify-center rounded-full bg-accent px-0.5 text-[9px] font-bold text-accent-foreground">
+                <span className="absolute -right-0.5 -top-0.5 flex h-3.5 min-w-[14px] items-center justify-center rounded-full bg-accent px-0.5 text-[9px] font-bold leading-none text-accent-foreground">
                   {activeFilterCount}
                 </span>
               )}
@@ -1549,25 +1657,40 @@ export default function SidebarTree({
 
           {/* Filter panel */}
           {showFilterPanel && (
-            <div className="absolute left-2 right-2 top-full z-30 mt-1 space-y-2.5 rounded-lg border border-border/70 bg-surface p-2.5 shadow-lg">
+            <div
+              ref={filterPanelRef}
+              className="glass-strong animate-rise-in absolute left-3 right-3 top-full z-30 mt-2 isolate space-y-3 rounded-2xl p-3"
+            >
+              <div className="flex items-center justify-between gap-2">
+                <span className="text-[11px] font-semibold uppercase tracking-[0.08em] text-muted">Filters</span>
+                {activeFilterCount > 0 && (
+                  <button
+                    onClick={clearAllFilters}
+                    className="focus-ring rounded-md px-1.5 py-0.5 text-[11px] font-medium text-muted transition-colors hover:bg-surface-hover hover:text-danger"
+                  >
+                    Clear all
+                  </button>
+                )}
+              </div>
+
               <div>
-                <div className="mb-1.5 px-0.5 text-[11px] font-medium uppercase tracking-wider text-muted">Type</div>
+                <div className="mb-1.5 text-[10.5px] font-semibold uppercase tracking-[0.08em] text-muted">Type</div>
                 <div className="flex flex-wrap gap-1">
                   {allNoteTypePresentations.map(tp => {
-                    const Icon = NOTE_TYPE_ICON_MAP[tp.iconKey]
                     const active = filterNoteTypes.has(tp.id)
                     return (
                       <button
                         key={tp.id}
                         onClick={() => toggleNoteTypeFilter(tp.id)}
                         title={tp.label}
-                        className={`flex items-center gap-1.5 rounded-md px-2 py-1 text-[11px] font-medium transition-colors ${
+                        aria-pressed={active}
+                        className={`flex items-center gap-1.5 rounded-full px-2 py-1 text-[11px] font-medium transition-colors ${
                           active
-                            ? 'bg-accent/10 text-accent'
+                            ? 'bg-accent-light text-accent'
                             : 'text-muted hover:bg-surface-hover hover:text-foreground'
                         }`}
                       >
-                        <Icon size={12} className={active ? '' : 'opacity-70'} />
+                        <NoteTypeGlyph noteType={tp.id} size="xs" />
                         {tp.label}
                       </button>
                     )
@@ -1577,13 +1700,14 @@ export default function SidebarTree({
 
               {projects.length > 0 && (
                 <div>
-                  <div className="mb-1.5 px-0.5 text-[11px] font-medium uppercase tracking-wider text-muted">Project</div>
+                  <div className="mb-1.5 text-[10.5px] font-semibold uppercase tracking-[0.08em] text-muted">Project</div>
                   <div className="flex flex-wrap gap-1">
                     <button
                       onClick={() => toggleProjectFilter('__UNFILED__')}
-                      className={`flex items-center gap-1.5 rounded-md px-2 py-1 text-[11px] font-medium transition-colors ${
+                      aria-pressed={filterProjectIds.has('__UNFILED__')}
+                      className={`flex items-center gap-1.5 rounded-full px-2 py-1 text-[11px] font-medium transition-colors ${
                         filterProjectIds.has('__UNFILED__')
-                          ? 'bg-accent/10 text-accent'
+                          ? 'bg-accent-light text-accent'
                           : 'text-muted hover:bg-surface-hover hover:text-foreground'
                       }`}
                     >
@@ -1597,9 +1721,10 @@ export default function SidebarTree({
                           key={p.id}
                           onClick={() => toggleProjectFilter(p.id)}
                           title={p.name}
-                          className={`flex max-w-[110px] items-center gap-1.5 rounded-md px-2 py-1 text-[11px] font-medium transition-colors ${
+                          aria-pressed={active}
+                          className={`flex max-w-[132px] items-center gap-1.5 rounded-full px-2 py-1 text-[11px] font-medium transition-colors ${
                             active
-                              ? 'bg-accent/10 text-accent'
+                              ? 'bg-accent-light text-accent'
                               : 'text-muted hover:bg-surface-hover hover:text-foreground'
                           }`}
                         >
@@ -1611,34 +1736,25 @@ export default function SidebarTree({
                   </div>
                 </div>
               )}
-
-              {activeFilterCount > 0 && (
-                <button
-                  onClick={clearAllFilters}
-                  className="flex items-center gap-1 px-0.5 text-[11px] font-medium text-muted transition-colors hover:text-danger"
-                >
-                  <X size={11} /> Clear all filters
-                </button>
-              )}
+              <GlassSurfaceScrim />
             </div>
           )}
         </div>
 
-        {/* ==== New dropdown ==== */}
-        <div className="shrink-0 px-2 pb-2" ref={newMenuRef}>
+        {/* ==== New note split button ==== */}
+        <div className="shrink-0 px-3 pb-2.5" ref={newMenuRef}>
           <div className="relative">
-            <div className="flex items-stretch overflow-hidden rounded-lg border border-border/70">
+            <div className="flex h-9 items-stretch gap-1.5">
               <button
                 onClick={() => { setNewMenuOpen(false); onNewNote() }}
-                className="flex h-8 flex-1 items-center justify-center gap-1.5 text-[13px] font-medium text-foreground/80 transition-colors hover:bg-surface-hover hover:text-foreground"
+                className="glass-btn-primary h-full min-w-0 flex-1 rounded-xl px-3 text-[13px] hover:translate-y-0"
               >
-                <Plus size={14} />
+                <Plus size={15} strokeWidth={2.5} />
                 New note
               </button>
-              <div className="w-px bg-border/70" />
               <button
                 onClick={() => setNewMenuOpen(v => !v)}
-                className="flex h-8 w-8 items-center justify-center text-muted/70 transition-colors hover:bg-surface-hover hover:text-foreground"
+                className="glass-btn-primary h-full w-9 shrink-0 rounded-xl px-0 hover:translate-y-0"
                 aria-label="More new options"
                 aria-expanded={newMenuOpen}
                 title="Choose a note type"
@@ -1648,68 +1764,77 @@ export default function SidebarTree({
             </div>
 
             {newMenuOpen && (
-              <div className="absolute left-0 right-0 top-full z-40 mt-1 overflow-hidden rounded-lg border border-border/70 bg-surface py-1 shadow-xl">
-                <div className="px-3 pb-1 pt-1.5 text-[11px] font-medium uppercase tracking-wider text-muted">New note</div>
-                {allNoteTypePresentations.map(tp => {
-                  const Icon = NOTE_TYPE_ICON_MAP[tp.iconKey]
-                  return (
-                    <button
-                      key={tp.id}
-                      onClick={() => { setNewMenuOpen(false); onNewNote(tp.id) }}
-                      className="flex w-full items-center gap-2.5 px-3 py-1.5 text-left transition-colors hover:bg-surface-hover"
-                    >
-                      <Icon size={15} className={`shrink-0 ${tp.iconClassName}`} />
-                      <span className="text-[13px] text-foreground/85">{tp.pickerLabel}</span>
-                    </button>
-                  )
-                })}
-                <div className="mx-2 my-1 border-t border-border/60" />
+              <div className="glass-strong animate-rise-in absolute left-0 right-0 top-full z-40 isolate mt-2 overflow-hidden rounded-2xl p-1.5">
+                <div className="px-2 pb-1 pt-1.5 text-[10.5px] font-semibold uppercase tracking-[0.08em] text-muted">New note</div>
+                {allNoteTypePresentations.map(tp => (
+                  <button
+                    key={tp.id}
+                    onClick={() => { setNewMenuOpen(false); onNewNote(tp.id) }}
+                    className="focus-ring flex w-full items-center gap-2.5 rounded-xl px-2 py-1.5 text-left transition-colors hover:bg-surface-hover"
+                  >
+                    <NoteTypeGlyph noteType={tp.id} />
+                    <span className="flex-1 truncate text-[13px]">{tp.pickerLabel}</span>
+                  </button>
+                ))}
+                <div className="glass-divider my-1.5" />
                 <button
                   onClick={() => { setNewMenuOpen(false); onCreateFolder(null) }}
-                  className="flex w-full items-center gap-2.5 px-3 py-1.5 text-left transition-colors hover:bg-surface-hover"
+                  className="focus-ring flex w-full items-center gap-2.5 rounded-xl px-2 py-1.5 text-left transition-colors hover:bg-surface-hover"
                 >
-                  <FolderPlus size={15} className="shrink-0 text-muted/70" />
-                  <span className="text-[13px] text-foreground/85">New folder</span>
+                  <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-md bg-surface-active text-muted" aria-hidden="true">
+                    <FolderPlus size={11} />
+                  </span>
+                  <span className="flex-1 truncate text-[13px]">New folder</span>
                 </button>
                 {onCreateProject && (
                   <button
                     onClick={() => { setNewMenuOpen(false); onCreateProject() }}
-                    className="flex w-full items-center gap-2.5 px-3 py-1.5 text-left transition-colors hover:bg-surface-hover"
+                    className="focus-ring flex w-full items-center gap-2.5 rounded-xl px-2 py-1.5 text-left transition-colors hover:bg-surface-hover"
                   >
-                    <Plus size={15} className="shrink-0 text-muted/70" />
-                    <span className="text-[13px] text-foreground/85">New project</span>
+                    <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-md bg-surface-active text-muted" aria-hidden="true">
+                      <Plus size={11} />
+                    </span>
+                    <span className="flex-1 truncate text-[13px]">New project</span>
                   </button>
                 )}
+                <GlassSurfaceScrim />
               </div>
             )}
           </div>
         </div>
 
         {/* ==== Scrollable nav ==== */}
-        <div className="scroll-thin min-h-0 flex-1 overflow-y-auto px-2 pb-2">
+        <div className="scroll-thin min-h-0 flex-1 overflow-y-auto px-3 pb-2">
           {isFilterActive ? (
             renderSearchResults()
           ) : (
-            <nav className="pb-1">
+            <nav className="pb-1" aria-label="Library tree">
               {renderRecentList()}
 
               {hasAnyContent ? (
-                <div className={`${recentNotes.length > 0 ? 'mt-3 border-t border-border/40' : ''} pt-2`}>
-                  <div className="flex items-center gap-1.5 px-2 pb-1">
-                    <Layers size={11} className="text-muted/40" />
-                    <span className="text-[11px] font-medium uppercase tracking-wider text-muted">Projects</span>
+                <div className={recentNotes.length > 0 ? 'mt-2' : ''}>
+                  {recentNotes.length > 0 && <div className="glass-divider mb-1" />}
+                  <div className={sectionLabelCls}>
+                    <Layers size={11} className="text-muted opacity-70" />
+                    <span>Projects</span>
+                    {projects.length > 0 && (
+                      <span className={`ml-auto ${countCls} normal-case tracking-normal`}>{projects.length}</span>
+                    )}
                   </div>
-                  <div className="space-y-0.5">
+                  <div className="space-y-1">
                     {projectTree.map(node => renderProject(node))}
                   </div>
                 </div>
               ) : (
-                <div className="mx-1 mt-2 rounded-lg border border-dashed border-border/80 px-3 py-5 text-center">
-                  <div className="text-[13px] font-medium text-foreground/80">Get started</div>
-                  <p className="mt-0.5 text-xs text-muted/70">Create your first note or organize ideas into folders and projects.</p>
+                <div className="mt-4 rounded-2xl border border-dashed border-border-strong px-4 py-6 text-center">
+                  <div className="mx-auto mb-2.5 flex h-9 w-9 items-center justify-center rounded-xl bg-surface-active text-muted">
+                    <Layers size={16} />
+                  </div>
+                  <div className="text-[13px] font-semibold text-foreground">Get started</div>
+                  <p className="mt-1 text-[11.5px] leading-4 text-muted">Create your first note or organize ideas into folders and projects.</p>
                   <button
                     onClick={() => onNewNote()}
-                    className="mt-3 inline-flex items-center gap-1.5 rounded-md bg-accent px-3 py-1.5 text-xs font-medium text-accent-foreground transition-opacity hover:opacity-90"
+                    className="glass-btn-primary mt-3 h-8 px-3 text-xs hover:translate-y-0"
                   >
                     <Plus size={13} />
                     New note
@@ -1721,71 +1846,49 @@ export default function SidebarTree({
         </div>
 
         {/* ==== Footer ==== */}
-        <div className="shrink-0 border-t border-border/50 px-2 py-1.5">
-          {onOpenCommandPalette && (
-            <button
-              onClick={onOpenCommandPalette}
-              className="group flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-[13px] text-muted transition-colors hover:bg-surface-hover hover:text-foreground"
-            >
-              <Search size={15} className="shrink-0 text-muted/60" />
-              <span className="flex-1 text-left">Search</span>
-              <kbd className="rounded border border-border px-1 text-[11px] font-medium text-muted/70">{formatModShortcut('K')}</kbd>
-            </button>
-          )}
-          {showHeader && onOpenTasks && (
-            <button
-              onClick={onOpenTasks}
-              className="group flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-[13px] text-muted transition-colors hover:bg-surface-hover hover:text-foreground"
-            >
-              <ListTodo size={15} className="shrink-0 text-muted/60" />
-              <span className="flex-1 text-left">Tasks</span>
-            </button>
-          )}
-          {showHeader && onOpenWelcome && (
-            <button
-              onClick={onOpenWelcome}
-              className="group flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-[13px] text-muted transition-colors hover:bg-surface-hover hover:text-foreground"
-            >
-              <Home size={15} className="shrink-0 text-muted/60" />
-              <span className="flex-1 text-left">Home</span>
-            </button>
-          )}
-          {onOpenSettings && (
-            <button
-              onClick={onOpenSettings}
-              className="group flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-[13px] text-muted transition-colors hover:bg-surface-hover hover:text-foreground"
-            >
-              <Settings size={15} className="shrink-0 text-muted/60" />
-              <span className="flex-1 text-left">Settings</span>
-            </button>
-          )}
-          {onOpenArchive && (
-            <button
-              onClick={onOpenArchive}
-              className="group flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-[13px] text-muted transition-colors hover:bg-surface-hover hover:text-foreground"
-            >
-              <Archive size={15} className="shrink-0 text-muted/60" />
-              <span className="flex-1 text-left">Archive</span>
-              {archivedCount > 0 && (
-                <span className="flex h-[18px] min-w-[18px] items-center justify-center rounded-full bg-surface-active px-1 text-[11px] font-semibold tabular-nums text-foreground/70">
-                  {archivedCount}
-                </span>
-              )}
-            </button>
-          )}
-          {onOpenFileExplorer && (
-            <button
-              onClick={onOpenFileExplorer}
-              className="group flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-[13px] text-muted transition-colors hover:bg-surface-hover hover:text-foreground"
-            >
-              <FolderOpen size={15} className="shrink-0 text-muted/60" />
-              <span className="flex-1 text-left">File Explorer</span>
-            </button>
-          )}
-          {projects.length > 0 && !onOpenFileExplorer && (
-            <div className="px-2 py-1 text-[11px] text-muted">{projects.length} project{projects.length !== 1 ? 's' : ''}</div>
-          )}
+        {(showFooterPrimary || showFooterSecondary) && (
+        <div className="shrink-0 px-3 pb-2.5 pt-1.5">
+          <div className="glass-divider mb-1.5" />
+          <nav aria-label="Workspace" className="space-y-0.5">
+            {showHeader && onOpenWelcome && (
+              <button onClick={onOpenWelcome} className={footerRowCls}>
+                <Home size={15} className="shrink-0" />
+                <span className="flex-1 truncate text-left">Home</span>
+              </button>
+            )}
+            {showHeader && onOpenTasks && (
+              <button onClick={onOpenTasks} className={footerRowCls}>
+                <ListTodo size={15} className="shrink-0" />
+                <span className="flex-1 truncate text-left">Tasks</span>
+              </button>
+            )}
+            {onOpenFileExplorer && (
+              <button onClick={onOpenFileExplorer} className={footerRowCls} title="File Explorer">
+                <FolderOpen size={15} className="shrink-0" />
+                <span className="flex-1 truncate text-left">Files</span>
+              </button>
+            )}
+            {showFooterPrimary && showFooterSecondary && <div className="glass-divider my-1.5" />}
+            {onOpenArchive && (
+              <button onClick={onOpenArchive} className={footerRowCls}>
+                <Archive size={15} className="shrink-0" />
+                <span className="flex-1 truncate text-left">Archive</span>
+                {archivedCount > 0 && (
+                  <span className="flex h-[18px] min-w-[18px] items-center justify-center rounded-full bg-surface-active px-1 text-[10.5px] font-semibold tabular-nums text-muted">
+                    {archivedCount}
+                  </span>
+                )}
+              </button>
+            )}
+            {onOpenSettings && (
+              <button onClick={onOpenSettings} className={footerRowCls}>
+                <Settings size={15} className="shrink-0" />
+                <span className="flex-1 truncate text-left">Settings</span>
+              </button>
+            )}
+          </nav>
         </div>
+        )}
       </div>
 
       {/* ========== CONTEXT MENU ========== */}
@@ -1795,10 +1898,12 @@ export default function SidebarTree({
           <div
             role="menu"
             tabIndex={-1}
-            className="fixed z-[60] min-w-[220px] overflow-y-auto rounded-lg border border-border/70 bg-surface py-1 shadow-xl"
+            aria-label={`${contextMenu.type} actions`}
+            className="glass-strong animate-rise-in fixed z-[60] isolate min-w-[232px] overflow-y-auto rounded-2xl p-1.5"
             style={{ left: contextMenu.x, top: contextMenu.y }}
           >
             {renderContextMenu()}
+            <GlassSurfaceScrim />
           </div>
         </>
       )}
@@ -1842,39 +1947,44 @@ export default function SidebarTree({
   // SIDEBAR MODALS (delete / color / move)
   // ==================================================================
   function renderSidebarModals() {
-    const modalOverlay = 'fixed inset-0 z-[70] flex items-center justify-center bg-black/40 p-4'
-    const modalCard = 'w-full max-w-md rounded-xl border border-border/70 bg-surface p-5 shadow-2xl'
-    const ghostBtn = 'rounded-lg border border-border px-3.5 py-2 text-[13px] font-medium text-foreground/80 transition-colors hover:bg-surface-hover'
-    const dangerBtn = 'rounded-lg bg-danger px-3.5 py-2 text-[13px] font-medium text-white transition-colors hover:bg-danger/90'
+    const modalOverlay = 'fixed inset-0 z-[70] flex items-center justify-center bg-[rgb(8_7_15_/_0.45)] p-4 backdrop-blur-sm animate-fade-in'
+    const modalCard = 'glass-strong animate-rise-in w-full max-w-md rounded-3xl p-5'
+    const ghostBtn = 'glass-btn h-9 px-4 text-[13px]'
+    const dangerBtn = 'focus-ring inline-flex h-9 items-center justify-center rounded-full bg-danger px-4 text-[13px] font-semibold text-background transition-opacity hover:opacity-90'
+    const modalTitleCls = 'text-[15px] font-semibold tracking-[-0.01em] text-foreground'
+    const modalSubCls = 'mt-0.5 text-[13px] leading-5 text-muted'
+    const pickerRowCls = 'glass-row h-8 w-full gap-2.5 px-2 text-[13px]'
+    const neutralTileCls = 'flex h-5 w-5 shrink-0 items-center justify-center rounded-md bg-surface-active text-muted'
 
     return (
       <>
         {/* ========== MOVE PICKER MODAL ========== */}
         {showMovePicker && (
           <div className={modalOverlay} role="presentation" onClick={(e) => { if (e.target === e.currentTarget) setShowMovePicker(null) }}>
-            <div role="dialog" aria-modal="true" aria-label="Move item" className="flex max-h-[65vh] w-full max-w-md flex-col rounded-xl border border-border/70 bg-surface shadow-2xl">
-              <div className="px-4 pb-2 pt-4">
-                <h3 className="text-[15px] font-semibold text-foreground">
+            <div role="dialog" aria-modal="true" aria-label="Move item" className="glass-strong animate-rise-in flex max-h-[65vh] w-full max-w-md flex-col overflow-hidden rounded-3xl">
+              <div className="px-5 pb-2.5 pt-5">
+                <h3 className={modalTitleCls}>
                   {showMovePicker.type === 'note-to-folder' && 'Move note to folder'}
                   {showMovePicker.type === 'note-to-project' && 'Move note to project'}
                   {showMovePicker.type === 'folder-to-project' && 'Move folder to project'}
                 </h3>
-                <p className="mb-2.5 mt-0.5 truncate text-xs text-muted">
+                <p className="mb-3 mt-0.5 truncate text-xs text-muted">
                   Moving &ldquo;{showMovePicker.name}&rdquo;
                 </p>
                 <div className="relative">
-                  <Search size={13} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-muted/50" />
+                  <Search size={13} className="pointer-events-none absolute left-2.5 top-1/2 -translate-y-1/2 text-muted" />
                   <input
                     ref={movePickerSearchRef}
                     type="text"
                     value={movePickerSearch}
                     onChange={(e) => setMovePickerSearch(e.target.value)}
                     placeholder="Search…"
-                    className="h-9 w-full rounded-lg border border-border bg-surface pl-8 pr-3 text-[13px] text-foreground outline-none transition-colors focus:border-accent/40 focus:ring-2 focus:ring-accent/20"
+                    aria-label="Search destinations"
+                    className="glass-input h-9 pl-8 pr-3 text-[13px]"
                   />
                 </div>
               </div>
-              <div className="scroll-thin flex-1 space-y-0.5 overflow-y-auto px-2 pb-2">
+              <div className="scroll-thin flex-1 space-y-0.5 overflow-y-auto px-2.5 pb-2.5">
                 {/* Note-to-Folder picker */}
                 {showMovePicker.type === 'note-to-folder' && (
                   <>
@@ -1883,26 +1993,30 @@ export default function SidebarTree({
                         if (onMoveNote) { try { await onMoveNote(showMovePicker.id, null) } catch {} }
                         setShowMovePicker(null)
                       }}
-                      className="flex w-full items-center gap-2 rounded-md px-3 py-1.5 text-left text-[13px] text-foreground/80 transition-colors hover:bg-surface-hover"
+                      className={pickerRowCls}
                     >
-                      <Home size={13} className="shrink-0 text-muted/60" />
-                      <span>Root (no folder)</span>
+                      <span className={neutralTileCls} aria-hidden="true">
+                        <Home size={12} />
+                      </span>
+                      <span className="flex-1 truncate">Root (no folder)</span>
                     </button>
                     {flatAllFolders
                       .filter(f => movePickerSearch ? f.folder.name.toLowerCase().includes(movePickerSearch.toLowerCase()) : true)
-                      .map(({ folder, depth, projectName, projectColor }) => (
+                      .map(({ folder, depth, projectName }) => (
                         <button
                           key={folder.id}
                           onClick={async () => {
                             if (onMoveNote) { try { await onMoveNote(showMovePicker.id, folder.id) } catch {} }
                             setShowMovePicker(null)
                           }}
-                          className="flex w-full items-center gap-2 rounded-md px-3 py-1.5 text-left text-[13px] text-foreground/80 transition-colors hover:bg-surface-hover"
-                          style={{ paddingLeft: `${depth * 14 + 12}px` }}
+                          className={pickerRowCls}
+                          style={{ paddingLeft: `${depth * 16 + 10}px` }}
                         >
-                          <FolderTreeIcon size={13} className="shrink-0 text-muted/50" />
+                          <span className={neutralTileCls} aria-hidden="true">
+                            <FolderTreeIcon size={12} />
+                          </span>
                           <span className="flex-1 truncate">{folder.name}</span>
-                          <span className="shrink-0 text-[11px] font-medium" style={{ color: projectColor }}>{projectName}</span>
+                          <span className="shrink-0 text-[11px] text-muted">{projectName}</span>
                         </button>
                       ))
                     }
@@ -1917,10 +2031,10 @@ export default function SidebarTree({
                         if (onMoveNoteToProject) { try { await onMoveNoteToProject(showMovePicker.id, null) } catch {} }
                         setShowMovePicker(null)
                       }}
-                      className="flex w-full items-center gap-2 rounded-md px-3 py-1.5 text-left text-[13px] text-foreground/80 transition-colors hover:bg-surface-hover"
+                      className={pickerRowCls}
                     >
-                      <Inbox size={13} className="shrink-0 text-muted/60" />
-                      <span>Unfiled</span>
+                      <UnfiledGlyph />
+                      <span className="flex-1 truncate">Unfiled</span>
                     </button>
                     {projects
                       .filter(p => movePickerSearch ? p.name.toLowerCase().includes(movePickerSearch.toLowerCase()) : true)
@@ -1931,10 +2045,10 @@ export default function SidebarTree({
                             if (onMoveNoteToProject) { try { await onMoveNoteToProject(showMovePicker.id, p.id) } catch {} }
                             setShowMovePicker(null)
                           }}
-                          className="flex w-full items-center gap-2 rounded-md px-3 py-1.5 text-left text-[13px] text-foreground/80 transition-colors hover:bg-surface-hover"
+                          className={pickerRowCls}
                         >
-                          <span className="h-2.5 w-2.5 shrink-0 rounded-full" style={{ backgroundColor: p.color ?? NEUTRAL_DOT }} />
-                          <span className="truncate">{p.name}</span>
+                          <ProjectGlyph color={p.color ?? NEUTRAL_DOT} name={p.name} />
+                          <span className="flex-1 truncate">{p.name}</span>
                         </button>
                       ))
                     }
@@ -1949,10 +2063,10 @@ export default function SidebarTree({
                         if (onMoveFolderToProject) { try { await onMoveFolderToProject(showMovePicker.id, null) } catch {} }
                         setShowMovePicker(null)
                       }}
-                      className="flex w-full items-center gap-2 rounded-md px-3 py-1.5 text-left text-[13px] text-foreground/80 transition-colors hover:bg-surface-hover"
+                      className={pickerRowCls}
                     >
-                      <Inbox size={13} className="shrink-0 text-muted/60" />
-                      <span>Unfiled</span>
+                      <UnfiledGlyph />
+                      <span className="flex-1 truncate">Unfiled</span>
                     </button>
                     {projects
                       .filter(p => movePickerSearch ? p.name.toLowerCase().includes(movePickerSearch.toLowerCase()) : true)
@@ -1963,20 +2077,20 @@ export default function SidebarTree({
                             if (onMoveFolderToProject) { try { await onMoveFolderToProject(showMovePicker.id, p.id) } catch {} }
                             setShowMovePicker(null)
                           }}
-                          className="flex w-full items-center gap-2 rounded-md px-3 py-1.5 text-left text-[13px] text-foreground/80 transition-colors hover:bg-surface-hover"
+                          className={pickerRowCls}
                         >
-                          <span className="h-2.5 w-2.5 shrink-0 rounded-full" style={{ backgroundColor: p.color ?? NEUTRAL_DOT }} />
-                          <span className="truncate">{p.name}</span>
+                          <ProjectGlyph color={p.color ?? NEUTRAL_DOT} name={p.name} />
+                          <span className="flex-1 truncate">{p.name}</span>
                         </button>
                       ))
                     }
                   </>
                 )}
               </div>
-              <div className="border-t border-border/60 px-4 py-2">
+              <div className="border-t border-border px-4 py-2">
                 <button
                   onClick={() => setShowMovePicker(null)}
-                  className="w-full rounded-md py-1 text-center text-[13px] font-medium text-muted transition-colors hover:text-foreground"
+                  className="focus-ring w-full rounded-xl py-2 text-center text-[13px] font-medium text-muted transition-colors hover:bg-surface-hover hover:text-foreground"
                 >
                   Cancel
                 </button>
@@ -1987,17 +2101,17 @@ export default function SidebarTree({
 
         {/* ========== DELETE CONFIRMATION MODAL ========== */}
         {showDeleteModal && (
-          <div className={modalOverlay}>
-            <div className={modalCard}>
+          <div className={modalOverlay} role="presentation">
+            <div role="dialog" aria-modal="true" aria-label="Confirm delete" className={modalCard}>
               <div className="mb-4 flex items-start gap-3">
-                <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-danger-light">
+                <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl bg-danger-light">
                   <Trash2 size={18} className="text-danger" />
                 </div>
-                <div className="flex-1">
-                  <h3 className="text-[15px] font-semibold text-foreground">
+                <div className="min-w-0 flex-1">
+                  <h3 className={modalTitleCls}>
                     Delete {showDeleteModal.type === 'folder' ? 'folder' : showDeleteModal.type === 'project' ? 'project' : 'note'}?
                   </h3>
-                  <p className="mt-0.5 text-[13px] text-muted">
+                  <p className={modalSubCls}>
                     Are you sure you want to delete &quot;{showDeleteModal.name}&quot;?
                     {showDeleteModal.type === 'folder' && (
                       <span className="mt-1 block">Notes inside will be moved to the root level.</span>
@@ -2025,9 +2139,9 @@ export default function SidebarTree({
 
         {/* ========== COLOR PICKER MODAL ========== */}
         {showColorPicker && onUpdateProjectColor && (
-          <div className={modalOverlay}>
-            <div className="w-full max-w-sm rounded-xl border border-border/70 bg-surface p-5 shadow-2xl">
-              <h3 className="text-[15px] font-semibold text-foreground">Project color</h3>
+          <div className={modalOverlay} role="presentation">
+            <div role="dialog" aria-modal="true" aria-label="Project color" className="glass-strong animate-rise-in w-full max-w-sm rounded-3xl p-5">
+              <h3 className={modalTitleCls}>Project color</h3>
               <p className="mb-4 mt-0.5 text-[13px] text-muted">Choose a color for this project</p>
               <div className="mb-4 grid grid-cols-6 gap-2">
                 {[
@@ -2041,14 +2155,20 @@ export default function SidebarTree({
                       onUpdateProjectColor(showColorPicker.projectId, color)
                       setShowColorPicker(null)
                     }}
-                    className={`h-8 w-8 rounded-full transition-all hover:scale-110 ${
+                    className={`focus-ring relative flex h-8 w-8 items-center justify-center rounded-full transition-transform hover:scale-110 ${
                       showColorPicker.currentColor === color
-                        ? 'ring-2 ring-accent ring-offset-2 ring-offset-surface'
+                        ? 'ring-2 ring-accent ring-offset-2 ring-offset-background'
                         : ''
                     }`}
                     style={{ backgroundColor: color }}
                     title={color}
-                  />
+                    aria-label={`Use ${color} for this project`}
+                    aria-pressed={showColorPicker.currentColor === color}
+                  >
+                    {showColorPicker.currentColor === color && (
+                      <Check size={14} strokeWidth={3} style={{ color: readableOnColor(color) }} />
+                    )}
+                  </button>
                 ))}
               </div>
               <div className="flex items-center justify-end">

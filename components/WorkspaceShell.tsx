@@ -11,9 +11,36 @@ import FileExplorerModal from '@/components/FileExplorerModal'
 import ProjectDashboard from '@/components/ProjectDashboard'
 import ArchivedProjectsModal from '@/components/ArchivedProjectsModal'
 import NewProjectModal from '@/components/NewProjectModal'
-import { FileEdit, Sparkles, FileText, PenTool, Network, BookOpen, Table2, FilePenLine, Menu, ChevronLeft, ChevronRight, FolderOpen, Home, FileQuestion, Target, Lightbulb, Scale, LayoutGrid, Search } from 'lucide-react'
+import {
+  FileEdit,
+  Sparkles,
+  FileText,
+  PenTool,
+  Network,
+  BookOpen,
+  Table2,
+  FilePenLine,
+  ChevronLeft,
+  ChevronRight,
+  FolderOpen,
+  Home,
+  FileQuestion,
+  Target,
+  Lightbulb,
+  Scale,
+  LayoutGrid,
+  Search,
+  ListTodo,
+  Layers,
+  Archive,
+  Keyboard,
+  LogOut,
+  Settings,
+  Plus,
+  FilePlus2,
+} from 'lucide-react'
 import type { LucideIcon } from 'lucide-react'
-import { useIsMobile } from '@/lib/useIsMobile'
+import { useIsMobile, useIsCompact } from '@/lib/useIsMobile'
 import type { NoteSummary, NoteType } from '@/lib/notes'
 import { getOrderedNoteTypePresentations, type NoteTypeIconKey } from '@/lib/note-types'
 import { MINDMAP_TEMPLATES, type MindmapTemplate } from '@/lib/mindmap-templates'
@@ -30,6 +57,19 @@ import WorkspaceSidebar from '@/components/workspace/WorkspaceSidebar'
 import WorkspaceSkeleton from '@/components/workspace/WorkspaceSkeleton'
 import CommandPalette from '@/components/CommandPalette'
 import OfflineStatusIndicator from '@/components/OfflineStatusIndicator'
+import TopBar from '@/components/shell/TopBar'
+import NoteListPane from '@/components/shell/NoteListPane'
+import MobileTabBar from '@/components/shell/MobileTabBar'
+import ShellBackground from '@/components/shell/ShellBackground'
+import EmptyEditorPane from '@/components/shell/EmptyEditorPane'
+import type {
+  Breadcrumb,
+  NoteListDensity,
+  NoteListSort,
+  TopBarMenuItem,
+} from '@/components/shell/types'
+import { useNavHistory, type NavLocation } from '@/lib/navigation/nav-history'
+import { requestOpenAIAssistant } from '@/lib/ai/assistant-events'
 import type { WorkspaceView } from '@/lib/workspace/types'
 import { subscribeToConflicts } from '@/lib/offline/events'
 import { installOfflineSync } from '@/lib/offline/sync'
@@ -67,6 +107,9 @@ function WorkspaceContent() {
   const searchParams = useSearchParams()
   const toast = useToast()
   const isMobile = useIsMobile()
+  // Tablet-sized viewports keep the rail but start with the library collapsed so
+  // the note list and editor still have room to breathe.
+  const isCompact = useIsCompact()
   const [selectedFolderId, setSelectedFolderId] = useState<string | null>(null)
   const [selectedProjectId, setSelectedProjectId] = useState<string | null>(null)
   const [selectedNote, setSelectedNote] = useState<Note | null>(null)
@@ -98,7 +141,7 @@ function WorkspaceContent() {
         title: 'Sync conflict',
         description:
           displayTitle +
-          ' was changed on another device. Your local version is kept — review it in the sync status.',
+          ' was changed on another device. Your local version is kept â€” review it in the sync status.',
         duration: 10000,
       })
     })
@@ -137,9 +180,26 @@ function WorkspaceContent() {
 
   // Projects state
   const [showArchiveModal, setShowArchiveModal] = useState(false)
-  // Sidebar state
-  const [sidebarCollapsed, setSidebarCollapsed] = useState(false)
-  
+  // Sidebar state (rail is always visible on desktop; this collapses the library pane)
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(
+    () => typeof window !== 'undefined' && window.innerWidth < 1280
+  )
+  // Note list pane (desktop) + its presentation preferences
+  const [noteListOpen, setNoteListOpen] = useState(true)
+  const [noteSort, setNoteSort] = useState<NoteListSort>('updated')
+  const [noteDensity, setNoteDensity] = useState<NoteListDensity>('comfortable')
+
+  // Collapse the library automatically when the viewport cannot comfortably
+  // hold rail + library + note list + editor side by side.
+  useEffect(() => {
+    if (typeof window === 'undefined') return
+    const mql = window.matchMedia('(max-width: 1279px)')
+    setSidebarCollapsed(mql.matches)
+    const handler = () => setSidebarCollapsed(mql.matches)
+    mql.addEventListener('change', handler)
+    return () => mql.removeEventListener('change', handler)
+  }, [])
+
   // Workspace view state
   const [activeView, setActiveView] = useState<WorkspaceView>('notes')
   const [showFilesPanel, setShowFilesPanel] = useState(false)
@@ -155,7 +215,7 @@ function WorkspaceContent() {
   const [showShortcuts, setShowShortcuts] = useState(false)
   const [commandPaletteOpen, setCommandPaletteOpen] = useState(false)
 
-  // ⌘/Ctrl+K opens the palette — except inside the rich text editor, where the
+  // âŒ˜/Ctrl+K opens the palette â€” except inside the rich text editor, where the
   // same shortcut inserts a link.
   useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {
@@ -235,6 +295,28 @@ function WorkspaceContent() {
       preserveDraftState: true,
     })
   }, [applyFolderSelection, user?.id])
+
+  // ---- Navigation history (back / forward) -------------------------------
+  // In-memory, browser-like trail over the four serialisable location fields.
+  // The URL-sync effects above stay untouched; history only records explicit
+  // user navigation so deep links and realtime updates never pollute it.
+  const navHistory = useNavHistory(
+    {
+      view: activeView,
+      folderId: selectedFolderId,
+      projectId: selectedProjectId,
+      noteId: null,
+    },
+    { maxEntries: 60 }
+  )
+  const navHistoryRef = useRef(navHistory)
+  navHistoryRef.current = navHistory
+  const isApplyingHistoryRef = useRef(false)
+
+  const recordNav = useCallback((location: NavLocation) => {
+    if (isApplyingHistoryRef.current) return
+    navHistoryRef.current.push(location)
+  }, [])
 
   const {
     handleSaveNote,
@@ -318,7 +400,7 @@ function WorkspaceContent() {
     toast,
   })
 
-  // ---- Refs for URL→state sync (break circular dependency) ----
+  // ---- Refs for URLâ†’state sync (break circular dependency) ----
   // These refs let the URL sync effect read the latest state/callbacks
   // without including them in its dependency array, preventing the
   // stale-noteParam flip-flop that occurs when useSearchParams doesn't
@@ -345,6 +427,70 @@ function WorkspaceContent() {
   applyFolderSelectionRef.current = applyFolderSelection
   updateNavigationParamsRef.current = updateNavigationParams
 
+  /** Restore a location from the back/forward trail. */
+  const applyNavLocation = useCallback(
+    async (target: NavLocation) => {
+      isApplyingHistoryRef.current = true
+      try {
+        setActiveView(target.view)
+        setWorkspaceNavOpen(false)
+        setSelectedProjectId(target.projectId)
+
+        if (target.view === 'notes' && target.noteId) {
+          const cached = allNotesRef.current.find((n) => n.id === target.noteId)
+          const fullNote =
+            cached && 'content' in cached && typeof (cached as Note).content === 'string'
+              ? (cached as Note)
+              : await getNote(target.noteId).catch(() => null)
+
+          if (fullNote) {
+            activateExistingNote(fullNote)
+            return
+          }
+        }
+
+        selectedNoteRef.current = null
+        isCreatingNewSaveRef.current = false
+        setSelectedNote(null)
+        setIsCreatingNew(false)
+        applyFolderSelection(target.folderId, {
+          projectId: target.projectId,
+          preserveDraftState: false,
+        })
+      } finally {
+        isApplyingHistoryRef.current = false
+      }
+    },
+    [activateExistingNote, applyFolderSelection]
+  )
+
+  const goBack = useCallback(() => {
+    const { state } = navHistoryRef.current
+    const target = state.entries[state.index - 1]
+    if (!target) return
+    navHistoryRef.current.back()
+    void applyNavLocation(target)
+  }, [applyNavLocation])
+
+  const goForward = useCallback(() => {
+    const { state } = navHistoryRef.current
+    const target = state.entries[state.index + 1]
+    if (!target) return
+    navHistoryRef.current.forward()
+    void applyNavLocation(target)
+  }, [applyNavLocation])
+
+  /** Open a project dashboard (records a navigation entry). */
+  const openProjectDashboard = useCallback(
+    (projectId: string) => {
+      setSelectedProjectId(projectId)
+      setActiveView('projects')
+      setWorkspaceNavOpen(false)
+      recordNav({ view: 'projects', folderId: null, projectId, noteId: null })
+    },
+    [recordNav]
+  )
+
   useEffect(() => {
     if (!loading && !user) {
       router.push('/login')
@@ -354,7 +500,7 @@ function WorkspaceContent() {
   const folderParam = searchParams.get('folder')
   const noteParam = searchParams.get('note')
 
-  // URL → state sync: only re-runs when URL params actually change
+  // URL â†’ state sync: only re-runs when URL params actually change
   // (initial load, browser back/forward). Internal state changes no
   // longer trigger this effect, preventing the flip-flop loop.
   useEffect(() => {
@@ -492,10 +638,19 @@ function WorkspaceContent() {
     []
   )
 
-  const switchWorkspaceView = useCallback((view: WorkspaceView) => {
-    setActiveView(view)
-    setWorkspaceNavOpen(false)
-  }, [])
+  const switchWorkspaceView = useCallback(
+    (view: WorkspaceView) => {
+      setActiveView(view)
+      setWorkspaceNavOpen(false)
+      recordNav({
+        view,
+        folderId: view === 'notes' ? selectedFolderIdRef.current : null,
+        projectId: view === 'notes' ? selectedProjectIdRef.current : null,
+        noteId: view === 'notes' ? selectedNoteIdRef.current ?? null : null,
+      })
+    },
+    [recordNav]
+  )
 
   const beginOpenSwipe = useCallback((clientX: number, clientY: number) => {
     if (!isMobile || workspaceNavOpen) return
@@ -594,6 +749,12 @@ function WorkspaceContent() {
     setIsCreatingNew(true)
     setNewNoteType(type)
     updateNavigationParams(targetFolderId ?? null, null)
+    recordNav({
+      view: 'notes',
+      folderId: targetFolderId ?? null,
+      projectId: projectArg !== undefined ? projectArg ?? null : selectedProjectId,
+      noteId: null,
+    })
   }
 
   const handleNewNote = (
@@ -650,9 +811,19 @@ function WorkspaceContent() {
     setPendingNoteContext(null)
   }
 
+  const recordNoteNavigation = useCallback((note: Note) => {
+    recordNav({
+      view: 'notes',
+      folderId: note.folder_id ?? null,
+      projectId: note.project_id ?? null,
+      noteId: note.id,
+    })
+  }, [recordNav])
+
   const handleSelectNote = async (note: NoteSummary) => {
     if ('content' in note && typeof (note as Note).content === 'string') {
       activateExistingNote(note as Note)
+      recordNoteNavigation(note as Note)
       return
     }
 
@@ -660,6 +831,7 @@ function WorkspaceContent() {
       const fullNote = await getNote(note.id)
       if (fullNote) {
         activateExistingNote(fullNote)
+        recordNoteNavigation(fullNote)
       } else {
         toast.push({ title: 'Note not found', description: 'This note could not be loaded.' })
       }
@@ -670,7 +842,16 @@ function WorkspaceContent() {
   }
 
   const handleSelectFolder = (folderId: string | null) => {
+    if (activeView !== 'notes') setActiveView('notes')
+    setWorkspaceNavOpen(false)
     applyFolderSelection(folderId)
+    const folderRecord = folders.find((f) => f.id === folderId)
+    recordNav({
+      view: 'notes',
+      folderId,
+      projectId: folderId ? folderRecord?.project_id ?? null : null,
+      noteId: null,
+    })
   }
 
   const handleCancel = () => {
@@ -691,14 +872,83 @@ function WorkspaceContent() {
     router.push('/login')
   }
 
-  const sidebarOffset = sidebarCollapsed ? '64px' : '300px'
+  // Desktop content offset: rail + library (library collapses to 0).
+  const contentOffset = sidebarCollapsed
+    ? 'var(--rail-width)'
+    : 'calc(var(--rail-width) + var(--library-width))'
 
   // Set CSS variable for fixed-position elements (e.g. bottom bar in NoteEditor)
   useEffect(() => {
     if (typeof document === 'undefined' || isMobile) return
-    document.documentElement.style.setProperty('--workspace-sidebar-offset', sidebarOffset)
+    document.documentElement.style.setProperty('--workspace-sidebar-offset', contentOffset)
     return () => { document.documentElement.style.removeProperty('--workspace-sidebar-offset') }
-  }, [sidebarOffset, isMobile])
+  }, [contentOffset, isMobile])
+
+  // Global keyboard shortcuts. Kept in a ref so the listener binds once while
+  // always calling the latest handlers.
+  const shortcutActionsRef = useRef({
+    newNote: () => {},
+    toggleSidebar: () => {},
+    goBack: () => {},
+    goForward: () => {},
+    switchView: (_view: WorkspaceView) => {},
+    openAssistant: () => {},
+  })
+  shortcutActionsRef.current = {
+    newNote: () => handleNewNote(),
+    toggleSidebar: () => setSidebarCollapsed((prev) => !prev),
+    goBack,
+    goForward,
+    switchView: switchWorkspaceView,
+    openAssistant: () => {
+      // The assistant only mounts with an editor, so ignore the shortcut
+      // everywhere else instead of silently doing nothing after a view switch.
+      if (activeView !== 'notes' || (!isCreatingNew && !selectedNote)) return
+      requestOpenAIAssistant()
+    },
+  }
+
+  useEffect(() => {
+    const VIEW_SHORTCUTS: Record<string, WorkspaceView> = {
+      '1': 'welcome',
+      '2': 'notes',
+      '3': 'tasks',
+      '4': 'files',
+    }
+
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (!(event.metaKey || event.ctrlKey) || event.altKey) return
+      if (event.shiftKey) return
+
+      const key = event.key.toLowerCase()
+      const view = VIEW_SHORTCUTS[key]
+      if (view) {
+        event.preventDefault()
+        shortcutActionsRef.current.switchView(view)
+        return
+      }
+
+      if (key === 'n') {
+        event.preventDefault()
+        shortcutActionsRef.current.newNote()
+      } else if (key === 'j') {
+        event.preventDefault()
+        shortcutActionsRef.current.openAssistant()
+      } else if (key === '\\') {
+        event.preventDefault()
+        shortcutActionsRef.current.toggleSidebar()
+      } else if (key === '[') {
+        event.preventDefault()
+        shortcutActionsRef.current.goBack()
+      } else if (key === ']') {
+        event.preventDefault()
+        shortcutActionsRef.current.goForward()
+      }
+    }
+
+    window.addEventListener('keydown', handleKeyDown)
+    return () => window.removeEventListener('keydown', handleKeyDown)
+  }, [])
 
   if (loading) {
     return (
@@ -721,12 +971,155 @@ function WorkspaceContent() {
     )
   }
 
-  const shouldShowEditor =
-    isCreatingNew ||
-    selectedNote !== null ||
-    selectedFolderId !== null ||
-    notes.length > 0 ||
-    folders.length > 0
+  // The editor only takes over when there is an actual document to edit; with
+  // nothing open the shell shows a welcoming empty pane instead of a blank
+  // draft. Creating a note sets isCreatingNew, so that path is unchanged.
+  const showEditor = isCreatingNew || selectedNote !== null
+
+  const currentFolder = folders.find((folder) => folder.id === selectedFolderId) ?? null
+  const currentProject = projects.find((project) => project.id === selectedProjectId) ?? null
+
+  const listNotes = selectedFolderId
+    ? filterOutArchivedContent(notes)
+    : currentProject
+      ? filterOutArchivedContent(allNotes.filter((note) => note.project_id === currentProject.id))
+      : filterOutArchivedContent(allNotes)
+
+  const listTitle = currentFolder?.name ?? currentProject?.name ?? 'All notes'
+  const listSubtitle = currentFolder
+    ? currentProject
+      ? `${currentProject.name} Â· ${listNotes.length} note${listNotes.length === 1 ? '' : 's'}`
+      : `${listNotes.length} note${listNotes.length === 1 ? '' : 's'}`
+    : `${folders.length} folder${folders.length === 1 ? '' : 's'} Â· ${listNotes.length} note${listNotes.length === 1 ? '' : 's'}`
+
+  const recentNotes = [...allNotes]
+    .sort((a, b) => new Date(b.updated_at).getTime() - new Date(a.updated_at).getTime())
+    .slice(0, 5)
+
+  const breadcrumbs: Breadcrumb[] = (() => {
+    const home: Breadcrumb = {
+      id: 'home',
+      label: 'Home',
+      icon: Home,
+      onClick: () => switchWorkspaceView('welcome'),
+    }
+
+    if (activeView === 'welcome') return [{ id: 'home', label: 'Home', icon: Home }]
+    if (activeView === 'tasks') {
+      return [home, { id: 'tasks', label: 'Tasks & agenda', icon: ListTodo }]
+    }
+    if (activeView === 'files') {
+      return [home, { id: 'files', label: 'Files', icon: FolderOpen }]
+    }
+    if (activeView === 'projects') {
+      return [
+        home,
+        {
+          id: 'project',
+          label: currentProject?.name ?? 'Project',
+          icon: Layers,
+          color: currentProject?.color ?? null,
+        },
+      ]
+    }
+
+    const crumbs: Breadcrumb[] = [home]
+    if (currentProject) {
+      crumbs.push({
+        id: `project-${currentProject.id}`,
+        label: currentProject.name,
+        color: currentProject.color,
+        onClick: () => openProjectDashboard(currentProject.id),
+      })
+    }
+    if (currentFolder) {
+      crumbs.push({
+        id: `folder-${currentFolder.id}`,
+        label: currentFolder.name,
+        icon: FolderOpen,
+      })
+    }
+    if (selectedNote) {
+      crumbs.push({
+        id: `note-${selectedNote.id}`,
+        label: selectedNote.title || 'Untitled',
+        icon: FileText,
+      })
+    } else if (isCreatingNew) {
+      crumbs.push({ id: 'new-note', label: 'New note', icon: FilePlus2 })
+    } else {
+      crumbs.push({ id: 'library', label: listTitle, icon: FileText })
+    }
+    return crumbs
+  })()
+
+  const assistantAvailable = activeView === 'notes' && (isCreatingNew || selectedNote !== null)
+
+  const overflowItems: TopBarMenuItem[] = [
+    ...(assistantAvailable
+      ? [
+          {
+            id: 'ai-assistant',
+            label: 'Ask AI assistant',
+            icon: Sparkles,
+            shortcut: formatModShortcut('J'),
+            onSelect: () => requestOpenAIAssistant(),
+          } satisfies TopBarMenuItem,
+        ]
+      : []),
+    ...(isCompact && activeView === 'notes' && showEditor
+      ? [
+          {
+            id: 'back-to-notes',
+            label: 'Back to note list',
+            icon: FileText,
+            onSelect: () => handleCancel(),
+          } satisfies TopBarMenuItem,
+        ]
+      : []),
+    {
+      id: 'note-list',
+      label: noteListOpen ? 'Hide note list' : 'Show note list',
+      icon: LayoutGrid,
+      onSelect: () => setNoteListOpen((prev) => !prev),
+    },
+    {
+      id: 'files',
+      label: 'Files',
+      icon: FolderOpen,
+      shortcut: formatModShortcut('4'),
+      onSelect: () => switchWorkspaceView('files'),
+    },
+    {
+      id: 'archive',
+      label: 'Archived projects',
+      icon: Archive,
+      onSelect: () => setShowArchiveModal(true),
+    },
+    {
+      id: 'shortcuts',
+      label: 'Keyboard shortcuts',
+      icon: Keyboard,
+      onSelect: () => setShowShortcuts(true),
+    },
+    {
+      id: 'settings',
+      label: 'Settings',
+      icon: Settings,
+      onSelect: () => setShowSettings(true),
+    },
+    {
+      id: 'sign-out',
+      label: 'Sign out',
+      icon: LogOut,
+      danger: true,
+      onSelect: () => { void handleSignOut() },
+    },
+  ]
+
+  // Phones and tablets use a list-or-editor flow (one pane at a time); desktops
+  // show the note list beside the editor and can toggle it.
+  const showListPane = isCompact ? !showEditor : noteListOpen
 
   const noteTypeOptions = getOrderedNoteTypePresentations().map((noteTypePresentation) => ({
     type: noteTypePresentation.id,
@@ -737,7 +1130,7 @@ function WorkspaceContent() {
   }))
 
   const renderNotesView = () => {
-    if (shouldShowEditor) {
+    if (showEditor) {
       return (
         <NoteEditor
           note={isCreatingNew ? null : selectedNote}
@@ -776,36 +1169,18 @@ function WorkspaceContent() {
     }
 
     return (
-      <div className="flex h-full items-center justify-center">
-        <EmptyState
-          icon={FileEdit}
-          title="Welcome to MindViz Notes"
-          description="Capture ideas, build mind maps, and organize your thoughts"
-          action={
-            <div className="w-full space-y-3">
-              <Button
-                type="button"
-                size="lg"
-                variant="primary"
-                icon={Sparkles}
-                onClick={() => handleNewNote()}
-                className="w-full"
-              >
-                Start Writing
-              </Button>
-              <p className="text-sm text-muted/70">
-                Press {formatModShortcut('K')} to search notes, or open the menu to browse your workspace.
-              </p>
-            </div>
-          }
-        />
-      </div>
+      <EmptyEditorPane
+        onCreateNote={(type) => handleNewNote(type)}
+        recentNotes={recentNotes}
+        onSelectNote={handleSelectNote}
+        onOpenSearch={() => setCommandPaletteOpen(true)}
+      />
     )
   }
 
   return (
     <div
-      className="min-h-screen flex flex-col"
+      className="relative flex h-[100dvh] min-h-screen w-full overflow-hidden text-foreground"
       onTouchStartCapture={(event) => {
         if (!isMobile || workspaceNavOpen || event.touches.length !== 1) return
         const touch = event.touches[0]
@@ -818,40 +1193,15 @@ function WorkspaceContent() {
         endOpenSwipe(touch.clientX, touch.clientY)
       }}
     >
-      {/* Mobile header */}
-      {isMobile && (
-        <header className="safe-top fixed inset-x-0 top-0 z-40 flex items-center justify-between border-b border-border/60 bg-surface px-3 py-2.5">
-          <div className="flex items-center gap-1.5">
-            <button
-              onClick={() => setWorkspaceNavOpen(prev => !prev)}
-              className="flex h-8 w-8 items-center justify-center rounded-lg text-muted/80 transition-colors hover:bg-surface-hover hover:text-foreground"
-              aria-label="Toggle navigation"
-            >
-              <Menu size={18} />
-            </button>
-            <img
-              src="/icon-192.png"
-              alt="MindViz Notes"
-              className="h-[22px] w-[22px] shrink-0 rounded-[6px] object-contain"
-            />
-            <h2 className="text-[15px] font-semibold tracking-tight text-foreground">MindViz Notes</h2>
-          </div>
-          <button
-            onClick={() => setCommandPaletteOpen(true)}
-            className="flex h-8 w-8 items-center justify-center rounded-lg text-muted/80 transition-colors hover:bg-surface-hover hover:text-foreground"
-            aria-label="Search notes and commands"
-            title={`Search (${formatModShortcut('K')})`}
-          >
-            <Search size={17} />
-          </button>
-        </header>
-      )}
+      <ShellBackground />
 
       <WorkspaceSidebar
         isMobile={isMobile}
         activeView={activeView}
         sidebarCollapsed={sidebarCollapsed}
         mobileOpen={workspaceNavOpen}
+        userName={homeUserName}
+        userEmail={user.email}
         treeProps={{
           projects,
           folderTree,
@@ -878,17 +1228,13 @@ function WorkspaceContent() {
           archivedCount: archivedProjects.length,
         }}
         onSwitchView={switchWorkspaceView}
-        onToggleCollapsed={() => setSidebarCollapsed(prev => !prev)}
+        onToggleCollapsed={() => setSidebarCollapsed((prev) => !prev)}
         onCloseMobileNav={() => setWorkspaceNavOpen(false)}
         onEnsureNotesView={() => {
           if (activeView !== 'notes') setActiveView('notes')
           setWorkspaceNavOpen(false)
         }}
-        onOpenProjectDashboard={(projectId) => {
-          setSelectedProjectId(projectId)
-          setActiveView('projects')
-          setWorkspaceNavOpen(false)
-        }}
+        onOpenProjectDashboard={openProjectDashboard}
         onOpenFileExplorer={() => {
           setShowFileExplorerModal(true)
           setWorkspaceNavOpen(false)
@@ -906,140 +1252,189 @@ function WorkspaceContent() {
         onMobileTouchEnd={endCloseSwipe}
       />
 
-      {/* Main content area */}
-      <main
-        className="flex-1 w-full h-screen overflow-hidden bg-background"
-        style={
-          isMobile
-            ? { paddingTop: 'calc(52px + var(--sat))' }
-            : { paddingLeft: sidebarOffset }
-        }
+      {/* Content column */}
+      <div
+        className="relative z-10 flex h-full min-w-0 flex-1 flex-col pb-[calc(var(--mobile-bar-height)+var(--sab))] md:pb-0"
+        style={isMobile ? undefined : { paddingLeft: contentOffset }}
       >
-        {activeView === 'welcome' && (
-          <HomeDashboard
-            userId={user.id}
-            userName={homeUserName}
-            notes={allNotes}
-            folders={folders}
-            projects={projects}
-            isLoading={isLoadingNotes || isLoadingProjects || isLoadingAllNotes}
-            onSelectNote={(note) => {
-              void handleSelectNote(note)
-              closeWelcomeView()
-            }}
-            onCreateNote={(type) => {
-              setActiveView('notes')
-              handleNewNote(type)
-            }}
-            onNewNote={() => {
-              setActiveView('notes')
-              handleNewNote()
-            }}
-            onOpenProject={(projectId) => {
-              setSelectedProjectId(projectId)
-              setActiveView('projects')
-            }}
-            onCreateProject={handleCreateProject}
-            onOpenSearch={() => setCommandPaletteOpen(true)}
-            onOpenTasks={() => setActiveView('tasks')}
-            onOpenUnfiled={() => {
-              setActiveView('notes')
-              handleSelectFolder(null)
-            }}
-          />
-        )}
-
-        {activeView === 'tasks' && (
-          <TasksView
-            notes={allNotes}
-            projects={projects}
-            onSelectNote={(note) => {
-              void handleSelectNote(note)
-              setActiveView('notes')
-            }}
-            onOpenProject={(projectId) => {
-              setSelectedProjectId(projectId)
-              setActiveView('projects')
-            }}
-          />
-        )}
-
-        {activeView === 'notes' && (
-          <div className="relative flex h-full overflow-hidden">
-            {/* Main editor area */}
-            <div className="flex-1 min-w-0 overflow-hidden">
-              {renderNotesView()}
-            </div>
-
-            {/* Right files panel (desktop only) */}
-            {!isMobile && showFilesPanel && (
-              <div
-                className="flex-shrink-0 border-l border-border flex flex-col overflow-hidden bg-surface"
-                style={{ width: '360px' }}
-              >
-                <FileExplorerModal
-                  isOpen
-                  asView
-                  onClose={() => setShowFilesPanel(false)}
-                  title="Files"
-                />
-              </div>
-            )}
-
-            {/* Files panel toggle tab (desktop only) */}
-            {!isMobile && (
-              <button
-                onClick={() => setShowFilesPanel(prev => !prev)}
-                className={`absolute top-1/2 -translate-y-1/2 z-20 flex items-center justify-center w-5 h-14 rounded-l-lg border border-r-0 shadow-sm transition-all ${
-                  showFilesPanel
-                    ? 'bg-accent border-accent text-accent-foreground'
-                    : 'bg-surface border-border text-muted/70 hover:bg-accent/10 hover:text-accent hover:border-accent/40'
-                }`}
-                style={{ right: showFilesPanel ? '360px' : '0' }}
-                title={showFilesPanel ? 'Close files panel' : 'Open files panel'}
-                aria-label={showFilesPanel ? 'Close files panel' : 'Open files panel'}
-              >
-                <FolderOpen size={12} />
-              </button>
-            )}
-          </div>
-        )}
-
-        {activeView === 'files' && (
-          <FileExplorerModal
-            isOpen
-            asView
-            onClose={() => setActiveView('notes')}
-          />
-        )}
-
-        <FileExplorerModal
-          isOpen={showFileExplorerModal}
-          onClose={() => setShowFileExplorerModal(false)}
+        <TopBar
+          breadcrumbs={breadcrumbs}
+          canGoBack={navHistory.canGoBack}
+          canGoForward={navHistory.canGoForward}
+          onBack={goBack}
+          onForward={goForward}
+          onOpenSearch={() => setCommandPaletteOpen(true)}
+          onCreateNote={(type) => handleNewNote(type)}
+          noteListOpen={noteListOpen}
+          onToggleNoteList={
+            activeView === 'notes' ? () => setNoteListOpen((prev) => !prev) : undefined
+          }
+          overflowItems={overflowItems}
+          onOpenLibrary={() => setWorkspaceNavOpen(true)}
         />
 
-        {activeView === 'projects' && selectedProjectId && (() => {
-          const dashboardProject = projects.find(p => p.id === selectedProjectId)
-          if (!dashboardProject) return null
-          return (
-            <ProjectDashboard
-              project={dashboardProject}
-              allNotes={allNotes}
-              folders={folders}
-              onSelectNote={(note) => {
-                void handleSelectNote(note)
-                setActiveView('notes')
-              }}
-              onUpdateProject={(id, updates) => {
-                setProjects(prev => prev.map(p => p.id === id ? { ...p, ...updates } : p))
-              }}
-              onClose={() => setActiveView('notes')}
-            />
-          )
-        })()}
-      </main>
+        <main className="relative min-h-0 flex-1 overflow-hidden">
+          {activeView === 'welcome' && (
+            <div className="h-full overflow-hidden">
+              <HomeDashboard
+                userId={user.id}
+                userName={homeUserName}
+                notes={allNotes}
+                folders={folders}
+                projects={projects}
+                isLoading={isLoadingNotes || isLoadingProjects || isLoadingAllNotes}
+                onSelectNote={(note) => {
+                  void handleSelectNote(note)
+                  closeWelcomeView()
+                }}
+                onCreateNote={(type) => {
+                  setActiveView('notes')
+                  handleNewNote(type)
+                }}
+                onNewNote={() => {
+                  setActiveView('notes')
+                  handleNewNote()
+                }}
+                onOpenProject={openProjectDashboard}
+                onCreateProject={handleCreateProject}
+                onOpenSearch={() => setCommandPaletteOpen(true)}
+                onOpenTasks={() => setActiveView('tasks')}
+                onOpenUnfiled={() => {
+                  handleSelectFolder(null)
+                  setActiveView('notes')
+                }}
+              />
+            </div>
+          )}
+
+          {activeView === 'tasks' && (
+            <div className="h-full overflow-hidden">
+              <TasksView
+                notes={allNotes}
+                projects={projects}
+                onSelectNote={(note) => {
+                  void handleSelectNote(note)
+                  setActiveView('notes')
+                }}
+                onOpenProject={openProjectDashboard}
+              />
+            </div>
+          )}
+
+          {activeView === 'files' && (
+            <div className="h-full overflow-hidden p-2 sm:p-3">
+              <div className="glass-card flex h-full flex-col overflow-hidden">
+                <FileExplorerModal isOpen asView onClose={() => setActiveView('notes')} />
+              </div>
+            </div>
+          )}
+
+          {activeView === 'notes' && (
+            <div className="relative flex h-full min-h-0 gap-2 p-2 sm:gap-3 sm:p-3">
+              {showListPane && (
+                <div
+                  className={
+                    isCompact
+                      ? 'min-h-0 w-full'
+                      : 'min-h-0 shrink-0 md:w-[var(--list-width)]'
+                  }
+                >
+                  <NoteListPane
+                    notes={listNotes}
+                    title={listTitle}
+                    subtitle={listSubtitle}
+                    isLoading={isLoadingNotes || isLoadingAllNotes}
+                    selectedNoteId={selectedNote?.id ?? null}
+                    folders={folders}
+                    projects={projects}
+                    sort={noteSort}
+                    onSortChange={setNoteSort}
+                    density={noteDensity}
+                    onDensityChange={setNoteDensity}
+                    onSelectNote={handleSelectNote}
+                    onNewNote={() => handleNewNote()}
+                    className="h-full"
+                  />
+                </div>
+              )}
+
+              <div
+                className={`min-h-0 min-w-0 flex-1 ${isCompact && showListPane ? 'hidden' : ''}`}
+              >
+                {renderNotesView()}
+              </div>
+
+              {/* Right files panel (desktop only) */}
+              {!isMobile && showFilesPanel && (
+                <div className="glass-card flex min-h-0 w-[360px] shrink-0 flex-col overflow-hidden">
+                  <FileExplorerModal
+                    isOpen
+                    asView
+                    onClose={() => setShowFilesPanel(false)}
+                    title="Files"
+                  />
+                </div>
+              )}
+
+              {/* Files panel toggle tab (desktop only) */}
+              {!isMobile && (
+                <button
+                  onClick={() => setShowFilesPanel((prev) => !prev)}
+                  className="absolute right-1 top-1/2 z-20 flex h-12 w-5 -translate-y-1/2 items-center justify-center rounded-full border border-border bg-surface text-muted transition-colors hover:border-accent/40 hover:text-accent focus-ring"
+                  title={showFilesPanel ? 'Close files panel' : 'Open files panel'}
+                  aria-label={showFilesPanel ? 'Close files panel' : 'Open files panel'}
+                >
+                  <FolderOpen size={12} />
+                </button>
+              )}
+            </div>
+          )}
+
+          {activeView === 'projects' && selectedProjectId && (() => {
+            const dashboardProject = projects.find((p) => p.id === selectedProjectId)
+            if (!dashboardProject) return null
+            return (
+              <div className="h-full overflow-hidden">
+                <ProjectDashboard
+                  project={dashboardProject}
+                  allNotes={allNotes}
+                  folders={folders}
+                  onSelectNote={(note) => {
+                    void handleSelectNote(note)
+                    setActiveView('notes')
+                  }}
+                  onUpdateProject={(id, updates) => {
+                    setProjects((prev) => prev.map((p) => (p.id === id ? { ...p, ...updates } : p)))
+                  }}
+                  onClose={() => setActiveView('notes')}
+                />
+              </div>
+            )
+          })()}
+        </main>
+      </div>
+
+      <MobileTabBar
+        activeView={activeView}
+        onNavigate={(view) => {
+          // On a phone, tapping "Notes" while a note is open returns to the list
+          // instead of leaving the user stranded inside the editor.
+          if (view === 'notes' && activeView === 'notes' && showEditor) {
+            handleCancel()
+            return
+          }
+          switchWorkspaceView(view)
+        }}
+        onOpenSearch={() => setCommandPaletteOpen(true)}
+        onOpenMore={() => setWorkspaceNavOpen(true)}
+      />
 
       <OfflineStatusIndicator />
+
+      <FileExplorerModal
+        isOpen={showFileExplorerModal}
+        onClose={() => setShowFileExplorerModal(false)}
+      />
 
       {showSettings && <SettingsModal isOpen onClose={() => setShowSettings(false)} />}
 
@@ -1063,10 +1458,7 @@ function WorkspaceContent() {
             setActiveView('notes')
             handleSelectFolder(folderId)
           }}
-          onOpenProject={(projectId) => {
-            setSelectedProjectId(projectId)
-            setActiveView('projects')
-          }}
+          onOpenProject={openProjectDashboard}
           onCreateNote={(type) => handleNewNote(type)}
           onOpenHome={openWelcomeView}
           onOpenTasks={openTasksView}
@@ -1217,7 +1609,7 @@ function WorkspaceContent() {
       />
 
       {/* Archive modal */}
-      <ArchivedProjectsModal
+            <ArchivedProjectsModal
         isOpen={showArchiveModal}
         onClose={() => setShowArchiveModal(false)}
         projects={archivedProjects}

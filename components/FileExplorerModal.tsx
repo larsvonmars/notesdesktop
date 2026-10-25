@@ -36,7 +36,7 @@ import {
   Copy,
 } from 'lucide-react'
 import ModalCloseButton from './ModalCloseButton'
-import BaseModal, { ModalHeader } from './BaseModal'
+import BaseModal, { ModalHeader, ModalTitle } from './BaseModal'
 import {
   listItems,
   uploadFiles,
@@ -93,21 +93,21 @@ function FileTypeIcon({ mimeType, size = 20 }: { mimeType: string; size?: number
   const props = { size, strokeWidth: 1.5 }
   switch (hint) {
     case 'image':
-      return <FileImage {...props} className="text-pink-500" />
+      return <FileImage {...props} className="text-[var(--hue-rose)]" />
     case 'pdf':
-      return <FileText {...props} className="text-red-500" />
+      return <FileText {...props} className="text-[var(--danger)]" />
     case 'text':
-      return <FileText {...props} className="text-blue-500" />
+      return <FileText {...props} className="text-[var(--hue-sky)]" />
     case 'spreadsheet':
-      return <FileSpreadsheet {...props} className="text-green-600" />
+      return <FileSpreadsheet {...props} className="text-[var(--hue-mint)]" />
     case 'presentation':
-      return <FileIcon {...props} className="text-orange-500" />
+      return <FileIcon {...props} className="text-[var(--hue-amber)]" />
     case 'audio':
-      return <Music {...props} className="text-purple-500" />
+      return <Music {...props} className="text-[var(--hue-violet)]" />
     case 'video':
-      return <Video {...props} className="text-indigo-500" />
+      return <Video {...props} className="text-[var(--hue-sky)]" />
     case 'archive':
-      return <Archive {...props} className="text-yellow-600" />
+      return <Archive {...props} className="text-[var(--hue-amber)]" />
     default:
       return <File {...props} className="text-muted" />
   }
@@ -709,34 +709,33 @@ export default function FileExplorerModal({
         maxHeight="calc(100vh - 3rem)"
         zIndex={100}
         asView={asView}
+        className={asView ? '!bg-transparent' : undefined}
       >
           {/* ============ HEADER ============ */}
           <ModalHeader onClose={onClose} closeAriaLabel="Close file explorer">
-            <div className="flex items-center gap-3">
-              <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-alpine-100 dark:bg-alpine-900/30">
-                <FolderOpen size={18} className="text-alpine-600" />
-              </div>
-              <div>
-                <h2 className="text-lg font-semibold text-foreground">{title}</h2>
-                <p className="text-xs text-muted">
-                  {isSelectMode ? 'Select files to attach' : 'Manage your uploaded files'}
-                </p>
-              </div>
+            <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-[var(--accent-light)] text-accent">
+              <FolderOpen size={17} strokeWidth={1.9} aria-hidden />
+            </span>
+            <div className="min-w-0">
+              <ModalTitle className="truncate">{title}</ModalTitle>
+              <p className="mt-0.5 truncate text-xs leading-5 text-muted">
+                {isSelectMode ? 'Select files to attach' : 'Manage your uploaded files'}
+              </p>
             </div>
           </ModalHeader>
 
           {uploadPathSegments.length > 0 && (
-            <div className="border-b border-border bg-surface-hover px-4 sm:px-5 py-2">
-              <div className="flex items-center gap-2 text-xs text-alpine-800 dark:text-alpine-200 overflow-x-auto">
-                <span className="font-medium whitespace-nowrap">Folder structure</span>
-                <span className="text-alpine-500 dark:text-alpine-300">/</span>
+            <div className="border-b border-border bg-[var(--surface-sunken)] px-4 py-2 sm:px-5">
+              <div className="flex items-center gap-2 overflow-x-auto text-xs text-muted">
+                <span className="whitespace-nowrap font-medium text-foreground">Folder structure</span>
+                <span className="text-muted">/</span>
                 {uploadPathSegments.map((segment, index) => (
                   <span key={`${segment}-${index}`} className="flex items-center gap-2 whitespace-nowrap">
-                    <span className="rounded-md bg-surface px-2 py-0.5 text-accent border border-border">
+                    <span className="rounded-md border border-border bg-[var(--surface-hover)] px-2 py-0.5 text-accent">
                       {segment}
                     </span>
                     {index < uploadPathSegments.length - 1 && (
-                      <span className="text-alpine-500 dark:text-alpine-300">/</span>
+                      <span className="text-muted">/</span>
                     )}
                   </span>
                 ))}
@@ -745,12 +744,12 @@ export default function FileExplorerModal({
           )}
 
           {/* ============ TOOLBAR ============ */}
-          <div className="flex flex-wrap items-center gap-2 border-b border-border px-4 sm:px-5 py-2.5 bg-surface">
+          <div className="flex flex-wrap items-center gap-2 border-b border-border bg-[var(--surface-sunken)] px-4 py-2.5 sm:px-5">
             {/* Breadcrumb */}
             <nav className="flex items-center gap-1 text-sm flex-1 min-w-0 overflow-x-auto">
               <button
                 onClick={() => navigateTo('')}
-                className="flex items-center gap-1 rounded-md px-2 py-1 text-foreground transition hover:bg-surface-hover hover:text-foreground whitespace-nowrap"
+                className="focus-ring flex items-center gap-1 whitespace-nowrap rounded-lg px-2 py-1 text-foreground transition-colors hover:bg-surface-hover"
               >
                 <Home size={14} />
                 <span>Files</span>
@@ -763,10 +762,10 @@ export default function FileExplorerModal({
                     <ChevronRight size={12} className="text-muted flex-shrink-0" />
                     <button
                       onClick={() => navigateTo(pathUpToHere)}
-                      className={`rounded-md px-2 py-1 transition whitespace-nowrap ${
+                      className={`focus-ring whitespace-nowrap rounded-lg px-2 py-1 transition-colors ${
                         isLast
                           ? 'font-medium text-foreground'
-                          : 'text-foreground hover:bg-surface-hover hover:text-foreground'
+                          : 'text-muted hover:bg-surface-hover hover:text-foreground'
                       }`}
                       disabled={isLast}
                     >
@@ -778,31 +777,31 @@ export default function FileExplorerModal({
             </nav>
 
             {/* Actions */}
-            <div className="flex items-center gap-1.5 ml-auto">
+            <div className="flex flex-wrap items-center gap-1.5 sm:ml-auto">
               {/* Search */}
               <div className="relative">
-                <Search size={14} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-muted" />
+                <Search size={14} className="pointer-events-none absolute left-2.5 top-1/2 -translate-y-1/2 text-muted" />
                 <input
                   type="text"
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
                   placeholder="Search..."
-                  className="h-8 w-32 sm:w-40 rounded-lg border border-border bg-surface-hover pl-8 pr-3 text-sm text-foreground placeholder:text-muted transition focus:border-accent focus:bg-surface focus:outline-none focus:ring-1 focus:ring-accent"
+                  className="glass-input h-8 w-28 rounded-lg pl-8 pr-3 text-sm sm:w-40"
                 />
               </div>
 
-              <div className="h-5 w-px bg-surface-active" />
+              <div className="hidden h-5 w-px bg-[var(--border)] sm:block" />
 
               {/* View toggle */}
               <button
                 onClick={() => setViewMode(viewMode === 'grid' ? 'list' : 'grid')}
-                className="rounded-lg p-1.5 text-muted transition hover:bg-surface-hover hover:text-foreground"
+                className="glass-btn-ghost h-8 w-8"
                 title={viewMode === 'grid' ? 'Switch to list view' : 'Switch to grid view'}
               >
                 {viewMode === 'grid' ? <List size={16} /> : <Grid3x3 size={16} />}
               </button>
 
-              <div className="h-5 w-px bg-surface-active" />
+              <div className="hidden h-5 w-px bg-[var(--border)] sm:block" />
 
               {/* Sort controls */}
               <button
@@ -812,7 +811,7 @@ export default function FileExplorerModal({
                   setSortField(next)
                   setSortDir('asc')
                 }}
-                className="flex items-center gap-1 rounded-lg px-2 py-1.5 text-xs text-muted transition hover:bg-surface-hover hover:text-foreground"
+                className="glass-btn h-8 gap-1 px-2.5 text-xs text-muted hover:text-foreground"
                 title={`Sort by: ${sortField} (click to cycle)`}
               >
                 <ArrowUpDown size={13} />
@@ -820,13 +819,13 @@ export default function FileExplorerModal({
               </button>
               <button
                 onClick={() => setSortDir((d) => (d === 'asc' ? 'desc' : 'asc'))}
-                className="rounded-lg p-1.5 text-muted transition hover:bg-surface-hover hover:text-foreground"
+                className="glass-btn-ghost h-8 w-8"
                 title={sortDir === 'asc' ? 'Ascending — click to descend' : 'Descending — click to ascend'}
               >
                 {sortDir === 'asc' ? <ArrowUp size={13} /> : <ArrowDown size={13} />}
               </button>
 
-              <div className="h-5 w-px bg-surface-active" />
+              <div className="hidden h-5 w-px bg-[var(--border)] sm:block" />
 
               {/* New folder */}
               <button
@@ -834,7 +833,7 @@ export default function FileExplorerModal({
                   setShowNewFolderInput(true)
                   setNewFolderName('')
                 }}
-                className="flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-sm text-foreground transition hover:bg-surface-hover hover:text-foreground"
+                className="glass-btn-ghost h-8 w-8"
                 title="New folder"
               >
                 <FolderPlus size={16} />
@@ -844,7 +843,7 @@ export default function FileExplorerModal({
               <button
                 onClick={() => fileInputRef.current?.click()}
                 disabled={isUploading}
-                className="flex items-center gap-1.5 rounded-lg bg-alpine-600 px-3 py-1.5 text-sm font-medium text-white transition hover:bg-alpine-700 disabled:opacity-50"
+                className="glass-btn-primary h-8 gap-1.5 px-3 text-xs"
                 title="Upload files"
               >
                 {isUploading ? (
@@ -858,7 +857,7 @@ export default function FileExplorerModal({
               {/* Refresh */}
               <button
                 onClick={loadItems}
-                className="rounded-lg p-1.5 text-muted transition hover:bg-surface-hover hover:text-foreground"
+                className="glass-btn-ghost h-8 w-8"
                 title="Refresh"
               >
                 <RefreshCw size={16} />
@@ -868,8 +867,8 @@ export default function FileExplorerModal({
 
           {/* New folder input row */}
           {showNewFolderInput && (
-            <div className="flex items-center gap-2 border-b border-border bg-surface-hover px-5 py-2">
-              <FolderPlus size={16} className="text-alpine-600 flex-shrink-0" />
+            <div className="flex flex-wrap items-center gap-2 border-b border-border bg-[var(--surface-sunken)] px-4 py-2 sm:px-5">
+              <FolderPlus size={16} className="shrink-0 text-accent" />
               <input
                 ref={newFolderInputRef}
                 type="text"
@@ -883,12 +882,12 @@ export default function FileExplorerModal({
                   }
                 }}
                 placeholder="Folder name..."
-                className="flex-1 rounded-lg border border-border bg-surface text-foreground px-3 py-1.5 text-sm focus:border-alpine-400 focus:outline-none focus:ring-1 focus:ring-alpine-400"
+                className="glass-input h-8 min-w-0 flex-1 text-sm"
               />
               <button
                 onClick={handleCreateFolder}
                 disabled={!newFolderName.trim()}
-                className="rounded-lg bg-alpine-600 px-3 py-1.5 text-sm font-medium text-white transition hover:bg-alpine-700 disabled:opacity-50"
+                className="glass-btn-primary h-8 px-3 text-xs"
               >
                 Create
               </button>
@@ -897,7 +896,7 @@ export default function FileExplorerModal({
                   setShowNewFolderInput(false)
                   setNewFolderName('')
                 }}
-                className="rounded-lg px-2 py-1.5 text-sm text-muted transition hover:bg-surface-active"
+                className="glass-btn h-8 px-3 text-xs"
               >
                 Cancel
               </button>
@@ -906,23 +905,23 @@ export default function FileExplorerModal({
 
           {/* ============ CONTENT ============ */}
           <div
-            className={`flex-1 overflow-y-auto min-h-[300px] ${isDragOver ? 'bg-alpine-50 dark:bg-alpine-900/25 ring-2 ring-inset ring-alpine-300 dark:ring-alpine-700' : ''}`}
+            className={`relative min-h-[300px] flex-1 overflow-y-auto ${isDragOver ? 'bg-[var(--accent-light)] ring-2 ring-inset ring-[var(--accent)]' : ''}`}
             onDragOver={handleDragOver}
             onDragLeave={handleDragLeave}
             onDrop={handleDrop}
           >
             {/* Upload progress */}
             {uploadProgress && (
-              <div className="px-5 py-2 bg-alpine-50 dark:bg-alpine-900/30 border-b border-border dark:border-alpine-800/50">
-                <div className="flex items-center gap-2 text-sm text-alpine-700 dark:text-alpine-300">
+              <div className="border-b border-border bg-[var(--accent-light)] px-4 py-2 sm:px-5">
+                <div className="flex items-center gap-2 text-sm text-accent">
                   <Loader2 size={14} className="animate-spin" />
                   <span>
                     Uploading {uploadProgress.done}/{uploadProgress.total} files...
                   </span>
                 </div>
-                <div className="mt-1 h-1.5 rounded-full bg-alpine-200 dark:bg-alpine-800/60">
+                <div className="mt-1 h-1.5 rounded-full bg-[var(--surface-active)]">
                   <div
-                    className="h-full rounded-full bg-alpine-600 dark:bg-alpine-500 transition-all"
+                    className="h-full rounded-full bg-accent transition-all"
                     style={{ width: `${(uploadProgress.done / uploadProgress.total) * 100}%` }}
                   />
                 </div>
@@ -931,7 +930,7 @@ export default function FileExplorerModal({
 
             {/* Error */}
             {error && (
-              <div className="mx-5 mt-4 flex items-center gap-2 rounded-lg bg-danger-light dark:bg-red-950/40 px-4 py-3 text-sm text-danger">
+              <div className="mx-4 mt-4 flex items-center gap-2 rounded-xl border border-border bg-danger-light px-4 py-3 text-sm text-danger sm:mx-5">
                 <AlertCircle size={16} className="flex-shrink-0" />
                 <span>{error}</span>
                 <button onClick={loadItems} className="ml-auto text-danger underline hover:no-underline">
@@ -943,7 +942,7 @@ export default function FileExplorerModal({
             {/* Loading */}
             {isLoading && !error && (
               <div className="flex items-center justify-center py-20">
-                <Loader2 size={24} className="animate-spin text-alpine-500" />
+                <Loader2 size={24} className="animate-spin text-accent" />
               </div>
             )}
 
@@ -964,7 +963,7 @@ export default function FileExplorerModal({
                     </p>
                     <button
                       onClick={() => fileInputRef.current?.click()}
-                      className="rounded-lg bg-alpine-600 px-4 py-2 text-sm font-medium text-white transition hover:bg-alpine-700"
+                      className="glass-btn-primary h-9 px-4 text-[13px]"
                     >
                       Upload Files
                     </button>
@@ -975,8 +974,8 @@ export default function FileExplorerModal({
 
             {/* Drag overlay */}
             {isDragOver && (
-              <div className="absolute inset-0 z-10 flex items-center justify-center bg-alpine-50 dark:bg-alpine-950/70 pointer-events-none">
-                <div className="flex flex-col items-center gap-2 text-alpine-700 dark:text-alpine-200">
+              <div className="pointer-events-none absolute inset-0 z-10 flex items-center justify-center bg-[var(--accent-light)] backdrop-blur-[2px]">
+                <div className="flex flex-col items-center gap-2 text-accent">
                   <Upload size={40} />
                   <p className="font-medium">Drop files to upload</p>
                 </div>
@@ -990,7 +989,7 @@ export default function FileExplorerModal({
                 {currentPath && viewMode === 'list' && (
                   <button
                     onClick={navigateUp}
-                    className="flex items-center gap-3 px-5 py-3 text-sm text-foreground transition hover:bg-surface-hover w-full text-left"
+                    className="focus-ring flex w-full items-center gap-3 px-4 py-3 text-left text-sm text-muted transition-colors hover:bg-surface-hover hover:text-foreground sm:px-5"
                   >
                     <ArrowLeft size={16} />
                     <span>Back</span>
@@ -999,7 +998,7 @@ export default function FileExplorerModal({
                 {currentPath && viewMode === 'grid' && (
                   <button
                     onClick={navigateUp}
-                    className="flex flex-col items-center justify-center gap-2 rounded-xl border border-dashed border-border p-4 text-muted transition hover:bg-surface-hover hover:border-border-strong"
+                    className="focus-ring flex flex-col items-center justify-center gap-2 rounded-xl border border-dashed border-border bg-[var(--surface-sunken)] p-4 text-muted transition-colors hover:border-border-strong hover:bg-surface-hover hover:text-foreground"
                   >
                     <ArrowLeft size={24} />
                     <span className="text-xs font-medium">Back</span>
@@ -1050,7 +1049,7 @@ export default function FileExplorerModal({
           </div>
 
           {/* ============ FOOTER ============ */}
-          <div className="flex flex-wrap items-center justify-between gap-2 border-t border-border bg-surface-hover px-4 sm:px-5 py-3">
+          <div className="flex flex-wrap items-center justify-between gap-2 border-t border-border bg-[var(--surface-sunken)] px-4 py-3 sm:px-5">
             <div className="flex items-center gap-3 text-xs text-muted">
               <span>
                 {filteredItems.length} item{filteredItems.length !== 1 ? 's' : ''}
@@ -1070,7 +1069,7 @@ export default function FileExplorerModal({
                       setSelectedPaths(new Set(allFilePaths))
                     }
                   }}
-                  className="flex items-center gap-1 text-xs text-muted hover:text-alpine-600 dark:hover:text-alpine-400 transition"
+                  className="focus-ring flex items-center gap-1 rounded-md px-1 py-0.5 text-xs text-muted transition-colors hover:text-accent"
                   title="Select all / deselect all files (or Ctrl+A)"
                 >
                   {selectedPaths.size > 0 && selectedPaths.size === filteredItems.filter((i) => i.kind === 'file').length
@@ -1084,7 +1083,7 @@ export default function FileExplorerModal({
               {hasSelection && !isSelectMode && (
                 <button
                   onClick={handleDeleteSelected}
-                  className="flex items-center gap-1.5 rounded-lg px-4 py-2 text-sm text-danger transition hover:bg-red-50 dark:hover:bg-red-950/40"
+                  className="glass-btn h-8 gap-1.5 px-3.5 text-xs text-danger hover:bg-danger-light"
                 >
                   <Trash2 size={14} />
                   <span>Delete Selected</span>
@@ -1094,14 +1093,14 @@ export default function FileExplorerModal({
                 <>
                   <button
                     onClick={onClose}
-                    className="rounded-lg px-4 py-2 text-sm font-medium text-foreground transition hover:bg-surface-active"
+                    className="glass-btn h-8 px-3.5 text-xs font-medium"
                   >
                     Cancel
                   </button>
                   <button
                     onClick={handleConfirmSelection}
                     disabled={selectedPaths.size === 0}
-                    className="flex items-center gap-1.5 rounded-lg bg-alpine-600 px-4 py-2 text-sm font-medium text-white transition hover:bg-alpine-700 disabled:opacity-50"
+                    className="glass-btn-primary h-8 gap-1.5 px-3.5 text-xs"
                   >
                     <Check size={14} />
                     <span>Attach {selectedPaths.size > 0 ? `(${selectedPaths.size})` : ''}</span>
@@ -1111,7 +1110,7 @@ export default function FileExplorerModal({
               {!isSelectMode && (
                 <button
                   onClick={onClose}
-                  className="rounded-lg px-4 py-2 text-sm font-medium text-foreground transition hover:bg-surface-active"
+                  className="glass-btn h-8 px-3.5 text-xs font-medium"
                 >
                   Close
                 </button>
@@ -1132,7 +1131,7 @@ export default function FileExplorerModal({
       {/* ============ CONTEXT MENU ============ */}
       {contextMenu && (
         <div
-          className="fixed z-[110] bg-surface rounded-xl shadow-2xl border border-border py-1.5 min-w-[180px]"
+          className="glass-strong fixed z-[110] min-w-[180px] overflow-hidden rounded-2xl p-1.5"
           style={{ left: contextMenu.x, top: contextMenu.y }}
           onClick={(e) => e.stopPropagation()}
         >
@@ -1143,7 +1142,7 @@ export default function FileExplorerModal({
                   openPreview(contextMenu.item)
                   setContextMenu(null)
                 }}
-                className="flex w-full items-center gap-2.5 px-3.5 py-2 text-sm text-foreground transition hover:bg-surface-hover"
+                className="glass-row gap-2.5 px-2.5 py-2 text-sm"
               >
                 <Eye size={15} />
                 <span>Preview</span>
@@ -1157,14 +1156,14 @@ export default function FileExplorerModal({
                   }
                   setContextMenu(null)
                 }}
-                className="flex w-full items-center gap-2.5 px-3.5 py-2 text-sm text-foreground transition hover:bg-surface-hover"
+                className="glass-row gap-2.5 px-2.5 py-2 text-sm"
               >
                 <Download size={15} />
                 <span>Download</span>
               </button>
               <button
                 onClick={() => startRename(contextMenu.item)}
-                className="flex w-full items-center gap-2.5 px-3.5 py-2 text-sm text-foreground transition hover:bg-surface-hover"
+                className="glass-row gap-2.5 px-2.5 py-2 text-sm"
               >
                 <Pencil size={15} />
                 <span>Rename</span>
@@ -1180,7 +1179,7 @@ export default function FileExplorerModal({
                   }
                   setContextMenu(null)
                 }}
-                className="flex w-full items-center gap-2.5 px-3.5 py-2 text-sm text-foreground transition hover:bg-surface-hover"
+                className="glass-row gap-2.5 px-2.5 py-2 text-sm"
               >
                 <Copy size={15} />
                 <span>Copy link</span>
@@ -1193,19 +1192,19 @@ export default function FileExplorerModal({
                 navigateTo(contextMenu.item.path)
                 setContextMenu(null)
               }}
-              className="flex w-full items-center gap-2.5 px-3.5 py-2 text-sm text-foreground transition hover:bg-surface-hover"
+              className="glass-row gap-2.5 px-2.5 py-2 text-sm"
             >
               <FolderOpen size={15} />
               <span>Open</span>
             </button>
           )}
-          <div className="my-1 border-t border-border" />
+          <div className="glass-divider my-1" />
           <button
             onClick={() => {
               handleDeleteItem(contextMenu.item)
               setContextMenu(null)
             }}
-            className="flex w-full items-center gap-2.5 px-3.5 py-2 text-sm text-danger transition hover:bg-red-50"
+            className="glass-row gap-2.5 px-2.5 py-2 text-sm text-danger hover:bg-danger-light"
           >
             <Trash2 size={15} />
             <span>Delete</span>
@@ -1216,15 +1215,15 @@ export default function FileExplorerModal({
       {/* ============ PREVIEW OVERLAY ============ */}
       {preview && (
         <div
-          className="fixed inset-0 z-[120] flex items-center justify-center bg-black/70 p-4 sm:p-8"
+          className="fixed inset-0 z-[120] flex items-center justify-center bg-black/40 p-4 backdrop-blur-md sm:p-8 dark:bg-black/70"
           onClick={closePreview}
         >
           <div
-            className="relative flex max-h-[90vh] max-w-5xl w-full flex-col overflow-hidden rounded-2xl bg-surface shadow-2xl"
+            className="glass-strong relative flex max-h-[90vh] w-full max-w-5xl flex-col overflow-hidden"
             onClick={(e) => e.stopPropagation()}
           >
             {/* Preview header */}
-            <div className="flex items-center justify-between border-b border-border px-5 py-3">
+            <div className="flex items-center justify-between gap-3 border-b border-border px-4 py-3 sm:px-5">
               <div className="flex items-center gap-2 min-w-0">
                 <FileTypeIcon mimeType={preview.type} size={18} />
                 <span className="truncate font-medium text-foreground">{preview.name}</span>
@@ -1238,7 +1237,7 @@ export default function FileExplorerModal({
                       toast.push({ title: 'Download failed', description: err.message })
                     }
                   }}
-                  className="rounded-lg p-2 text-muted transition hover:bg-surface-hover hover:text-foreground"
+                  className="glass-btn-ghost h-8 w-8"
                   title="Download"
                 >
                   <Download size={18} />
@@ -1252,7 +1251,7 @@ export default function FileExplorerModal({
               </div>
             </div>
             {/* Preview content */}
-            <div className="flex-1 overflow-auto flex items-center justify-center bg-surface-hover p-4">
+            <div className="flex flex-1 items-center justify-center overflow-auto bg-[var(--surface-sunken)] p-4">
               {isPreviewableImage(preview.type) && (
                 <img
                   src={preview.url}
@@ -1268,7 +1267,7 @@ export default function FileExplorerModal({
                 />
               )}
               {isPreviewableText(preview.type) && previewTextContent !== null && (
-                <pre className="w-full max-h-[70vh] overflow-auto rounded-lg border border-border bg-surface p-4 text-sm text-foreground font-mono whitespace-pre-wrap">
+                <pre className="scroll-thin max-h-[70vh] w-full overflow-auto whitespace-pre-wrap rounded-xl border border-border bg-[var(--surface-hover)] p-4 font-mono text-sm text-foreground">
                   {previewTextContent}
                 </pre>
               )}
@@ -1332,12 +1331,12 @@ function GridItem({
 
   return (
     <div
-      className={`group relative flex flex-col items-center justify-center gap-2 rounded-xl border p-3 cursor-pointer transition-all ${
+      className={`group relative flex cursor-pointer flex-col items-center justify-center gap-2 rounded-xl border p-3 transition-all duration-150 ${
         isSelected
-          ? 'border-alpine-400 bg-alpine-50 dark:bg-alpine-900/25 ring-1 ring-alpine-300'
+          ? 'border-accent bg-[var(--accent-light)] shadow-[inset_0_0_0_1px_var(--accent)]'
           : isFocused
-            ? 'border-alpine-300 dark:border-alpine-600 bg-surface-hover dark:bg-alpine-900/15 ring-1 ring-alpine-200 dark:ring-alpine-700'
-            : 'border-border hover:border-border-strong hover:bg-surface-hover'
+            ? 'border-border-strong bg-surface-hover'
+            : 'border-border bg-[var(--surface-sunken)] hover:border-border-strong hover:bg-surface-hover'
       }`}
       onClick={onClick}
       onDoubleClick={onDoubleClick}
@@ -1346,10 +1345,10 @@ function GridItem({
       {/* Select checkbox */}
       {isSelectMode && item.kind === 'file' && (
         <button
-          className={`absolute top-2 left-2 flex h-5 w-5 items-center justify-center rounded-md border transition ${
+          className={`focus-ring absolute left-2 top-2 flex h-5 w-5 items-center justify-center rounded-md border transition-colors ${
             isSelected
-              ? 'border-alpine-500 bg-alpine-600 text-white'
-              : 'border-border-strong bg-surface text-transparent hover:border-border-strong'
+              ? 'border-accent bg-accent text-[var(--accent-foreground)]'
+              : 'border-border-strong bg-[var(--surface-sunken)] text-transparent hover:border-accent'
           }`}
           onClick={(e) => {
             e.stopPropagation()
@@ -1361,9 +1360,9 @@ function GridItem({
       )}
 
       {/* Thumbnail / Icon */}
-      <div className="flex h-16 w-16 items-center justify-center overflow-hidden rounded-lg">
+      <div className="flex h-16 w-16 items-center justify-center overflow-hidden rounded-xl bg-[var(--surface-sunken)]">
         {item.kind === 'folder' ? (
-          <FolderOpen size={32} className="text-amber-500" />
+          <FolderOpen size={32} className="text-[var(--hue-amber)]" />
         ) : thumbUrl ? (
           <img src={thumbUrl} alt={item.name} className="h-full w-full rounded-lg object-cover" />
         ) : (
@@ -1383,7 +1382,7 @@ function GridItem({
             if (e.key === 'Escape') onRenameCancel()
           }}
           onBlur={onRenameCommit}
-          className="w-full rounded border border-alpine-300 px-1.5 py-0.5 text-center text-xs focus:outline-none focus:ring-1 focus:ring-alpine-400"
+          className="glass-input h-7 w-full px-1.5 text-center text-xs"
           onClick={(e) => e.stopPropagation()}
         />
       ) : (
@@ -1400,7 +1399,7 @@ function GridItem({
       {/* Hover actions */}
       <div className="absolute top-1.5 right-1.5 opacity-0 group-hover:opacity-100 transition">
         <button
-          className="rounded-md p-1 text-muted hover:bg-surface-active hover:text-foreground"
+          className="focus-ring rounded-md p-1 text-muted transition-colors hover:bg-surface-active hover:text-foreground"
           onClick={(e) => {
             e.stopPropagation()
             onContextMenu(e)
@@ -1435,12 +1434,8 @@ function ListItem({
 }: ItemProps) {
   return (
     <div
-      className={`group flex items-center gap-3 px-5 py-2.5 cursor-pointer transition-colors ${
-        isSelected
-          ? 'bg-alpine-50 dark:bg-alpine-900/25'
-          : isFocused
-            ? 'bg-surface-hover dark:bg-alpine-900/15'
-            : 'hover:bg-surface-hover'
+      className={`glass-row group cursor-pointer gap-3 rounded-none px-4 py-2.5 sm:px-5 ${
+        isSelected ? 'is-active' : isFocused ? 'bg-surface-hover' : ''
       }`}
       onClick={onClick}
       onDoubleClick={onDoubleClick}
@@ -1449,10 +1444,10 @@ function ListItem({
       {/* Select checkbox */}
       {isSelectMode && item.kind === 'file' && (
         <button
-          className={`flex h-5 w-5 items-center justify-center rounded-md border transition flex-shrink-0 ${
+          className={`focus-ring flex h-5 w-5 shrink-0 items-center justify-center rounded-md border transition-colors ${
             isSelected
-              ? 'border-alpine-500 bg-alpine-600 text-white'
-              : 'border-border-strong bg-surface text-transparent hover:border-border-strong'
+              ? 'border-accent bg-accent text-[var(--accent-foreground)]'
+              : 'border-border-strong bg-[var(--surface-sunken)] text-transparent hover:border-accent'
           }`}
           onClick={(e) => {
             e.stopPropagation()
@@ -1466,7 +1461,7 @@ function ListItem({
       {/* Icon */}
       <div className="flex-shrink-0">
         {item.kind === 'folder' ? (
-          <FolderOpen size={20} className="text-amber-500" />
+          <FolderOpen size={20} className="text-[var(--hue-amber)]" />
         ) : (
           <FileTypeIcon mimeType={item.type || ''} size={20} />
         )}
@@ -1485,7 +1480,7 @@ function ListItem({
               if (e.key === 'Escape') onRenameCancel()
             }}
             onBlur={onRenameCommit}
-            className="w-full rounded border border-alpine-300 px-2 py-0.5 text-sm focus:outline-none focus:ring-1 focus:ring-alpine-400"
+            className="glass-input h-7 w-full px-2 text-sm"
             onClick={(e) => e.stopPropagation()}
           />
         ) : (
@@ -1495,7 +1490,7 @@ function ListItem({
 
       {/* Meta */}
       {item.kind === 'file' && (
-        <div className="flex items-center gap-4 text-xs text-muted flex-shrink-0">
+        <div className="flex shrink-0 items-center gap-4 text-xs text-muted">
           <span>{formatFileSize(item.size || 0)}</span>
           {item.updated_at && (
             <span className="hidden sm:inline">
@@ -1511,7 +1506,7 @@ function ListItem({
       {/* Hover actions */}
       <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition flex-shrink-0">
         <button
-          className="rounded-md p-1 text-muted hover:bg-surface-active hover:text-foreground"
+          className="focus-ring rounded-md p-1 text-muted transition-colors hover:bg-surface-active hover:text-foreground"
           onClick={(e) => {
             e.stopPropagation()
             onContextMenu(e)

@@ -14,6 +14,12 @@ interface LinkDialogProps {
   onUseRecent: (link: RecentLink) => void
 }
 
+const FIELD_LABEL =
+  'mb-2 flex items-center gap-2 text-[11px] font-semibold uppercase tracking-[0.08em] text-muted'
+
+const FIELD_INPUT =
+  'focus-ring w-full rounded-xl border border-border bg-surface px-3.5 py-2.5 text-sm text-foreground placeholder:text-muted transition-colors focus:border-accent'
+
 export default function LinkDialog({
   isOpen,
   linkUrl,
@@ -29,28 +35,32 @@ export default function LinkDialog({
   if (!isOpen) return null
 
   return (
-    <div className="fixed inset-0 bg-black/60  flex items-center justify-center z-50 p-4">
-      <div className="bg-white rounded-2xl shadow-2xl p-6 w-full max-w-lg border border-slate-200">
-        <div className="flex items-center justify-between mb-6">
-          <div className="flex items-center gap-2">
-            <div className="p-2 bg-alpine-100 rounded-lg">
-              <Link2 size={20} className="text-alpine-600" />
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-[rgb(14_12_32_/_0.44)] p-4 backdrop-blur-[3px]">
+      <div className="floating-pop-in glass-strong w-full max-w-lg rounded-3xl p-6">
+        <div className="mb-5 flex items-center justify-between">
+          <div className="flex items-center gap-2.5">
+            <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-accent-light text-accent">
+              <Link2 size={18} />
             </div>
-            <h3 className="text-xl font-semibold text-slate-900">Insert Link</h3>
+            <div>
+              <h3 className="text-lg font-semibold tracking-[-0.01em] text-foreground">Insert link</h3>
+              <p className="text-[11px] text-muted">Link text to a page, note, or file</p>
+            </div>
           </div>
           <button
+            type="button"
             onClick={onClose}
-            className="text-slate-400 hover:text-slate-600 transition-colors p-1 rounded-lg hover:bg-slate-100"
+            className="focus-ring flex h-8 w-8 items-center justify-center rounded-full text-muted transition-colors hover:bg-surface-hover hover:text-foreground"
             aria-label="Close dialog"
           >
-            <X size={20} />
+            <X size={17} />
           </button>
         </div>
 
-        <div className="space-y-5">
+        <div className="space-y-4">
           <div>
-            <label htmlFor="link-dialog-url" className="flex items-center gap-2 text-sm font-semibold text-slate-700 mb-2">
-              <Globe size={16} />
+            <label htmlFor="link-dialog-url" className={FIELD_LABEL}>
+              <Globe size={12} />
               URL
             </label>
             <div className="relative">
@@ -66,31 +76,29 @@ export default function LinkDialog({
                   }
                 }}
                 placeholder="https://example.com or example.com"
-                className={`w-full px-4 py-3 pr-10 border-2 ${
-                  linkUrlError
-                    ? 'border-red-300 focus:border-red-500 focus:ring-red-500'
-                    : 'border-slate-200 focus:border-alpine-500 focus:ring-alpine-500'
-                } rounded-xl focus:ring-2 focus:ring-offset-0 transition-all text-slate-900 placeholder-slate-400`}
+                className={`${FIELD_INPUT} pr-10 ${
+                  linkUrlError ? 'border-danger focus:border-danger' : ''
+                }`}
                 autoFocus
               />
               {linkUrlError && (
                 <div className="absolute right-3 top-1/2 -translate-y-1/2">
-                  <AlertCircle size={20} className="text-red-500" />
+                  <AlertCircle size={18} className="text-danger" />
                 </div>
               )}
             </div>
             {linkUrlError && (
-              <p className="mt-2 text-sm text-red-600 flex items-center gap-1">
-                <AlertCircle size={14} />
+              <p className="mt-2 flex items-center gap-1 text-xs text-danger">
+                <AlertCircle size={13} />
                 {linkUrlError}
               </p>
             )}
           </div>
 
           <div>
-            <label htmlFor="link-dialog-text" className="flex items-center gap-2 text-sm font-semibold text-slate-700 mb-2">
-              <Edit2 size={16} />
-              Link Text (optional)
+            <label htmlFor="link-dialog-text" className={FIELD_LABEL}>
+              <Edit2 size={12} />
+              Link text
             </label>
             <input
               id="link-dialog-text"
@@ -103,31 +111,33 @@ export default function LinkDialog({
                   onApply()
                 }
               }}
-              placeholder="Custom display text"
-              className="w-full px-4 py-3 border-2 border-slate-200 rounded-xl focus:border-alpine-500 focus:ring-2 focus:ring-alpine-500 focus:ring-offset-0 transition-all text-slate-900 placeholder-slate-400"
+              placeholder="Custom display text (optional)"
+              className={FIELD_INPUT}
             />
-            <p className="mt-2 text-xs text-slate-500">Leave empty to use the URL as display text</p>
+            <p className="mt-2 text-[11px] text-muted">Leave empty to use the URL as display text</p>
           </div>
 
           {recentLinks.length > 0 && (
-            <div className="border-t border-slate-200 pt-4">
-              <div className="flex items-center gap-2 text-sm font-semibold text-slate-700 mb-3">
-                <Clock size={16} />
-                Recent Links
+            <div className="border-t border-border pt-4">
+              <div className={FIELD_LABEL}>
+                <Clock size={12} />
+                Recent links
               </div>
-              <div className="space-y-2 max-h-32 overflow-y-auto">
+              <div className="scroll-thin max-h-32 space-y-1.5 overflow-y-auto pr-0.5">
                 {recentLinks.map((recent, index) => (
                   <button
                     key={index}
+                    type="button"
                     onClick={() => onUseRecent(recent)}
-                    className="w-full px-3 py-2 text-left rounded-lg border border-slate-200 hover:border-alpine-300 hover:bg-alpine-50 transition-all group"
+                    className="focus-ring group flex w-full items-center gap-2 rounded-xl border border-border bg-surface px-3 py-2 text-left transition-colors hover:border-accent hover:bg-surface-hover"
                   >
-                    <div className="flex items-center gap-2">
-                      <ExternalLink size={14} className="text-slate-400 group-hover:text-alpine-600" />
-                      <div className="flex-1 min-w-0">
-                        <p className="text-sm font-medium text-slate-700 truncate">{recent.text}</p>
-                        <p className="text-xs text-slate-500 truncate">{recent.url}</p>
-                      </div>
+                    <ExternalLink
+                      size={13}
+                      className="shrink-0 text-muted transition-colors group-hover:text-accent"
+                    />
+                    <div className="min-w-0 flex-1">
+                      <p className="truncate text-sm font-medium text-foreground">{recent.text}</p>
+                      <p className="truncate text-[11px] text-muted">{recent.url}</p>
                     </div>
                   </button>
                 ))}
@@ -135,20 +145,22 @@ export default function LinkDialog({
             </div>
           )}
 
-          <div className="flex gap-3 justify-end pt-2">
+          <div className="flex items-center justify-end gap-2 pt-1">
             <button
+              type="button"
               onClick={onClose}
-              className="px-5 py-2.5 text-slate-700 hover:bg-slate-100 rounded-xl transition-colors font-medium"
+              className="glass-btn h-10 rounded-xl px-4 text-sm font-medium"
             >
               Cancel
             </button>
             <button
+              type="button"
               onClick={onApply}
               disabled={!linkUrl.trim()}
-              className="px-5 py-2.5 bg-gradient-to-r from-alpine-600 to-alpine-700 text-white rounded-xl hover:from-alpine-700 hover:to-alpine-800 disabled:opacity-50 disabled:cursor-not-allowed transition-all font-medium shadow-lg shadow-alpine-500/30 disabled:shadow-none flex items-center gap-2"
+              className="glass-btn-primary inline-flex h-10 items-center gap-2 rounded-xl px-4 text-sm font-semibold disabled:cursor-not-allowed disabled:opacity-50"
             >
-              <Check size={18} />
-              Insert Link
+              <Check size={16} />
+              Insert link
             </button>
           </div>
         </div>

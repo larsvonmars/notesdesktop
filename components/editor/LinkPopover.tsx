@@ -14,6 +14,13 @@ interface LinkPopoverProps {
   onRemove: (linkElement: HTMLAnchorElement) => void
 }
 
+const PILL =
+  'focus-ring inline-flex h-7 items-center gap-1.5 rounded-full px-2.5 text-[11px] font-semibold transition-colors'
+
+/**
+ * Hover card over an inline link. Positioning and the hover-intent callbacks
+ * are owned by the host; this file only paints the card.
+ */
 export default function LinkPopover({
   isOpen,
   top,
@@ -31,66 +38,76 @@ export default function LinkPopover({
 
   return (
     <div
-      className="link-popover fixed z-50 bg-white rounded-xl shadow-2xl border border-slate-200 p-3 min-w-[320px] max-w-[400px]"
+      className="link-popover floating-pop-in glass-strong fixed z-50 min-w-[320px] max-w-[400px] rounded-2xl p-3"
       style={{ top: `${top}px`, left: `${left}px` }}
       onMouseEnter={onMouseEnter}
       onMouseLeave={onMouseLeave}
     >
       <div className="flex items-start gap-3">
-        <div className="p-2 bg-alpine-100 rounded-lg flex-shrink-0">
-          <ExternalLink size={16} className="text-alpine-600" />
+        <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-xl bg-accent-light text-accent">
+          <ExternalLink size={15} />
         </div>
-        <div className="flex-1 min-w-0">
-          <p className="text-sm font-semibold text-slate-900 truncate mb-1">{linkElement.textContent}</p>
+        <div className="min-w-0 flex-1">
+          <p className="mb-1 truncate text-sm font-semibold tracking-[-0.01em] text-foreground">
+            {linkElement.textContent}
+          </p>
           <a
             href={linkElement.href}
             target="_blank"
             rel="noopener noreferrer"
-            className="text-xs text-alpine-600 hover:text-alpine-800 truncate block mb-2"
+            className="mb-2.5 block truncate text-[11px] font-medium text-accent hover:underline"
             onClick={(e) => e.stopPropagation()}
           >
             {linkElement.href}
           </a>
-          <div className="flex items-center gap-2">
+          <div className="flex flex-wrap items-center gap-1.5">
             <button
+              type="button"
               onClick={() => onOpen(linkElement.href)}
-              className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-alpine-600 bg-alpine-50 hover:bg-alpine-100 rounded-lg transition-colors"
+              className={`${PILL} bg-accent text-accent-foreground hover:bg-accent-strong`}
               title="Open link in new tab"
             >
-              <ExternalLink size={14} />
+              <ExternalLink size={13} />
               Open
             </button>
             <button
+              type="button"
               onClick={() => onEdit(linkElement)}
-              className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-slate-600 bg-slate-100 hover:bg-slate-200 rounded-lg transition-colors"
+              className={`${PILL} bg-surface-hover text-foreground hover:bg-surface-active`}
               title="Edit link"
             >
-              <Edit2 size={14} />
+              <Edit2 size={13} />
               Edit
             </button>
             <button
+              type="button"
               onClick={() => onCopy(linkElement.href)}
-              className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-slate-600 bg-slate-100 hover:bg-slate-200 rounded-lg transition-colors"
+              className={`${PILL} ${
+                copiedLink
+                  ? 'bg-success-light text-success'
+                  : 'bg-surface-hover text-foreground hover:bg-surface-active'
+              }`}
               title="Copy link"
             >
               {copiedLink ? (
                 <>
-                  <Check size={14} className="text-green-600" />
-                  <span className="text-green-600">Copied!</span>
+                  <Check size={13} />
+                  Copied!
                 </>
               ) : (
                 <>
-                  <Copy size={14} />
+                  <Copy size={13} />
                   Copy
                 </>
               )}
             </button>
             <button
+              type="button"
               onClick={() => onRemove(linkElement)}
-              className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-red-600 bg-red-50 hover:bg-red-100 rounded-lg transition-colors ml-auto"
+              className={`${PILL} ml-auto text-danger hover:bg-danger-light`}
               title="Remove link"
             >
-              <Trash2 size={14} />
+              <Trash2 size={13} />
               Remove
             </button>
           </div>

@@ -11,6 +11,11 @@ interface TableInsertDialogProps {
   onInsert: () => void
 }
 
+/**
+ * Table size picker. Same props/hover behaviour as before — only the surface
+ * language changed so it matches the table toolbar and the other editor
+ * popovers (glass-strong, accent selection, pill buttons).
+ */
 export default function TableInsertDialog({
   isOpen,
   tableRows,
@@ -27,11 +32,16 @@ export default function TableInsertDialog({
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center">
-      <div className="absolute inset-0 bg-black/30" onMouseDown={onClose} />
-      <div className="relative z-10 w-80 rounded bg-white p-4 shadow-lg">
-        <h3 className="text-sm font-medium mb-2">Insert table</h3>
+      <div
+        className="absolute inset-0 bg-[rgb(14_12_32_/_0.42)] backdrop-blur-[2px]"
+        onMouseDown={onClose}
+      />
+      <div className="floating-pop-in glass-strong relative z-10 w-80 rounded-3xl p-4">
+        <h3 className="mb-3 text-sm font-semibold tracking-[-0.01em] text-foreground">Insert table</h3>
         <div className="mb-3">
-          <div className="text-xs mb-2">Pick table size</div>
+          <div className="mb-2 text-[11px] font-semibold uppercase tracking-[0.08em] text-muted">
+            Pick table size
+          </div>
           <div className="grid grid-cols-6 gap-1">
             {Array.from({ length: 36 }).map((_, idx) => {
               const r = Math.floor(idx / 6)
@@ -47,20 +57,32 @@ export default function TableInsertDialog({
                   onMouseLeave={onHoverLeave}
                   onClick={() => onSelectSize(r + 1, c + 1)}
                   aria-label={`${r + 1} by ${c + 1}`}
-                  className={`w-6 h-6 rounded-sm border ${isActive ? 'bg-alpine-500 border-alpine-500' : 'bg-white border-gray-200'} focus:outline-none`}
+                  className={`h-6 w-6 rounded-[5px] border transition-colors focus-ring ${
+                    isActive
+                      ? 'border-accent bg-accent-light'
+                      : 'border-border bg-surface hover:bg-surface-hover'
+                  }`}
                 />
               )
             })}
           </div>
-          <div className="mt-2 text-xs text-gray-600">
+          <div className="mt-2 text-[11px] font-medium tabular-nums text-muted">
             {(hoverRows ?? tableRows)} x {(hoverCols ?? tableCols)}
           </div>
         </div>
         <div className="flex justify-end gap-2">
-          <button type="button" onClick={onClose} className="px-3 py-1 rounded border text-sm">
+          <button
+            type="button"
+            onClick={onClose}
+            className="glass-btn focus-ring rounded-xl px-3.5 text-xs font-medium"
+          >
             Cancel
           </button>
-          <button type="button" onClick={onInsert} className="px-3 py-1 rounded bg-alpine-600 text-white text-sm">
+          <button
+            type="button"
+            onClick={onInsert}
+            className="glass-btn-primary focus-ring rounded-xl px-3.5 text-xs font-semibold"
+          >
             Insert
           </button>
         </div>

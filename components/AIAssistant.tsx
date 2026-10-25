@@ -4,7 +4,6 @@ import { useState, useRef, useEffect, useCallback, useMemo } from 'react'
 import {
   Send,
   Sparkles,
-  User,
   Loader2,
   Copy,
   Check,
@@ -99,6 +98,7 @@ import {
   type ContextProjectGroup,
 } from '@/lib/ai/context-groups'
 import { parseAIResponse, type ParsedAIResponse } from '@/lib/ai/parse-response'
+import { formatModShortcut } from '@/lib/platform'
 
 // ============================================================================
 // CONSTANTS
@@ -174,6 +174,81 @@ type QuickAction =
 // ============================================================================
 // SUB-COMPONENTS
 // ============================================================================
+
+/** Accent-gradient glyph tile used as the assistant's identity mark. */
+function AssistantMark({
+  size = 30,
+  radius,
+  className = '',
+}: {
+  size?: number
+  radius?: number
+  className?: string
+}) {
+  const resolvedRadius = radius ?? Math.max(7, Math.round(size * 0.3))
+  return (
+    <span
+      aria-hidden="true"
+      className={'relative inline-flex shrink-0 items-center justify-center ' + className}
+      style={{
+        width: size,
+        height: size,
+        borderRadius: resolvedRadius,
+        background: 'var(--accent-gradient)',
+        border: '1px solid rgb(255 255 255 / 0.2)',
+        boxShadow: 'inset 0 1px 0 rgb(255 255 255 / 0.35), 0 8px 20px -12px var(--accent-glow)',
+      }}
+    >
+      <span
+        className="pointer-events-none absolute inset-0"
+        style={{
+          borderRadius: resolvedRadius,
+          background: 'radial-gradient(120% 90% at 30% 0%, rgb(255 255 255 / 0.32), transparent 58%)',
+        }}
+      />
+      <Sparkles
+        size={Math.round(size * 0.5)}
+        strokeWidth={1.9}
+        className="relative text-white"
+        style={{ filter: 'drop-shadow(0 1px 1px rgb(0 0 0 / 0.18))' }}
+      />
+    </span>
+  )
+}
+
+/** Collapsible reasoning stream shown while an assistant response is in flight. */
+function LiveReasoning({ text }: { text: string }) {
+  const [open, setOpen] = useState(true)
+
+  return (
+    <div className="overflow-hidden rounded-xl border border-[var(--border)] bg-[var(--glass-bg-subtle)] backdrop-blur-sm">
+      <button
+        type="button"
+        onClick={() => setOpen(value => !value)}
+        className="flex w-full items-center gap-1.5 px-2.5 py-2 text-left text-muted transition-colors duration-150 hover:text-foreground"
+      >
+        <Cpu size={11} className="shrink-0 animate-pulse-soft text-accent" strokeWidth={1.9} />
+        <span className="text-[10px] font-medium uppercase tracking-[0.08em]">Live reasoning</span>
+        <ChevronDown
+          size={11}
+          className={'ml-auto shrink-0 transition-transform duration-200 ' + (open ? 'rotate-180' : '')}
+        />
+      </button>
+      <div
+        className={
+          'grid transition-[grid-template-rows,opacity] duration-300 ease-out ' +
+          (open ? 'grid-rows-[1fr] opacity-100' : 'grid-rows-[0fr] opacity-0')
+        }
+      >
+        <div className="overflow-hidden">
+          <div className="max-h-40 overflow-y-auto border-t border-[var(--border)] px-2.5 py-2 text-[11px] italic leading-relaxed whitespace-pre-wrap text-muted">
+            {text.slice(-360)}
+          </div>
+        </div>
+      </div>
+    </div>
+  )
+}
 
 // ============================================================================
 // MAIN COMPONENT
@@ -254,6 +329,11 @@ export default function AIAssistant({
   const inputRef = useRef<HTMLTextAreaElement>(null)
   const chatHistoryRef = useRef<AIMessage[]>([])
   const quotaPopoverRef = useRef<HTMLDivElement>(null)
+
+  // Focus the composer as soon as the panel mounts so the ⌘J flow is instant.
+  useEffect(() => {
+    inputRef.current?.focus()
+  }, [])
 
   useEffect(() => {
     if (showChatHistory) loadChatHistory()
@@ -1004,6 +1084,36 @@ export default function AIAssistant({
     setPendingPromptForConsent(null)
   }, [])
 
+  // Inner dialogs own Escape while open so the host's panel-level handler
+  // does not close the whole assistant underneath them.
+  useEffect(() => {
+    if (!showMindmapPromptModal && !showNoteContextConsentModal) return
+
+    const handleEscape = (event: KeyboardEvent) => {
+      if (event.key !== 'Escape') return
+      event.preventDefault()
+      event.stopPropagation()
+
+      if (showMindmapPromptModal) {
+        if (isLoading) return
+        setShowMindmapPromptModal(false)
+        setPendingMindmapPayload(null)
+        setMindmapPromptInput('')
+        return
+      }
+
+      handleCancelNoteContextConsent()
+    }
+
+    window.addEventListener('keydown', handleEscape, true)
+    return () => window.removeEventListener('keydown', handleEscape, true)
+  }, [
+    showMindmapPromptModal,
+    showNoteContextConsentModal,
+    isLoading,
+    handleCancelNoteContextConsent,
+  ])
+
   const handleSubmitMindmapCreation = useCallback(async () => {
     if (!onCreateMindmapNote || !pendingMindmapPayload) return
 
@@ -1218,24 +1328,32 @@ export default function AIAssistant({
               : [...prev, availableNote.id]
         )}
         disabled={selectionLimitReached}
-        className={`assistant-soft-pop assistant-hover-lift flex w-full items-start gap-3 rounded-2xl border px-3 py-3 text-left transition-all ${
+        className={[
+          'assistant-soft-pop flex w-full items-start gap-2 rounded-xl px-2 py-1.5 text-left transition-colors duration-150',
           isSelected
-            ? 'border-alpine-500/30 bg-alpine-600/10 shadow-sm'
+            ? 'bg-[var(--accent-light)]'
             : selectionLimitReached
-              ? 'cursor-not-allowed border-border/50 bg-surface opacity-50'
-              : 'border-border/60 bg-surface hover:border-border-strong hover:bg-surface-hover/40'
-        }`}
-        style={{ animationDelay: `${160 + Math.min(index, 5) * 25}ms` }}
+              ? 'cursor-not-allowed opacity-50'
+              : 'hover:bg-[var(--surface-hover)]',
+        ].join(' ')}
+        style={{ animationDelay: (160 + Math.min(index, 5) * 25) + 'ms' }}
       >
-        <div className={`mt-0.5 flex h-4 w-4 flex-shrink-0 items-center justify-center rounded border-2 transition-all ${
-          isSelected ? 'border-alpine-600 bg-alpine-600 text-white' : 'border-border-strong'
-        }`}>
-          {isSelected && <Check size={10} />}
-        </div>
-        <div className="min-w-0 flex-1">
-          <div className="truncate text-sm font-medium text-foreground">{availableNote.title || 'Untitled'}</div>
-          <div className="mt-1 text-[11px] text-muted">{availableNote.note_type || 'note'}</div>
-        </div>
+        <span
+          className={[
+            'mt-0.5 flex h-4 w-4 flex-shrink-0 items-center justify-center rounded-[5px] border transition-colors duration-150',
+            isSelected
+              ? 'border-transparent bg-[var(--accent)] text-accent-foreground'
+              : 'border-[var(--border-strong)] text-transparent',
+          ].join(' ')}
+        >
+          <Check size={10} strokeWidth={3} />
+        </span>
+        <span className="min-w-0 flex-1">
+          <span className="block truncate text-[12px] font-medium leading-4 text-foreground">
+            {availableNote.title || 'Untitled'}
+          </span>
+          <span className="mt-0.5 block text-[10px] text-muted">{availableNote.note_type || 'note'}</span>
+        </span>
       </button>
     )
   }
@@ -1244,16 +1362,22 @@ export default function AIAssistant({
     const totalNotes = countNotesInFolderGroup(folderGroup)
 
     return (
-      <div key={folderGroup.folder.id} className="space-y-2">
-        <div className="flex items-center gap-2 px-1 text-[11px] font-semibold text-foreground/70" style={{ paddingLeft: `${depth * 12}px` }}>
-          <FolderOpen size={12} className="text-muted" />
+      <div key={folderGroup.folder.id} className="space-y-1">
+        <div
+          className="flex items-center gap-1.5 text-[10px] font-medium text-muted"
+          style={{ paddingLeft: (depth * 12) + 'px' }}
+        >
+          <FolderOpen size={11} className="shrink-0" />
           <span className="truncate">{folderGroup.folder.name}</span>
-          <span className="inline-flex items-center rounded-full border border-border/50 px-1.5 py-0.5 text-[10px] font-medium text-muted">
+          <span className="inline-flex h-4 min-w-4 items-center justify-center rounded-full bg-[var(--surface-active)] px-1 text-[9px] font-semibold text-muted">
             {totalNotes}
           </span>
         </div>
 
-        <div className="space-y-1.5 border-l border-border/50 pl-3" style={{ marginLeft: `${depth * 12}px` }}>
+        <div
+          className="space-y-0.5 border-l border-[var(--border)] pl-2"
+          style={{ marginLeft: (depth * 12) + 'px' }}
+        >
           {folderGroup.notes.map((availableNote, noteIndex) => renderSelectableNote(availableNote, noteIndex))}
           {folderGroup.children.map((childGroup) => renderContextFolderGroup(childGroup, depth + 1))}
         </div>
@@ -1332,78 +1456,100 @@ export default function AIAssistant({
   // ─── CHAT HISTORY PANEL ─────────────────────────────────────────────────────
 
   const renderChatHistory = () => (
-    <div className="flex-1 flex flex-col overflow-hidden">
-      <div className="flex-1 overflow-y-auto">
+    <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
+      <div className="scroll-thin min-h-0 flex-1 overflow-y-auto">
         {isLoadingHistory ? (
-          <div className="flex items-center justify-center py-16">
-            <div className="flex flex-col items-center gap-3">
-              <div className="w-10 h-10 rounded-full bg-surface-hover flex items-center justify-center">
-                <Loader2 size={18} className="animate-spin text-muted" />
+          <div className="space-y-2 p-3">
+            <span className="sr-only">Loading conversations…</span>
+            {[0, 1, 2].map((row) => (
+              <div
+                key={row}
+                className="rounded-2xl border border-[var(--border)] bg-[var(--surface-sunken)] p-3"
+              >
+                <div className="flex items-center gap-2.5">
+                  <div className="skeleton-shimmer h-7 w-7 shrink-0 rounded-lg" />
+                  <div className="min-w-0 flex-1 space-y-1.5">
+                    <div className="skeleton-shimmer h-2.5 w-1/2 rounded-full" />
+                    <div className="skeleton-shimmer h-2 w-3/4 rounded-full" />
+                  </div>
+                </div>
               </div>
-              <span className="text-xs text-muted">Loading conversations…</span>
-            </div>
+            ))}
           </div>
         ) : chatHistory.length === 0 ? (
-          <div className="flex flex-col items-center justify-center py-16 px-8">
-            <div className="w-16 h-16 rounded-2xl bg-gradient-to-br from-surface-hover to-surface-active/50 flex items-center justify-center mb-4">
-              <MessageSquare size={24} className="text-muted/60" />
+          <div className="flex min-h-full flex-col items-center justify-center px-8 py-16">
+            <div className="relative mb-4">
+              <div className="absolute inset-0 rounded-2xl bg-[var(--accent-glow)] opacity-50 blur-xl" aria-hidden />
+              <div className="relative flex h-12 w-12 items-center justify-center rounded-2xl border border-[var(--border)] bg-[var(--accent-light)] text-accent shadow-[inset_0_1px_0_var(--glass-highlight)]">
+                <MessageSquare size={20} strokeWidth={1.8} />
+              </div>
             </div>
-            <p className="text-sm font-medium text-foreground/70">No conversations yet</p>
-            <p className="text-xs text-muted mt-1.5 text-center leading-relaxed">
+            <p className="text-[13px] font-medium text-foreground">No conversations yet</p>
+            <p className="mt-1 text-center text-[11px] leading-5 text-muted">
               Your AI conversations will appear here
             </p>
           </div>
         ) : (
-          <div className="p-3 space-y-2">
-            {chatHistory.map((c, index) => (
-              <button
-                key={c.id}
-                onClick={() => loadChat(c)}
-                className={`assistant-soft-pop assistant-hover-lift w-full p-3.5 text-left rounded-2xl transition-all duration-200 group relative border ${
-                  currentChatId === c.id
-                    ? 'bg-alpine-600/10 border-alpine-500/30 shadow-[0_16px_30px_rgba(37,112,235,0.12)]'
-                    : 'bg-surface border-border/60 hover:border-border-strong hover:bg-surface-hover/60 shadow-sm'
-                }`}
-                style={{ animationDelay: `${Math.min(index, 6) * 45}ms` }}
-              >
-                <div className="flex items-start gap-3">
-                  <div className={`w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0 ${
-                    currentChatId === c.id
-                      ? 'bg-alpine-500/20 text-alpine-500'
-                      : 'bg-surface-hover text-muted'
-                  }`}>
-                    <MessageSquare size={14} />
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <h4 className={`text-xs font-medium truncate ${currentChatId === c.id ? 'text-alpine-600 dark:text-alpine-400' : 'text-foreground'}`}>
-                      {c.title}
-                    </h4>
-                    <p className="mt-1 text-[11px] leading-relaxed text-foreground/60 line-clamp-2">
-                      {truncateAtBoundary(c.messages[c.messages.length - 1]?.content || 'Open this conversation to continue where you left off.', 120)}
-                    </p>
-                    <div className="flex items-center gap-1.5 mt-1 text-[10px] text-muted">
-                      <span>{c.messages.length} messages</span>
-                      <span className="opacity-40">·</span>
-                      <span>{new Date(c.updated_at).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}</span>
-                    </div>
-                  </div>
+          <div className="space-y-1 p-2.5">
+            {chatHistory.map((c, index) => {
+              const isActive = currentChatId === c.id
+              return (
+                <div
+                  key={c.id}
+                  className={[
+                    'assistant-soft-pop glass-row group relative rounded-xl px-2 py-2',
+                    isActive ? 'is-active' : '',
+                  ].join(' ')}
+                  style={{ animationDelay: (Math.min(index, 6) * 45) + 'ms' }}
+                >
+                  <button
+                    onClick={() => loadChat(c)}
+                    className="flex min-w-0 flex-1 items-start gap-2.5 text-left"
+                    type="button"
+                  >
+                    <span
+                      className={[
+                        'mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-lg',
+                        isActive
+                          ? 'bg-[var(--accent-light)] text-accent'
+                          : 'bg-[var(--surface-sunken)] text-muted',
+                      ].join(' ')}
+                    >
+                      <MessageSquare size={13} strokeWidth={1.9} />
+                    </span>
+                    <span className="min-w-0 flex-1">
+                      <span className="block truncate text-[12px] font-medium text-foreground">
+                        {c.title}
+                      </span>
+                      <span className="mt-0.5 line-clamp-2 block text-[11px] leading-5 text-muted">
+                        {truncateAtBoundary(c.messages[c.messages.length - 1]?.content || 'Open this conversation to continue where you left off.', 120)}
+                      </span>
+                      <span className="mt-1 flex items-center gap-1.5 text-[10px] text-muted">
+                        <span>{c.messages.length} messages</span>
+                        <span aria-hidden>·</span>
+                        <span>{new Date(c.updated_at).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}</span>
+                      </span>
+                    </span>
+                  </button>
                   <button
                     onClick={(e) => handleDeleteChat(c.id, e)}
-                    className="p-1.5 rounded-lg opacity-0 group-hover:opacity-100 transition-all text-muted hover:text-danger hover:bg-danger/10"
+                    className="glass-btn-ghost ml-1 h-7 w-7 shrink-0 opacity-0 transition-opacity duration-150 focus-visible:opacity-100 group-hover:opacity-100"
                     title="Delete"
+                    type="button"
                   >
                     <Trash2 size={12} />
                   </button>
                 </div>
-              </button>
-            ))}
+              )
+            })}
           </div>
         )}
       </div>
-      <div className="p-3 border-t border-border/50 shrink-0">
+      <div className="shrink-0 border-t border-[var(--border)] p-3">
         <button
           onClick={startNewChat}
-          className="w-full flex items-center justify-center gap-2 px-4 py-2.5 bg-alpine-600 text-white text-xs font-medium rounded-xl hover:bg-alpine-700 active:scale-[0.98] transition-all shadow-sm"
+          className="glass-btn-primary h-9 w-full justify-center gap-2 text-[12px]"
+          type="button"
         >
           <Plus size={14} />
           New Conversation
@@ -1464,43 +1610,51 @@ export default function AIAssistant({
     if (!showQuickActions) return null
 
     return (
-      <div className="assistant-rise-in shrink-0 border-b border-border/50 bg-surface/60">
-        <div className="flex items-center justify-between gap-3 px-4 pt-3">
-          <div className="flex items-center gap-2 text-[11px] font-semibold uppercase tracking-[0.18em] text-muted">
-            <Zap size={12} className="text-alpine-600" />
+      <div className="assistant-rise-in shrink-0 border-b border-[var(--border)] bg-[var(--surface-sunken)]">
+        <div className="flex items-center justify-between gap-3 px-3.5 pb-1 pt-2.5">
+          <div className="flex items-center gap-1.5 text-[11px] font-medium uppercase tracking-[0.08em] text-muted">
+            <Zap size={11} className="text-accent" strokeWidth={1.9} />
             Quick actions
           </div>
           <button
             onClick={() => setShowQuickActions(false)}
-            className="rounded-lg p-1 text-muted transition-colors hover:bg-surface-hover hover:text-foreground"
+            className="glass-btn-ghost -mr-1 h-6 w-6"
             title="Hide quick actions"
+            type="button"
           >
-            <X size={14} />
+            <X size={13} />
           </button>
         </div>
 
-        <div className="max-h-[38vh] space-y-3 overflow-y-auto px-4 pb-3.5 pt-2">
+        <div className="scroll-thin max-h-[38vh] space-y-2.5 overflow-y-auto px-3.5 pb-3 pt-1">
           {sections.map((section) => (
             <div key={section.title}>
-              <div className="flex items-center gap-1.5 text-[11px] font-medium text-foreground/60">
-                {section.highlight ? <MousePointerClick size={12} className="text-peak-600" /> : <Sparkles size={12} className="text-alpine-600" />}
+              <div className="mb-1.5 flex items-center gap-1.5 text-[10px] font-medium uppercase tracking-[0.08em] text-muted">
+                {section.highlight ? (
+                  <MousePointerClick size={10} className="text-accent" />
+                ) : (
+                  <Sparkles size={10} className="text-accent" />
+                )}
                 {section.title}
               </div>
-              <div className="mt-1.5 flex flex-wrap gap-1.5">
+              <div className="grid grid-cols-2 gap-1.5">
                 {section.items.map(({ action, icon, label, description }) => (
                   <button
                     key={action}
                     onClick={() => { handleQuickAction(action); setShowQuickActions(false) }}
                     disabled={isLoading || !isConfigured}
                     title={description}
-                    className={`assistant-hover-lift inline-flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-xs font-medium transition-all disabled:cursor-not-allowed disabled:opacity-40 active:scale-[0.98] ${
+                    className={[
+                      'flex items-center gap-1.5 rounded-xl border px-2.5 py-1.5 text-left text-[11.5px] font-medium transition-colors duration-150',
+                      'disabled:cursor-not-allowed disabled:opacity-40',
                       section.highlight
-                        ? 'border-alpine-500/25 bg-alpine-600/10 text-alpine-700 dark:text-alpine-300'
-                        : 'border-border/60 bg-surface text-foreground/80 hover:border-border-strong hover:text-foreground'
-                    }`}
+                        ? 'border-transparent bg-[var(--accent-light)] text-accent hover:brightness-105'
+                        : 'border-[var(--border)] bg-[var(--surface)] text-foreground hover:bg-[var(--surface-hover)]',
+                    ].join(' ')}
+                    type="button"
                   >
-                    {icon}
-                    {label}
+                    <span className="shrink-0">{icon}</span>
+                    <span className="min-w-0 truncate">{label}</span>
                   </button>
                 ))}
               </div>
@@ -1515,49 +1669,62 @@ export default function AIAssistant({
 
   const renderSuggestions = () => {
     if (!showSuggestions) return null
+    const cardClass = 'assistant-soft-pop glass rounded-2xl p-3'
+    const labelClass = 'flex items-center gap-1.5 text-[10px] font-medium uppercase tracking-[0.08em] text-muted'
+    const rowClass = 'rounded-xl border border-[var(--border)] bg-[var(--surface-sunken)] p-2.5'
+
     return (
-      <div className="assistant-rise-in border-b border-border/50 bg-surface-hover/10 shrink-0 overflow-y-auto max-h-[40%]">
+      <div className="scroll-thin max-h-[40%] shrink-0 overflow-y-auto border-b border-[var(--border)] bg-[var(--surface-sunken)]">
         <div className="p-3">
-          <div className="flex items-center justify-between mb-3">
-            <div className="flex items-center gap-2">
-              <Sparkles size={14} className="text-alpine-500" />
-              <span className="text-xs font-semibold text-foreground">Suggestions</span>
+          <div className="mb-2.5 flex items-center justify-between">
+            <div className="flex items-center gap-1.5">
+              <Sparkles size={13} className="text-accent" strokeWidth={1.9} />
+              <span className="text-[11px] font-medium uppercase tracking-[0.08em] text-muted">Suggestions</span>
             </div>
             <button
               onClick={() => { setSuggestions({}); setShowSuggestions(false) }}
-              className="p-1.5 hover:bg-surface-hover rounded-lg transition-colors text-muted hover:text-foreground"
+              className="glass-btn-ghost -mr-1 h-6 w-6"
+              type="button"
             >
-              <X size={14} />
+              <X size={13} />
             </button>
           </div>
 
-          <div className="space-y-2.5">
+          <div className="space-y-2">
             {suggestions.summary && (
-              <div className="assistant-soft-pop assistant-hover-lift bg-surface rounded-xl p-3.5 border border-border/50" style={{ animationDelay: '40ms' }}>
-                <div className="flex items-center gap-1.5 text-[10px] font-semibold text-muted uppercase tracking-wider mb-2.5">
-                  <FileText size={10} /> Summary
+              <div className={cardClass} style={{ animationDelay: '40ms' }}>
+                <div className={labelClass + ' mb-2'}>
+                  <FileText size={10} className="text-accent" /> Summary
                 </div>
-                <p className="text-[13px] text-foreground/80 leading-relaxed">{suggestions.summary.summary}</p>
+                <p className="text-[12.5px] leading-5 text-foreground">{suggestions.summary.summary}</p>
                 {suggestions.summary.keyPoints.length > 0 && (
-                  <div className="mt-3 pt-2.5 border-t border-border/40">
-                    <div className="text-[10px] font-semibold text-muted uppercase tracking-wider mb-2">Key Points</div>
-                    <ul className="space-y-2">
+                  <div className="mt-2.5 border-t border-[var(--border)] pt-2.5">
+                    <div className={labelClass + ' mb-2'}>Key Points</div>
+                    <ul className="space-y-1.5">
                       {suggestions.summary.keyPoints.map((point, i) => (
-                        <li key={i} className="flex gap-2.5 text-xs text-foreground/70 leading-relaxed">
-                          <span className="w-5 h-5 rounded-full bg-alpine-600/10 text-alpine-600 flex items-center justify-center flex-shrink-0 text-[10px] font-bold mt-0.5">{i + 1}</span>
-                          <span>{point}</span>
+                        <li key={i} className="flex gap-2 text-[12px] leading-5 text-foreground">
+                          <span className="mt-0.5 flex h-[18px] w-[18px] flex-shrink-0 items-center justify-center rounded-full bg-[var(--accent-light)] text-[10px] font-semibold text-accent">
+                            {i + 1}
+                          </span>
+                          <span className="min-w-0">{point}</span>
                         </li>
                       ))}
                     </ul>
                   </div>
                 )}
                 {suggestions.summary.suggestedTasks && suggestions.summary.suggestedTasks.length > 0 && (
-                  <div className="mt-3 pt-2.5 border-t border-border/40">
-                    <div className="text-[10px] font-semibold text-muted uppercase tracking-wider mb-2">Suggested Tasks</div>
-                    <div className="space-y-1">
+                  <div className="mt-2.5 border-t border-[var(--border)] pt-2.5">
+                    <div className={labelClass + ' mb-1.5'}>Suggested Tasks</div>
+                    <div className="space-y-0.5">
                       {suggestions.summary.suggestedTasks.map((task, i) => (
-                        <button key={i} onClick={() => handleApplyTask({ title: task })} className="flex items-center gap-2 w-full text-left text-xs text-foreground/70 hover:text-foreground p-2 rounded-lg hover:bg-surface-hover transition-colors group">
-                          <Plus size={12} className="text-muted group-hover:text-alpine-500 transition-colors" /> {task}
+                        <button
+                          key={i}
+                          onClick={() => handleApplyTask({ title: task })}
+                          className="glass-row flex items-center gap-2 rounded-lg px-2 py-1.5 text-left text-[11.5px] text-foreground"
+                          type="button"
+                        >
+                          <Plus size={11} className="shrink-0 text-accent" />
+                          <span className="min-w-0 flex-1 truncate">{task}</span>
                         </button>
                       ))}
                     </div>
@@ -1567,30 +1734,44 @@ export default function AIAssistant({
             )}
 
             {suggestions.tasks && suggestions.tasks.length > 0 && (
-              <div className="assistant-soft-pop assistant-hover-lift bg-surface rounded-xl p-3.5 border border-border/50" style={{ animationDelay: '80ms' }}>
-                <div className="flex items-center gap-1.5 text-[10px] font-semibold text-muted uppercase tracking-wider mb-2.5">
-                  <CheckSquare size={10} /> Task Suggestions
+              <div className={cardClass} style={{ animationDelay: '80ms' }}>
+                <div className={labelClass + ' mb-2'}>
+                  <CheckSquare size={10} className="text-accent" /> Task Suggestions
                 </div>
-                <div className="space-y-2">
+                <div className="space-y-1.5">
                   {suggestions.tasks.map((task, i) => (
-                    <div key={i} className="flex items-start justify-between gap-3 p-2.5 bg-surface-hover/40 rounded-lg">
-                      <div className="flex-1 min-w-0">
-                        <div className="text-xs font-medium text-foreground">{task.title}</div>
-                        {task.description && <div className="text-[11px] text-muted mt-0.5 leading-relaxed">{task.description}</div>}
-                        <div className="flex items-center gap-2 mt-1.5">
+                    <div key={i} className={rowClass + ' flex items-start justify-between gap-2.5'}>
+                      <div className="min-w-0 flex-1">
+                        <div className="text-[12px] font-medium leading-5 text-foreground">{task.title}</div>
+                        {task.description && (
+                          <div className="mt-0.5 text-[11px] leading-5 text-muted">{task.description}</div>
+                        )}
+                        <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
                           {task.priority && (
-                            <span className={`text-[10px] px-2 py-0.5 rounded-full font-medium ${
-                              task.priority === 'urgent' ? 'bg-danger/10 text-danger' :
-                              task.priority === 'high' ? 'bg-warning/10 text-warning' :
-                              task.priority === 'low' ? 'bg-surface-active text-muted' :
-                              'bg-alpine-600/10 text-alpine-600'
-                            }`}>{task.priority}</span>
+                            <span
+                              className={[
+                                'rounded-full px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-[0.06em]',
+                                task.priority === 'urgent'
+                                  ? 'bg-[var(--danger-light)] text-danger'
+                                  : task.priority === 'high'
+                                    ? 'bg-[var(--warning-light)] text-warning'
+                                    : task.priority === 'low'
+                                      ? 'bg-[var(--surface-active)] text-muted'
+                                      : 'bg-[var(--accent-light)] text-accent',
+                              ].join(' ')}
+                            >
+                              {task.priority}
+                            </span>
                           )}
                           {task.dueDate && <span className="text-[10px] text-muted">{task.dueDate}</span>}
                         </div>
                       </div>
                       {onCreateTask && (
-                        <button onClick={() => handleApplyTask(task)} className="px-2.5 py-1 text-[10px] font-medium bg-alpine-600 text-white rounded-lg hover:bg-alpine-700 active:scale-95 transition-all flex-shrink-0">
+                        <button
+                          onClick={() => handleApplyTask(task)}
+                          className="glass-btn-primary h-7 shrink-0 px-2.5 text-[10px]"
+                          type="button"
+                        >
                           Add
                         </button>
                       )}
@@ -1601,23 +1782,29 @@ export default function AIAssistant({
             )}
 
             {suggestions.events && suggestions.events.length > 0 && (
-              <div className="assistant-soft-pop assistant-hover-lift bg-surface rounded-xl p-3.5 border border-border/50" style={{ animationDelay: '120ms' }}>
-                <div className="flex items-center gap-1.5 text-[10px] font-semibold text-muted uppercase tracking-wider mb-2.5">
-                  <Calendar size={10} /> Event Suggestions
+              <div className={cardClass} style={{ animationDelay: '120ms' }}>
+                <div className={labelClass + ' mb-2'}>
+                  <Calendar size={10} className="text-accent" /> Event Suggestions
                 </div>
-                <div className="space-y-2">
+                <div className="space-y-1.5">
                   {suggestions.events.map((event, i) => (
-                    <div key={i} className="flex items-start justify-between gap-3 p-2.5 bg-surface-hover/40 rounded-lg">
-                      <div className="flex-1 min-w-0">
-                        <div className="text-xs font-medium text-foreground">{event.title}</div>
-                        {event.description && <div className="text-[11px] text-muted mt-0.5 leading-relaxed">{event.description}</div>}
-                        <div className="flex items-center gap-2 mt-1.5 text-[10px] text-muted">
+                    <div key={i} className={rowClass + ' flex items-start justify-between gap-2.5'}>
+                      <div className="min-w-0 flex-1">
+                        <div className="text-[12px] font-medium leading-5 text-foreground">{event.title}</div>
+                        {event.description && (
+                          <div className="mt-0.5 text-[11px] leading-5 text-muted">{event.description}</div>
+                        )}
+                        <div className="mt-1 flex items-center gap-1.5 text-[10px] text-muted">
                           {event.suggestedDate && <span>{event.suggestedDate}</span>}
                           {event.duration && <span>({event.duration} min)</span>}
                         </div>
                       </div>
                       {onCreateEvent && event.suggestedDate && (
-                        <button onClick={() => handleApplyEvent(event)} className="px-2.5 py-1 text-[10px] font-medium bg-alpine-600 text-white rounded-lg hover:bg-alpine-700 active:scale-95 transition-all flex-shrink-0">
+                        <button
+                          onClick={() => handleApplyEvent(event)}
+                          className="glass-btn-primary h-7 shrink-0 px-2.5 text-[10px]"
+                          type="button"
+                        >
                           Add
                         </button>
                       )}
@@ -1628,26 +1815,34 @@ export default function AIAssistant({
             )}
 
             {suggestions.mindmap && suggestions.mindmap.length > 0 && (
-              <div className="assistant-soft-pop assistant-hover-lift bg-surface rounded-xl p-3.5 border border-border/50" style={{ animationDelay: '160ms' }}>
-                <div className="flex items-center gap-1.5 text-[10px] font-semibold text-muted uppercase tracking-wider mb-2.5">
-                  <Network size={10} /> Mindmap Ideas
+              <div className={cardClass} style={{ animationDelay: '160ms' }}>
+                <div className={labelClass + ' mb-2'}>
+                  <Network size={10} className="text-accent" /> Mindmap Ideas
                 </div>
-                <div className="space-y-2">
+                <div className="space-y-1.5">
                   {suggestions.mindmap.map((suggestion, i) => (
-                    <div key={i} className="flex items-start justify-between gap-3 p-2.5 bg-surface-hover/40 rounded-lg">
-                      <div className="flex-1 min-w-0">
-                        <div className="text-xs font-medium text-foreground">{suggestion.nodeText}</div>
-                        {suggestion.description && <div className="text-[11px] text-muted mt-0.5 leading-relaxed">{suggestion.description}</div>}
+                    <div key={i} className={rowClass + ' flex items-start justify-between gap-2.5'}>
+                      <div className="min-w-0 flex-1">
+                        <div className="text-[12px] font-medium leading-5 text-foreground">{suggestion.nodeText}</div>
+                        {suggestion.description && (
+                          <div className="mt-0.5 text-[11px] leading-5 text-muted">{suggestion.description}</div>
+                        )}
                         {suggestion.childSuggestions && suggestion.childSuggestions.length > 0 && (
                           <div className="mt-1.5 flex flex-wrap gap-1">
                             {suggestion.childSuggestions.map((child, j) => (
-                              <span key={j} className="text-[10px] px-2 py-0.5 bg-surface-active/60 text-muted rounded-full">{child}</span>
+                              <span key={j} className="rounded-full bg-[var(--surface-active)] px-2 py-0.5 text-[10px] text-muted">
+                                {child}
+                              </span>
                             ))}
                           </div>
                         )}
                       </div>
                       {onAddMindmapNode && (
-                        <button onClick={() => handleApplyMindmapNode(suggestion)} className="px-2.5 py-1 text-[10px] font-medium bg-alpine-600 text-white rounded-lg hover:bg-alpine-700 active:scale-95 transition-all flex-shrink-0">
+                        <button
+                          onClick={() => handleApplyMindmapNode(suggestion)}
+                          className="glass-btn-primary h-7 shrink-0 px-2.5 text-[10px]"
+                          type="button"
+                        >
                           Add
                         </button>
                       )}
@@ -1661,31 +1856,33 @@ export default function AIAssistant({
       </div>
     )
   }
-
   // ─── STRUCTURED CONTENT ────────────────────────────────────────────────────
 
   const renderStructuredContent = (parsed: ParsedAIResponse) => {
     if (parsed.type === 'text') return <MarkdownContent content={parsed.rawText || ''} />
+    const labelClass = 'mb-2 flex items-center gap-1.5 text-[10px] font-medium uppercase tracking-[0.08em] text-muted'
     return (
       <div className="space-y-4">
         {parsed.summary && (
           <div>
-            <div className="flex items-center gap-1.5 text-[10px] font-semibold text-muted uppercase tracking-wider mb-2">
-              <FileText size={10} /> Summary
+            <div className={labelClass}>
+              <FileText size={10} className="text-accent" /> Summary
             </div>
-            <p className="text-[13px] text-foreground/80 leading-relaxed">{parsed.summary}</p>
+            <p className="text-[12.5px] leading-5 text-foreground">{parsed.summary}</p>
           </div>
         )}
         {parsed.keyPoints && parsed.keyPoints.length > 0 && (
           <div>
-            <div className="flex items-center gap-1.5 text-[10px] font-semibold text-muted uppercase tracking-wider mb-2">
-              <Lightbulb size={10} /> Key Points
+            <div className={labelClass}>
+              <Lightbulb size={10} className="text-accent" /> Key Points
             </div>
-            <ul className="space-y-2.5">
+            <ul className="space-y-2">
               {parsed.keyPoints.map((point, i) => (
-                <li key={i} className="flex gap-2.5 text-[13px] text-foreground/80">
-                  <span className="flex-shrink-0 w-5 h-5 rounded-full bg-alpine-600 text-white text-[10px] font-bold flex items-center justify-center mt-0.5">{i + 1}</span>
-                  <span className="leading-relaxed">{point}</span>
+                <li key={i} className="flex gap-2.5 text-[12.5px] leading-5 text-foreground">
+                  <span className="mt-0.5 flex h-[18px] w-[18px] flex-shrink-0 items-center justify-center rounded-full bg-accent-gradient text-[10px] font-semibold text-accent-foreground">
+                    {i + 1}
+                  </span>
+                  <span className="min-w-0 leading-5">{point}</span>
                 </li>
               ))}
             </ul>
@@ -1693,15 +1890,22 @@ export default function AIAssistant({
         )}
         {parsed.suggestedTasks && parsed.suggestedTasks.length > 0 && (
           <div>
-            <div className="flex items-center gap-1.5 text-[10px] font-semibold text-muted uppercase tracking-wider mb-2">
-              <CheckSquare size={10} /> Suggested Tasks
+            <div className={labelClass}>
+              <CheckSquare size={10} className="text-accent" /> Suggested Tasks
             </div>
-            <ul className="space-y-1.5">
+            <ul className="space-y-1">
               {parsed.suggestedTasks.map((task, i) => (
-                <li key={i} className="flex items-start gap-2 group">
-                  <div className="flex-1 text-[13px] text-foreground/80 bg-surface-hover/50 px-3 py-2 rounded-xl border border-border/40">{task}</div>
+                <li key={i} className="group flex items-start gap-1.5">
+                  <div className="min-w-0 flex-1 rounded-xl border border-[var(--border)] bg-[var(--surface-sunken)] px-2.5 py-2 text-[12px] leading-5 text-foreground">
+                    {task}
+                  </div>
                   {onCreateTask && (
-                    <button onClick={() => handleApplyTask({ title: task })} className="flex-shrink-0 p-2 text-muted hover:text-foreground hover:bg-surface-hover rounded-lg transition-all opacity-0 group-hover:opacity-100" title="Add as task">
+                    <button
+                      onClick={() => handleApplyTask({ title: task })}
+                      className="glass-btn-ghost h-7 w-7 shrink-0 opacity-0 transition-opacity duration-150 group-hover:opacity-100 focus-visible:opacity-100"
+                      title="Add as task"
+                      type="button"
+                    >
                       <Plus size={12} />
                     </button>
                   )}
@@ -1721,92 +1925,128 @@ export default function AIAssistant({
       {
         prompt: selectedText?.trim() ? 'Explain this selection' : 'Summarize this note',
         title: selectedText?.trim() ? 'Explain the selected text' : 'Summarize the current note',
-        icon: selectedText?.trim() ? <HelpCircle size={15} className="text-peak-600" /> : <FileText size={15} className="text-alpine-600" />,
+        icon: <HelpCircle size={14} />,
+        tint: 'bg-[var(--accent-light)] text-accent',
       },
       {
         prompt: 'Help me brainstorm ideas',
         title: 'Brainstorm directions',
-        icon: <Lightbulb size={15} className="text-warning" />,
+        icon: <Lightbulb size={14} />,
+        tint: 'bg-[var(--warning-light)] text-warning',
       },
       {
         prompt: 'Create a task list',
         title: 'Turn notes into actions',
-        icon: <CheckSquare size={15} className="text-accent" />,
+        icon: <CheckSquare size={14} />,
+        tint: 'bg-[var(--accent-light)] text-accent',
       },
       {
         prompt: 'Build a mindmap from this',
         title: 'Map the structure',
-        icon: <Network size={15} className="text-alpine-600" />,
+        icon: <Network size={14} />,
+        tint: 'bg-[var(--accent-light)] text-accent',
       },
     ]
 
     return (
-      <div className="flex-1 overflow-y-auto">
-        <div className="space-y-3 p-4">
-          <div className="assistant-rise-in rounded-2xl border border-border/60 bg-surface px-4 py-3.5">
-            <div className="flex items-start gap-3">
-              <div className="rounded-xl bg-alpine-600/10 p-2 text-alpine-600">
-                <Sparkles size={16} />
-              </div>
-              <div className="min-w-0">
-                <h3 className="text-sm font-semibold text-foreground">Ask, edit, search, and act across your notes.</h3>
-                <p className="mt-1 text-xs leading-relaxed text-foreground/65">
-                  {isConfigured
-                    ? `${AI_MODEL_SHORT_LABEL} with thinking is ready — it can read note context, rewrite text, create tasks, or turn ideas into a mindmap.`
-                    : 'Add a DeepSeek API key to your environment to unlock note search, drafting, summarization, and structured AI actions.'}
-                </p>
+      <div className="scroll-thin flex min-h-0 flex-1 flex-col overflow-y-auto">
+        <div className="m-auto w-full px-4 pb-6 pt-7">
+          <div className="assistant-rise-in flex flex-col items-center text-center">
+            <div className="relative mb-4">
+              <div className="absolute inset-0 rounded-2xl bg-[var(--accent-glow)] opacity-70 blur-2xl" aria-hidden />
+              <div className="relative flex h-11 w-11 items-center justify-center rounded-2xl border border-[var(--border)] bg-[var(--accent-light)] text-accent shadow-[inset_0_1px_0_var(--glass-highlight)]">
+                <Sparkles size={22} strokeWidth={1.7} />
               </div>
             </div>
-            <div className="mt-3 flex flex-wrap gap-1.5">
-              <span className="inline-flex items-center gap-1.5 rounded-full border border-border/60 bg-surface-hover/40 px-2.5 py-1 text-[11px] text-foreground/70">
-                <BookOpen size={11} className="text-peak-600" />
-                {workspaceNoteCount} note{workspaceNoteCount === 1 ? '' : 's'}
+            <h3 className="font-display text-[21px] font-semibold leading-tight tracking-[-0.02em] text-foreground">
+              How can I help <span className="text-gradient">with this note?</span>
+            </h3>
+            <p className="mt-2 max-w-[34ch] text-[12px] leading-5 text-muted">
+              {isConfigured
+                ? AI_MODEL_SHORT_LABEL + ' with thinking is ready — it can read note context, rewrite text, create tasks, or turn ideas into a mindmap.'
+                : 'Add a DeepSeek API key to your environment to unlock note search, drafting, summarization, and structured AI actions.'}
+            </p>
+          </div>
+
+          <div className="mt-4 flex flex-wrap items-center justify-center gap-1.5">
+            {note && (
+              <span className="glass-round inline-flex h-6 items-center gap-1.5 border border-[var(--border)] bg-[var(--surface-sunken)] px-2.5 text-[10.5px] text-muted">
+                <FileText size={10} className="text-accent" />
+                <span className="max-w-[130px] truncate">{note.title || 'Untitled'}</span>
               </span>
-              <span className="inline-flex items-center gap-1.5 rounded-full border border-border/60 bg-surface-hover/40 px-2.5 py-1 text-[11px] text-foreground/70">
-                <CheckSquare size={11} className="text-accent" />
-                {pendingTaskCount} active task{pendingTaskCount === 1 ? '' : 's'}
+            )}
+            <span className="glass-round inline-flex h-6 items-center gap-1.5 border border-[var(--border)] bg-[var(--surface-sunken)] px-2.5 text-[10.5px] text-muted">
+              <BookOpen size={10} className="text-accent" />
+              {workspaceNoteCount} note{workspaceNoteCount === 1 ? '' : 's'}
+            </span>
+            <span className="glass-round inline-flex h-6 items-center gap-1.5 border border-[var(--border)] bg-[var(--surface-sunken)] px-2.5 text-[10.5px] text-muted">
+              <CheckSquare size={10} className="text-accent" />
+              {pendingTaskCount} active task{pendingTaskCount === 1 ? '' : 's'}
+            </span>
+            <span className="glass-round inline-flex h-6 items-center gap-1.5 border border-[var(--border)] bg-[var(--surface-sunken)] px-2.5 text-[10.5px] text-muted">
+              <Calendar size={10} className="text-accent" />
+              {upcomingEventCount} upcoming event{upcomingEventCount === 1 ? '' : 's'}
+            </span>
+            {activeContextSources > 0 && (
+              <span className="glass-round inline-flex h-6 items-center gap-1.5 bg-[var(--accent-light)] px-2.5 text-[10.5px] font-medium text-accent">
+                <MousePointerClick size={10} />
+                {activeContextSources} attached
               </span>
-              <span className="inline-flex items-center gap-1.5 rounded-full border border-border/60 bg-surface-hover/40 px-2.5 py-1 text-[11px] text-foreground/70">
-                <Calendar size={11} className="text-alpine-600" />
-                {upcomingEventCount} upcoming event{upcomingEventCount === 1 ? '' : 's'}
-              </span>
-              {activeContextSources > 0 && (
-                <span className="inline-flex items-center gap-1.5 rounded-full border border-alpine-500/20 bg-alpine-600/10 px-2.5 py-1 text-[11px] text-alpine-700 dark:text-alpine-300">
-                  <MousePointerClick size={11} />
-                  {activeContextSources} attached to the next message
-                </span>
-              )}
-            </div>
+            )}
+          </div>
+
+          <div className="mt-2.5 flex flex-wrap items-center justify-center gap-x-2.5 gap-y-1 text-[10px] text-muted">
+            <span className="inline-flex items-center gap-1">
+              <kbd className="kbd">{formatModShortcut('J')}</kbd>
+              toggle this panel
+            </span>
+            <span aria-hidden className="opacity-40">·</span>
+            <span className="inline-flex items-center gap-1">
+              <kbd className="kbd">{formatModShortcut('K')}</kbd>
+              search everything
+            </span>
           </div>
 
           {!isConfigured ? (
-            <div className="assistant-soft-pop rounded-2xl border border-warning/20 bg-warning/5 px-4 py-3.5">
-              <div className="flex items-start gap-3">
-                <div className="mt-0.5 rounded-xl bg-warning/10 p-2 text-warning">
-                  <AlertCircle size={16} />
-                </div>
-                <div>
-                  <h4 className="text-sm font-semibold text-foreground">AI is not configured yet</h4>
-                  <p className="mt-1 text-xs leading-relaxed text-foreground/70">
+            <div className="assistant-soft-pop mt-5 rounded-2xl bg-[var(--warning-light)] p-3.5">
+              <div className="flex items-start gap-2.5">
+                <span className="mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-[var(--surface)] text-warning">
+                  <AlertCircle size={15} />
+                </span>
+                <div className="min-w-0">
+                  <h4 className="text-[12.5px] font-semibold text-foreground">AI is not configured yet</h4>
+                  <p className="mt-1 text-[11px] leading-5 text-muted">
                     Set DEEPSEEK_API_KEY in your app environment, then reopen the assistant.
                   </p>
                 </div>
               </div>
             </div>
           ) : (
-            <div className="space-y-2">
-              <div className="px-1 text-[11px] font-semibold uppercase tracking-[0.18em] text-muted">Try asking</div>
-              {starterPrompts.map((suggestion) => (
-                <button
-                  key={suggestion.prompt}
-                  onClick={() => void handleSend(suggestion.prompt)}
-                  className="assistant-hover-lift group flex w-full items-center gap-3 rounded-xl border border-border/60 bg-surface px-3.5 py-2.5 text-left transition-all hover:border-alpine-500/35"
-                >
-                  <span className="rounded-lg bg-surface-hover p-1.5">{suggestion.icon}</span>
-                  <span className="min-w-0 flex-1 truncate text-sm text-foreground">{suggestion.title}</span>
-                  <ArrowRight size={14} className="text-muted transition-all group-hover:translate-x-0.5 group-hover:text-alpine-600" />
-                </button>
-              ))}
+            <div className="mt-5">
+              <div className="mb-2 flex items-center justify-between px-0.5">
+                <span className="text-[10px] font-medium uppercase tracking-[0.08em] text-muted">Try asking</span>
+              </div>
+              <div className="grid grid-cols-1 gap-2.5 min-[420px]:grid-cols-2">
+                {starterPrompts.map((suggestion) => (
+                  <button
+                    key={suggestion.prompt}
+                    onClick={() => void handleSend(suggestion.prompt)}
+                    className="glass-card hover-lift group flex h-full min-h-[66px] items-center gap-2 rounded-2xl p-2.5 text-left"
+                    type="button"
+                  >
+                    <span className={'flex h-7 w-7 shrink-0 items-center justify-center rounded-lg ' + suggestion.tint}>
+                      {suggestion.icon}
+                    </span>
+                    <span className="min-w-0 flex-1 text-[12px] font-medium leading-4 text-foreground">
+                      {suggestion.title}
+                    </span>
+                    <ArrowRight
+                      size={13}
+                      className="shrink-0 text-muted transition-transform duration-200 group-hover:translate-x-0.5 group-hover:text-accent"
+                    />
+                  </button>
+                ))}
+              </div>
             </div>
           )}
         </div>
@@ -1817,113 +2057,137 @@ export default function AIAssistant({
   // ─── MESSAGES ──────────────────────────────────────────────────────────────
 
   const renderMessages = () => (
-    <div className="flex-1 overflow-y-auto min-h-0">
+    <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
       {messages.length === 0 ? (
         renderWelcome()
       ) : (
-        <div className="p-4 space-y-4">
-          {messages.map((message, index) => {
-            const parsed = message.role === 'assistant' && !message.isStreaming
-              ? parseAIResponse(message.content) : null
-            const isUser = message.role === 'user'
-            const timeLabel = message.timestamp.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })
+        <div className="scroll-thin min-h-0 flex-1 overflow-y-auto [mask-image:linear-gradient(to_bottom,transparent_0px,black_14px)] [-webkit-mask-image:linear-gradient(to_bottom,transparent_0px,black_14px)]">
+          <div className="space-y-3.5 px-3.5 pb-5 pt-4">
+            {messages.map((message, index) => {
+              const parsed = message.role === 'assistant' && !message.isStreaming
+                ? parseAIResponse(message.content) : null
+              const isUser = message.role === 'user'
+              const timeLabel = message.timestamp.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })
 
-            return (
-              <div key={message.id} className={`assistant-rise-in group flex ${isUser ? 'justify-end' : 'justify-start'}`} style={{ animationDelay: `${Math.min(index, 8) * 30}ms` }}>
-                <div className={`w-full max-w-[88%] ${isUser ? 'flex justify-end' : ''}`}>
-                  <div className={`flex items-start gap-3 ${isUser ? 'flex-row-reverse' : ''}`}>
-                    <div className={`mt-1 flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-2xl ${
-                      isUser
-                        ? 'bg-alpine-600 text-white shadow-sm shadow-alpine-900/20'
-                        : 'bg-[linear-gradient(145deg,rgba(37,112,235,0.14),rgba(20,184,166,0.10))] text-alpine-700 dark:text-alpine-200 border border-alpine-500/15'
-                    }`}>
-                      {isUser ? <User size={14} /> : <Sparkles size={14} />}
+              return (
+                <div
+                  key={message.id}
+                  className={'assistant-rise-in group ' + (isUser ? 'flex justify-end' : 'flex items-start gap-2.5')}
+                  style={{ animationDelay: (Math.min(index, 8) * 30) + 'ms' }}
+                >
+                  {!isUser && <AssistantMark size={24} radius={999} className="mt-0.5" />}
+
+                  <div className={'min-w-0 ' + (isUser ? 'flex max-w-[88%] flex-col items-end' : 'flex min-w-0 flex-1 flex-col items-start')}>
+                    <div className={'mb-1 flex items-center gap-1.5 px-0.5 ' + (isUser ? 'justify-end' : '')}>
+                      <span className="text-[10px] font-medium uppercase tracking-[0.12em] text-muted opacity-60">
+                        {isUser ? 'You' : 'Assistant'}
+                      </span>
+                      <span
+                        className={
+                          isUser
+                            ? 'text-[10px] text-muted opacity-60'
+                            : 'text-[10px] text-muted opacity-0 transition-opacity duration-150 group-hover:opacity-60'
+                        }
+                      >
+                        {timeLabel}
+                      </span>
                     </div>
 
-                    <div className={`min-w-0 flex-1 ${isUser ? 'flex flex-col items-end' : ''}`}>
-                      <div className={`mb-1 flex items-center gap-2 ${isUser ? 'justify-end' : ''}`}>
-                        <span className="text-[10px] font-semibold uppercase tracking-[0.18em] text-muted">{isUser ? 'You' : 'Assistant'}</span>
-                        <span className="text-[10px] text-muted/70">{timeLabel}</span>
+                    {isUser ? (
+                      <div
+                        className="rounded-3xl rounded-br-lg px-4 py-2.5 text-[13px] leading-relaxed shadow-[0_16px_32px_-18px_var(--accent-glow)]"
+                        style={{ background: 'var(--accent-gradient)', color: 'var(--accent-foreground)' }}
+                      >
+                        <div className="whitespace-pre-wrap">{message.content}</div>
                       </div>
-
-                      <div className={`overflow-hidden rounded-[24px] border transition-all ${
-                        isUser
-                          ? 'border-alpine-500/30 bg-[linear-gradient(145deg,#2570eb,#1d5bd8)] px-4 py-3 text-white shadow-[0_18px_35px_rgba(37,112,235,0.18)]'
-                          : 'assistant-hover-lift border-border/60 bg-surface px-4 py-3.5 shadow-[0_18px_35px_rgba(15,23,42,0.06)]'
-                      }`}>
-                        {message.isStreaming ? (
-                          streamingContent ? (
-                            <div>
-                              {streamingReasoning && (
-                                <div className="mb-3 rounded-2xl border border-border/50 bg-surface-hover/50 px-3.5 py-3">
-                                  <div className="flex items-center gap-1.5 text-[10px] font-semibold uppercase tracking-[0.16em] text-muted mb-1.5">
-                                    <Cpu size={10} className="text-alpine-500/70" />
-                                    Live reasoning
-                                  </div>
-                                  <p className="text-[11px] text-muted/75 leading-relaxed italic line-clamp-4">
-                                    {streamingReasoning.slice(-360)}
-                                  </p>
-                                </div>
-                              )}
-                              <MarkdownContent content={streamingContent} />
-                            </div>
-                          ) : (
-                            <div className="flex items-center gap-2.5 py-1">
-                              <TypingDots />
-                              <span className="text-xs text-muted">
-                                {streamingReasoning ? 'Thinking deeply…' : 'Thinking…'}
-                              </span>
-                            </div>
-                          )
-                        ) : parsed ? (
+                    ) : message.isStreaming ? (
+                      <div className="w-full">
+                        {streamingContent ? (
+                          <div className="w-full rounded-2xl rounded-tl-md border border-[var(--border)] bg-[var(--glass-bg-subtle)] px-3.5 py-3 backdrop-blur-sm">
+                            <MarkdownContent content={streamingContent} />
+                          </div>
+                        ) : (
+                          <div className="inline-flex items-center gap-2.5 rounded-full border border-[var(--border)] bg-[var(--glass-bg-subtle)] px-3.5 py-2">
+                            <TypingDots />
+                            <span className="animate-pulse-soft text-[12px] font-medium text-muted">
+                              {streamingReasoning ? 'Thinking deeply…' : 'Thinking…'}
+                            </span>
+                          </div>
+                        )}
+                        {streamingReasoning && (
+                          <div className="mt-2 w-full">
+                            <LiveReasoning text={streamingReasoning} />
+                          </div>
+                        )}
+                      </div>
+                    ) : (
+                      <div className="w-full rounded-2xl rounded-tl-md border border-[var(--border)] bg-[var(--glass-bg-subtle)] px-3.5 py-3 backdrop-blur-sm">
+                        {parsed ? (
                           <>
                             {message.reasoning && <ThinkingSection reasoning={message.reasoning} />}
                             {renderStructuredContent(parsed)}
                           </>
-                        ) : !isUser ? (
+                        ) : (
                           <>
                             {message.reasoning && <ThinkingSection reasoning={message.reasoning} />}
                             <MarkdownContent content={message.content} />
                           </>
-                        ) : (
-                          <div className="text-[13px] leading-relaxed whitespace-pre-wrap">{message.content}</div>
                         )}
                       </div>
+                    )}
 
-                      {!isUser && !message.isStreaming && (
-                        <div className="mt-2 flex translate-y-1 items-center gap-1 opacity-0 transition-[opacity,transform] duration-200 group-hover:translate-y-0 group-hover:opacity-100">
-                          <button onClick={() => handleCopy(message.content, message.id)} className="rounded-xl p-1.5 text-muted transition-all hover:bg-surface-hover hover:text-foreground" title="Copy">
-                            {copiedId === message.id ? <Check size={12} className="text-accent" /> : <Copy size={12} />}
+                    {!isUser && !message.isStreaming && (
+                      <div className="pointer-events-none mt-1.5 flex items-center gap-0.5 self-start rounded-full border border-[var(--border)] bg-[var(--surface)] p-0.5 opacity-0 shadow-[var(--glass-shadow-sm)] transition-[opacity,transform] duration-200 group-hover:pointer-events-auto group-hover:opacity-100 focus-within:pointer-events-auto focus-within:opacity-100">
+                        <button
+                          onClick={() => handleCopy(message.content, message.id)}
+                          className="glass-btn-ghost h-6 w-6"
+                          title="Copy"
+                          type="button"
+                        >
+                          {copiedId === message.id ? <Check size={11} className="text-accent" /> : <Copy size={11} />}
+                        </button>
+                        {onInsertText && (
+                          <button
+                            onClick={() => handleInsertToNote(message.content)}
+                            className="glass-btn-ghost h-6 w-6"
+                            title="Append to note"
+                            type="button"
+                          >
+                            <FileText size={11} />
                           </button>
-                          {onInsertText && (
-                            <button onClick={() => handleInsertToNote(message.content)} className="rounded-xl p-1.5 text-muted transition-all hover:bg-surface-hover hover:text-foreground" title="Append to note">
-                              <FileText size={12} />
-                            </button>
-                          )}
-                          {onInsertAtCursor && (
-                            <button onClick={() => handleInsertAtCursorPosition(message.content)} className="rounded-xl p-1.5 text-muted transition-all hover:bg-surface-hover hover:text-foreground" title="Insert at cursor">
-                              <PenLine size={12} />
-                            </button>
-                          )}
-                          {selectedText && onReplaceSelection && (
-                            <button onClick={() => handleReplaceSelectionWithResponse(message.content)} className="rounded-xl p-1.5 text-muted transition-all hover:bg-surface-hover hover:text-foreground" title="Replace selection">
-                              <ArrowRight size={12} />
-                            </button>
-                          )}
-                        </div>
-                      )}
-                    </div>
+                        )}
+                        {onInsertAtCursor && (
+                          <button
+                            onClick={() => handleInsertAtCursorPosition(message.content)}
+                            className="glass-btn-ghost h-6 w-6"
+                            title="Insert at cursor"
+                            type="button"
+                          >
+                            <PenLine size={11} />
+                          </button>
+                        )}
+                        {selectedText && onReplaceSelection && (
+                          <button
+                            onClick={() => handleReplaceSelectionWithResponse(message.content)}
+                            className="glass-btn-ghost h-6 w-6"
+                            title="Replace selection"
+                            type="button"
+                          >
+                            <ArrowRight size={11} />
+                          </button>
+                        )}
+                      </div>
+                    )}
                   </div>
                 </div>
-              </div>
-            )
-          })}
-          <div ref={messagesEndRef} />
+              )
+            })}
+            <div ref={messagesEndRef} />
+          </div>
         </div>
       )}
     </div>
   )
-
   // ─── CONTEXT SIDEBAR ───────────────────────────────────────────────────────
 
   const renderContextSidebar = (mode: 'docked' | 'overlay' = 'docked') => {
@@ -1937,81 +2201,96 @@ export default function AIAssistant({
       ? 'bg-danger'
       : contextDiagnostics.nearLimit
         ? 'bg-warning'
-        : 'bg-alpine-600'
+        : 'bg-accent'
+    const insetCardClass = 'rounded-xl border border-[var(--border)] bg-[var(--surface-sunken)] px-2.5 py-2'
+    const labelClass = 'flex items-center gap-1.5 text-[10px] font-medium uppercase tracking-[0.08em] text-muted'
 
     const sidebarPanel = (
-      <aside className={`flex h-full w-[320px] max-w-[88vw] flex-col border-l border-border/50 bg-surface/95 backdrop-blur ${isOverlay ? 'shadow-2xl' : 'shadow-[-14px_0_40px_rgba(15,23,42,0.05)]'}`}>
-        <div className="flex items-center justify-between gap-3 border-b border-border/50 px-4 py-3">
-          <div>
-            <div className="text-sm font-semibold text-foreground">Context</div>
-            <div className="text-[11px] text-muted">
+      <aside
+        className={[
+          'flex h-full w-[320px] max-w-[88vw] flex-col',
+          isOverlay
+            ? 'glass-strong rounded-l-3xl rounded-r-none shadow-glass-lg'
+            : 'border-l border-[var(--border)] bg-[var(--surface-sunken)]',
+        ].join(' ')}
+      >
+        <div className="flex shrink-0 items-start justify-between gap-3 border-b border-[var(--border)] px-3.5 py-3">
+          <div className="min-w-0">
+            <div className="font-display text-[13px] font-semibold leading-tight text-foreground">Context</div>
+            <div className="mt-0.5 text-[10.5px] leading-4 text-muted">
               {activeContextSources} source{activeContextSources === 1 ? '' : 's'} attached to the next message
             </div>
           </div>
           <button
             onClick={() => setShowContextSidebar(false)}
-            className="rounded-xl border border-border/60 bg-surface p-1.5 text-muted transition-all hover:border-border-strong hover:text-foreground"
+            className="glass-btn-ghost -mr-1 h-7 w-7"
             title="Hide context sidebar"
+            type="button"
           >
-            <X size={14} />
+            <X size={13} />
           </button>
         </div>
 
-        <div className="flex-1 space-y-3 overflow-y-auto p-4">
+        <div className="scroll-thin min-h-0 flex-1 space-y-2.5 overflow-y-auto p-3">
           {selectedTextPreview && (
-            <div className="rounded-xl border border-border/60 bg-surface px-3 py-2.5">
-              <div className="flex items-center gap-1.5 text-[10px] font-semibold uppercase tracking-[0.16em] text-muted">
-                <MousePointerClick size={11} className="text-peak-600" />
+            <div className={insetCardClass}>
+              <div className={labelClass}>
+                <MousePointerClick size={10} className="text-accent" />
                 Selection
               </div>
-              <p className="mt-1.5 line-clamp-3 text-xs leading-relaxed text-foreground/75">“{selectedTextPreview}”</p>
+              <p className="mt-1.5 line-clamp-3 text-[11px] leading-5 text-foreground">“{selectedTextPreview}”</p>
             </div>
           )}
 
           {aiContext.mindmapData?.selectedNodeText && (
-            <div className="rounded-xl border border-border/60 bg-surface px-3 py-2.5">
-              <div className="flex items-center gap-1.5 text-[10px] font-semibold uppercase tracking-[0.16em] text-muted">
-                <Network size={11} className="text-alpine-600" />
+            <div className={insetCardClass}>
+              <div className={labelClass}>
+                <Network size={10} className="text-accent" />
                 Mindmap node
               </div>
-              <p className="mt-1.5 truncate text-xs font-medium text-foreground">{aiContext.mindmapData.selectedNodeText}</p>
+              <p className="mt-1 truncate text-[11px] font-medium text-foreground">
+                {aiContext.mindmapData.selectedNodeText}
+              </p>
             </div>
           )}
 
-          <div className="rounded-xl border border-border/60 bg-surface">
+          <div className="overflow-hidden rounded-xl border border-[var(--border)] bg-[var(--surface-sunken)]">
             {note ? (
-              <div className="flex items-center justify-between gap-3 border-b border-border/40 px-3 py-2.5">
+              <div className="flex items-center justify-between gap-2.5 border-b border-[var(--border)] px-2.5 py-2">
                 <div className="min-w-0">
-                  <div className="truncate text-xs font-medium text-foreground">{note.title || 'Untitled'}</div>
-                  <div className="text-[10px] text-muted">
+                  <div className="truncate text-[11.5px] font-medium text-foreground">{note.title || 'Untitled'}</div>
+                  <div className="mt-0.5 text-[10px] text-muted">
                     Current note · {currentNotePlainText.length.toLocaleString()} chars
                   </div>
                 </div>
                 <button
                   onClick={() => setIncludeCurrentNote(value => !value)}
-                  className={`inline-flex flex-shrink-0 items-center gap-1 rounded-full px-2 py-1 text-[10px] font-medium transition-all ${
+                  className={[
+                    'inline-flex h-6 flex-shrink-0 items-center gap-1 rounded-full px-2 text-[10px] font-medium transition-colors duration-150',
                     includeCurrentNote
-                      ? 'bg-alpine-600 text-white'
-                      : 'border border-border/60 bg-surface-hover text-muted hover:text-foreground'
-                  }`}
+                      ? 'bg-[var(--accent-light)] text-accent'
+                      : 'border border-[var(--border)] text-muted hover:text-foreground',
+                  ].join(' ')}
+                  type="button"
                 >
                   {includeCurrentNote ? <Check size={10} /> : <Plus size={10} />}
                   {includeCurrentNote ? 'Included' : 'Add'}
                 </button>
               </div>
             ) : (
-              <div className="border-b border-border/40 px-3 py-2.5 text-xs text-muted">No note open</div>
+              <div className="border-b border-[var(--border)] px-2.5 py-2 text-[11px] text-muted">No note open</div>
             )}
 
-            <div className="px-3 pb-3 pt-2.5">
+            <div className="px-2.5 pb-2.5 pt-2">
               <div className="flex items-center justify-between gap-2">
-                <div className="text-[10px] font-semibold uppercase tracking-[0.16em] text-muted">Additional notes</div>
-                <div className="flex items-center gap-2">
+                <div className="text-[10px] font-medium uppercase tracking-[0.08em] text-muted">Additional notes</div>
+                <div className="flex items-center gap-1.5">
                   <span className="text-[10px] text-muted">{selectedNoteIds.length}/{contextLimits.maxSelectedNotes}</span>
                   {selectedNoteIds.length > 0 && (
                     <button
                       onClick={() => setSelectedNoteIds([])}
-                      className="rounded-full border border-border/60 px-2 py-0.5 text-[10px] font-medium text-muted transition-all hover:border-border-strong hover:text-foreground"
+                      className="rounded-full border border-[var(--border)] px-2 py-0.5 text-[10px] font-medium text-muted transition-colors duration-150 hover:text-foreground"
+                      type="button"
                     >
                       Clear
                     </button>
@@ -2020,71 +2299,81 @@ export default function AIAssistant({
               </div>
 
               <div className="relative mt-2">
-                <Search size={12} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-muted" />
+                <Search size={12} className="pointer-events-none absolute left-2.5 top-1/2 -translate-y-1/2 text-muted" />
                 <input
                   value={notePickerSearch}
                   onChange={(e) => setNotePickerSearch(e.target.value)}
                   placeholder="Search notes, projects, or folders…"
-                  className="h-9 w-full rounded-xl border border-border bg-surface-hover/50 pl-8 pr-3 text-xs text-foreground placeholder:text-muted/60 focus:border-alpine-500/35 focus:outline-none focus:ring-2 focus:ring-alpine-500/15"
+                  className="glass-input h-8 pl-7 pr-2.5 text-[11px]"
                 />
               </div>
 
               {contextDiagnostics.omittedSelectedCount > 0 && (
-                <div className="mt-1.5 text-[10px] text-warning">{contextDiagnostics.omittedSelectedCount} omitted by limit</div>
-              )}
-
-              <div className="mt-2 max-h-[320px] space-y-1.5 overflow-y-auto pr-0.5">
-                {groupedSelectableNotes.length === 0 ? (
-                <div className="rounded-2xl border border-dashed border-border/60 px-3 py-4 text-center text-[11px] text-muted">
-                  No notes match this search.
+                <div className="mt-1.5 text-[10px] text-warning">
+                  {contextDiagnostics.omittedSelectedCount} omitted by limit
                 </div>
-              ) : (
-                groupedSelectableNotes.map((projectGroup) => (
-                  <div key={projectGroup.key} className="rounded-2xl border border-border/60 bg-surface-hover/25 px-3 py-3">
-                    <div className="flex items-center gap-2">
-                      <span
-                        className="h-2.5 w-2.5 rounded-full border border-white/60 shadow-sm"
-                        style={{ backgroundColor: projectGroup.color || 'var(--color-border-strong)' }}
-                      />
-                      <div className="min-w-0 flex-1 truncate text-[11px] font-semibold uppercase tracking-[0.18em] text-muted">
-                        {projectGroup.label}
-                      </div>
-                      <span className="inline-flex items-center rounded-full border border-border/50 px-1.5 py-0.5 text-[10px] font-medium text-muted">
-                        {countNotesInProjectGroup(projectGroup)}
-                      </span>
-                    </div>
-
-                    <div className="mt-3 space-y-3">
-                      {projectGroup.notes.length > 0 && (
-                        <div className="space-y-1.5">
-                          {projectGroup.folders.length > 0 && (
-                            <div className="px-1 text-[10px] font-semibold uppercase tracking-[0.16em] text-muted">
-                              Project Notes
-                            </div>
-                          )}
-                          {projectGroup.notes.map((availableNote, noteIndex) => renderSelectableNote(availableNote, noteIndex))}
-                        </div>
-                      )}
-
-                      {projectGroup.folders.map((folderGroup) => renderContextFolderGroup(folderGroup))}
-                    </div>
-                  </div>
-                ))
               )}
+
+              <div className="scroll-thin mt-2 max-h-[320px] space-y-1.5 overflow-y-auto pr-0.5">
+                {groupedSelectableNotes.length === 0 ? (
+                  <div className="rounded-xl border border-dashed border-[var(--border)] px-3 py-4 text-center text-[10.5px] text-muted">
+                    No notes match this search.
+                  </div>
+                ) : (
+                  groupedSelectableNotes.map((projectGroup) => (
+                    <div
+                      key={projectGroup.key}
+                      className="rounded-xl border border-[var(--border)] bg-[var(--surface)] p-2"
+                    >
+                      <div className="flex items-center gap-1.5">
+                        <span
+                          className="h-2 w-2 shrink-0 rounded-full ring-1 ring-[var(--border)]"
+                          style={{ backgroundColor: projectGroup.color || 'var(--border-strong)' }}
+                        />
+                        <div className="min-w-0 flex-1 truncate text-[10px] font-semibold uppercase tracking-[0.08em] text-muted">
+                          {projectGroup.label}
+                        </div>
+                        <span className="inline-flex h-4 min-w-4 items-center justify-center rounded-full bg-[var(--surface-sunken)] px-1 text-[9px] font-semibold text-muted">
+                          {countNotesInProjectGroup(projectGroup)}
+                        </span>
+                      </div>
+
+                      <div className="mt-2 space-y-2">
+                        {projectGroup.notes.length > 0 && (
+                          <div className="space-y-0.5">
+                            {projectGroup.folders.length > 0 && (
+                              <div className="px-1 text-[9px] font-semibold uppercase tracking-[0.08em] text-muted">
+                                Project Notes
+                              </div>
+                            )}
+                            {projectGroup.notes.map((availableNote, noteIndex) => renderSelectableNote(availableNote, noteIndex))}
+                          </div>
+                        )}
+
+                        {projectGroup.folders.map((folderGroup) => renderContextFolderGroup(folderGroup))}
+                      </div>
+                    </div>
+                  ))
+                )}
               </div>
             </div>
           </div>
         </div>
 
-        <div className="border-t border-border/50 px-4 py-3">
-          <div className="flex items-center justify-between text-[11px] text-foreground/70">
+        <div className="shrink-0 border-t border-[var(--border)] px-3.5 py-3">
+          <div className="flex items-center justify-between text-[10.5px] text-muted">
             <span>Injected context</span>
-            <span>{contextDiagnostics.totalIncludedChars.toLocaleString()} / {contextLimits.maxTotalInjectedChars.toLocaleString()}</span>
+            <span className="font-medium text-foreground">
+              {contextDiagnostics.totalIncludedChars.toLocaleString()} / {contextLimits.maxTotalInjectedChars.toLocaleString()}
+            </span>
           </div>
-          <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-surface-active/60">
-            <div className={`h-full rounded-full transition-all duration-300 ${usageBarClassName}`} style={{ width: `${contextUsagePercent}%` }} />
+          <div className="mt-1.5 h-1 overflow-hidden rounded-full bg-[var(--surface-sunken)]">
+            <div
+              className={'h-full rounded-full transition-all duration-300 ' + usageBarClassName}
+              style={{ width: contextUsagePercent + '%' }}
+            />
           </div>
-          <div className="mt-2 flex items-center justify-between gap-2 text-[10px] text-muted">
+          <div className="mt-1.5 flex items-center justify-between gap-2 text-[10px] text-muted">
             <span>{diagnosticsLabel}</span>
             {contextDiagnostics.truncatedCount > 0 && <span>{contextDiagnostics.truncatedCount} truncated</span>}
           </div>
@@ -2094,11 +2383,12 @@ export default function AIAssistant({
 
     if (isOverlay) {
       return (
-        <div className="absolute inset-0 z-40 flex justify-end bg-black/20 backdrop-blur-[1px]">
+        <div className="absolute inset-0 z-40 flex justify-end bg-black/25 backdrop-blur-sm">
           <button
             aria-label="Close context sidebar"
             className="flex-1 cursor-default"
             onClick={() => setShowContextSidebar(false)}
+            type="button"
           />
           <div className="assistant-rise-in h-full">{sidebarPanel}</div>
         </div>
@@ -2111,13 +2401,12 @@ export default function AIAssistant({
   // ─── INPUT ─────────────────────────────────────────────────────────────────
 
   const renderInput = () => (
-    <div className="border-t border-border/50 bg-[linear-gradient(180deg,transparent,rgba(37,112,235,0.04))] shrink-0">
-      {/* Error & warnings */}
+    <div className="shrink-0 px-3 pb-3 pt-1">
       {error && (
-        <div className="mx-4 mt-4 px-3.5 py-3 bg-danger/5 border border-danger/15 rounded-2xl text-xs flex items-start gap-2.5 shadow-sm">
-          <AlertCircle size={14} className="flex-shrink-0 mt-0.5 text-danger" />
-          <div className="flex-1 min-w-0">
-            <div className="text-foreground/80">{error}</div>
+        <div className="mb-2 flex items-start gap-2 rounded-2xl bg-[var(--danger-light)] px-3 py-2.5 text-[11.5px] leading-5 text-danger">
+          <AlertCircle size={13} className="mt-0.5 shrink-0" />
+          <div className="min-w-0 flex-1">
+            <div>{error}</div>
             {lastFailedPrompt && !isLoading && (
               <button
                 onClick={() => {
@@ -2126,94 +2415,134 @@ export default function AIAssistant({
                   void handleSend(lastFailedPrompt)
                 }}
                 disabled={retryCooldown > 0}
-                className="mt-1.5 px-2.5 py-1 rounded-lg bg-danger/10 hover:bg-danger/20 disabled:opacity-40 disabled:cursor-not-allowed transition-colors text-[10px] font-medium text-danger"
+                className="mt-1.5 inline-flex h-6 items-center rounded-full border border-[var(--border)] bg-[var(--surface)] px-2 text-[10px] font-semibold text-danger transition-colors duration-150 hover:bg-[var(--surface-hover)] disabled:cursor-not-allowed disabled:opacity-40"
+                type="button"
               >
-                {retryCooldown > 0 ? `Retry in ${retryCooldown}s` : 'Retry'}
+                {retryCooldown > 0 ? 'Retry in ' + retryCooldown + 's' : 'Retry'}
               </button>
             )}
           </div>
-          <button onClick={() => setError(null)} className="p-1 hover:bg-danger/10 rounded-lg transition-colors flex-shrink-0 text-muted">
+          <button
+            onClick={() => setError(null)}
+            className="glass-btn-ghost h-6 w-6 flex-shrink-0"
+            type="button"
+          >
             <X size={12} />
           </button>
         </div>
       )}
 
       {!isConfigured && (
-        <div className="mx-4 mt-4 px-3.5 py-3 bg-warning/5 border border-warning/15 rounded-2xl text-xs text-foreground/70 flex items-start gap-2.5 shadow-sm">
-          <AlertCircle size={14} className="flex-shrink-0 mt-0.5 text-warning" />
-          <span>Set <code className="font-mono bg-surface-active/60 px-1 py-0.5 rounded text-[10px]">DEEPSEEK_API_KEY</code> in your environment to enable AI.</span>
+        <div className="mb-2 flex items-start gap-2 rounded-2xl bg-[var(--warning-light)] px-3 py-2.5 text-[11.5px] leading-5 text-muted">
+          <AlertCircle size={13} className="mt-0.5 shrink-0 text-warning" />
+          <span>
+            Set{' '}
+            <code className="rounded bg-[var(--surface)] px-1 py-0.5 font-mono text-[10px] text-foreground">
+              DEEPSEEK_API_KEY
+            </code>{' '}
+            in your environment to enable AI.
+          </span>
         </div>
       )}
 
-      <div className="p-4 pt-3">
-        <div className="overflow-hidden rounded-[26px] border border-border/70 bg-surface shadow-[0_-8px_30px_rgba(15,23,42,0.05)] transition-all focus-within:border-alpine-500/35 focus-within:ring-2 focus-within:ring-alpine-500/10">
-          <textarea
-            ref={inputRef}
-            value={inputValue}
-            onChange={(e) => setInputValue(e.target.value)}
-            onKeyDown={handleKeyDown}
-            placeholder={isConfigured ? (selectedText ? 'Ask about the selection, rewrite it, or turn it into actions…' : 'Ask the assistant to analyze, search, write, or plan…') : 'Configure an API key to start using the assistant…'}
-            disabled={isLoading || !isConfigured}
-            rows={3}
-            className="w-full px-4 pt-4 pb-3 text-[14px] leading-relaxed bg-transparent resize-none focus:outline-none disabled:opacity-50 disabled:cursor-not-allowed text-foreground placeholder:text-muted/60"
-            style={{ minHeight: '96px', maxHeight: '220px' }}
-          />
+      <div className="glass rounded-3xl p-2 transition-shadow duration-200 focus-within:shadow-[0_0_0_3px_var(--accent-light)]">
+        <textarea
+          ref={inputRef}
+          data-ai-assistant-input
+          value={inputValue}
+          onChange={(e) => setInputValue(e.target.value)}
+          onKeyDown={handleKeyDown}
+          placeholder={isConfigured ? (selectedText ? 'Ask about the selection, rewrite it, or turn it into actions…' : 'Ask the assistant to analyze, search, write, or plan…') : 'Configure an API key to start using the assistant…'}
+          disabled={isLoading || !isConfigured}
+          rows={3}
+          className="block w-full resize-none bg-transparent px-2 pb-1 pt-1.5 text-[13.5px] leading-6 text-foreground placeholder:text-muted focus:outline-none disabled:cursor-not-allowed disabled:opacity-50"
+          style={{ minHeight: '72px', maxHeight: '200px' }}
+        />
 
-          <div className="flex items-center justify-between gap-3 border-t border-border/60 bg-surface-hover/35 px-3 py-3">
-            <div className="flex flex-wrap items-center gap-2">
+        {contextDiagnostics.nearLimit && (
+          <div className="mx-2 mt-1 flex items-center gap-2">
+            <div className="h-0.5 flex-1 overflow-hidden rounded-full bg-[var(--surface-sunken)]">
+              <div
+                className={
+                  'h-full rounded-full transition-all duration-300 ' +
+                  (contextDiagnostics.exhausted ? 'bg-danger' : 'bg-warning')
+                }
+                style={{ width: contextUsagePercent + '%' }}
+              />
+            </div>
+            <span className="shrink-0 text-[9px] text-muted">Context {contextUsagePercent}%</span>
+          </div>
+        )}
+
+        <div className="flex items-center justify-between gap-2">
+          <div className="flex min-w-0 items-center gap-1">
+            <button
+              onClick={() => setShowQuickActions(v => !v)}
+              className={[
+                'glass-btn h-7 gap-1.5 px-2.5 text-[11px] font-medium',
+                showQuickActions ? 'border-transparent bg-[var(--accent-light)] text-accent' : 'text-muted',
+              ].join(' ')}
+              title="Quick actions"
+              type="button"
+            >
+              <Zap size={12} />
+              {showQuickActions ? 'Hide actions' : 'Actions'}
+            </button>
+
+            <button
+              onClick={() => setShowContextSidebar(v => !v)}
+              className={[
+                'glass-btn h-7 gap-1.5 px-2.5 text-[11px] font-medium',
+                showContextSidebar ? 'border-transparent bg-[var(--accent-light)] text-accent' : 'text-muted',
+              ].join(' ')}
+              title="Toggle context sidebar"
+              type="button"
+            >
+              <Settings2 size={12} />
+              {showContextSidebar ? 'Hide context' : 'Context'}
+              <span
+                className={[
+                  'inline-flex h-4 min-w-4 items-center justify-center rounded-full px-1 text-[9px] font-semibold',
+                  showContextSidebar ? 'bg-[var(--accent)] text-accent-foreground' : 'bg-[var(--surface-active)] text-foreground',
+                ].join(' ')}
+              >
+                {activeContextSources}
+              </span>
+            </button>
+          </div>
+
+          <div className="flex shrink-0 items-center gap-1.5">
+            <span className="hidden items-center gap-1 text-[10px] text-muted sm:flex">
+              <kbd className="kbd">↵</kbd>
+              <span>send</span>
+              <span aria-hidden className="px-0.5 opacity-40">·</span>
+              <kbd className="kbd">⇧↵</kbd>
+              <span>newline</span>
+            </span>
+            {isLoading ? (
               <button
-                onClick={() => setShowQuickActions(v => !v)}
-                className={`assistant-hover-lift inline-flex items-center gap-1.5 rounded-xl border px-2.5 py-1.5 text-xs font-medium transition-all ${
-                  showQuickActions
-                    ? 'border-alpine-500/20 bg-alpine-600/10 text-alpine-600 dark:text-alpine-300'
-                    : 'border-border/60 bg-surface text-muted hover:border-border-strong hover:text-foreground'
-                }`}
-                title="Quick actions"
+                onClick={handleCancelResponse}
+                className="inline-flex h-8 items-center gap-1.5 rounded-full bg-[var(--danger-light)] px-3 text-[12px] font-medium text-danger transition-colors duration-150 hover:brightness-105 active:scale-[0.98]"
+                title="Stop generating"
+                type="button"
               >
-                <Zap size={13} />
-                {showQuickActions ? 'Hide actions' : 'Actions'}
+                <StopCircle size={14} />
+                Stop
               </button>
-
-                <button
-                onClick={() => setShowContextSidebar(v => !v)}
-                className={`assistant-hover-lift inline-flex items-center gap-1.5 rounded-xl border px-2.5 py-1.5 text-xs font-medium transition-all ${
-                  showContextSidebar
-                    ? 'border-alpine-500/20 bg-alpine-600/10 text-alpine-600 dark:text-alpine-300'
-                    : 'border-border/60 bg-surface text-muted hover:border-border-strong hover:text-foreground'
-                }`}
-                title="Toggle context sidebar"
+            ) : (
+              <button
+                onClick={handleSendClick}
+                disabled={!inputValue.trim() || !isConfigured}
+                className="glass-btn-primary h-8 gap-1.5 px-3.5 text-[12px] disabled:cursor-not-allowed"
+                type="button"
               >
-                <Settings2 size={13} />
-                {showContextSidebar ? 'Hide context' : 'Show context'}
-                <span className="rounded-full bg-surface-active/70 px-1.5 py-0.5 text-[10px] text-foreground/70">
-                  {activeContextSources}
-                </span>
+                <Send size={13} />
+                <span>Send</span>
               </button>
-            </div>
-
-            <div className="flex items-center gap-2">
-              {isLoading ? (
-                <button
-                  onClick={handleCancelResponse}
-                  className="assistant-hover-lift inline-flex items-center gap-1.5 rounded-xl bg-danger/10 px-3 py-2 text-xs font-medium text-danger transition-all hover:bg-danger/20 active:scale-[0.98]"
-                  title="Stop generating"
-                >
-                  <StopCircle size={15} />
-                  Stop
-                </button>
-              ) : (
-                <button
-                  onClick={handleSendClick}
-                  disabled={!inputValue.trim() || !isConfigured}
-                  className="assistant-hover-lift group inline-flex items-center gap-1.5 rounded-xl bg-alpine-600 px-3.5 py-2 text-xs font-medium text-white shadow-sm shadow-alpine-900/20 transition-all hover:bg-alpine-700 disabled:opacity-20 disabled:cursor-not-allowed active:scale-[0.98]"
-                >
-                  <Send size={15} />
-                  <span>Send</span>
-                </button>
-              )}
-            </div>
+            )}
           </div>
         </div>
+
       </div>
     </div>
   )
@@ -2222,12 +2551,23 @@ export default function AIAssistant({
     if (!showMindmapPromptModal) return null
 
     return (
-      <div className="absolute inset-0 z-50 flex items-center justify-center bg-black/40  p-4">
-        <div className="w-full max-w-lg rounded-2xl border border-border-strong bg-surface shadow-2xl">
-          <div className="flex items-center justify-between border-b border-border/50 px-5 py-3.5">
-            <div>
-              <h4 className="text-sm font-semibold text-foreground">Create Mindmap</h4>
-              <p className="text-xs text-muted mt-0.5">Optionally guide the AI with instructions</p>
+      <div
+        className="absolute inset-0 z-50 flex items-center justify-center bg-black/35 p-4 backdrop-blur-sm dark:bg-black/55"
+        onKeyDown={(event) => {
+          if (event.key !== 'Escape') return
+          event.preventDefault()
+          event.stopPropagation()
+          if (isLoading) return
+          setShowMindmapPromptModal(false)
+          setPendingMindmapPayload(null)
+          setMindmapPromptInput('')
+        }}
+      >
+        <div className="glass-strong w-full max-w-lg animate-rise-in overflow-hidden rounded-3xl">
+          <div className="flex items-center justify-between gap-3 border-b border-[var(--border)] px-4 py-3">
+            <div className="min-w-0">
+              <h4 className="font-display text-[14px] font-semibold leading-tight text-foreground">Create Mindmap</h4>
+              <p className="mt-0.5 text-[11px] leading-4 text-muted">Optionally guide the AI with instructions</p>
             </div>
             <button
               onClick={() => {
@@ -2236,15 +2576,16 @@ export default function AIAssistant({
                 setPendingMindmapPayload(null)
                 setMindmapPromptInput('')
               }}
-              className="p-1.5 text-muted hover:text-foreground hover:bg-surface-hover rounded-lg transition-colors"
+              className="glass-btn-ghost -mr-1 h-8 w-8"
               aria-label="Close modal"
+              type="button"
             >
-              <X size={16} />
+              <X size={15} />
             </button>
           </div>
 
-          <div className="px-5 py-4 space-y-3">
-            <label htmlFor="mindmap-additional-prompt" className="text-xs font-medium text-foreground/80">
+          <div className="space-y-2.5 px-4 py-4">
+            <label htmlFor="mindmap-additional-prompt" className="block text-[11px] font-medium text-foreground">
               Instructions (optional)
             </label>
             <textarea
@@ -2254,12 +2595,12 @@ export default function AIAssistant({
               placeholder="e.g., Focus on implementation steps, risks, and timeline"
               rows={4}
               disabled={isLoading}
-              className="w-full px-3.5 py-2.5 text-[13px] bg-surface-hover/50 border border-border rounded-xl resize-y focus:ring-2 focus:ring-alpine-500/20 focus:border-alpine-500/50 focus:outline-none disabled:opacity-50 disabled:cursor-not-allowed text-foreground placeholder:text-muted/60"
+              className="glass-input h-auto min-h-[96px] w-full resize-y px-3 py-2 text-[12.5px] leading-5"
             />
-            <p className="text-[11px] text-muted">Leave empty to use context only.</p>
+            <p className="text-[10.5px] text-muted">Leave empty to use context only.</p>
           </div>
 
-          <div className="flex items-center justify-end gap-2 border-t border-border/50 px-5 py-3.5">
+          <div className="flex items-center justify-end gap-2 border-t border-[var(--border)] px-4 py-3">
             <button
               onClick={() => {
                 if (isLoading) return
@@ -2268,14 +2609,16 @@ export default function AIAssistant({
                 setMindmapPromptInput('')
               }}
               disabled={isLoading}
-              className="px-4 py-2 text-xs font-medium rounded-xl border border-border text-muted hover:text-foreground hover:bg-surface-hover transition-all disabled:opacity-50"
+              className="glass-btn h-8 px-3.5 text-[11px] font-medium disabled:cursor-not-allowed"
+              type="button"
             >
               Cancel
             </button>
             <button
               onClick={() => void handleSubmitMindmapCreation()}
               disabled={isLoading || !pendingMindmapPayload}
-              className="px-4 py-2 text-xs font-medium rounded-xl bg-alpine-600 text-white hover:bg-alpine-700 transition-all disabled:opacity-50 flex items-center gap-1.5 active:scale-[0.98] shadow-sm"
+              className="glass-btn-primary h-8 gap-1.5 px-3.5 text-[11px] disabled:cursor-not-allowed"
+              type="button"
             >
               {isLoading ? <Loader2 size={12} className="animate-spin" /> : <Network size={12} />}
               Create
@@ -2290,36 +2633,48 @@ export default function AIAssistant({
     if (!showNoteContextConsentModal) return null
 
     return (
-      <div className="absolute inset-0 z-[60] flex items-center justify-center bg-black/40  p-4">
-        <div className="w-full max-w-md rounded-2xl border border-border-strong bg-surface shadow-2xl">
-          <div className="px-5 py-3.5 border-b border-border/50">
-            <h3 className="text-sm font-semibold text-foreground">Share note context with AI?</h3>
+      <div
+        className="absolute inset-0 z-[60] flex items-center justify-center bg-black/35 p-4 backdrop-blur-sm dark:bg-black/55"
+        onKeyDown={(event) => {
+          if (event.key !== 'Escape') return
+          event.preventDefault()
+          event.stopPropagation()
+          handleCancelNoteContextConsent()
+        }}
+      >
+        <div className="glass-strong w-full max-w-md animate-rise-in overflow-hidden rounded-3xl">
+          <div className="border-b border-[var(--border)] px-4 py-3">
+            <h3 className="font-display text-[14px] font-semibold leading-tight text-foreground">
+              Share note context with AI?
+            </h3>
           </div>
-          <div className="px-5 py-4">
-            <p className="text-xs text-muted leading-relaxed">
+          <div className="px-4 py-4">
+            <p className="text-[11.5px] leading-5 text-muted">
               This message includes note content from your workspace and sends it to the AI provider.
               Continue only if the content is safe to share.
             </p>
-            <label className="mt-3 flex items-center gap-2.5 text-xs text-foreground/80 cursor-pointer select-none">
+            <label className="mt-3 flex select-none items-center gap-2.5 text-[11.5px] text-foreground">
               <input
                 type="checkbox"
                 checked={rememberNoteContextConsent}
                 onChange={(e) => setRememberNoteContextConsent(e.target.checked)}
-                className="rounded border-border-strong bg-surface accent-alpine-600"
+                className="h-3.5 w-3.5 rounded border-[var(--border-strong)] accent-[var(--accent)]"
               />
               Remember my choice
             </label>
           </div>
-          <div className="px-5 py-3.5 border-t border-border/50 flex items-center justify-end gap-2">
+          <div className="flex items-center justify-end gap-2 border-t border-[var(--border)] px-4 py-3">
             <button
               onClick={handleCancelNoteContextConsent}
-              className="px-4 py-2 text-xs rounded-xl border border-border text-muted hover:text-foreground hover:bg-surface-hover transition-all"
+              className="glass-btn h-8 px-3.5 text-[11px] font-medium"
+              type="button"
             >
               Cancel
             </button>
             <button
               onClick={handleConfirmNoteContextConsent}
-              className="px-4 py-2 text-xs rounded-xl bg-alpine-600 text-white hover:bg-alpine-700 transition-all active:scale-[0.98] shadow-sm"
+              className="glass-btn-primary h-8 px-3.5 text-[11px]"
+              type="button"
             >
               Continue
             </button>
@@ -2330,62 +2685,61 @@ export default function AIAssistant({
   }
 
   const renderHeader = () => {
-    const headerActionButtonClassName = 'assistant-hover-lift p-2 text-muted hover:text-foreground hover:bg-surface-hover/70 rounded-xl transition-all'
-
     return (
-      <div className="assistant-rise-in shrink-0 border-b border-border/50 bg-surface/80 backdrop-blur">
-        <div className="flex items-center gap-3 px-4 py-3">
+      <div className="assistant-rise-in relative shrink-0 border-b border-[var(--border)]">
+        <div className="flex h-14 items-center gap-2 px-3">
           {showChatHistory ? (
             <button
               onClick={() => setShowChatHistory(false)}
-              className="assistant-hover-lift rounded-xl border border-border/60 bg-surface p-2 text-muted transition-all hover:border-border-strong hover:text-foreground"
+              className="glass-btn-ghost h-8 w-8 shrink-0"
               title="Back to chat"
+              type="button"
             >
               <ChevronLeft size={15} />
             </button>
           ) : (
-            <div className="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-xl bg-[linear-gradient(145deg,#2570eb,#14b8a6)]">
-              <Sparkles size={16} className="text-white" />
-            </div>
+            <AssistantMark size={30} />
           )}
 
           <div className="min-w-0 flex-1">
             <div className="flex items-center gap-2">
-              <h3 className="truncate text-sm font-semibold text-foreground">
-                {showChatHistory ? 'Conversations' : 'AI Assistant'}
+              <h3 className="truncate font-display text-[14px] font-semibold leading-tight tracking-[-0.01em] text-foreground">
+                {showChatHistory ? 'Conversations' : 'Assistant'}
               </h3>
               {!showChatHistory && (
                 <span
-                  className="inline-flex flex-shrink-0 items-center gap-1 rounded-full border border-border/60 bg-surface-hover/50 px-2 py-0.5 text-[10px] font-medium text-foreground/70"
-                  title={`${AI_MODEL_LABEL} — thinking enabled`}
+                  className="kbd h-5 shrink-0 gap-1 border-transparent bg-[var(--accent-light)] px-1.5 text-accent max-[430px]:hidden"
+                  title={AI_MODEL_LABEL + ' — thinking enabled'}
                 >
-                  <Cpu size={10} className="text-alpine-600" />
+                  <Cpu size={9} strokeWidth={2} />
                   {AI_MODEL_SHORT_LABEL} · Thinking
                 </span>
               )}
             </div>
             {showChatHistory && (
-              <p className="mt-0.5 truncate text-[11px] text-muted">
+              <p className="mt-0.5 truncate text-[10.5px] leading-4 text-muted">
                 {chatHistory.length} saved conversation{chatHistory.length === 1 ? '' : 's'} for this workspace
               </p>
             )}
           </div>
 
-          <div className="flex flex-shrink-0 items-center gap-1">
+          <div className="flex shrink-0 items-center gap-2">
             {!showChatHistory && (
               <>
                 <button
                   onClick={startNewChat}
-                  className={headerActionButtonClassName}
+                  className="glass-btn-ghost h-8 w-8"
                   title="New chat"
+                  type="button"
                 >
                   <Plus size={15} />
                 </button>
                 {messages.length > 0 && (
                   <button
                     onClick={handleClearChat}
-                    className={headerActionButtonClassName}
+                    className="glass-btn-ghost h-8 w-8"
                     title="Clear chat"
+                    type="button"
                   >
                     <Trash2 size={14} />
                   </button>
@@ -2395,8 +2749,9 @@ export default function AIAssistant({
             {onToggleSize && !showChatHistory && (
               <button
                 onClick={onToggleSize}
-                className={headerActionButtonClassName}
+                className="glass-btn-ghost h-8 w-8"
                 title={isLargeWindow ? 'Default size' : 'Expand'}
+                type="button"
               >
                 {isLargeWindow ? <Minimize2 size={15} /> : <Maximize2 size={15} />}
               </button>
@@ -2404,9 +2759,10 @@ export default function AIAssistant({
             {onClose && (
               <button
                 onClick={onClose}
-                className={headerActionButtonClassName}
+                className="glass-btn-ghost h-8 w-8"
                 title="Close"
                 aria-label="Close AI Assistant"
+                type="button"
               >
                 <X size={15} />
               </button>
@@ -2414,7 +2770,8 @@ export default function AIAssistant({
             {onToggleExpand && (
               <button
                 onClick={onToggleExpand}
-                className={headerActionButtonClassName}
+                className="glass-btn-ghost h-8 w-8"
+                type="button"
               >
                 {isExpanded ? <ChevronDown size={15} /> : <ChevronUp size={15} />}
               </button>
@@ -2423,17 +2780,21 @@ export default function AIAssistant({
         </div>
 
         {!showChatHistory && (
-          <div className="flex items-center justify-between gap-2 px-4 pb-3">
-            <div className="inline-flex items-center rounded-xl border border-border/60 bg-surface p-0.5">
+          <div className="flex items-center justify-between gap-2 px-3 pb-2.5">
+            <div className="segmented" role="group" aria-label="Assistant view">
               <button
                 onClick={() => setShowChatHistory(false)}
-                className="rounded-lg bg-foreground px-3 py-1 text-xs font-medium text-background shadow-sm"
+                aria-pressed={!showChatHistory}
+                className="segmented-item h-7 px-3.5 text-[12px]"
+                type="button"
               >
                 Chat
               </button>
               <button
                 onClick={() => setShowChatHistory(true)}
-                className="rounded-lg px-3 py-1 text-xs font-medium text-muted transition-colors hover:text-foreground"
+                aria-pressed={showChatHistory}
+                className="segmented-item h-7 px-3.5 text-[12px]"
+                type="button"
               >
                 History
               </button>
@@ -2443,33 +2804,34 @@ export default function AIAssistant({
               <div className="relative" ref={quotaPopoverRef}>
                 <button
                   onClick={() => setShowQuotaPopover(value => !value)}
-                  className="assistant-hover-lift inline-flex items-center gap-1.5 rounded-xl border border-border/60 bg-surface px-2.5 py-1 text-[11px] font-medium text-muted transition-all hover:border-border-strong hover:text-foreground"
+                  className="inline-flex h-7 items-center gap-1.5 rounded-full border border-[var(--border)] bg-[var(--surface-sunken)] px-2.5 text-[11px] font-medium text-muted transition-colors duration-150 hover:text-foreground"
                   title="Usage quota"
+                  type="button"
                 >
-                  <Zap size={11} className={quotaInfo.low ? 'text-warning' : 'text-alpine-600'} />
+                  <Zap size={11} className={quotaInfo.low ? 'text-warning' : 'text-accent'} />
                   {quotaInfo.remaining}/{quotaInfo.limit}
                 </button>
 
                 {showQuotaPopover && (
-                  <div className="assistant-rise-in absolute right-0 top-full z-20 mt-1.5 w-56 rounded-xl border border-border-strong bg-surface p-3 shadow-2xl">
-                    <div className="text-xs font-semibold text-foreground">Usage snapshot</div>
-                    <div className="mt-2 space-y-2 text-xs text-foreground/75">
+                  <div className="glass-popover animate-rise-in absolute right-0 top-full z-20 mt-2 w-56 rounded-2xl p-3">
+                    <div className="text-[12px] font-semibold text-foreground">Usage snapshot</div>
+                    <div className="mt-2 space-y-1.5 text-[11px]">
                       <div className="flex items-center justify-between gap-3">
                         <span className="text-muted">Remaining</span>
-                        <span>{quotaInfo.remaining}</span>
+                        <span className="font-medium text-foreground">{quotaInfo.remaining}</span>
                       </div>
                       <div className="flex items-center justify-between gap-3">
                         <span className="text-muted">Limit</span>
-                        <span>{quotaInfo.limit}</span>
+                        <span className="font-medium text-foreground">{quotaInfo.limit}</span>
                       </div>
                       <div className="flex items-center justify-between gap-3">
                         <span className="text-muted">Window</span>
-                        <span>{quotaWindowLabel}</span>
+                        <span className="font-medium text-foreground">{quotaWindowLabel}</span>
                       </div>
                       {quotaInfo.resetInSeconds !== null && (
                         <div className="flex items-center justify-between gap-3">
                           <span className="text-muted">Resets in</span>
-                          <span>{quotaInfo.resetInSeconds}s</span>
+                          <span className="font-medium text-foreground">{quotaInfo.resetInSeconds}s</span>
                         </div>
                       )}
                     </div>
@@ -2486,7 +2848,7 @@ export default function AIAssistant({
   // ─── MAIN RENDER ───────────────────────────────────────────────────────────
 
   return (
-    <div className="relative flex h-full flex-col overflow-hidden bg-[radial-gradient(circle_at_top,rgba(37,112,235,0.08),transparent_34%)] bg-surface">
+    <div className="relative flex h-full flex-col overflow-hidden bg-[radial-gradient(85%_55%_at_50%_0%,var(--accent-light),transparent_72%)] text-foreground">
       {renderHeader()}
 
       {isExpanded && (

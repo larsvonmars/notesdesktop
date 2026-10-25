@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState, type ComponentType } from 'react'
 import { useIsMobile } from '@/lib/useIsMobile'
 import { useAuth } from '@/lib/auth-context'
 import { supabase } from '@/lib/supabase'
@@ -12,8 +12,9 @@ import {
   readWelcomeOnStartupPreference,
   setWelcomeOnStartupPreference,
 } from '@/lib/workspace/preferences'
+import { Palette, PenLine, Rocket, Settings2, User, type LucideProps } from 'lucide-react'
 import ThemeSelector from './ThemeSelector'
-import BaseModal, { ModalHeader, ModalBody, ModalTitle } from './BaseModal'
+import BaseModal, { ModalHeader, ModalTitle } from './BaseModal'
 
 interface SettingsModalProps {
   isOpen: boolean
@@ -25,6 +26,96 @@ const configuredDeleteAccountEndpoint = process.env.NEXT_PUBLIC_DELETE_ACCOUNT_E
 const supabaseEdgeDeleteAccountEndpoint = process.env.NEXT_PUBLIC_SUPABASE_URL
   ? `${process.env.NEXT_PUBLIC_SUPABASE_URL.replace(/\/$/, '')}/functions/v1/delete-account`
   : null
+
+const SETTINGS_SECTIONS: ReadonlyArray<{
+  id: 'account' | 'appearance' | 'editor' | 'startup'
+  label: string
+  icon: ComponentType<LucideProps>
+}> = [
+  { id: 'account', label: 'Account', icon: User },
+  { id: 'appearance', label: 'Appearance', icon: Palette },
+  { id: 'editor', label: 'Editor', icon: PenLine },
+  { id: 'startup', label: 'Startup', icon: Rocket },
+]
+
+type SettingsSectionId = (typeof SETTINGS_SECTIONS)[number]['id']
+
+const metaLabelClass = 'text-[11px] font-medium uppercase tracking-[0.08em] text-muted'
+
+const fieldClass =
+  'glass-input h-11 w-full rounded-xl px-3.5 text-sm text-foreground placeholder:text-muted'
+
+const primaryActionClass =
+  'glass-btn-primary inline-flex h-11 shrink-0 items-center justify-center rounded-full px-4 text-[13px] text-accent-foreground transition-[filter] duration-200 hover:brightness-105 disabled:cursor-not-allowed disabled:opacity-50'
+
+const wideActionClass =
+  'glass-btn inline-flex h-11 w-full items-center justify-center rounded-full px-4 text-[13px] font-medium text-foreground transition-colors duration-150 disabled:cursor-not-allowed disabled:opacity-50'
+
+const dangerWideActionClass =
+  'inline-flex h-11 w-full items-center justify-center rounded-full border border-[var(--border)] px-4 text-[13px] font-medium text-danger transition-colors duration-150 hover:bg-[var(--danger-light)] disabled:cursor-not-allowed disabled:opacity-50'
+
+function SectionHeading({
+  icon: Icon,
+  title,
+  description,
+}: {
+  icon: ComponentType<LucideProps>
+  title: string
+  description?: string
+}) {
+  return (
+    <div className="mb-3 flex items-start gap-2.5">
+      <span className="mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-[var(--surface-sunken)] text-muted">
+        <Icon size={14} strokeWidth={1.9} aria-hidden />
+      </span>
+      <div className="min-w-0">
+        <h3 className="text-[13px] font-semibold leading-5 text-foreground">{title}</h3>
+        {description && <p className="mt-0.5 text-xs leading-5 text-muted">{description}</p>}
+      </div>
+    </div>
+  )
+}
+
+function ToggleRow({
+  label,
+  title,
+  description,
+  checked,
+  onClick,
+}: {
+  label: string
+  title: string
+  description: string
+  checked: boolean
+  onClick: () => void
+}) {
+  return (
+    <div className="glass flex items-start justify-between gap-4 rounded-2xl p-4">
+      <div className="min-w-0">
+        <p className="text-[13px] font-medium text-foreground">{title}</p>
+        <p className="mt-1 text-xs leading-5 text-muted">{description}</p>
+      </div>
+      <button
+        type="button"
+        role="switch"
+        aria-checked={checked}
+        aria-label={label}
+        onClick={onClick}
+        className={`focus-ring relative inline-flex h-6 w-11 shrink-0 items-center rounded-full border transition-colors duration-200 ${
+          checked
+            ? 'border-transparent bg-accent'
+            : 'border-[var(--border-strong)] bg-[var(--surface-sunken)]'
+        }`}
+      >
+        <span
+          className={`inline-block h-[18px] w-[18px] transform rounded-full bg-[var(--accent-contrast)] shadow-sm transition-transform duration-200 ${
+            checked ? 'translate-x-[22px]' : 'translate-x-[3px]'
+          }`}
+        />
+      </button>
+    </div>
+  )
+}
 
 export default function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
   const isMobile = useIsMobile()
@@ -44,6 +135,8 @@ export default function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
   const [successMessage, setSuccessMessage] = useState<string | null>(null)
   const [grammarCheckEnabled, setGrammarCheckEnabled] = useState(() => readGrammarEnabledPreference())
   const [welcomeOnStartup, setWelcomeOnStartup] = useState(() => readWelcomeOnStartupPreference())
+  const [activeSection, setActiveSection] = useState<SettingsSectionId>('account')
+  const scrollRef = useRef<HTMLDivElement | null>(null)
 
   const userEmail = user?.email ?? ''
   const displayNameFromProfile = useMemo(
@@ -90,6 +183,45 @@ export default function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
   const setSuccess = (message: string) => {
     setErrorMessage(null)
     setSuccessMessage(message)
+  }
+
+  const jumpToSection = (id: SettingsSectionId) => {
+    setActiveSection(id)
+    const container = scrollRef.current
+    if (!container) return
+    const target = container.querySelector<HTMLElement>(`[data-settings-section="${id}"]`)
+    if (!target) return
+    const top =
+      target.getBoundingClientRect().top -
+      container.getBoundingClientRect().top +
+      container.scrollTop -
+      8
+    const reduceMotion =
+      typeof window !== 'undefined' &&
+      window.matchMedia('(prefers-reduced-motion: reduce)').matches
+    container.scrollTo({ top, behavior: reduceMotion ? 'auto' : 'smooth' })
+  }
+
+  const handleBodyScroll = (event: React.UIEvent<HTMLDivElement>) => {
+    const container = event.currentTarget
+    // The last section may never reach the top of the viewport, so pin the
+    // highlight to it once the panel is scrolled to the end.
+    const atBottom =
+      container.scrollTop + container.clientHeight >= container.scrollHeight - 4
+    if (atBottom) {
+      const last = SETTINGS_SECTIONS[SETTINGS_SECTIONS.length - 1].id
+      setActiveSection((current) => (current === last ? current : last))
+      return
+    }
+    const containerTop = container.getBoundingClientRect().top
+    let next: SettingsSectionId = SETTINGS_SECTIONS[0].id
+    for (const section of SETTINGS_SECTIONS) {
+      const target = container.querySelector<HTMLElement>(`[data-settings-section="${section.id}"]`)
+      if (target && target.getBoundingClientRect().top - containerTop <= 64) {
+        next = section.id
+      }
+    }
+    setActiveSection((current) => (current === next ? current : next))
   }
 
   const handleSaveProfile = async () => {
@@ -306,235 +438,289 @@ export default function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
     <BaseModal
       isOpen={isOpen}
       onClose={onClose}
-      size={isMobile ? 'full' : 'lg'}
+      size={isMobile ? 'full' : '3xl'}
       maxHeight={isMobile ? '92vh' : '82vh'}
       zIndex={70}
     >
         <ModalHeader onClose={onClose} closeAriaLabel="Close settings">
-          <ModalTitle>Settings</ModalTitle>
+          <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-[var(--accent-light)] text-accent">
+            <Settings2 size={17} strokeWidth={1.9} />
+          </span>
+          <div className="min-w-0">
+            <ModalTitle>Settings</ModalTitle>
+            <p className="mt-0.5 text-xs leading-5 text-muted">
+              Account, appearance, editor and startup
+            </p>
+          </div>
         </ModalHeader>
 
-        <ModalBody className="space-y-8">
-          {/* ─── Account ─── */}
-          <section className="space-y-4">
-            <h3 className="text-sm font-semibold text-muted uppercase tracking-wider">Account</h3>
-
-            <div className="rounded-xl border border-border bg-surface-hover p-3 sm:p-4 space-y-2">
-              <div className="flex items-center justify-between gap-3">
-                <span className="text-xs font-medium text-muted uppercase tracking-wide">Current Email</span>
-                <span className="text-sm font-medium text-foreground break-all text-right">{userEmail || 'Not available'}</span>
-              </div>
-              <div className="flex items-center justify-between gap-3">
-                <span className="text-xs font-medium text-muted uppercase tracking-wide">Account ID</span>
-                <span className="text-[11px] font-mono text-foreground break-all text-right">{user?.id || 'Not available'}</span>
-              </div>
-            </div>
-
-            <div className="space-y-2">
-              <label htmlFor="settings-display-name" className="text-sm font-medium text-foreground">Display Name</label>
-              <div className="flex gap-2">
-                <input
-                  id="settings-display-name"
-                  type="text"
-                  value={displayName}
-                  onChange={(e) => setDisplayName(e.target.value)}
-                  placeholder="How your name appears"
-                  className="flex-1 min-w-0 px-3 py-2 rounded-lg border border-border-strong bg-surface text-foreground text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-                />
+        <div className="flex min-h-0 flex-1">
+          {/* Section rail (desktop) */}
+          <nav
+            aria-label="Settings sections"
+            className="hidden w-[168px] shrink-0 flex-col gap-1 border-r border-[var(--border)] bg-[var(--surface-sunken)] p-3 sm:flex"
+          >
+            {SETTINGS_SECTIONS.map(({ id, label, icon: Icon }) => {
+              const isActive = activeSection === id
+              return (
                 <button
-                  onClick={handleSaveProfile}
-                  disabled={isSavingProfile || !user}
-                  className="px-3 py-2 text-sm font-medium rounded-lg bg-accent text-white hover:bg-blue-700 disabled:opacity-60 disabled:cursor-not-allowed transition-colors"
+                  key={id}
+                  type="button"
+                  onClick={() => jumpToSection(id)}
+                  aria-current={isActive ? 'true' : undefined}
+                  className={[
+                    'glass-row flex w-full items-center gap-2.5 rounded-xl px-2.5 py-2 text-left text-[13px] font-medium',
+                    'transition-colors duration-150',
+                    isActive ? 'is-active text-foreground' : 'text-muted hover:text-foreground',
+                  ].join(' ')}
                 >
-                  {isSavingProfile ? 'Saving...' : 'Save'}
+                  <Icon
+                    size={15}
+                    strokeWidth={1.9}
+                    className={isActive ? 'text-accent' : 'text-muted'}
+                    aria-hidden
+                  />
+                  <span className="truncate">{label}</span>
                 </button>
-              </div>
-            </div>
+              )
+            })}
+          </nav>
 
-            <div className="space-y-2">
-              <label htmlFor="settings-email" className="text-sm font-medium text-foreground">Email Address</label>
-              <div className="flex gap-2">
-                <input
-                  id="settings-email"
-                  type="email"
-                  value={emailDraft}
-                  onChange={(e) => setEmailDraft(e.target.value)}
-                  placeholder="name@example.com"
-                  className="flex-1 min-w-0 px-3 py-2 rounded-lg border border-border-strong bg-surface text-foreground text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+          {/* Scrollable content */}
+          <div
+            ref={scrollRef}
+            onScroll={handleBodyScroll}
+            className="scroll-thin min-h-0 flex-1 overflow-y-auto overscroll-contain px-5 py-5 sm:px-6"
+          >
+            <div className="space-y-8">
+              {/* ─── Account ─── */}
+              <section data-settings-section="account" className="space-y-4">
+                <SectionHeading
+                  icon={User}
+                  title="Account"
+                  description="Your profile, sign-in details and account control."
                 />
-                <button
-                  onClick={handleUpdateEmail}
-                  disabled={isUpdatingEmail || !user}
-                  className="px-3 py-2 text-sm font-medium rounded-lg bg-accent text-white hover:bg-blue-700 disabled:opacity-60 disabled:cursor-not-allowed transition-colors"
-                >
-                  {isUpdatingEmail ? 'Updating...' : 'Update'}
-                </button>
-              </div>
-              <p className="text-xs text-muted">Email updates require confirmation through your inbox.</p>
-            </div>
 
-            <div className="space-y-2">
-              <label htmlFor="settings-password" className="text-sm font-medium text-foreground">New Password</label>
-              <input
-                id="settings-password"
-                type="password"
-                value={newPassword}
-                onChange={(e) => setNewPassword(e.target.value)}
-                placeholder="At least 8 characters"
-                className="w-full px-3 py-2 rounded-lg border border-border-strong bg-surface text-foreground text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-              />
-              <label htmlFor="settings-password-confirm" className="text-sm font-medium text-foreground">Confirm Password</label>
-              <div className="flex gap-2">
-                <input
-                  id="settings-password-confirm"
-                  type="password"
-                  value={confirmPassword}
-                  onChange={(e) => setConfirmPassword(e.target.value)}
-                  placeholder="Re-enter your password"
-                  className="flex-1 min-w-0 px-3 py-2 rounded-lg border border-border-strong bg-surface text-foreground text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                <div className="glass rounded-2xl p-4">
+                  <div className="flex items-center justify-between gap-4">
+                    <span className={metaLabelClass}>Current Email</span>
+                    <span className="break-all text-right text-[13px] font-medium text-foreground">
+                      {userEmail || 'Not available'}
+                    </span>
+                  </div>
+                  <div className="glass-divider my-2.5" />
+                  <div className="flex items-center justify-between gap-4">
+                    <span className={metaLabelClass}>Account ID</span>
+                    <span className="break-all text-right font-mono text-[11px] text-muted">
+                      {user?.id || 'Not available'}
+                    </span>
+                  </div>
+                </div>
+
+                <div className="space-y-1.5">
+                  <label htmlFor="settings-display-name" className={metaLabelClass}>
+                    Display Name
+                  </label>
+                  <div className="flex gap-2">
+                    <input
+                      id="settings-display-name"
+                      type="text"
+                      value={displayName}
+                      onChange={(e) => setDisplayName(e.target.value)}
+                      placeholder="How your name appears"
+                      className={`${fieldClass} min-w-0 flex-1`}
+                    />
+                    <button
+                      onClick={handleSaveProfile}
+                      disabled={isSavingProfile || !user}
+                      className={primaryActionClass}
+                      type="button"
+                    >
+                      {isSavingProfile ? 'Saving...' : 'Save'}
+                    </button>
+                  </div>
+                </div>
+
+                <div className="space-y-1.5">
+                  <label htmlFor="settings-email" className={metaLabelClass}>
+                    Email Address
+                  </label>
+                  <div className="flex gap-2">
+                    <input
+                      id="settings-email"
+                      type="email"
+                      value={emailDraft}
+                      onChange={(e) => setEmailDraft(e.target.value)}
+                      placeholder="name@example.com"
+                      className={`${fieldClass} min-w-0 flex-1`}
+                    />
+                    <button
+                      onClick={handleUpdateEmail}
+                      disabled={isUpdatingEmail || !user}
+                      className={primaryActionClass}
+                      type="button"
+                    >
+                      {isUpdatingEmail ? 'Updating...' : 'Update'}
+                    </button>
+                  </div>
+                  <p className="text-xs leading-5 text-muted">Email updates require confirmation through your inbox.</p>
+                </div>
+
+                <div className="space-y-1.5">
+                  <label htmlFor="settings-password" className={metaLabelClass}>
+                    New Password
+                  </label>
+                  <input
+                    id="settings-password"
+                    type="password"
+                    value={newPassword}
+                    onChange={(e) => setNewPassword(e.target.value)}
+                    placeholder="At least 8 characters"
+                    className={fieldClass}
+                  />
+                  <label htmlFor="settings-password-confirm" className={metaLabelClass}>
+                    Confirm Password
+                  </label>
+                  <div className="flex gap-2">
+                    <input
+                      id="settings-password-confirm"
+                      type="password"
+                      value={confirmPassword}
+                      onChange={(e) => setConfirmPassword(e.target.value)}
+                      placeholder="Re-enter your password"
+                      className={`${fieldClass} min-w-0 flex-1`}
+                    />
+                    <button
+                      onClick={handleUpdatePassword}
+                      disabled={isUpdatingPassword || !user}
+                      className={primaryActionClass}
+                      type="button"
+                    >
+                      {isUpdatingPassword ? 'Updating...' : 'Set'}
+                    </button>
+                  </div>
+                  <p className="text-xs leading-5 text-muted">
+                    You can also request a reset link if you prefer changing it by email.
+                  </p>
+                </div>
+
+                {(errorMessage || successMessage) && (
+                  <div
+                    role={errorMessage ? 'alert' : 'status'}
+                    className={`rounded-xl px-3.5 py-2.5 text-[13px] leading-5 ${
+                      errorMessage
+                        ? 'bg-[var(--danger-light)] text-danger'
+                        : 'bg-[var(--success-light)] text-success'
+                    }`}
+                  >
+                    {errorMessage || successMessage}
+                  </div>
+                )}
+
+                <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+                  <button
+                    onClick={handleSendPasswordReset}
+                    disabled={isSendingReset || !userEmail}
+                    className={wideActionClass}
+                    type="button"
+                  >
+                    {isSendingReset ? 'Sending...' : 'Send Reset Link'}
+                  </button>
+                  <button
+                    onClick={handleSignOut}
+                    disabled={isSigningOut || !user}
+                    className={dangerWideActionClass}
+                    type="button"
+                  >
+                    {isSigningOut ? 'Signing Out...' : 'Sign Out'}
+                  </button>
+                </div>
+
+                <div className="rounded-2xl bg-[var(--danger-light)] p-4">
+                  <p className="text-[13px] font-semibold text-danger">Delete Account</p>
+                  <p className="mt-1 text-xs leading-5 text-danger">
+                    This permanently removes your account and cannot be undone.
+                  </p>
+                  <label
+                    htmlFor="settings-delete-confirm"
+                    className={`mt-3 block ${metaLabelClass} text-danger`}
+                  >
+                    Type DELETE to confirm
+                  </label>
+                  <div className="mt-1.5 flex gap-2">
+                    <input
+                      id="settings-delete-confirm"
+                      type="text"
+                      value={deleteConfirmationText}
+                      onChange={(e) => setDeleteConfirmationText(e.target.value)}
+                      placeholder="DELETE"
+                      className={`${fieldClass} min-w-0 flex-1 border-danger`}
+                    />
+                    <button
+                      onClick={handleDeleteAccount}
+                      disabled={isDeletingAccount || !user || deleteConfirmationText !== 'DELETE'}
+                      className="inline-flex h-11 shrink-0 items-center justify-center rounded-full bg-danger px-4 text-[13px] font-semibold text-accent-foreground transition-[filter] duration-200 hover:brightness-105 disabled:cursor-not-allowed disabled:opacity-50"
+                      type="button"
+                    >
+                      {isDeletingAccount ? 'Deleting...' : 'Delete'}
+                    </button>
+                  </div>
+                </div>
+              </section>
+
+              {/* ─── Appearance ─── */}
+              <section data-settings-section="appearance">
+                <SectionHeading
+                  icon={Palette}
+                  title="Appearance"
+                  description="Choose how MindViz Notes looks on this device."
                 />
-                <button
-                  onClick={handleUpdatePassword}
-                  disabled={isUpdatingPassword || !user}
-                  className="px-3 py-2 text-sm font-medium rounded-lg bg-accent text-white hover:bg-blue-700 disabled:opacity-60 disabled:cursor-not-allowed transition-colors"
-                >
-                  {isUpdatingPassword ? 'Updating...' : 'Set'}
-                </button>
-              </div>
-              <p className="text-xs text-muted">You can also request a reset link if you prefer changing it by email.</p>
-            </div>
+                <div className="glass rounded-2xl p-4">
+                  <ThemeSelector />
+                </div>
+              </section>
 
-            {(errorMessage || successMessage) && (
-              <div
-                className={`rounded-lg border px-3 py-2 text-sm ${
-                  errorMessage
-                    ? 'border-danger bg-danger-light text-danger dark:border-red-900/60 dark:bg-red-950/40'
-                    : 'border-emerald-200 bg-emerald-50 text-emerald-700 dark:border-emerald-900/60 dark:bg-emerald-950/40 dark:text-emerald-300'
-                }`}
-              >
-                {errorMessage || successMessage}
-              </div>
-            )}
-
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-              <button
-                onClick={handleSendPasswordReset}
-                disabled={isSendingReset || !userEmail}
-                className="w-full py-2 text-sm font-medium rounded-lg border border-border-strong text-foreground bg-surface hover:bg-surface-hover disabled:opacity-60 disabled:cursor-not-allowed transition-colors"
-              >
-                {isSendingReset ? 'Sending...' : 'Send Reset Link'}
-              </button>
-              <button
-                onClick={handleSignOut}
-                disabled={isSigningOut || !user}
-                className="w-full py-2 text-sm font-medium rounded-lg border border-danger dark:border-red-700 text-danger bg-danger-light dark:bg-red-950/30 hover:bg-red-100 dark:hover:bg-red-900/40 disabled:opacity-60 disabled:cursor-not-allowed transition-colors"
-              >
-                {isSigningOut ? 'Signing Out...' : 'Sign Out'}
-              </button>
-            </div>
-
-            <div className="rounded-xl border border-danger dark:border-red-900/60 bg-red-50/70 dark:bg-red-950/20 p-3 sm:p-4 space-y-3">
-              <div>
-                <p className="text-sm font-semibold text-danger">Delete Account</p>
-                <p className="text-xs text-red-700/90 dark:text-red-300/90 mt-1">
-                  This permanently removes your account and cannot be undone.
-                </p>
-              </div>
-              <label htmlFor="settings-delete-confirm" className="text-xs font-medium text-danger uppercase tracking-wide">
-                Type DELETE to confirm
-              </label>
-              <div className="flex gap-2">
-                <input
-                  id="settings-delete-confirm"
-                  type="text"
-                  value={deleteConfirmationText}
-                  onChange={(e) => setDeleteConfirmationText(e.target.value)}
-                  placeholder="DELETE"
-                  className="flex-1 min-w-0 px-3 py-2 rounded-lg border border-danger dark:border-red-800 bg-surface text-foreground text-sm focus:outline-none focus:ring-2 focus:ring-red-500"
+              {/* ─── Editor ─── */}
+              <section data-settings-section="editor">
+                <SectionHeading
+                  icon={PenLine}
+                  title="Editor"
+                  description="Writing assistance while you type."
                 />
-                <button
-                  onClick={handleDeleteAccount}
-                  disabled={isDeletingAccount || !user || deleteConfirmationText !== 'DELETE'}
-                  className="px-3 py-2 text-sm font-medium rounded-lg bg-red-600 text-white hover:bg-red-700 disabled:opacity-60 disabled:cursor-not-allowed transition-colors"
-                >
-                  {isDeletingAccount ? 'Deleting...' : 'Delete'}
-                </button>
-              </div>
-            </div>
-          </section>
-
-          {/* ─── Appearance ─── */}
-          <section>
-            <h3 className="text-sm font-semibold text-muted uppercase tracking-wider mb-3">Appearance</h3>
-            <ThemeSelector />
-          </section>
-
-          {/* ─── Editor ─── */}
-          <section>
-            <h3 className="text-sm font-semibold text-muted uppercase tracking-wider mb-3">Editor</h3>
-
-            <div className="flex items-start justify-between gap-4 rounded-xl border border-border bg-surface-hover p-3 sm:p-4">
-              <div className="min-w-0">
-                <p className="text-sm font-medium text-foreground">Grammar &amp; spelling check</p>
-                <p className="text-xs text-muted mt-1">
-                  Shows suggestions while you write. Runs entirely on your device (English only).
-                </p>
-              </div>
-              <button
-                type="button"
-                role="switch"
-                aria-checked={grammarCheckEnabled}
-                aria-label="Grammar and spelling check"
-                onClick={handleToggleGrammarCheck}
-                className={`relative inline-flex h-6 w-11 flex-shrink-0 items-center rounded-full transition-colors focus:outline-none focus:ring-2 focus:ring-blue-500 ${
-                  grammarCheckEnabled ? 'bg-accent' : 'bg-surface-active'
-                }`}
-              >
-                <span
-                  className={`inline-block h-4 w-4 transform rounded-full bg-white shadow transition-transform ${
-                    grammarCheckEnabled ? 'translate-x-6' : 'translate-x-1'
-                  }`}
+                <ToggleRow
+                  label="Grammar and spelling check"
+                  title="Grammar & spelling check"
+                  description="Shows suggestions while you write. Runs entirely on your device (English only)."
+                  checked={grammarCheckEnabled}
+                  onClick={handleToggleGrammarCheck}
                 />
-              </button>
-            </div>
-          </section>
+              </section>
 
-          {/* ─── Startup ─── */}
-          <section>
-            <h3 className="text-sm font-semibold text-muted uppercase tracking-wider mb-3">Startup</h3>
-
-            <div className="flex items-start justify-between gap-4 rounded-xl border border-border bg-surface-hover p-3 sm:p-4">
-              <div className="min-w-0">
-                <p className="text-sm font-medium text-foreground">Open Home on launch</p>
-                <p className="text-xs text-muted mt-1">
-                  Shows your daily briefing with recent notes, tasks, and quick capture when the app starts. You can always reopen it from Home in the sidebar.
-                </p>
-              </div>
-              <button
-                type="button"
-                role="switch"
-                aria-checked={welcomeOnStartup}
-                aria-label="Open Home on launch"
-                onClick={handleToggleWelcomeOnStartup}
-                className={`relative inline-flex h-6 w-11 flex-shrink-0 items-center rounded-full transition-colors focus:outline-none focus:ring-2 focus:ring-blue-500 ${
-                  welcomeOnStartup ? 'bg-accent' : 'bg-surface-active'
-                }`}
-              >
-                <span
-                  className={`inline-block h-4 w-4 transform rounded-full bg-white shadow transition-transform ${
-                    welcomeOnStartup ? 'translate-x-6' : 'translate-x-1'
-                  }`}
+              {/* ─── Startup ─── */}
+              <section data-settings-section="startup">
+                <SectionHeading
+                  icon={Rocket}
+                  title="Startup"
+                  description="What you see when the app launches."
                 />
-              </button>
+                <ToggleRow
+                  label="Open Home on launch"
+                  title="Open Home on launch"
+                  description="Shows your daily briefing with recent notes, tasks, and quick capture when the app starts. You can always reopen it from Home in the sidebar."
+                  checked={welcomeOnStartup}
+                  onClick={handleToggleWelcomeOnStartup}
+                />
+              </section>
             </div>
-          </section>
-        </ModalBody>
+          </div>
+        </div>
 
         {/* Footer */}
-        <div className="px-4 sm:px-6 py-3.5 sm:py-4 border-t border-border bg-surface-hover">
+        <div className="shrink-0 border-t border-[var(--border)] bg-[var(--surface-sunken)] px-4 py-3.5 sm:px-6 sm:py-4">
           <button
             onClick={onClose}
-            className="w-full py-2 text-sm font-medium text-foreground bg-surface-hover hover:bg-surface-active rounded-lg transition-colors"
+            className="glass-btn inline-flex h-10 w-full items-center justify-center rounded-full text-[13px] font-medium text-foreground transition-colors duration-150"
+            type="button"
           >
             Done
           </button>

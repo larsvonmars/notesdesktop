@@ -872,7 +872,7 @@ const SlashMenu = forwardRef<SlashMenuHandle, SlashMenuProps>(function SlashMenu
       data-testid="slash-menu"
       role="listbox"
       aria-label="Insert block"
-      className="pointer-events-auto fixed z-50 flex flex-col overflow-hidden rounded-xl border border-border bg-surface/98 shadow-xl backdrop-blur-xl"
+      className="pointer-events-auto floating-pop-in glass-strong fixed z-50 flex flex-col overflow-hidden rounded-2xl"
       style={{
         top: menu.top,
         left: menu.left,
@@ -891,15 +891,15 @@ const SlashMenu = forwardRef<SlashMenuHandle, SlashMenuProps>(function SlashMenu
             data-testid="slash-step-back"
             onMouseDown={(event) => event.preventDefault()}
             onClick={goBack}
-            className="flex h-5 w-5 items-center justify-center rounded text-muted transition-colors hover:bg-surface-hover hover:text-foreground"
+            className="flex h-5 w-5 items-center justify-center rounded-full text-muted transition-colors hover:bg-surface-hover hover:text-foreground"
           >
             <ArrowLeft size={13} strokeWidth={2} />
           </button>
-          <span className="text-[11px] font-semibold uppercase tracking-wide text-muted">
+          <span className="text-[10px] font-semibold uppercase tracking-[0.08em] text-muted">
             {stepTitle}
           </span>
           {menu.stepQuery && (
-            <span className="ml-auto truncate rounded bg-surface-hover px-1.5 py-0.5 text-[10px] text-foreground">
+            <span className="ml-auto truncate rounded-full bg-surface-hover px-2 py-0.5 text-[10px] text-foreground">
               {menu.stepQuery}
             </span>
           )}
@@ -926,10 +926,10 @@ const SlashMenu = forwardRef<SlashMenuHandle, SlashMenuProps>(function SlashMenu
                   onMouseDown={(event) => event.preventDefault()}
                   onMouseEnter={() => setActive(index)}
                   onClick={applyGrid}
-                  className={`rounded-[4px] border transition-colors ${
+                  className={`rounded-[5px] border transition-colors ${
                     active
-                      ? 'border-alpine-500 bg-alpine-500/25'
-                      : 'border-border bg-surface-hover/30 hover:bg-surface-hover'
+                      ? 'border-accent bg-accent-light'
+                      : 'border-border bg-surface-sunken hover:bg-surface-hover'
                   }`}
                   style={{ height: GRID_CELL }}
                 />
@@ -970,7 +970,7 @@ const SlashMenu = forwardRef<SlashMenuHandle, SlashMenuProps>(function SlashMenu
               return (
                 <div
                   key={`header-${row.label}`}
-                  className="px-2 pb-1 pt-2 text-[10px] font-semibold uppercase tracking-wide text-muted"
+                  className="px-2 pb-1 pt-2 text-[10px] font-semibold uppercase tracking-[0.08em] text-muted"
                 >
                   {row.label}
                 </div>
@@ -1001,9 +1001,9 @@ const SlashMenu = forwardRef<SlashMenuHandle, SlashMenuProps>(function SlashMenu
                 onMouseDown={(event) => event.preventDefault()}
                 onMouseEnter={() => setActive(index)}
                 onClick={() => (row.kind === 'command' ? chooseCommand(row.command.id) : applyOption())}
-                className={`flex h-8 w-full items-center gap-2 rounded-lg px-2 text-left text-sm transition-colors ${
+                className={`flex h-8 w-full items-center gap-2 rounded-[10px] px-2 text-left text-[13px] transition-colors ${
                   active
-                    ? 'bg-alpine-50 font-medium text-alpine-700 dark:bg-alpine-900/40 dark:text-alpine-300'
+                    ? 'bg-accent-light font-medium text-accent'
                     : 'text-foreground hover:bg-surface-hover'
                 }`}
               >
@@ -1020,7 +1020,7 @@ const SlashMenu = forwardRef<SlashMenuHandle, SlashMenuProps>(function SlashMenu
         </div>
       )}
 
-      <div className="flex shrink-0 items-center justify-between border-t border-border px-2 py-1 text-[10px] text-muted">
+      <div className="flex shrink-0 items-center justify-between border-t border-border px-2.5 py-1 text-[10px] text-muted">
           <span>
             {menu.view === 'commands'
               ? 'Type to filter'
