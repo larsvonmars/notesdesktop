@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useCallback, useRef, useEffect, useMemo } from 'react'
+import { createPortal } from 'react-dom'
 import {
   ChevronRight,
   ChevronDown,
@@ -152,6 +153,17 @@ function GlassSurfaceScrim() {
       className="pointer-events-none absolute inset-0 -z-10 rounded-[inherit] bg-surface-solid opacity-50"
     />
   )
+}
+
+/**
+ * The sidebar panes use `backdrop-filter` (`.glass-*`) plus `overflow-hidden`,
+ * which makes them the containing block for `position: fixed` children and
+ * clips anything drawn past their edges. Menus and modals therefore have to be
+ * portaled to `<body>` to stay visible and viewport-anchored.
+ */
+function SidebarPortal({ children }: { children: React.ReactNode }) {
+  if (typeof document === 'undefined') return null
+  return createPortal(children, document.body)
 }
 
 // Drag data types
@@ -1170,6 +1182,7 @@ export default function SidebarTree({
                 aria-current={isActive ? 'page' : undefined}
                 onClick={() => onSelectNote(note)}
                 onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onSelectNote(note) } }}
+                onContextMenu={(e) => handleNoteContextMenu(e, note)}
                 className={`glass-row group relative cursor-pointer ${rowHeightCls} ${isActive ? 'is-active' : ''}`}
                 title={note.title || 'Untitled'}
               >
@@ -1549,7 +1562,7 @@ export default function SidebarTree({
 
         {/* ========== CONTEXT MENU ========== */}
         {contextMenu && (
-          <>
+          <SidebarPortal>
             <div className="fixed inset-0 z-50" role="presentation" aria-hidden="true" onClick={() => setContextMenu(null)} />
             <div
               role="menu"
@@ -1561,7 +1574,7 @@ export default function SidebarTree({
               {renderContextMenu()}
               <GlassSurfaceScrim />
             </div>
-          </>
+          </SidebarPortal>
         )}
         {renderSidebarModals()}
       </>
@@ -1893,7 +1906,7 @@ export default function SidebarTree({
 
       {/* ========== CONTEXT MENU ========== */}
       {contextMenu && (
-        <>
+        <SidebarPortal>
           <div className="fixed inset-0 z-50" role="presentation" aria-hidden="true" onClick={() => setContextMenu(null)} />
           <div
             role="menu"
@@ -1905,7 +1918,7 @@ export default function SidebarTree({
             {renderContextMenu()}
             <GlassSurfaceScrim />
           </div>
-        </>
+        </SidebarPortal>
       )}
 
       {renderSidebarModals()}
@@ -1957,7 +1970,7 @@ export default function SidebarTree({
     const neutralTileCls = 'flex h-5 w-5 shrink-0 items-center justify-center rounded-md bg-surface-active text-muted'
 
     return (
-      <>
+      <SidebarPortal>
         {/* ========== MOVE PICKER MODAL ========== */}
         {showMovePicker && (
           <div className={modalOverlay} role="presentation" onClick={(e) => { if (e.target === e.currentTarget) setShowMovePicker(null) }}>
@@ -2179,7 +2192,7 @@ export default function SidebarTree({
             </div>
           </div>
         )}
-      </>
+      </SidebarPortal>
     )
   }
 }
