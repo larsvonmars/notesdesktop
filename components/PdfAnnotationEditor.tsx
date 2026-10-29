@@ -10,6 +10,7 @@ import React, {
   type PointerEvent as ReactPointerEvent,
   type ChangeEvent,
 } from 'react'
+import { createPortal } from 'react-dom'
 import {
   TEXT_HIT_SLOP_TOUCH_PX,
   TEXT_LINE_HEIGHT,
@@ -206,6 +207,11 @@ const MIN_ZOOM = 0.25
 const MAX_ZOOM = 4
 const ZOOM_STEP = 0.1
 const DEFAULT_FONT_SIZE = 16
+
+// Widths of the portalled top-bar popovers (needed to anchor them under a trigger)
+const POPOVER_WIDTHS = { color: 150, size: 224, zoom: 256 } as const
+const POPOVER_GAP_PX = 8
+const POPOVER_VIEWPORT_MARGIN_PX = 8
 
 // ── Touch gesture tuning ────────────────────────────────────────────────────
 /** Ignore accidental micro-movements below this distance (px) while stroke capturing. */
@@ -472,6 +478,10 @@ const PdfAnnotationEditor = forwardRef<PdfAnnotationEditorHandle, PdfAnnotationE
     const [panelTab, setPanelTab] = useState<'pages' | 'annotations'>('pages')
     // Inline popover in the top bar ('color' | 'size'), click-away closes it
     const [openPopover, setOpenPopover] = useState<'color' | 'size' | 'zoom' | null>(null)
+    // Viewport position of the open popover. The toolbar scrolls horizontally
+    // (`overflow-y: hidden`), which would clip an in-flow dropdown, so the
+    // popover is portalled to <body> and positioned against its trigger.
+    const [popoverPos, setPopoverPos] = useState<{ top: number; left: number } | null>(null)
     // Page-number jump field
     const [pageInput, setPageInput] = useState('')
     // Fill opacity applied to newly created filled shapes
@@ -2166,16 +2176,47 @@ const PdfAnnotationEditor = forwardRef<PdfAnnotationEditorHandle, PdfAnnotationE
       if (clamped !== currentPage) goToPage(clamped)
     }, [pageInput, totalPages, currentPage, goToPage])
 
-    // Close the colour/size popover when clicking anywhere outside it
+    /**
+     * Open/toggle a top-bar popover, anchored underneath its trigger button.
+     * Positions are viewport-based because the popover is portalled to `<body>`.
+     */
+    const togglePopover = useCallback((
+      kind: 'color' | 'size' | 'zoom',
+      anchor: HTMLElement | null,
+      align: 'left' | 'center' = 'left',
+    ) => {
+      if (openPopover === kind || !anchor) {
+        setOpenPopover(null)
+        return
+      }
+      const width = POPOVER_WIDTHS[kind]
+      const rect = anchor.getBoundingClientRect()
+      const preferredLeft = align === 'center' ? rect.left + rect.width / 2 - width / 2 : rect.left
+      setPopoverPos({
+        top: rect.bottom + POPOVER_GAP_PX,
+        left: Math.max(
+          POPOVER_VIEWPORT_MARGIN_PX,
+          Math.min(preferredLeft, window.innerWidth - width - POPOVER_VIEWPORT_MARGIN_PX),
+        ),
+      })
+      setOpenPopover(kind)
+    }, [openPopover])
+
+    // Close the colour/size popover when clicking anywhere outside it,
+    // pressing Escape, resizing the window or scrolling (the trigger moves).
     useEffect(() => {
       if (!openPopover) return
       const close = () => setOpenPopover(null)
       const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') setOpenPopover(null) }
       window.addEventListener('pointerdown', close)
       window.addEventListener('keydown', onKey)
+      window.addEventListener('resize', close)
+      window.addEventListener('scroll', close, true)
       return () => {
         window.removeEventListener('pointerdown', close)
         window.removeEventListener('keydown', onKey)
+        window.removeEventListener('resize', close)
+        window.removeEventListener('scroll', close, true)
       }
     }, [openPopover])
 
@@ -3845,10 +3886,10 @@ const PdfAnnotationEditor = forwardRef<PdfAnnotationEditorHandle, PdfAnnotationE
             </div>
 
             {/* Colour popover */}
-            <div className="relative hidden shrink-0 sm:block" onPointerDown={e => e.stopPropagation()}>
+            <div className="hidden shrink-0 sm:block" onPointerDown={e => e.stopPropagation()}>
               <button
                 type="button"
-                onClick={() => setOpenPopover(p => (p === 'color' ? null : 'color'))}
+                onClick={e => togglePopover('color', e.currentTarget)}
                 aria-label="Stroke and text colour"
                 aria-expanded={openPopover === 'color'}
                 aria-haspopup="dialog"
@@ -3858,8 +3899,12 @@ const PdfAnnotationEditor = forwardRef<PdfAnnotationEditorHandle, PdfAnnotationE
                 <span className="h-4 w-4 rounded-full border border-black/10 shadow-sm" style={{ backgroundColor: color }} />
                 <span className="hidden 2xl:inline">Colour</span>
               </button>
-              {openPopover === 'color' && (
-                <div className="floating-pop-in glass-strong absolute left-0 top-full z-50 mt-2 w-max rounded-2xl p-2.5">
+              {openPopover === 'color' && popoverPos && typeof document !== 'undefined' && createPortal(
+                <div
+                  className="floating-pop-in glass-strong fixed z-50 rounded-2xl p-2.5 shadow-glass-lg"
+                  style={{ top: popoverPos.top, left: popoverPos.left, width: POPOVER_WIDTHS.color }}
+                  onPointerDown={e => e.stopPropagation()}
+                >
                   <p className={metaLabel}>Colour</p>
                   <div className="mt-1.5 grid grid-cols-4 gap-1.5">
                     {COLORS.map(c => (
@@ -3874,15 +3919,16 @@ const PdfAnnotationEditor = forwardRef<PdfAnnotationEditorHandle, PdfAnnotationE
                       />
                     ))}
                   </div>
-                </div>
+                </div>,
+                document.body,
               )}
             </div>
 
             {/* Size popover */}
-            <div className="relative hidden shrink-0 sm:block" onPointerDown={e => e.stopPropagation()}>
+            <div className="hidden shrink-0 sm:block" onPointerDown={e => e.stopPropagation()}>
               <button
                 type="button"
-                onClick={() => setOpenPopover(p => (p === 'size' ? null : 'size'))}
+                onClick={e => togglePopover('size', e.currentTarget)}
                 aria-label="Stroke size"
                 aria-expanded={openPopover === 'size'}
                 aria-haspopup="dialog"
@@ -3891,8 +3937,12 @@ const PdfAnnotationEditor = forwardRef<PdfAnnotationEditorHandle, PdfAnnotationE
               >
                 <span className="text-[11px] tabular-nums">{strokeSize}px</span>
               </button>
-              {openPopover === 'size' && (
-                <div className="floating-pop-in glass-strong absolute left-0 top-full z-50 mt-2 w-56 rounded-2xl p-3">
+              {openPopover === 'size' && popoverPos && typeof document !== 'undefined' && createPortal(
+                <div
+                  className="floating-pop-in glass-strong fixed z-50 rounded-2xl p-3 shadow-glass-lg"
+                  style={{ top: popoverPos.top, left: popoverPos.left, width: POPOVER_WIDTHS.size }}
+                  onPointerDown={e => e.stopPropagation()}
+                >
                   <div className="flex items-center justify-between">
                     <p className={metaLabel}>Stroke size</p>
                     <span className="text-xs tabular-nums text-foreground">{strokeSize}px</span>
@@ -3918,7 +3968,8 @@ const PdfAnnotationEditor = forwardRef<PdfAnnotationEditorHandle, PdfAnnotationE
                       </button>
                     ))}
                   </div>
-                </div>
+                </div>,
+                document.body,
               )}
             </div>
 
@@ -3976,10 +4027,10 @@ const PdfAnnotationEditor = forwardRef<PdfAnnotationEditorHandle, PdfAnnotationE
                 title={'Zoom: ' + Math.round(zoom * 100) + '%'}
                 className="hidden h-1.5 w-20 accent-[var(--accent)] xl:block"
               />
-              <div className="relative">
+              <div>
                 <button
                   type="button"
-                  onClick={() => setOpenPopover(p => (p === 'zoom' ? null : 'zoom'))}
+                  onClick={e => togglePopover('zoom', e.currentTarget, 'center')}
                   aria-label="Zoom level"
                   aria-expanded={openPopover === 'zoom'}
                   aria-haspopup="dialog"
@@ -3988,8 +4039,12 @@ const PdfAnnotationEditor = forwardRef<PdfAnnotationEditorHandle, PdfAnnotationE
                 >
                   {Math.round(zoom * 100)}%
                 </button>
-                {openPopover === 'zoom' && (
-                  <div className="floating-pop-in glass-strong absolute left-1/2 top-full z-50 mt-2 w-64 -translate-x-1/2 rounded-2xl p-3 shadow-glass-lg">
+                {openPopover === 'zoom' && popoverPos && typeof document !== 'undefined' && createPortal(
+                  <div
+                    className="floating-pop-in glass-strong fixed z-50 rounded-2xl p-3 shadow-glass-lg"
+                    style={{ top: popoverPos.top, left: popoverPos.left, width: POPOVER_WIDTHS.zoom }}
+                    onPointerDown={e => e.stopPropagation()}
+                  >
                     <div className="flex items-center justify-between">
                       <p className={metaLabel}>Zoom</p>
                       <span className="text-xs tabular-nums text-foreground">{Math.round(zoom * 100)}%</span>
@@ -4027,7 +4082,8 @@ const PdfAnnotationEditor = forwardRef<PdfAnnotationEditorHandle, PdfAnnotationE
                     <button type="button" onClick={() => { handleZoomReset(); setOpenPopover(null) }} className="glass-btn mt-1.5 h-8 w-full text-[11px]">
                       Actual size (100%)
                     </button>
-                  </div>
+                  </div>,
+                  document.body,
                 )}
               </div>
               <button type="button" title="Zoom in" aria-label="Zoom in" onClick={handleZoomIn} disabled={zoom >= MAX_ZOOM} className={barIconButtonClass(false) + ' disabled:opacity-30'}>
