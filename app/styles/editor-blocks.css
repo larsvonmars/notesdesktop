@@ -16,7 +16,7 @@
   .show-block-outlines [contenteditable='true'] pre,
   .show-block-outlines [contenteditable='true'] [data-block='true'] {
     position: relative;
-    border: 1px dashed rgba(147, 51, 234, 0.3) !important;
+    border: 1px dashed rgba(132, 204, 22, 0.3) !important;
     border-radius: 4px !important;
     padding: 8px !important;
     margin-top: 4px !important;
@@ -37,8 +37,8 @@
   .show-block-outlines [contenteditable='true'] blockquote:hover,
   .show-block-outlines [contenteditable='true'] pre:hover,
   .show-block-outlines [contenteditable='true'] [data-block='true']:hover {
-    background-color: rgba(147, 51, 234, 0.05) !important;
-    border-color: rgba(147, 51, 234, 0.6) !important;
+    background-color: rgba(132, 204, 22, 0.05) !important;
+    border-color: rgba(132, 204, 22, 0.6) !important;
   }
 
   /* Block type labels - shown when block visibility is enabled */
@@ -63,7 +63,7 @@
     font-weight: 600;
     text-transform: uppercase;
     letter-spacing: 0.5px;
-    background: linear-gradient(135deg, #9333EA 0%, #7C3AED 100%);
+    background: linear-gradient(135deg, #4D7C0F 0%, #3F6212 100%);
     color: white;
     padding: 2px 6px;
     border-radius: 3px;
@@ -100,7 +100,7 @@
 
   .show-block-outlines [contenteditable='true'] h5::before {
     content: 'H5';
-    background: linear-gradient(135deg, #8B5CF6 0%, #7C3AED 100%);
+    background: linear-gradient(135deg, #4D7C0F 0%, #3F6212 100%);
   }
 
   .show-block-outlines [contenteditable='true'] h6::before {
@@ -120,7 +120,7 @@
 
   .show-block-outlines [contenteditable='true'] blockquote::before {
     content: 'Quote';
-    background: linear-gradient(135deg, #8B5CF6 0%, #7C3AED 100%);
+    background: linear-gradient(135deg, #4D7C0F 0%, #3F6212 100%);
   }
 
   .show-block-outlines [contenteditable='true'] pre::before {
@@ -150,11 +150,11 @@
   .image-drop-caret {
     position: absolute;
     width: 2px;
-    background: #6366f1;
+    background: #65A30D;
     border-radius: 1px;
     pointer-events: none;
     z-index: 9999;
-    box-shadow: 0 0 0 1px rgba(99, 102, 241, 0.25);
+    box-shadow: 0 0 0 1px rgba(101, 163, 13, 0.25);
   }
 
   .image-drag-ghost {
@@ -295,8 +295,9 @@
     color: #2563eb !important;
   }
 
+  /* Legacy `data-color='purple'` value kept for stored note content — renders lime. */
   [contenteditable='true'] span[data-color='purple'] {
-    color: #7c3aed !important;
+    color: #4d7c0f !important;
   }
 
   /* Font size mappings for persisted data-font-size attribute */

@@ -41,8 +41,8 @@ export const viewport: Viewport = {
   initialScale: 1,
   viewportFit: 'cover', // enables safe-area-inset env() on iOS
   themeColor: [
-    { media: '(prefers-color-scheme: light)', color: '#eef0fa' },
-    { media: '(prefers-color-scheme: dark)', color: '#08070f' },
+    { media: '(prefers-color-scheme: light)', color: '#f1f3ee' },
+    { media: '(prefers-color-scheme: dark)', color: '#090b08' },
   ],
 }
 

@@ -58,7 +58,7 @@ function RailButton({ icon: Icon, label, shortcut, active, onClick }: RailButton
  *
  * Brand → primary destinations → spacer → theme, settings and the account
  * menu. The active destination is a .nav-pill with aria-current="page", which
- * glass.css renders as a violet pill with a glowing left bar.
+ * glass.css renders as a lime pill with a glowing left bar.
  */
 export default function AppRail({
   activeView,

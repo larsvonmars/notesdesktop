@@ -42,8 +42,8 @@ export const DEFAULT_PROJECT_COLOR = '#3B82F6'
 /** Curated palette offered when creating or recoloring a project. */
 export const PROJECT_COLOR_PRESETS = [
   '#EF4444', '#F97316', '#F59E0B', '#EAB308', '#84CC16', '#22C55E',
-  '#14B8A6', '#06B6D4', '#3B82F6', '#6366F1', '#8B5CF6', '#A855F7',
-  '#D946EF', '#EC4899', '#F43F5E', '#6B7280', '#78716C', '#0EA5E9',
+  '#14B8A6', '#06B6D4', '#3B82F6', '#16A34A', '#65A30D', '#A3E635',
+  '#4D7C0F', '#EC4899', '#F43F5E', '#6B7280', '#78716C', '#0EA5E9',
 ] as const
 
 /**

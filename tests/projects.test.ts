@@ -74,10 +74,10 @@ describe('Project Types', () => {
       '#10B981', // Green
       '#F59E0B', // Amber
       '#EF4444', // Red
-      '#8B5CF6', // Purple
+      '#65A30D', // Lime
       '#EC4899', // Pink
       '#14B8A6', // Teal
-      '#6366F1', // Indigo
+      '#16A34A', // Green
     ]
 
     validColors.forEach((color) => {

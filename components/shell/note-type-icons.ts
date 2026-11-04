@@ -26,8 +26,8 @@ const NOTE_TYPE_TONES: Record<NoteType, { tile: string; icon: string }> = {
     icon: 'text-sky-600 dark:text-sky-300',
   },
   drawing: {
-    tile: 'bg-violet-500/10 ring-violet-500/10 dark:bg-violet-400/20 dark:ring-violet-300/10',
-    icon: 'text-violet-600 dark:text-violet-300',
+    tile: 'bg-lime-500/10 ring-lime-500/10 dark:bg-lime-400/20 dark:ring-lime-300/10',
+    icon: 'text-lime-700 dark:text-lime-300',
   },
   mindmap: {
     tile: 'bg-emerald-500/10 ring-emerald-500/10 dark:bg-emerald-400/20 dark:ring-emerald-300/10',

@@ -115,7 +115,7 @@ const COLORS = [
   { name: 'Blue', value: '#2563eb' },
   { name: 'Red', value: '#dc2626' },
   { name: 'Green', value: '#16a34a' },
-  { name: 'Purple', value: '#9333ea' },
+  { name: 'Lime', value: '#65a30d' },
   { name: 'Orange', value: '#ea580c' },
   { name: 'Yellow', value: '#fbbf24' },
   { name: 'Pink', value: '#ec4899' }

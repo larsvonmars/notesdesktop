@@ -23,7 +23,7 @@ const COLORS = {
   green: '#10B981',
   amber: '#F59E0B',
   red: '#EF4444',
-  purple: '#8B5CF6',
+  lime: '#84CC16',
   pink: '#EC4899',
   cyan: '#06B6D4',
   orange: '#F97316',
@@ -135,7 +135,7 @@ function createProjectPlanningData(): MindmapData {
     {
       id: 'resources',
       text: 'Resources',
-      color: COLORS.purple,
+      color: COLORS.lime,
       children: [
         { id: 'resource-1', text: 'Resource 1' },
         { id: 'resource-2', text: 'Resource 2' },
@@ -171,7 +171,7 @@ function createSWOTData(): MindmapData {
     { id: 'strengths', text: 'Strengths', color: COLORS.green, items: ['Strength 1', 'Strength 2'] },
     { id: 'weaknesses', text: 'Weaknesses', color: COLORS.red, items: ['Weakness 1', 'Weakness 2'] },
     { id: 'opportunities', text: 'Opportunities', color: COLORS.amber, items: ['Opportunity 1', 'Opportunity 2'] },
-    { id: 'threats', text: 'Threats', color: COLORS.purple, items: ['Threat 1', 'Threat 2'] },
+    { id: 'threats', text: 'Threats', color: COLORS.lime, items: ['Threat 1', 'Threat 2'] },
   ]
 
   nodes[rootId] = makeNode(rootId, 'SWOT Analysis', CENTER_X, CENTER_Y, COLORS.blue, null, quadrants.map((q) => q.id))
@@ -205,7 +205,7 @@ function createBrainstormingData(): MindmapData {
   const branchColors = [COLORS.blue, COLORS.green, COLORS.amber, COLORS.pink, COLORS.cyan]
   const branchIds = Array.from({ length: branchCount }, (_, i) => `idea-${i + 1}`)
 
-  nodes[rootId] = makeNode(rootId, 'Topic', CENTER_X, CENTER_Y, COLORS.purple, null, branchIds)
+  nodes[rootId] = makeNode(rootId, 'Topic', CENTER_X, CENTER_Y, COLORS.lime, null, branchIds)
 
   const positions = radialPositions(CENTER_X, CENTER_Y, branchCount, RING_RADIUS)
 

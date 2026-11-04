@@ -39,7 +39,7 @@ Desktop (>= 1024px)
 
 - **Rail** (68px, always visible desktop): brand mark, primary destinations
   (Home, Notes, Tasks, Files), spacer, theme toggle, settings, avatar/sign-out.
-  Active item = violet glass pill + left glow bar + tooltip.
+  Active item = lime glass pill + left glow bar + tooltip.
 - **Library** (300px, collapsible to 0): SidebarTree content. Collapse button in
   its header. Floating collapse/expand affordance when hidden.
 - **TopBar** (56px): back/forward, breadcrumbs, search trigger, new-note
@@ -80,8 +80,8 @@ New CSS custom properties you may use directly:
     --shell-radius-sm: 10px  --shell-radius: 16px  --shell-radius-lg: 24px
     --accent-glow
 
-Light theme: surface = white 66%, borders = ink 8%, accent = violet #6757f5.
-Dark theme: surface = white 6%, borders = white 10%, accent = #a394ff.
+Light theme: surface = white 66%, borders = ink 8%, accent = lime #4d7c0f.
+Dark theme: surface = white 6%, borders = white 10%, accent = #a3e635.
 
 ## 4. Reusable classes (defined in app/styles/glass.css)
 
@@ -99,7 +99,7 @@ layout/spacing only.
 | .glass-row[aria-current=page] / .is-active | accent-tinted selected row |
 | .glass-input | inset search/text field |
 | .glass-btn | neutral glass button |
-| .glass-btn-primary | accent gradient button (violet->indigo), subtle glow |
+| .glass-btn-primary | accent gradient button (lime->green), subtle glow |
 | .glass-btn-ghost | borderless icon button with hover wash |
 | .nav-pill | rail destination button; [aria-current=page] = active |
 | .glass-divider | 1px hairline separator |

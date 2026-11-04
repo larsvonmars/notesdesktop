@@ -163,7 +163,7 @@ interface NoteEditorProps {
 
 const stripHtml = (html: string) => html.replace(/<[^>]*>/g, ' ').replace(/&nbsp;/g, ' ').trim()
 
-const MINDMAP_NODE_COLORS = ['#3B82F6', '#10B981', '#F59E0B', '#EF4444', '#8B5CF6', '#EC4899', '#06B6D4', '#F97316']
+const MINDMAP_NODE_COLORS = ['#3B82F6', '#10B981', '#F59E0B', '#EF4444', '#84CC16', '#EC4899', '#06B6D4', '#F97316']
 const MAX_AUTO_MINDMAP_NODES = 12
 const MAX_AI_MINDMAP_FIRST_LEVEL_NODES = 10
 const MINDMAP_ROOT_X = 400
@@ -1729,9 +1729,9 @@ export default function NoteEditor({
         if (existingEmbed) {
           const opened = await openPdfAnnotationNote(existingEmbed.noteId)
           if (opened) {
-            existingEmbed.element.classList.add('ring-2', 'ring-indigo-300')
+            existingEmbed.element.classList.add('ring-2', 'ring-lime-300')
             window.setTimeout(() => {
-              existingEmbed.element.classList.remove('ring-2', 'ring-indigo-300')
+              existingEmbed.element.classList.remove('ring-2', 'ring-lime-300')
             }, 1200)
 
             toast.push({
@@ -2641,13 +2641,13 @@ export default function NoteEditor({
       background: #fff;
     }
     @media (prefers-color-scheme: dark) {
-      body { background: #1a1a2e; color: #e2e8f0; }
-      pre, code { background: #2d2d44; border-color: #3d3d55; }
-      td, th { border-color: #3d3d55; }
-      th { background: #2d2d44; }
-      blockquote { border-color: #4a5568; color: #94a3b8; background: #2d2d44; }
+      body { background: #1a2118; color: #e2e8f0; }
+      pre, code { background: #2e362c; border-color: #3e483c; }
+      td, th { border-color: #3e483c; }
+      th { background: #2e362c; }
+      blockquote { border-color: #4a5568; color: #94a3b8; background: #2e362c; }
       a { color: #60a5fa; }
-      hr { border-color: #3d3d55; }
+      hr { border-color: #3e483c; }
     }
     h1 { font-size: 2em; margin: 0 0 0.2em; font-weight: 700; }
     h2 { font-size: 1.5em; margin-top: 1.5em; }
@@ -3232,7 +3232,7 @@ export default function NoteEditor({
       const newX = rootNode.x + Math.cos(angle) * distance
       const newY = rootNode.y + Math.sin(angle) * distance
       
-      const colors = ['#3B82F6', '#10B981', '#F59E0B', '#EF4444', '#8B5CF6', '#EC4899', '#06B6D4', '#F97316']
+      const colors = ['#3B82F6', '#10B981', '#F59E0B', '#EF4444', '#84CC16', '#EC4899', '#06B6D4', '#F97316']
       const colorIndex = childCount % colors.length
       
       const newData = {

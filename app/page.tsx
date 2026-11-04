@@ -29,7 +29,7 @@ const features = [
     description:
       'Rich text, mind maps, journals, data sheets, drawings, and annotated PDFs live in one library — no app-hopping required.',
     icon: PenSquare,
-    tile: 'bg-violet-500/10 text-violet-600 ring-violet-500/20 dark:bg-violet-400/10 dark:text-violet-300 dark:ring-violet-400/20',
+    tile: 'bg-lime-500/10 text-lime-700 ring-lime-500/20 dark:bg-lime-400/10 dark:text-lime-300 dark:ring-lime-400/20',
   },
   {
     title: 'Think in mind maps',

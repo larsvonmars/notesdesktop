@@ -171,17 +171,17 @@
     text-shadow: 0 0 8px rgba(245, 158, 11, 0.45) !important;
   }
 
-  /* Level 4 → violet */
+  /* Level 4 → lime */
   [contenteditable='true'] ul ul ul ul,
   [contenteditable='true'] ol ol ol ol {
-    border-left: 2px solid rgba(139, 92, 246, 0.35) !important;
-    box-shadow: -3px 0 12px -4px rgba(139, 92, 246, 0.18) !important;
+    border-left: 2px solid rgba(132, 204, 22, 0.35) !important;
+    box-shadow: -3px 0 12px -4px rgba(132, 204, 22, 0.18) !important;
   }
 
   [contenteditable='true'] ul ul ul ul > li:not(.checklist-item)::before {
     content: '◆' !important;
-    color: var(--editor-rail-violet) !important;
-    text-shadow: 0 0 8px rgba(139, 92, 246, 0.5) !important;
+    color: var(--editor-rail-lime) !important;
+    text-shadow: 0 0 8px rgba(132, 204, 22, 0.5) !important;
     font-size: 0.6em !important;
     top: 0.2em !important;
   }

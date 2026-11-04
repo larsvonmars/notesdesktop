@@ -55,7 +55,7 @@ const NOTE_TYPE_ICON_MAP: Record<NoteTypeIconKey, LucideIcon> = {
 // standard palette (not from semantic tokens) so the alpha modifiers are safe.
 const NOTE_TYPE_TILE_CLASS: Record<NoteTypeIconKey, string> = {
   'file-text': 'bg-sky-500/10 text-sky-600 dark:bg-sky-400/15 dark:text-sky-300',
-  'pen-tool': 'bg-violet-500/10 text-violet-600 dark:bg-violet-400/15 dark:text-violet-300',
+  'pen-tool': 'bg-lime-500/10 text-lime-700 dark:bg-lime-400/15 dark:text-lime-300',
   network: 'bg-emerald-500/10 text-emerald-600 dark:bg-emerald-400/15 dark:text-emerald-300',
   'book-open': 'bg-amber-500/10 text-amber-600 dark:bg-amber-400/15 dark:text-amber-300',
   'table-2': 'bg-cyan-500/10 text-cyan-600 dark:bg-cyan-400/15 dark:text-cyan-300',
@@ -76,7 +76,7 @@ function readableOnColor(hex: string): string {
   const g = parseInt(value.slice(2, 4), 16)
   const b = parseInt(value.slice(4, 6), 16)
   const luminance = (0.299 * r + 0.587 * g + 0.114 * b) / 255
-  return luminance > 0.62 ? '#0b0a15' : '#ffffff'
+  return luminance > 0.62 ? '#1a1d18' : '#ffffff'
 }
 
 /** First two grapheme-ish characters, safe for emoji/unicode workspace names. */
@@ -2159,8 +2159,8 @@ export default function SidebarTree({
               <div className="mb-4 grid grid-cols-6 gap-2">
                 {[
                   '#EF4444', '#F97316', '#F59E0B', '#EAB308', '#84CC16', '#22C55E',
-                  '#14B8A6', '#06B6D4', '#3B82F6', '#6366F1', '#8B5CF6', '#A855F7',
-                  '#D946EF', '#EC4899', '#F43F5E', '#6B7280', '#78716C', '#0EA5E9',
+                  '#14B8A6', '#06B6D4', '#3B82F6', '#16A34A', '#65A30D', '#A3E635',
+                  '#4D7C0F', '#EC4899', '#F43F5E', '#6B7280', '#78716C', '#0EA5E9',
                 ].map(color => (
                   <button
                     key={color}

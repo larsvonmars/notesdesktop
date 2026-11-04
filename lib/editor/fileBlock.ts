@@ -148,13 +148,13 @@ function getFileIconSvg(mimeType: string): string {
         <line x1="12" y1="9" x2="12" y2="21"/>
       </svg>`
     case 'audio':
-      return `<svg ${base} class="text-purple-500 dark:text-purple-400">
+      return `<svg ${base} class="text-lime-700 dark:text-lime-400">
         <path d="M9 18V5l12-2v13"/>
         <circle cx="6" cy="18" r="3"/>
         <circle cx="18" cy="16" r="3"/>
       </svg>`
     case 'video':
-      return `<svg ${base} class="text-indigo-500 dark:text-indigo-400">
+      return `<svg ${base} class="text-sky-500 dark:text-sky-400">
         <polygon points="23 7 16 12 23 17 23 7"/>
         <rect x="1" y="5" width="15" height="14" rx="2" ry="2"/>
       </svg>`
@@ -186,8 +186,8 @@ function getFileBgClass(mimeType: string): string {
     case 'image': return 'bg-pink-100 dark:bg-pink-900/40'
     case 'pdf': return 'bg-red-100 dark:bg-red-900/40'
     case 'spreadsheet': return 'bg-green-100 dark:bg-green-900/40'
-    case 'audio': return 'bg-purple-100 dark:bg-purple-900/40'
-    case 'video': return 'bg-indigo-100 dark:bg-indigo-900/40'
+    case 'audio': return 'bg-lime-100 dark:bg-lime-900/40'
+    case 'video': return 'bg-sky-100 dark:bg-sky-900/40'
     case 'archive': return 'bg-amber-100 dark:bg-amber-900/40'
     case 'text': return 'bg-blue-100 dark:bg-blue-900/40'
     default: return 'bg-slate-100 dark:bg-slate-700/60'
@@ -242,7 +242,7 @@ function renderFileBlock(payload: FileBlockPayload): string {
   if (pdf) {
     extraButtons += `
       <button type="button" class="file-block-action file-block-preview-pdf inline-flex items-center justify-center w-8 h-8 rounded-lg text-red-500 dark:text-red-400 transition-colors hover:bg-red-50 dark:hover:bg-red-900/30 hover:text-red-600 dark:hover:text-red-300" data-file-action="preview-pdf" aria-label="Preview PDF" title="Preview PDF" contenteditable="false">${SVG_EYE}</button>
-      <button type="button" class="file-block-action file-block-annotate-pdf inline-flex items-center justify-center w-8 h-8 rounded-lg text-indigo-600 dark:text-indigo-400 transition-colors hover:bg-indigo-50 dark:hover:bg-indigo-900/30 hover:text-indigo-700 dark:hover:text-indigo-300" data-file-action="annotate-pdf" aria-label="Annotate PDF" title="Create PDF annotation" contenteditable="false">${SVG_ANNOTATE}</button>`
+      <button type="button" class="file-block-action file-block-annotate-pdf inline-flex items-center justify-center w-8 h-8 rounded-lg text-lime-600 dark:text-lime-400 transition-colors hover:bg-lime-50 dark:hover:bg-lime-900/30 hover:text-lime-700 dark:hover:text-lime-300" data-file-action="annotate-pdf" aria-label="Annotate PDF" title="Create PDF annotation" contenteditable="false">${SVG_ANNOTATE}</button>`
   }
 
   if (docx) {

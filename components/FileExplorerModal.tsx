@@ -103,7 +103,7 @@ function FileTypeIcon({ mimeType, size = 20 }: { mimeType: string; size?: number
     case 'presentation':
       return <FileIcon {...props} className="text-[var(--hue-amber)]" />
     case 'audio':
-      return <Music {...props} className="text-[var(--hue-violet)]" />
+      return <Music {...props} className="text-[var(--hue-lime)]" />
     case 'video':
       return <Video {...props} className="text-[var(--hue-sky)]" />
     case 'archive':

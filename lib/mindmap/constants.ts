@@ -9,7 +9,7 @@ export const DEFAULT_COLORS = [
   '#10B981', // green
   '#F59E0B', // amber
   '#EF4444', // red
-  '#8B5CF6', // purple
+  '#84CC16', // lime
   '#EC4899', // pink
   '#06B6D4', // cyan
   '#F97316', // orange

@@ -196,7 +196,7 @@ interface PdfAnnotationEditorProps {
 // CONSTANTS
 // ============================================================================
 
-const COLORS = ['#000000', '#ef4444', '#3b82f6', '#22c55e', '#f59e0b', '#8b5cf6', '#ec4899', '#ffffff']
+const COLORS = ['#000000', '#ef4444', '#3b82f6', '#22c55e', '#f59e0b', '#84cc16', '#ec4899', '#ffffff']
 const STICKY_COLORS: Record<StickyColor, string> = {
   yellow: '#fef08a',
   blue: '#bfdbfe',
@@ -236,11 +236,11 @@ function uid(): string {
   return Math.random().toString(36).slice(2, 10) + Date.now().toString(36)
 }
 
-/** Live accent colour for on-canvas selection chrome (falls back to glass violet). */
+/** Live accent colour for on-canvas selection chrome (falls back to glass lime). */
 function accentColor(): string {
-  if (typeof window === 'undefined') return '#6757f5'
+  if (typeof window === 'undefined') return '#4d7c0f'
   const value = getComputedStyle(document.documentElement).getPropertyValue('--accent').trim()
-  return value || '#6757f5'
+  return value || '#4d7c0f'
 }
 
 // ============================================================================

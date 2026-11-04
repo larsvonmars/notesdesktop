@@ -97,7 +97,8 @@ const TEXT_COLORS: ColorSwatch[] = [
   { key: 'red', bg: 'bg-red-500', label: 'Red text' },
   { key: 'green', bg: 'bg-green-500', label: 'Green text' },
   { key: 'blue', bg: 'bg-blue-500', label: 'Blue text' },
-  { key: 'purple', bg: 'bg-purple-500', label: 'Purple text' },
+  // Legacy 'purple' key is kept so stored note content keeps its colour; it now renders lime.
+  { key: 'purple', bg: 'bg-lime-500', label: 'Lime text' },
 ]
 
 const FONT_SIZES = [

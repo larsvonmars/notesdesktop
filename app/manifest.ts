@@ -9,8 +9,8 @@ export default function manifest(): MetadataRoute.Manifest {
     description: 'A powerful mind-mapping and note-taking desktop app',
     start_url: '/',
     display: 'standalone',
-    background_color: '#08070f',
-    theme_color: '#6757f5',
+    background_color: '#090b08',
+    theme_color: '#4d7c0f',
     icons: [
       { src: '/favicon.ico', sizes: '16x16 32x32', type: 'image/x-icon' },
       { src: '/icon-192.png', sizes: '192x192', type: 'image/png' },

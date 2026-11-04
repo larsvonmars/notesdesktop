@@ -361,6 +361,20 @@ export function drawCollapseIndicator(
 }
 
 /**
+ * Picks a readable label colour for a node fill: white on saturated/dark
+ * colours, dark ink on light fills (e.g. lime) so labels keep contrast.
+ */
+function readableNodeLabelColor(fill: string): string {
+  const hex = fill.trim().replace(/^#/, '')
+  if (!/^[0-9a-fA-F]{6}$/.test(hex)) return '#ffffff'
+  const r = parseInt(hex.slice(0, 2), 16)
+  const g = parseInt(hex.slice(2, 4), 16)
+  const b = parseInt(hex.slice(4, 6), 16)
+  const luminance = (0.299 * r + 0.587 * g + 0.114 * b) / 255
+  return luminance > 0.62 ? '#14210a' : '#ffffff'
+}
+
+/**
  * Draws a single node (rounded rectangle with text)
  */
 export function drawNodeBody(
@@ -395,7 +409,7 @@ export function drawNodeBody(
   if (isSelected) ctx.stroke()
 
   // Node text
-  ctx.fillStyle = '#fff'
+  ctx.fillStyle = readableNodeLabelColor(node.color)
   ctx.textAlign = 'center'
   ctx.textBaseline = 'middle'
   ctx.font = isRoot ? 'bold 16px sans-serif' : '14px sans-serif'

@@ -73,7 +73,7 @@ interface ProjectsWorkspaceModalProps {
 const UNASSIGNED_KEY = '__unassigned__'
 const colorPresets = [
   '#3B82F6', '#10B981', '#F59E0B', '#EF4444',
-  '#8B5CF6', '#EC4899', '#14B8A6', '#6366F1',
+  '#65A30D', '#EC4899', '#14B8A6', '#16A34A',
 ]
 
 const updatedAtFormatter = new Intl.DateTimeFormat('default', {

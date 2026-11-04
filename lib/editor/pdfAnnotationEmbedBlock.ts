@@ -30,10 +30,10 @@ export const pdfAnnotationEmbedBlock: CustomBlockDescriptor = {
     const idAttr = escapeHtml(noteId)
 
     return `
-      <div class="pdf-annotation-embed my-2 block select-none rounded-lg border border-indigo-200 dark:border-indigo-800 bg-indigo-50/50 dark:bg-indigo-950/30 p-2.5 transition-colors hover:bg-indigo-50 dark:hover:bg-indigo-950/50" data-block="true" data-block-type="pdf-annotation-embed" data-pdf-note-id="${idAttr}" data-pdf-source-path="${pathAttr}" data-pdf-source-name="${source}" data-pdf-note-title="${title}" data-pdf-occurrence-index="${occurrenceIndex ?? 0}" contenteditable="false">
+      <div class="pdf-annotation-embed my-2 block select-none rounded-lg border border-lime-200 dark:border-lime-800 bg-lime-50/50 dark:bg-lime-950/30 p-2.5 transition-colors hover:bg-lime-50 dark:hover:bg-lime-950/50" data-block="true" data-block-type="pdf-annotation-embed" data-pdf-note-id="${idAttr}" data-pdf-source-path="${pathAttr}" data-pdf-source-name="${source}" data-pdf-note-title="${title}" data-pdf-occurrence-index="${occurrenceIndex ?? 0}" contenteditable="false">
         <div class="flex items-center justify-between gap-3">
           <div class="flex items-center gap-2.5 min-w-0">
-            <div class="flex h-8 w-8 flex-shrink-0 items-center justify-center rounded bg-indigo-100 dark:bg-indigo-900/50 text-indigo-600 dark:text-indigo-400">
+            <div class="flex h-8 w-8 flex-shrink-0 items-center justify-center rounded bg-lime-100 dark:bg-lime-900/50 text-lime-600 dark:text-lime-400">
               <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                 <path d="M12 20h9"/>
                 <path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z"/>
@@ -45,7 +45,7 @@ export const pdfAnnotationEmbedBlock: CustomBlockDescriptor = {
             </div>
           </div>
           
-          <button type="button" class="inline-flex flex-shrink-0 items-center gap-1 rounded border border-indigo-200 dark:border-indigo-700 bg-white dark:bg-slate-800 px-2 py-1 text-[11px] font-medium text-indigo-700 dark:text-indigo-300 shadow-sm transition-colors hover:bg-indigo-50 dark:hover:bg-indigo-900/40 hover:text-indigo-800 dark:hover:text-indigo-200" data-open-pdf-note-id="${idAttr}" title="Open Annotation Note">
+          <button type="button" class="inline-flex flex-shrink-0 items-center gap-1 rounded border border-lime-200 dark:border-lime-700 bg-white dark:bg-slate-800 px-2 py-1 text-[11px] font-medium text-lime-700 dark:text-lime-300 shadow-sm transition-colors hover:bg-lime-50 dark:hover:bg-lime-900/40 hover:text-lime-800 dark:hover:text-lime-200" data-open-pdf-note-id="${idAttr}" title="Open Annotation Note">
             <span>Open</span>
             <svg xmlns="http://www.w3.org/2000/svg" width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
               <path d="M5 12h14"/>

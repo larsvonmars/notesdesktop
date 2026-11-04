@@ -540,7 +540,7 @@ function createResizeOverlay(): {
   // Thin border outline shown around the image while the overlay is visible
   const border = document.createElement('div')
   border.className = 'image-resize-border'
-  border.style.cssText = 'position:fixed;pointer-events:none;border:2px solid #6366f1;border-radius:6px;z-index:9998;'
+  border.style.cssText = 'position:fixed;pointer-events:none;border:2px solid #65a30d;border-radius:6px;z-index:9998;'
   overlay.appendChild(border)
 
   const handles = new Map<HandleDirection, HTMLElement>()

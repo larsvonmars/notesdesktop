@@ -98,7 +98,7 @@ function readableOn(color: string): string {
   const b = parseInt(hex.slice(4, 6), 16)
   if ([r, g, b].some((value) => Number.isNaN(value))) return '#ffffff'
   const luminance = (0.299 * r + 0.587 * g + 0.114 * b) / 255
-  return luminance > 0.62 ? '#17162b' : '#ffffff'
+  return luminance > 0.62 ? '#1a1d18' : '#ffffff'
 }
 
 // ────────────────────────────────────────────────────────────────────────────
@@ -580,7 +580,7 @@ export default function ProjectDashboard({
             <StatCard icon={FileText} label="Notes" value={stats.noteCount} accent={project.color} />
             <StatCard icon={FolderOpen} label="Folders" value={stats.folderCount} accent="var(--hue-amber)" />
             <StatCard icon={CheckCircle2} label="Open tasks" value={stats.openTasks} accent="var(--hue-mint)" />
-            <StatCard icon={Type} label="Words" value={stats.totalWords.toLocaleString()} accent="var(--hue-violet)" />
+            <StatCard icon={Type} label="Words" value={stats.totalWords.toLocaleString()} accent="var(--hue-lime)" />
           </div>
 
           {/* ────── AI Summary ────── */}

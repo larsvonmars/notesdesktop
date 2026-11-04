@@ -8,29 +8,29 @@
 
 :root {
   /* ---- Semantic surface colours (light / airy frosted) ---- */
-  --background:        #eef0fa;
-  --background-deep:   #e6e9f7;
-  --foreground:        #17162b;
+  --background:        #f1f3ee;
+  --background-deep:   #e8ebe4;
+  --foreground:        #1a1d18;
   --surface:           rgb(255 255 255 / 0.66);
   --surface-solid:     #ffffff;
   --surface-hover:     rgb(255 255 255 / 0.82);
   --surface-active:    rgb(255 255 255 / 0.94);
-  --surface-sunken:    rgb(23 22 43 / 0.035);
-  --border:            rgb(23 22 43 / 0.08);
-  --border-strong:     rgb(23 22 43 / 0.16);
-  --muted:             #63627c;
+  --surface-sunken:    rgb(26 29 24 / 0.035);
+  --border:            rgb(26 29 24 / 0.08);
+  --border-strong:     rgb(26 29 24 / 0.16);
+  --muted:             #646b61;
 
-  /* ---- Accent (violet) ---- */
-  --accent:            #6757f5;
-  --accent-strong:     #5747ee;
-  --accent-light:      rgb(103 87 245 / 0.12);
+  /* ---- Accent (lime) ---- */
+  --accent:            #4d7c0f;
+  --accent-strong:     #3f6212;
+  --accent-light:      rgb(132 204 22 / 0.16);
   --accent-foreground: #ffffff;
   --accent-contrast:   #ffffff;
-  --accent-glow:       rgb(103 87 245 / 0.38);
-  --accent-gradient:   linear-gradient(135deg, #7c6bff 0%, #6757f5 45%, #5a48f0 100%);
+  --accent-glow:       rgb(132 204 22 / 0.38);
+  --accent-gradient:   linear-gradient(135deg, #65a30d 0%, #4d7c0f 45%, #3f6212 100%);
 
   /* ---- Secondary hues used for notes/projects ---- */
-  --hue-violet: #6757f5;
+  --hue-lime:   #4d7c0f;
   --hue-sky:    #2f9bff;
   --hue-mint:   #12b98a;
   --hue-amber:  #f2a33c;
@@ -49,15 +49,15 @@
   --glass-bg-subtle:     rgb(255 255 255 / 0.38);
   --glass-bg-strong:     rgb(255 255 255 / 0.9);
   --glass-border:        rgb(255 255 255 / 0.85);
-  --glass-border-outer:  rgb(23 22 43 / 0.07);
+  --glass-border-outer:  rgb(26 29 24 / 0.07);
   --glass-highlight:     rgb(255 255 255 / 0.95);
   --glass-sheen:         rgb(255 255 255 / 0.3);
   --glass-blur:          28px;
   --glass-blur-strong:   40px;
   --glass-saturate:      1.6;
-  --glass-shadow:        0 24px 60px -28px rgb(35 32 78 / 0.42), 0 4px 14px -8px rgb(35 32 78 / 0.18);
-  --glass-shadow-lg:     0 48px 110px -48px rgb(35 32 78 / 0.55), 0 10px 30px -16px rgb(35 32 78 / 0.22);
-  --glass-shadow-sm:     0 10px 26px -18px rgb(35 32 78 / 0.38);
+  --glass-shadow:        0 24px 60px -28px rgb(31 37 29 / 0.42), 0 4px 14px -8px rgb(31 37 29 / 0.18);
+  --glass-shadow-lg:     0 48px 110px -48px rgb(31 37 29 / 0.55), 0 10px 30px -16px rgb(31 37 29 / 0.22);
+  --glass-shadow-sm:     0 10px 26px -18px rgb(31 37 29 / 0.38);
 
   /* ---- Shell geometry ---- */
   --rail-width:      68px;
@@ -78,12 +78,12 @@
   --ease-spring:   cubic-bezier(0.34, 1.3, 0.64, 1);
 
   /* ---- Background field ---- */
-  --aurora-base: linear-gradient(150deg, #e3e7ff 0%, #dee3ff 26%, #ece1ff 58%, #dbefff 100%);
-  --aurora-c1: rgb(116 96 255 / 0.75);
+  --aurora-base: linear-gradient(150deg, #edf3e1 0%, #e4f0e3 26%, #eef7dc 58%, #ddf2e8 100%);
+  --aurora-c1: rgb(132 204 22 / 0.6);
   --aurora-c2: rgb(64 186 255 / 0.62);
   --aurora-c3: rgb(255 104 170 / 0.55);
   --aurora-c4: rgb(64 232 186 / 0.55);
-  --aurora-1: radial-gradient(circle at 50% 50%, rgb(124 107 255 / 0.55) 0%, rgb(124 107 255 / 0) 68%);
+  --aurora-1: radial-gradient(circle at 50% 50%, rgb(163 230 53 / 0.55) 0%, rgb(163 230 53 / 0) 68%);
   --aurora-2: radial-gradient(circle at 50% 50%, rgb(84 197 255 / 0.5) 0%, rgb(84 197 255 / 0) 68%);
   --aurora-3: radial-gradient(circle at 50% 50%, rgb(255 126 182 / 0.45) 0%, rgb(255 126 182 / 0) 68%);
   --aurora-4: radial-gradient(circle at 50% 50%, rgb(94 240 199 / 0.42) 0%, rgb(94 240 199 / 0) 68%);
@@ -92,12 +92,12 @@
   /* ---- Legacy aliases ---- */
   --sidebar-width:     300px;
   --sidebar-collapsed: 68px;
-  --alpine-gradient-from: #f7f8fe;
-  --alpine-gradient-to:   #eef0fb;
+  --alpine-gradient-from: #f4f6f0;
+  --alpine-gradient-to:   #eff2ea;
 
-  --shadow-xs: 0 1px 2px rgb(23 22 43 / 0.05);
-  --shadow-sm: 0 1px 3px rgb(23 22 43 / 0.07), 0 1px 2px rgb(23 22 43 / 0.05);
-  --shadow-md: 0 6px 16px -8px rgb(23 22 43 / 0.18), 0 2px 6px -3px rgb(23 22 43 / 0.08);
+  --shadow-xs: 0 1px 2px rgb(26 29 24 / 0.05);
+  --shadow-sm: 0 1px 3px rgb(26 29 24 / 0.07), 0 1px 2px rgb(26 29 24 / 0.05);
+  --shadow-md: 0 6px 16px -8px rgb(26 29 24 / 0.18), 0 2px 6px -3px rgb(26 29 24 / 0.08);
   --shadow-lg: var(--glass-shadow);
   --shadow-xl: var(--glass-shadow-lg);
 
@@ -108,54 +108,54 @@
   --sal: env(safe-area-inset-left, 0px);
 
   /* ---- Editor tokens ---- */
-  --editor-heading-1: #14132a;
-  --editor-heading-2: #232144;
-  --editor-heading-3: #333155;
-  --editor-heading-4: #47456a;
-  --editor-heading-5: #63627c;
-  --editor-heading-6: #8b8aa3;
+  --editor-heading-1: #181b16;
+  --editor-heading-2: #262a23;
+  --editor-heading-3: #373c34;
+  --editor-heading-4: #4c5249;
+  --editor-heading-5: #646b61;
+  --editor-heading-6: #8d968a;
   --editor-rail-green: #12b98a;
   --editor-rail-sky: #2f9bff;
   --editor-rail-amber: #e8952a;
-  --editor-rail-violet: #7c6bff;
+  --editor-rail-lime: #65a30d;
   --editor-rail-pink: #f45d8c;
   --editor-rail-teal: #0fb9b1;
   --editor-rail-green-bright: #23d39f;
   --editor-rail-sky-bright: #57b6ff;
   --editor-rail-amber-bright: #ffb454;
-  --editor-code-bg: #1b1930;
-  --editor-code-text: #e7e5f5;
+  --editor-code-bg: #1a2016;
+  --editor-code-text: #e9f0e3;
   --editor-table-bg: rgb(255 255 255 / 0.72);
-  --editor-table-header-bg-from: #232144;
-  --editor-table-header-bg-to: #2c2a52;
-  --editor-table-header-color: #bdb4ff;
-  --editor-table-cell-color: #2b2947;
-  --editor-body-color: #3b3959;
+  --editor-table-header-bg-from: #262a23;
+  --editor-table-header-bg-to: #2f362a;
+  --editor-table-header-color: #d9f99d;
+  --editor-table-cell-color: #2c3229;
+  --editor-body-color: #3d443a;
   color-scheme: light;
 }
 
 :root.dark {
-  --background:        #08070f;
-  --background-deep:   #050409;
-  --foreground:        #f0effa;
+  --background:        #090b08;
+  --background-deep:   #050705;
+  --foreground:        #f1f4ee;
   --surface:           rgb(255 255 255 / 0.055);
-  --surface-solid:     #14121f;
+  --surface-solid:     #151a14;
   --surface-hover:     rgb(255 255 255 / 0.09);
   --surface-active:    rgb(255 255 255 / 0.13);
   --surface-sunken:    rgb(0 0 0 / 0.24);
   --border:            rgb(255 255 255 / 0.1);
   --border-strong:     rgb(255 255 255 / 0.2);
-  --muted:             #a3a2bc;
+  --muted:             #a5aea1;
 
-  --accent:            #a394ff;
-  --accent-strong:     #b6aaff;
-  --accent-light:      rgb(163 148 255 / 0.16);
-  --accent-foreground: #0b0a15;
+  --accent:            #a3e635;
+  --accent-strong:     #bef264;
+  --accent-light:      rgb(163 230 53 / 0.16);
+  --accent-foreground: #14210a;
   --accent-contrast:   #ffffff;
-  --accent-glow:       rgb(163 148 255 / 0.4);
-  --accent-gradient:   linear-gradient(135deg, #b6aaff 0%, #9d8cff 45%, #8d7bff 100%);
+  --accent-glow:       rgb(163 230 53 / 0.4);
+  --accent-gradient:   linear-gradient(135deg, #bef264 0%, #a3e635 45%, #84cc16 100%);
 
-  --hue-violet: #a394ff;
+  --hue-lime:   #a3e635;
   --hue-sky:    #64bcff;
   --hue-mint:   #3ddba8;
   --hue-amber:  #ffc06b;
@@ -170,7 +170,7 @@
 
   --glass-bg:            rgb(255 255 255 / 0.06);
   --glass-bg-subtle:     rgb(255 255 255 / 0.035);
-  --glass-bg-strong:     rgb(20 18 33 / 0.86);
+  --glass-bg-strong:     rgb(21 26 20 / 0.86);
   --glass-border:        rgb(255 255 255 / 0.1);
   --glass-border-outer:  rgb(0 0 0 / 0.4);
   --glass-highlight:     rgb(255 255 255 / 0.12);
@@ -179,30 +179,31 @@
   --glass-shadow-lg:     0 50px 120px -50px rgb(0 0 0 / 0.95), 0 10px 30px -14px rgb(0 0 0 / 0.6);
   --glass-shadow-sm:     0 8px 24px -16px rgb(0 0 0 / 0.8);
 
-  --aurora-base: linear-gradient(160deg, #0d0b18 0%, #08070f 42%, #0b0916 100%);
-  --aurora-c1: rgb(124 107 255 / 0.44);
+  --aurora-base: linear-gradient(160deg, #0c100b 0%, #090b08 42%, #0a100a 100%);
+  --aurora-c1: rgb(163 230 53 / 0.4);
   --aurora-c2: rgb(47 155 255 / 0.3);
   --aurora-c3: rgb(244 93 140 / 0.24);
   --aurora-c4: rgb(18 185 138 / 0.2);
-  --aurora-1: radial-gradient(circle at 50% 50%, rgb(124 107 255 / 0.44) 0%, rgb(124 107 255 / 0) 68%);
+  --aurora-1: radial-gradient(circle at 50% 50%, rgb(163 230 53 / 0.4) 0%, rgb(163 230 53 / 0) 68%);
   --aurora-2: radial-gradient(circle at 50% 50%, rgb(47 155 255 / 0.3) 0%, rgb(47 155 255 / 0) 68%);
   --aurora-3: radial-gradient(circle at 50% 50%, rgb(244 93 140 / 0.24) 0%, rgb(244 93 140 / 0) 68%);
   --aurora-4: radial-gradient(circle at 50% 50%, rgb(18 185 138 / 0.2) 0%, rgb(18 185 138 / 0) 68%);
   --aurora-noise-opacity: 0.045;
 
-  --editor-heading-1: #f4f2ff;
-  --editor-heading-2: #e6e3fb;
-  --editor-heading-3: #d2cef0;
-  --editor-heading-4: #b6b2d4;
-  --editor-heading-5: #9693b4;
-  --editor-heading-6: #74718f;
-  --editor-code-bg: #0f0e19;
-  --editor-code-text: #dcd9f2;
+  --editor-heading-1: #f3f7f0;
+  --editor-heading-2: #e6eee1;
+  --editor-heading-3: #d4ddce;
+  --editor-heading-4: #b8c2b1;
+  --editor-heading-5: #98a291;
+  --editor-heading-6: #767f72;
+  --editor-rail-lime: #a3e635;
+  --editor-code-bg: #10150f;
+  --editor-code-text: #dfe8d9;
   --editor-table-bg: rgb(255 255 255 / 0.04);
-  --editor-table-header-bg-from: #1a1829;
-  --editor-table-header-bg-to: #201d33;
-  --editor-table-header-color: #bdb4ff;
-  --editor-table-cell-color: #cbc8e4;
-  --editor-body-color: #cbc8e4;
+  --editor-table-header-bg-from: #1b2219;
+  --editor-table-header-bg-to: #232d20;
+  --editor-table-header-color: #d9f99d;
+  --editor-table-cell-color: #ccd6c7;
+  --editor-body-color: #ccd6c7;
   color-scheme: dark;
 }

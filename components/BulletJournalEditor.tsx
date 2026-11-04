@@ -139,7 +139,7 @@ const SIGNIFIER_COLORS: Record<BulletSignifier, string> = {
   note: 'text-muted',
   completed: 'text-success',
   migrated: 'text-warning',
-  scheduled: 'text-[color:var(--hue-violet)]',
+  scheduled: 'text-[color:var(--hue-lime)]',
   irrelevant: 'text-muted line-through',
 }
 

@@ -562,7 +562,7 @@ export async function createTimetableEntry(
       project_id: options?.projectId || null,
       is_all_day: false,
       category: 'timetable',
-      color: options?.color || '#8B5CF6',
+      color: options?.color || '#84CC16',
       is_recurring: true,
       recurrence_pattern_id: pattern.id,
     })

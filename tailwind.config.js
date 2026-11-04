@@ -91,7 +91,7 @@ module.exports = {
         'glass-sm': 'var(--glass-shadow-sm)',
         glow: '0 0 0 3px var(--accent-glow)',
         'glow-sm': '0 0 18px -4px var(--accent-glow)',
-        lift: '0 18px 40px -24px rgb(23 22 43 / 0.35)',
+        lift: '0 18px 40px -24px rgb(26 29 24 / 0.35)',
       },
       backdropBlur: {
         xs: '2px',
