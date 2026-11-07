@@ -91,6 +91,7 @@ import {
   type PointerKind,
   type TapRecord,
 } from '@/lib/editor/pdf-touch'
+import { clampPdfPage, readPdfViewState, writePdfViewState } from '@/lib/pdf-view-state'
 
 const PDF_ANNOTATION_MAX_FILE_SIZE_BYTES = 50 * 1024 * 1024
 
@@ -172,6 +173,14 @@ export interface PdfAnnotationPage {
 export interface PdfAnnotationData {
   pdfStoragePath: string
   pages: PdfAnnotationPage[]
+  /**
+   * Fallback reading position, not the live one.
+   *
+   * Page navigation is device-local view state (see `lib/pdf-view-state.ts`)
+   * and is never written back through `onChange`, so this field is only used
+   * when this device has no cached page for the note (fresh device, shared
+   * link, first open) and is refreshed whenever an annotation edit is saved.
+   */
   currentPage: number
   totalPages: number
   zoom: number
@@ -407,6 +416,23 @@ const PdfAnnotationEditor = forwardRef<PdfAnnotationEditorHandle, PdfAnnotationE
     useEffect(() => { currentPageRef.current = currentPage }, [currentPage])
     useEffect(() => { zoomRef.current = zoom; gestureZoomRef.current = zoom }, [zoom])
     useEffect(() => { totalPagesRef.current = totalPages }, [totalPages])
+
+    // Stable access to the note id from callbacks/effects that are registered
+    // once (e.g. the wheel listener) or that open documents for a new note.
+    const noteIdRef = useRef(noteId)
+    useEffect(() => { noteIdRef.current = noteId }, [noteId])
+
+    /**
+     * Remember the reading position on THIS device.
+     *
+     * Navigation is view state, not a document edit: routing it through
+     * `onChange` would mark the note dirty and sync the whole annotated-PDF
+     * payload to the server on every page flip. `lib/pdf-view-state` keeps it
+     * in a per-note localStorage entry instead, so it never touches the note.
+     */
+    const persistPagePosition = useCallback((page: number) => {
+      writePdfViewState(noteIdRef.current, page)
+    }, [])
 
     // ────────────────────────────────────────────────────────
     // Touch interaction helpers
@@ -753,6 +779,7 @@ const PdfAnnotationEditor = forwardRef<PdfAnnotationEditorHandle, PdfAnnotationE
         setPages(newPages)
         setTotalPages(newTotal)
         setCurrentPage(insertAt)
+        persistPagePosition(insertAt)
         pushHistory(newPages)
         if (value?.pdfStoragePath) {
           onChange({
@@ -764,7 +791,7 @@ const PdfAnnotationEditor = forwardRef<PdfAnnotationEditorHandle, PdfAnnotationE
           })
         }
       },
-      [pages, pushHistory, onChange, value, zoom]
+      [pages, pushHistory, persistPagePosition, onChange, value, zoom]
     )
 
     const deletePage = useCallback(
@@ -778,6 +805,7 @@ const PdfAnnotationEditor = forwardRef<PdfAnnotationEditorHandle, PdfAnnotationE
         setPages(newPages)
         setTotalPages(newTotal)
         setCurrentPage(newCurrent)
+        persistPagePosition(newCurrent)
         setDeleteConfirmIdx(null)
         pushHistory(newPages)
         if (value?.pdfStoragePath) {
@@ -790,7 +818,7 @@ const PdfAnnotationEditor = forwardRef<PdfAnnotationEditorHandle, PdfAnnotationE
           })
         }
       },
-      [pages, currentPage, pushHistory, onChange, value, zoom]
+      [pages, currentPage, pushHistory, persistPagePosition, onChange, value, zoom]
     )
 
     // ────────────────────────────────────────────────────────
@@ -1077,16 +1105,32 @@ const PdfAnnotationEditor = forwardRef<PdfAnnotationEditorHandle, PdfAnnotationE
 
     // ────────────────────────────────────────────────────────
     // Load PDF from storage
+    //
+    // The editor instance is reused across notes, so opening a document must
+    // (re)seed the internal annotation state from the note payload that is
+    // actually being opened — otherwise the previous note's pages, history and
+    // reading position would leak into this one.
     // ────────────────────────────────────────────────────────
     useEffect(() => {
-      if (!value?.pdfStoragePath) {
+      const pdfStoragePath = value?.pdfStoragePath
+      if (!pdfStoragePath) {
         // No document (e.g. a brand-new note): a previously started load must not
-        // leave the empty state stuck showing "Loading…".
+        // leave the empty state stuck showing "Loading…" or the previous document.
         setPdfLoading(false)
         setPdfError(null)
         setPdfDoc(null)
+        setPages([])
+        setTotalPages(0)
+        setHistory([])
+        setHistoryIdx(-1)
+        setSelectedId(null)
+        setEditingText(null)
+        setCurrentPage(0)
         return
       }
+      // Captured at open time: page navigation may persist the local position
+      // before this async load finishes.
+      const openedNoteId = noteId
       let cancelled = false
       let textExtractionTimer: ReturnType<typeof setTimeout> | null = null
 
@@ -1095,12 +1139,43 @@ const PdfAnnotationEditor = forwardRef<PdfAnnotationEditorHandle, PdfAnnotationE
         setPdfError(null)
         try {
           const lib = await loadPdfJs()
-          const blob = await downloadFile(value!.pdfStoragePath)
+          const blob = await downloadFile(pdfStoragePath!)
           const arrayBuf = await blob.arrayBuffer()
           const doc = await lib.getDocument({ data: arrayBuf }).promise
           if (cancelled) return
+
+          // Seed this document from the note payload. Missing `pdfPageNumber`
+          // values are migrated (older notes) and `stickyNotes` is normalized.
+          const notePages = value?.pages ?? []
+          const nextPages: PdfAnnotationPage[] =
+            notePages.length > 0
+              ? notePages.map(p =>
+                  p.pdfPageNumber === undefined && !p.isBlank
+                    ? { ...p, pdfPageNumber: p.pageNumber + 1, stickyNotes: p.stickyNotes ?? [] }
+                    : { ...p, stickyNotes: p.stickyNotes ?? [] }
+                )
+              : Array.from({ length: doc.numPages }, (_, i) => ({
+                  pageNumber: i,
+                  pdfPageNumber: i + 1,
+                  strokes: [],
+                  textAnnotations: [],
+                  shapes: [],
+                  stickyNotes: [],
+                }))
+          const pageCount = Math.max(nextPages.length, doc.numPages)
+
+          // Reading position: device-local cache first, synced fallback second.
+          // It is deliberately not written back through `onChange` on navigation
+          // (that would sync the whole payload to the server on every page flip).
+          const savedPage = readPdfViewState(openedNoteId)?.page
           setPdfDoc(doc)
-          setTotalPages(doc.numPages)
+          setTotalPages(pageCount)
+          setPages(nextPages)
+          setHistory([nextPages])
+          setHistoryIdx(0)
+          setSelectedId(null)
+          setEditingText(null)
+          setCurrentPage(clampPdfPage(savedPage ?? value?.currentPage ?? 0, pageCount))
 
           // Extract full plain text from all PDF pages for AI context. Defer it
           // so opening a PDF stays responsive (the text is only needed once the
@@ -1127,31 +1202,6 @@ const PdfAnnotationEditor = forwardRef<PdfAnnotationEditorHandle, PdfAnnotationE
               if (!cancelled) onTextExtracted(parts.join('\n\n'))
             }, 1500)
             textExtractionTimer = timerId as unknown as ReturnType<typeof setTimeout>
-          }
-
-          // Initialize page annotations if empty OR migrate existing notes (add pdfPageNumber)
-          if (pages.length === 0) {
-            const initialPages: PdfAnnotationPage[] = []
-            for (let i = 0; i < doc.numPages; i++) {
-              initialPages.push({
-                pageNumber: i,
-                pdfPageNumber: i + 1,
-                strokes: [],
-                textAnnotations: [],
-                shapes: [],
-                stickyNotes: [],
-              })
-            }
-            setPages(initialPages)
-            pushHistory(initialPages)
-          } else if (pages.some(p => p.pdfPageNumber === undefined && !p.isBlank)) {
-            // Migrate: assign pdfPageNumber to pages that are missing it
-            const migrated = pages.map(p =>
-              p.pdfPageNumber === undefined && !p.isBlank
-                ? { ...p, pdfPageNumber: p.pageNumber + 1, stickyNotes: p.stickyNotes ?? [] }
-                : { ...p, stickyNotes: p.stickyNotes ?? [] }
-            )
-            setPages(migrated)
           }
         } catch (err) {
           if (!cancelled) {
@@ -1971,20 +2021,15 @@ const PdfAnnotationEditor = forwardRef<PdfAnnotationEditorHandle, PdfAnnotationE
     // Page navigation
     // ────────────────────────────────────────────────────────
     const goToPage = useCallback((pg: number) => {
-      // Commit any in-progress text edit before leaving the page
-      const latestPages = commitText() ?? pages
+      // Commit any in-progress text edit before leaving the page. `commitText`
+      // emits the document change itself (if there is one); a plain page
+      // navigation must not emit — otherwise the note is marked dirty and the
+      // whole annotation payload is synced to the server on every flip.
+      commitText()
       setCurrentPage(pg)
       setSelectedId(null)
-      if (value?.pdfStoragePath) {
-        onChange({
-          pdfStoragePath: value.pdfStoragePath,
-          pages: latestPages,
-          currentPage: pg,
-          totalPages,
-          zoom,
-        })
-      }
-    }, [commitText, value?.pdfStoragePath, pages, totalPages, zoom, onChange])
+      persistPagePosition(pg)
+    }, [commitText, persistPagePosition])
 
     // ────────────────────────────────────────────────────────
     // Keyboard shortcuts: delete, undo/redo, tool switching, page nav
@@ -2301,7 +2346,8 @@ const PdfAnnotationEditor = forwardRef<PdfAnnotationEditorHandle, PdfAnnotationE
                 const newPg = scrollingDown ? pg + 1 : pg - 1
                 setCurrentPage(newPg)
                 el.scrollTop = scrollingDown ? 0 : 99999
-                emitChange(pagesRef.current, newPg, zoomRef.current)
+                // View state only — never emit a note change for a page flip.
+                persistPagePosition(newPg)
                 setPageAnim(scrollingDown ? 'enter-from-bottom' : 'enter-from-top')
                 setTimeout(() => {
                   setPageAnim(null)
@@ -2327,7 +2373,7 @@ const PdfAnnotationEditor = forwardRef<PdfAnnotationEditorHandle, PdfAnnotationE
       }
       // The scroll viewport only exists once a PDF is loaded (and not while the
       // loading/error states are rendered), so re-attach whenever it appears.
-    }, [clampZoom, emitChange, value?.pdfStoragePath, pdfLoading, pdfError])
+    }, [clampZoom, emitChange, persistPagePosition, value?.pdfStoragePath, pdfLoading, pdfError])
 
     // ────────────────────────────────────────────────────────
     // Two-finger pan & pinch-to-zoom
@@ -2766,6 +2812,9 @@ const PdfAnnotationEditor = forwardRef<PdfAnnotationEditorHandle, PdfAnnotationE
           }
           setPages(initialPages)
           setCurrentPage(0)
+          // A newly selected document starts at the first page — drop any cached
+          // position from the PDF this note had before.
+          writePdfViewState(noteIdRef.current, 0)
           pushHistory(initialPages)
 
           onChange({
@@ -2835,6 +2884,9 @@ const PdfAnnotationEditor = forwardRef<PdfAnnotationEditorHandle, PdfAnnotationE
           }
           setPages(initialPages)
           setCurrentPage(0)
+          // A newly uploaded document starts at the first page — drop any cached
+          // position from the PDF this note had before.
+          writePdfViewState(noteIdRef.current, 0)
           pushHistory(initialPages)
 
           onChange({
