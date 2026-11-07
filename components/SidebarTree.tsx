@@ -466,11 +466,45 @@ export default function SidebarTree({
     return getAncestorFolderIds(activeNote.folder_id, folderTree)
   }, [activeNote, folderTree, getAncestorFolderIds])
 
-  const countNotesRecursive = useCallback((folder: FolderNode): number => {
-    const direct = allNotes.filter(n => n.folder_id === folder.id).length
-    const childCount = folder.children.reduce((acc, c) => acc + countNotesRecursive(c), 0)
-    return direct + childCount
-  }, [allNotes])
+  /**
+   * Pre-computed O(N+F) lookups for the tree. Rebuilding the tree previously
+   * filtered all notes per folder row (O(folders × notes) on every render).
+   */
+  const treeIndex = useMemo(() => {
+    const byFolder = new Map<string, NoteSummary[]>()
+    for (const note of allNotes) {
+      if (!note.folder_id) continue
+      const list = byFolder.get(note.folder_id)
+      if (list) list.push(note)
+      else byFolder.set(note.folder_id, [note])
+    }
+
+    const descendantCounts = new Map<string, number>()
+    const folderCountByProject = new Map<string, number>()
+    const walk = (node: FolderNode): number => {
+      let total = byFolder.get(node.id)?.length ?? 0
+      const projectKey = node.project_id ?? '__unfiled__'
+      folderCountByProject.set(projectKey, (folderCountByProject.get(projectKey) ?? 0) + 1)
+      for (const child of node.children) total += walk(child)
+      descendantCounts.set(node.id, total)
+      return total
+    }
+    for (const root of folderTree) walk(root)
+
+    const noteCountByProject = new Map<string, number>()
+    for (const note of allNotes) {
+      const key = note.project_id ?? '__unfiled__'
+      noteCountByProject.set(key, (noteCountByProject.get(key) ?? 0) + 1)
+    }
+
+    const projectById = new Map(projects.map((project) => [project.id, project]))
+    return { byFolder, descendantCounts, folderCountByProject, noteCountByProject, projectById }
+  }, [allNotes, folderTree, projects])
+
+  const getNotesForFolder = useCallback(
+    (folderId: string): NoteSummary[] => treeIndex.byFolder.get(folderId) ?? [],
+    [treeIndex]
+  )
 
   const projectTree = useMemo((): ProjectTreeNode[] => {
     const result: ProjectTreeNode[] = []
@@ -489,10 +523,6 @@ export default function SidebarTree({
 
     return result
   }, [projects, folderTree, allNotes])
-
-  const getNotesForFolder = useCallback((folderId: string): NoteSummary[] => {
-    return allNotes.filter(n => n.folder_id === folderId)
-  }, [allNotes])
 
   // Flatten all folders for move picker
   const flatAllFolders = useMemo(() => {
@@ -756,7 +786,7 @@ export default function SidebarTree({
   const totalResultCount = filteredNotes.length + filteredFolders.length + filteredProjects.length
 
   const getNoteLocationMeta = useCallback((note: NoteSummary): { projectName: string; projectColor: string; folderPath: string } => {
-    const proj = projects.find(p => p.id === note.project_id)
+    const proj = note.project_id ? treeIndex.projectById.get(note.project_id) : undefined
     const projectName = proj?.name ?? 'Unfiled'
     const projectColor = proj?.color ?? NEUTRAL_DOT
     let folderPath = ''
@@ -773,7 +803,7 @@ export default function SidebarTree({
       if (path) folderPath = path.join(' › ')
     }
     return { projectName, projectColor, folderPath }
-  }, [projects, folderTree])
+  }, [treeIndex, folderTree])
 
   const toggleNoteTypeFilter = useCallback((type: NoteType) => {
     setFilterNoteTypes(prev => {
@@ -851,7 +881,7 @@ export default function SidebarTree({
   const renderNoteItem = (n: NoteSummary, indent: number = 0) => {
     if (!matchesSearch(n.title || 'Untitled')) return null
     const isActive = selectedNoteId === n.id
-    const noteProject = projects.find(p => p.id === n.project_id)
+    const noteProject = n.project_id ? treeIndex.projectById.get(n.project_id) : undefined
     const isDragging = dragPayload?.type === 'note' && dragPayload.id === n.id
     return (
       <div
@@ -903,7 +933,7 @@ export default function SidebarTree({
     const isSelected = selectedFolderId === folder.id
     const hasChildren = folder.children.length > 0
     const folderNotes = getNotesForFolder(folder.id)
-    const totalCount = countNotesRecursive(folder)
+    const totalCount = treeIndex.descendantCounts.get(folder.id) ?? 0
     const isOnActivePath = activeFolderAncestors.has(folder.id)
     const isRenaming = inlineRename?.type === 'folder' && inlineRename.id === folder.id
     const isDragging = dragPayload?.type === 'folder' && dragPayload.id === folder.id
@@ -1037,7 +1067,7 @@ export default function SidebarTree({
     const totalItems = node.folders.length + node.notes.length
     const isActiveProject = node.project?.id === activeNote?.project_id
     const isSelectedProject = selectedProjectId === node.project?.id && !selectedFolderId && !selectedNoteId
-    const totalNoteCount = node.notes.length + node.folders.reduce((acc, f) => acc + countNotesRecursive(f), 0)
+    const totalNoteCount = treeIndex.noteCountByProject.get(node.project?.id ?? '__unfiled__') ?? 0
     const isRenaming = inlineRename?.type === 'project' && node.project && inlineRename.id === node.project.id
     const dropTargetHere: DropTarget = { kind: 'project-root', projectId: node.project?.id ?? null }
     const isDropHere = isDropHighlighted(dropTargetHere)
@@ -1172,7 +1202,7 @@ export default function SidebarTree({
         </div>
         <div className="space-y-0.5">
           {recentNotes.map(note => {
-            const noteProject = projects.find(p => p.id === note.project_id)
+            const noteProject = note.project_id ? treeIndex.projectById.get(note.project_id) : undefined
             const isActive = selectedNoteId === note.id
             return (
               <div
@@ -1239,8 +1269,8 @@ export default function SidebarTree({
             <div className="space-y-0.5">
               {filteredProjects.map(project => {
                 const isActive = selectedProjectId === project.id
-                const noteCount = allNotes.filter(n => n.project_id === project.id).length
-                const folderCount = folderTree.filter(f => f.project_id === project.id).length
+                const noteCount = treeIndex.noteCountByProject.get(project.id) ?? 0
+                const folderCount = treeIndex.folderCountByProject.get(project.id) ?? 0
                 return (
                   <div
                     role="button"
@@ -1291,7 +1321,7 @@ export default function SidebarTree({
             <div className="space-y-0.5">
               {filteredFolders.map(({ folder, depth, projectName, projectColor }) => {
                 const isActive = selectedFolderId === folder.id
-                const noteCount = countNotesRecursive(folder)
+                const noteCount = treeIndex.descendantCounts.get(folder.id) ?? 0
                 return (
                   <div
                     role="button"
@@ -1420,7 +1450,7 @@ export default function SidebarTree({
   if (collapsed) {
     const railBtn = 'glass-btn-ghost focus-ring h-9 w-9 rounded-xl'
     const railActiveCls = 'bg-surface-active text-foreground'
-    const activeNoteProject = activeNote ? projects.find(p => p.id === activeNote.project_id) : undefined
+    const activeNoteProject = activeNote?.project_id ? treeIndex.projectById.get(activeNote.project_id) : undefined
 
     return (
       <>

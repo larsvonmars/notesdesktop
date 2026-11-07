@@ -117,7 +117,16 @@ export interface NoteLinkIndexEntry {
   title: string
   folder_id: string | null
   note_type: NoteType
-  content: string
+  /**
+   * Note ids this note links to (one entry per link block, so duplicates mean
+   * the note links to the same target multiple times).
+   */
+  linkIds: string[]
+}
+
+interface StoredNoteLinkIndex {
+  syncedAt: string
+  entries: NoteLinkIndexEntry[]
 }
 
 export const NOTE_SUMMARY_COLUMNS =
@@ -569,55 +578,101 @@ export async function getNotesByIds(ids: string[]): Promise<Note[]> {
 }
 
 /**
- * Content index for backlinks. Only rich-text rows are requested, and the
- * query is scoped to the columns the link parser needs.
+ * Content index for backlinks. The server is asked for rich-text bodies once
+ * per TTL, but only the parsed link targets are persisted: storing every note
+ * body in the offline cache just to compute backlinks bloated the cache and
+ * made every cache read slower.
  */
-export async function getNoteLinkIndex(): Promise<NoteLinkIndexEntry[]> {
-  const userId = await getCurrentUserId()
-  const cached = (await readCachedNotes(userId)).filter(
-    (row) => row.note_type === 'rich-text' && typeof row.content === 'string'
-  )
+let noteLinkIndexCache: {
+  userId: string | null
+  syncedAt: number
+  entries: NoteLinkIndexEntry[]
+} | null = null
 
-  const toEntries = (rows: CachedNote[]): NoteLinkIndexEntry[] =>
-    rows.map((row) => ({
+/** Extract note-link block targets from stored HTML without caching the body. */
+function extractNoteLinkIds(html: string): string[] {
+  if (!html) return []
+
+  if (typeof DOMParser !== 'undefined') {
+    const doc = new DOMParser().parseFromString(html, 'text/html')
+    return Array.from(doc.querySelectorAll('[data-block-type="note-link"]'))
+      .map((element) => element.getAttribute('data-note-id'))
+      .filter((id): id is string => !!id)
+  }
+
+  // Non-DOM fallback (e.g. tests): note-link blocks store data-note-id.
+  const ids: string[] = []
+  const pattern = /data-note-id="([^"]+)"/g
+  let match: RegExpExecArray | null
+  while ((match = pattern.exec(html))) ids.push(match[1])
+  return ids
+}
+
+async function refreshNoteLinkIndex(
+  userId: string | null,
+  cacheKey: string
+): Promise<NoteLinkIndexEntry[]> {
+  const { data, error } = await supabase
+    .from('notes')
+    .select(NOTE_FULL_COLUMNS)
+    .eq('note_type', 'rich-text')
+    .order('updated_at', { ascending: false })
+    .limit(5000)
+  if (error) throw error
+
+  const entries = ((data ?? []) as unknown as CachedNote[])
+    .map((row) => ({
       id: row.id,
       title: row.title,
       folder_id: row.folder_id,
       note_type: row.note_type,
-      content: row.content ?? '',
+      linkIds: extractNoteLinkIds(row.content ?? ''),
     }))
+    // Only notes that actually link somewhere participate in backlinks.
+    .filter((entry) => entry.linkIds.length > 0)
 
-  const fetchIndex = async (): Promise<void> => {
-    const { data, error } = await supabase
-      .from('notes')
-      .select(NOTE_FULL_COLUMNS)
-      .eq('note_type', 'rich-text')
-      .order('updated_at', { ascending: false })
-      .limit(5000)
-    if (error) throw error
+  const syncedAt = new Date().toISOString()
+  await setMeta(cacheKey, { syncedAt, entries } satisfies StoredNoteLinkIndex)
+  noteLinkIndexCache = { userId, syncedAt: Date.parse(syncedAt), entries }
+  return entries
+}
 
-    const rows = (data ?? []) as unknown as CachedNote[]
-    const changed = await mergeNoteRows(rows, { full: true, userId })
-    await setMeta(metaKey('notes.linkIndexSyncedAt', userId), new Date().toISOString())
-    if (changed) emitDataChanged('notes')
+export async function getNoteLinkIndex(): Promise<NoteLinkIndexEntry[]> {
+  const userId = await getCurrentUserId()
+  const cacheKey = metaKey('notes.linkIndex', userId)
+
+  const now = Date.now()
+  if (
+    noteLinkIndexCache &&
+    noteLinkIndexCache.userId === userId &&
+    now - noteLinkIndexCache.syncedAt < REFRESH_TTL_MS
+  ) {
+    return noteLinkIndexCache.entries
   }
 
-  const marker = await getMeta<string>(metaKey('notes.linkIndexSyncedAt', userId))
-  if (marker) {
+  let stored: StoredNoteLinkIndex | null = null
+  try {
+    stored = (await getMeta<StoredNoteLinkIndex>(cacheKey)) ?? null
+  } catch {
+    stored = null
+  }
+
+  if (stored) {
+    const syncedAt = Date.parse(stored.syncedAt) || 0
+    noteLinkIndexCache = { userId, syncedAt, entries: stored.entries }
+    if (now - syncedAt < REFRESH_TTL_MS) return stored.entries
+
+    // Keep serving the persisted index while it is re-built in the background.
     if (shouldRefresh(`links:${userId ?? 'anonymous'}`)) {
-      void fetchIndex().catch(() => {})
+      void refreshNoteLinkIndex(userId, cacheKey).catch(() => {})
     }
-    return toEntries(cached)
+    return stored.entries
   }
 
   try {
-    await fetchIndex()
-    const merged = (await readCachedNotes(userId)).filter(
-      (row) => row.note_type === 'rich-text' && typeof row.content === 'string'
-    )
-    return toEntries(merged)
+    return await refreshNoteLinkIndex(userId, cacheKey)
   } catch {
-    return toEntries(cached)
+    return noteLinkIndexCache?.entries ?? []
   }
 }
 

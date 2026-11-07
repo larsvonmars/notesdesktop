@@ -88,7 +88,8 @@ export function useWorkspaceData({
     }
   }, [])
 
-  const loadFolders = useCallback(async () => {
+  const loadFolders = useCallback(async (options?: { silent?: boolean }) => {
+    if (!options?.silent) setIsLoadingFolders(true)
     try {
       const fetchedFolders = filterOutArchivedContent(await getFolders())
       setFolders(fetchedFolders)
@@ -100,9 +101,12 @@ export function useWorkspaceData({
     }
   }, [filterOutArchivedContent])
 
-  const loadNotesInFolder = useCallback(async (folderId: string | null) => {
+  const loadNotesInFolder = useCallback(async (
+    folderId: string | null,
+    options?: { silent?: boolean }
+  ) => {
+    if (!options?.silent) setIsLoadingNotes(true)
     try {
-      setIsLoadingNotes(true)
       setNotes(filterOutArchivedContent(await getNotesByFolder(folderId)))
     } catch (error) {
       console.error('Error loading notes:', error)
@@ -113,7 +117,8 @@ export function useWorkspaceData({
 
   // Load note metadata for AI tool calling, the sidebar and dashboards.
   // Bodies are fetched on demand (getNote) so login does not download them all.
-  const loadAllNotes = useCallback(async () => {
+  const loadAllNotes = useCallback(async (options?: { silent?: boolean }) => {
+    if (!options?.silent) setIsLoadingAllNotes(true)
     try {
       setAllNotes(filterOutArchivedContent(await getAllNoteSummaries()))
     } catch (error) {
@@ -244,16 +249,31 @@ export function useWorkspaceData({
 
   // Refresh React state whenever the offline cache changes (optimistic write,
   // sync completion, or background refresh), debounced to coalesce bursts.
+  // Background refreshes are silent (no loading flags/skeleton) and only the
+  // affected collections are reloaded.
   useEffect(() => {
     if (!userId) return
 
     let timer: ReturnType<typeof setTimeout> | null = null
-    const unsubscribe = subscribeToDataChanges(() => {
+    let notesChanged = false
+    let foldersChanged = false
+    const unsubscribe = subscribeToDataChanges((detail) => {
+      if (detail?.table === 'folders') foldersChanged = true
+      else notesChanged = true
       if (timer) clearTimeout(timer)
       timer = setTimeout(() => {
-        void loadNotesInFolder(selectedFolderId)
-        void loadAllNotes()
-        void loadFolders()
+        timer = null
+        if (notesChanged) {
+          void loadNotesInFolder(selectedFolderId, { silent: true })
+          void loadAllNotes({ silent: true })
+        }
+        if (foldersChanged) {
+          void loadFolders({ silent: true })
+          void loadNotesInFolder(selectedFolderId, { silent: true })
+          void loadAllNotes({ silent: true })
+        }
+        notesChanged = false
+        foldersChanged = false
       }, 120)
     })
 

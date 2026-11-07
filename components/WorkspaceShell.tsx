@@ -2,9 +2,16 @@
 
 import { useAuth } from '@/lib/auth-context'
 import { useRouter, useSearchParams } from 'next/navigation'
-import { useEffect, useState, useRef, useCallback, Suspense } from 'react'
+import { useEffect, useState, useRef, useCallback, useMemo, Suspense } from 'react'
 import dynamic from 'next/dynamic'
-import NoteEditor, { Note } from '@/components/NoteEditor'
+import type { Note } from '@/components/NoteEditor'
+// The editor pulls in all six note editors (rich text, drawing, mindmap,
+// journal, data sheet, PDF annotations) plus grammar/PDF helpers — keep that
+// graph out of the workspace first load and fetch it when a note is opened.
+const NoteEditor = dynamic(() => import('@/components/NoteEditor'), {
+  ssr: false,
+  loading: () => null,
+})
 import HomeDashboard from '@/components/HomeDashboard'
 import TasksView from '@/components/TasksView'
 import FileExplorerModal from '@/components/FileExplorerModal'
@@ -950,6 +957,33 @@ function WorkspaceContent() {
     return () => window.removeEventListener('keydown', handleKeyDown)
   }, [])
 
+  // Derived list data is memoized so a save/realtime update that only touches
+  // one note does not rebuild + re-sort the whole note list on every render.
+  const currentFolder = useMemo(
+    () => folders.find((folder) => folder.id === selectedFolderId) ?? null,
+    [folders, selectedFolderId]
+  )
+  const currentProject = useMemo(
+    () => projects.find((project) => project.id === selectedProjectId) ?? null,
+    [projects, selectedProjectId]
+  )
+  const listNotes = useMemo(
+    () =>
+      selectedFolderId
+        ? filterOutArchivedContent(notes)
+        : currentProject
+          ? filterOutArchivedContent(allNotes.filter((note) => note.project_id === currentProject.id))
+          : filterOutArchivedContent(allNotes),
+    [selectedFolderId, currentProject, notes, allNotes, filterOutArchivedContent]
+  )
+  const recentNotes = useMemo(
+    () =>
+      [...allNotes]
+        .sort((a, b) => new Date(b.updated_at).getTime() - new Date(a.updated_at).getTime())
+        .slice(0, 5),
+    [allNotes]
+  )
+
   if (loading) {
     return (
       <WorkspaceSkeleton />
@@ -976,25 +1010,12 @@ function WorkspaceContent() {
   // draft. Creating a note sets isCreatingNew, so that path is unchanged.
   const showEditor = isCreatingNew || selectedNote !== null
 
-  const currentFolder = folders.find((folder) => folder.id === selectedFolderId) ?? null
-  const currentProject = projects.find((project) => project.id === selectedProjectId) ?? null
-
-  const listNotes = selectedFolderId
-    ? filterOutArchivedContent(notes)
-    : currentProject
-      ? filterOutArchivedContent(allNotes.filter((note) => note.project_id === currentProject.id))
-      : filterOutArchivedContent(allNotes)
-
   const listTitle = currentFolder?.name ?? currentProject?.name ?? 'All notes'
   const listSubtitle = currentFolder
     ? currentProject
       ? `${currentProject.name} Â· ${listNotes.length} note${listNotes.length === 1 ? '' : 's'}`
       : `${listNotes.length} note${listNotes.length === 1 ? '' : 's'}`
     : `${folders.length} folder${folders.length === 1 ? '' : 's'} Â· ${listNotes.length} note${listNotes.length === 1 ? '' : 's'}`
-
-  const recentNotes = [...allNotes]
-    .sort((a, b) => new Date(b.updated_at).getTime() - new Date(a.updated_at).getTime())
-    .slice(0, 5)
 
   const breadcrumbs: Breadcrumb[] = (() => {
     const home: Breadcrumb = {

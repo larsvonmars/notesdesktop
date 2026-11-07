@@ -683,6 +683,25 @@ export default function NoteEditor({
   // Track the previous note id so we can detect actual note switches
   // (as opposed to same-note reference updates from saves)
   const prevNoteIdRef = useRef<string | undefined>(note?.id)
+  /**
+   * The editor data object as last loaded/saved. Dirty tracking compares by
+   * reference instead of serializing the whole note (which can be multi-MB for
+   * PDF annotations and runs on every page switch/zoom/stroke).
+   */
+  const savedEditorDataRef = useRef<unknown>(null)
+  /**
+   * Mindmap and bullet-journal editors emit one normalized data object right
+   * after mounting. That first emission is the loaded baseline, not a user
+   * edit, so it must not mark the note dirty.
+   */
+  const mindmapBaselinePendingRef = useRef(true)
+  const bulletJournalBaselinePendingRef = useRef(true)
+  const renderedNoteIdRef = useRef<string | undefined>(undefined)
+  if (renderedNoteIdRef.current !== note?.id) {
+    renderedNoteIdRef.current = note?.id
+    mindmapBaselinePendingRef.current = true
+    bulletJournalBaselinePendingRef.current = true
+  }
 
   useEffect(() => {
     const isNoteSwitched = prevNoteIdRef.current !== note?.id
@@ -716,14 +735,23 @@ export default function NoteEditor({
               height: data.height || 600,
               currentPage: 0
             }
+            savedEditorDataRef.current = migratedData
             setDrawingData(migratedData)
           } else {
+            savedEditorDataRef.current = data
             setDrawingData(data)
           }
           setContent('')
           setMindmapData(null)
         } catch {
-          setDrawingData({ pages: [{ strokes: [], background: 'none' }], width: 800, height: 600, currentPage: 0 })
+          const fallback: DrawingData = {
+            pages: [{ strokes: [], background: 'none' }],
+            width: 800,
+            height: 600,
+            currentPage: 0,
+          }
+          savedEditorDataRef.current = fallback
+          setDrawingData(fallback)
           setContent('')
           setMindmapData(null)
         }
@@ -731,13 +759,14 @@ export default function NoteEditor({
         // Parse mindmap data from content
         try {
           const data = JSON.parse(note.content || '{}')
+          savedEditorDataRef.current = data
           setMindmapData(data)
           setContent('')
           setDrawingData(null)
         } catch {
           // Create default mindmap if parsing fails
           const rootId = 'root'
-          setMindmapData({
+          const fallback = {
             rootId,
             nodes: {
               [rootId]: {
@@ -753,7 +782,9 @@ export default function NoteEditor({
                 attachments: [],
               },
             },
-          })
+          }
+          savedEditorDataRef.current = fallback
+          setMindmapData(fallback)
           setContent('')
           setDrawingData(null)
         }
@@ -761,8 +792,10 @@ export default function NoteEditor({
         // Parse bullet journal data from content
         try {
           const data = JSON.parse(note.content || '{}')
+          savedEditorDataRef.current = data
           setBulletJournalData(data)
         } catch {
+          savedEditorDataRef.current = null
           setBulletJournalData(null)
         }
         setContent('')
@@ -773,8 +806,10 @@ export default function NoteEditor({
         // Parse data sheet data from content
         try {
           const data = JSON.parse(note.content || '{}')
+          savedEditorDataRef.current = data
           setDataSheetData(data)
         } catch {
+          savedEditorDataRef.current = null
           setDataSheetData(null)
         }
         setContent('')
@@ -785,8 +820,10 @@ export default function NoteEditor({
       } else if (note.note_type === 'pdf-annotation') {
         try {
           const data = JSON.parse(note.content || '{}')
+          savedEditorDataRef.current = data
           setPdfAnnotationData(data)
         } catch {
+          savedEditorDataRef.current = null
           setPdfAnnotationData(null)
         }
         setContent('')
@@ -795,6 +832,7 @@ export default function NoteEditor({
         setBulletJournalData(null)
         setDataSheetData(null)
       } else {
+        savedEditorDataRef.current = null
         contentRef.current = note.content || ''
         setContent(note.content || '')
         setDrawingData(null)
@@ -819,6 +857,7 @@ export default function NoteEditor({
       }
     } else {
       setTitle('')
+      savedEditorDataRef.current = null
       contentRef.current = ''
       setContent('')
       setDrawingData(initialNoteType === 'drawing' ? { pages: [{ strokes: [], background: 'none' }], width: 800, height: 600, currentPage: 0 } : null)
@@ -848,25 +887,17 @@ export default function NoteEditor({
     if (noteLoadingRef.current) return
     if (note) {
       if (noteType === 'drawing') {
-        const currentDrawingStr = JSON.stringify(drawingData)
-        const noteDrawingStr = note.content || '{}'
-        setHasChanges(title !== note.title || currentDrawingStr !== noteDrawingStr)
+        // Reference comparison: editors emit a new data object per edit, so no
+        // need to serialize the (potentially large) payload on every change.
+        setHasChanges(title !== note.title || drawingData !== savedEditorDataRef.current)
       } else if (noteType === 'mindmap') {
-        const currentMindmapStr = JSON.stringify(mindmapData)
-        const noteMindmapStr = note.content || '{}'
-        setHasChanges(title !== note.title || currentMindmapStr !== noteMindmapStr)
+        setHasChanges(title !== note.title || mindmapData !== savedEditorDataRef.current)
       } else if (noteType === 'bullet-journal') {
-        const currentBJStr = JSON.stringify(bulletJournalData)
-        const noteBJStr = note.content || '{}'
-        setHasChanges(title !== note.title || currentBJStr !== noteBJStr)
+        setHasChanges(title !== note.title || bulletJournalData !== savedEditorDataRef.current)
       } else if (noteType === 'data-sheet') {
-        const currentDSStr = JSON.stringify(dataSheetData)
-        const noteDSStr = note.content || '{}'
-        setHasChanges(title !== note.title || currentDSStr !== noteDSStr)
+        setHasChanges(title !== note.title || dataSheetData !== savedEditorDataRef.current)
       } else if (noteType === 'pdf-annotation') {
-        const currentPAStr = JSON.stringify(pdfAnnotationData)
-        const notePAStr = note.content || '{}'
-        setHasChanges(title !== note.title || currentPAStr !== notePAStr)
+        setHasChanges(title !== note.title || pdfAnnotationData !== savedEditorDataRef.current)
       } else {
         setHasChanges(title !== note.title || content !== (note.content || ''))
       }
@@ -904,6 +935,26 @@ export default function NoteEditor({
         autosaveTimeoutRef.current = null
       }
     }
+  }, [])
+
+  /**
+   * Editor change handlers that distinguish the editors' initial normalized
+   * emission from real user edits (see baseline refs above).
+   */
+  const handleMindmapDataChange = useCallback((data: MindmapData) => {
+    if (mindmapBaselinePendingRef.current) {
+      mindmapBaselinePendingRef.current = false
+      savedEditorDataRef.current = data
+    }
+    setMindmapData(data)
+  }, [])
+
+  const handleBulletJournalDataChange = useCallback((data: BulletJournalData) => {
+    if (bulletJournalBaselinePendingRef.current) {
+      bulletJournalBaselinePendingRef.current = false
+      savedEditorDataRef.current = data
+    }
+    setBulletJournalData(data)
   }, [])
 
   // Flush pending saves on window close or app hide to prevent data loss
@@ -1945,6 +1996,22 @@ export default function NoteEditor({
         }
       }
 
+      // Record exactly what we persisted. Dirty tracking compares data objects
+      // by reference: if an edit landed while the save was in flight the
+      // current object still differs, so the note stays dirty.
+      savedEditorDataRef.current =
+        noteType === 'drawing'
+          ? drawingData
+          : noteType === 'mindmap'
+            ? mindmapData
+            : noteType === 'bullet-journal'
+              ? bulletJournalData
+              : noteType === 'data-sheet'
+                ? dataSheetData
+                : noteType === 'pdf-annotation'
+                  ? pdfAnnotationData
+                  : null
+
       setHasChanges(false)
       setLastSaveTime(new Date())
       // Reset retry counter on success
@@ -2320,8 +2387,7 @@ export default function NoteEditor({
     return (backlinkIndex ?? [])
       .filter((candidate) => candidate.id !== note.id)
       .map((candidate) => {
-        const links = extractNoteLinkIdsFromHtml(candidate.content)
-        const relationCount = links.filter((id) => id === note.id).length
+        const relationCount = candidate.linkIds.filter((id) => id === note.id).length
         if (relationCount <= 0) return null
 
         return {
@@ -3664,7 +3730,7 @@ export default function NoteEditor({
                   <MindmapEditor
                     ref={mindmapEditorRef}
                     initialData={mindmapData || undefined}
-                    onChange={setMindmapData}
+                    onChange={handleMindmapDataChange}
                     onSelectedNodeChange={handleMindmapSelectedNodeChange}
                     textNotes={mindmapTextNotes}
                     resolveTextNote={resolveMindmapTextNote}
@@ -3679,7 +3745,7 @@ export default function NoteEditor({
                     ref={bulletJournalRef}
                     noteId={note?.id ?? null}
                     initialData={bulletJournalData}
-                    onChange={setBulletJournalData}
+                    onChange={handleBulletJournalDataChange}
                     disabled={isSaving || isDeleting}
                   />
                 </ErrorBoundary>

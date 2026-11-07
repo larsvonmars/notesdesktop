@@ -309,6 +309,41 @@ export default function AIAssistant({
   const [selectedNoteBodies, setSelectedNoteBodies] = useState<Record<string, Note>>({})
   const [notePickerSearch, setNotePickerSearch] = useState('')
   const [streamingReasoning, setStreamingReasoning] = useState('')
+  // Streaming tokens arrive many times per second. Re-parsing markdown and
+  // re-rendering on every token is O(n²) for long answers, so batch UI updates.
+  const streamPendingRef = useRef('')
+  const reasoningPendingRef = useRef('')
+  const streamFlushTimerRef = useRef<number | null>(null)
+  const STREAM_FLUSH_MS = 80
+
+  const scheduleStreamFlush = useCallback(() => {
+    if (streamFlushTimerRef.current !== null) return
+    streamFlushTimerRef.current = window.setTimeout(() => {
+      streamFlushTimerRef.current = null
+      setStreamingContent(streamPendingRef.current)
+      setStreamingReasoning(reasoningPendingRef.current)
+    }, STREAM_FLUSH_MS)
+  }, [])
+
+  const resetStreamingBuffers = useCallback(() => {
+    if (streamFlushTimerRef.current !== null) {
+      window.clearTimeout(streamFlushTimerRef.current)
+      streamFlushTimerRef.current = null
+    }
+    streamPendingRef.current = ''
+    reasoningPendingRef.current = ''
+    setStreamingContent('')
+    setStreamingReasoning('')
+  }, [])
+
+  useEffect(() => {
+    return () => {
+      if (streamFlushTimerRef.current !== null) {
+        window.clearTimeout(streamFlushTimerRef.current)
+        streamFlushTimerRef.current = null
+      }
+    }
+  }, [])
   const [showMindmapPromptModal, setShowMindmapPromptModal] = useState(false)
   const [mindmapPromptInput, setMindmapPromptInput] = useState('')
   const [hasNoteContextConsent, setHasNoteContextConsent] = useState(false)
@@ -960,8 +995,7 @@ export default function AIAssistant({
     if (!overrideInput) setInputValue('')
     setIsLoading(true)
     setError(null)
-    setStreamingContent('')
-    setStreamingReasoning('')
+    resetStreamingBuffers()
 
     chatHistoryRef.current = [...chatHistoryRef.current, { role: 'user', content: userMessage.content }]
 
@@ -979,9 +1013,17 @@ export default function AIAssistant({
         userMessage.content,
         aiContext,
         chatHistoryRef.current.slice(0, -1),
-        (token) => { fullResponse += token; setStreamingContent(fullResponse) },
+        (token) => {
+          fullResponse += token
+          streamPendingRef.current = fullResponse
+          scheduleStreamFlush()
+        },
         allNotes?.length ? handleToolCall : undefined,
-        (token) => { reasoningContent += token; setStreamingReasoning(prev => prev + token) },
+        (token) => {
+          reasoningContent += token
+          reasoningPendingRef.current = reasoningContent
+          scheduleStreamFlush()
+        },
         (conversation) => { updatedConversation = conversation },
       )
 
@@ -1046,11 +1088,10 @@ export default function AIAssistant({
       }
     } finally {
       setIsLoading(false)
-      setStreamingContent('')
-      setStreamingReasoning('')
+      resetStreamingBuffers()
       refreshRateLimitSnapshot()
     }
-  }, [inputValue, isLoading, aiContext, allNotes, handleToolCall, currentChatId, note?.id, mapAIErrorToUserMessage, refreshRateLimitSnapshot, hasNoteContextConsent])
+  }, [inputValue, isLoading, aiContext, allNotes, handleToolCall, currentChatId, note?.id, mapAIErrorToUserMessage, refreshRateLimitSnapshot, hasNoteContextConsent, resetStreamingBuffers, scheduleStreamFlush])
 
   const handleCancelResponse = useCallback(() => {
     cancelActiveAIRequest()

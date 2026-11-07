@@ -358,6 +358,12 @@ const PdfAnnotationEditor = forwardRef<PdfAnnotationEditorHandle, PdfAnnotationE
     /** Last zoom applied by a gesture — scroll anchoring is computed against this. */
     const gestureZoomRef = useRef(zoom)
     /**
+     * Wheel zoom fires many events per gesture. Persist the view state once it
+     * settles instead of scheduling a full note update (and its serialization)
+     * for every wheel tick.
+     */
+    const zoomPersistTimerRef = useRef<number | null>(null)
+    /**
      * Stable handle to `emitChange`. Gesture listeners must not be torn down and
      * re-registered on every zoom/page change (which is every frame of a pinch).
      */
@@ -512,6 +518,12 @@ const PdfAnnotationEditor = forwardRef<PdfAnnotationEditorHandle, PdfAnnotationE
 
     /** pdfPageNumber of the page being displayed (undefined for inserted blank pages). */
     const currentPdfPageNumber = pages.find(p => p.pageNumber === currentPage)?.pdfPageNumber
+    // Primitive page descriptors: the pdf.js raster effect below must not depend
+    // on the whole `pages` array, otherwise every committed annotation stroke
+    // re-rasterizes the page.
+    const currentPageEntry = pages.find(p => p.pageNumber === currentPage)
+    const currentPageIsBlank = currentPageEntry?.isBlank ?? false
+    const currentPagePdfNumber = currentPageEntry?.pdfPageNumber ?? (currentPage + 1)
 
     // ────────────────────────────────────────────────────────
     // Imperative handle
@@ -1076,6 +1088,7 @@ const PdfAnnotationEditor = forwardRef<PdfAnnotationEditorHandle, PdfAnnotationE
         return
       }
       let cancelled = false
+      let textExtractionTimer: ReturnType<typeof setTimeout> | null = null
 
       async function loadPdf() {
         setPdfLoading(true)
@@ -1089,11 +1102,15 @@ const PdfAnnotationEditor = forwardRef<PdfAnnotationEditorHandle, PdfAnnotationE
           setPdfDoc(doc)
           setTotalPages(doc.numPages)
 
-          // Extract full plain text from all PDF pages for AI context
+          // Extract full plain text from all PDF pages for AI context. Defer it
+          // so opening a PDF stays responsive (the text is only needed once the
+          // user actually involves the AI panel).
           if (onTextExtracted) {
-            ;(async () => {
+            const timerId = window.setTimeout(async () => {
+              if (cancelled) return
               const parts: string[] = []
               for (let i = 1; i <= doc.numPages; i++) {
+                if (cancelled) return
                 try {
                   const pg = await doc.getPage(i)
                   const tc = await pg.getTextContent()
@@ -1107,8 +1124,9 @@ const PdfAnnotationEditor = forwardRef<PdfAnnotationEditorHandle, PdfAnnotationE
                   // skip unreadable page
                 }
               }
-              onTextExtracted(parts.join('\n\n'))
-            })()
+              if (!cancelled) onTextExtracted(parts.join('\n\n'))
+            }, 1500)
+            textExtractionTimer = timerId as unknown as ReturnType<typeof setTimeout>
           }
 
           // Initialize page annotations if empty OR migrate existing notes (add pdfPageNumber)
@@ -1145,7 +1163,10 @@ const PdfAnnotationEditor = forwardRef<PdfAnnotationEditorHandle, PdfAnnotationE
       }
 
       loadPdf()
-      return () => { cancelled = true }
+      return () => {
+        cancelled = true
+        if (textExtractionTimer !== null) clearTimeout(textExtractionTimer)
+      }
       // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [value?.pdfStoragePath])
 
@@ -1155,10 +1176,8 @@ const PdfAnnotationEditor = forwardRef<PdfAnnotationEditorHandle, PdfAnnotationE
     useEffect(() => {
       if (!pdfCanvasRef.current) return
 
-      const currentPageData = pages.find(p => p.pageNumber === currentPage)
-
       // Handle blank (user-inserted) pages
-      if (currentPageData?.isBlank) {
+      if (currentPageIsBlank) {
         if (renderTaskRef.current) {
           renderTaskRef.current.cancel()
           renderTaskRef.current = null
@@ -1189,7 +1208,7 @@ const PdfAnnotationEditor = forwardRef<PdfAnnotationEditorHandle, PdfAnnotationE
       }
 
       async function renderPage() {
-        const pdfPageNum = currentPageData?.pdfPageNumber ?? (currentPage + 1)
+        const pdfPageNum = currentPagePdfNumber
         const page = await pdfDoc!.getPage(pdfPageNum)
         if (cancelled) return
 
@@ -1232,7 +1251,10 @@ const PdfAnnotationEditor = forwardRef<PdfAnnotationEditorHandle, PdfAnnotationE
           renderTaskRef.current = null
         }
       }
-    }, [pdfDoc, currentPage, zoom, pages])
+      // Deliberately not depending on `pages`: annotation edits are drawn on the
+      // overlay canvas and must not re-rasterize the pdf.js page.
+      // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [pdfDoc, currentPage, zoom, currentPageIsBlank, currentPagePdfNumber])
 
     // ────────────────────────────────────────────────────────
     // Render annotations overlay
@@ -2236,7 +2258,18 @@ const PdfAnnotationEditor = forwardRef<PdfAnnotationEditorHandle, PdfAnnotationE
           const delta = e.deltaY > 0 ? -ZOOM_STEP : ZOOM_STEP
           setZoom(prev => {
             const newZoom = clampZoom(prev + delta)
-            queueMicrotask(() => emitChange(pagesRef.current, currentPageRef.current, newZoom))
+            // Coalesce rapid wheel ticks into one view-state update.
+            if (zoomPersistTimerRef.current !== null) {
+              window.clearTimeout(zoomPersistTimerRef.current)
+            }
+            zoomPersistTimerRef.current = window.setTimeout(() => {
+              zoomPersistTimerRef.current = null
+              emitChangeRef.current(
+                pagesRef.current,
+                currentPageRef.current,
+                zoomRef.current
+              )
+            }, 180)
             return newZoom
           })
           return
@@ -2285,7 +2318,13 @@ const PdfAnnotationEditor = forwardRef<PdfAnnotationEditorHandle, PdfAnnotationE
         }
       }
       el.addEventListener('wheel', onWheel, { passive: false })
-      return () => el.removeEventListener('wheel', onWheel)
+      return () => {
+        el.removeEventListener('wheel', onWheel)
+        if (zoomPersistTimerRef.current !== null) {
+          window.clearTimeout(zoomPersistTimerRef.current)
+          zoomPersistTimerRef.current = null
+        }
+      }
       // The scroll viewport only exists once a PDF is loaded (and not while the
       // loading/error states are rendered), so re-attach whenever it appears.
     }, [clampZoom, emitChange, value?.pdfStoragePath, pdfLoading, pdfError])
@@ -2443,10 +2482,12 @@ const PdfAnnotationEditor = forwardRef<PdfAnnotationEditorHandle, PdfAnnotationE
 
     // ────────────────────────────────────────────────────────
     // Build cross-page search index (text items per page)
-    // Runs once when the PDF doc loads or page count changes
+    // Built lazily on first search: extracting text for every page on open is
+    // wasted work when the user never searches.
     // ────────────────────────────────────────────────────────
     useEffect(() => {
       if (!pdfDoc) { setSearchIndex([]); return }
+      if (!searchVisible) return
       let cancelled = false
       // Show loading indicator only after 400ms (hides flicker for fast PDFs)
       const loadingTimer = setTimeout(() => { if (!cancelled) setSearchIndexBuilding(true) }, 400)
@@ -2481,7 +2522,15 @@ const PdfAnnotationEditor = forwardRef<PdfAnnotationEditorHandle, PdfAnnotationE
         clearTimeout(loadingTimer)
         setSearchIndexBuilding(false)
       }
-    }, [pdfDoc, totalPages])
+    }, [pdfDoc, totalPages, searchVisible])
+
+    // Drop a stale cross-page index when a different PDF is loaded (the editor
+    // instance is reused across notes).
+    useEffect(() => {
+      setSearchIndex([])
+      setSearchIndexBuilding(false)
+      searchGlobalResultsRef.current = []
+    }, [value?.pdfStoragePath])
 
     // ────────────────────────────────────────────────────────
     // Search: build cross-page results when query or index changes

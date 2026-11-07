@@ -130,4 +130,28 @@ describe('notes lib', () => {
     const page = await notesLib.getNoteSummaries({ limit: 2, offset: 1 })
     expect(page).toHaveLength(2)
   })
+
+  it('builds a lightweight backlink index without caching note bodies', async () => {
+    const s = (globalThis as any).__supabase_mock
+    const linkHtml = '<p>See also</p><div data-block-type="note-link" data-note-id="1"></div>'
+    s.__mockState.notes = [
+      makeNote({ id: '1', title: 'A' }),
+      makeNote({ id: '2', title: 'Links to A', content: linkHtml }),
+    ]
+
+    const index = await notesLib.getNoteLinkIndex()
+    expect(index).toHaveLength(1)
+    expect(index[0]).toMatchObject({ id: '2', linkIds: ['1'] })
+
+    // Fetching the index must not persist the fetched bodies in the note cache.
+    const storage = await import('../lib/offline/storage')
+    const cachedBody = await storage.getRow<{ __full?: boolean }>('notes', '2')
+    expect(cachedBody?.__full).not.toBe(true)
+
+    // The persisted index is served while offline.
+    s.__mockState.offline = true
+    const offlineIndex = await notesLib.getNoteLinkIndex()
+    expect(offlineIndex).toHaveLength(1)
+    expect(offlineIndex[0].linkIds).toEqual(['1'])
+  })
 })
