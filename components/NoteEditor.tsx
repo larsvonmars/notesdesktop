@@ -533,6 +533,8 @@ export default function NoteEditor({
   const autosaveTimeoutRef = useRef<number | null>(null)
   const isAutosavingRef = useRef(false)
   const autosaveRetryCountRef = useRef(0)
+  /** Set when an edit arrives while an autosave is in flight. */
+  const autosaveQueuedRef = useRef(false)
   const MAX_AUTOSAVE_RETRIES = 3
   const migratingLegacyImagesRef = useRef(false)
   const migratedNotesRef = useRef<Set<string>>(new Set())
@@ -693,6 +695,8 @@ export default function NoteEditor({
       window.clearTimeout(autosaveTimeoutRef.current)
       autosaveTimeoutRef.current = null
     }
+    // A queued follow-up autosave belongs to the previous note.
+    if (isNoteSwitched) autosaveQueuedRef.current = false
 
     // Mark that we're loading a note to suppress hasChanges flicker
     noteLoadingRef.current = true
@@ -1992,6 +1996,29 @@ export default function NoteEditor({
       if (isAuto) {
         isAutosavingRef.current = false
         setIsAutosaving(false)
+
+        // An edit landed while this autosave was in flight (e.g. fast PDF page
+        // switching). Save it now instead of waiting for another edit.
+        if (autosaveQueuedRef.current) {
+          autosaveQueuedRef.current = false
+          const queuedNoteId = note?.id
+          if (
+            hasChangesRef.current &&
+            queuedNoteId &&
+            prevNoteIdRef.current === queuedNoteId
+          ) {
+            autosaveTimeoutRef.current = window.setTimeout(() => {
+              autosaveTimeoutRef.current = null
+              if (
+                !isAutosavingRef.current &&
+                handleSaveRef.current &&
+                prevNoteIdRef.current === queuedNoteId
+              ) {
+                handleSaveRef.current({ isAuto: true })
+              }
+            }, 0)
+          }
+        }
       } else {
         setIsSaving(false)
       }
@@ -2023,7 +2050,11 @@ export default function NoteEditor({
       ;(async () => {
         try {
           // avoid scheduling a new autosave while one is running
-          if (isAutosavingRef.current) return
+          if (isAutosavingRef.current) {
+            // The in-flight save will pick this up when it settles.
+            autosaveQueuedRef.current = true
+            return
+          }
           await handleSave({ isAuto: true })
         } finally {
           autosaveTimeoutRef.current = null

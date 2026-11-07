@@ -5,6 +5,7 @@ import { NoteSyncError } from './offline/errors'
 import {
   enqueueMutation,
   getMutation,
+  hasPendingDelete,
   hasPendingMutation,
   listOutbox,
   loadPendingState,
@@ -15,6 +16,7 @@ import {
   getAllRows,
   getMeta,
   getRow,
+  mutateRow,
   putRow,
   putRows,
   deleteRow,
@@ -51,7 +53,10 @@ export interface FolderQueryOptions {
   offset?: number
 }
 
-type CachedFolder = Folder
+type CachedFolder = Folder & {
+  /** Last `updated_at` confirmed by the server (the DB trigger rewrites it). */
+  __serverUpdatedAt?: string
+}
 
 type CachedNoteRow = {
   id: string
@@ -59,6 +64,20 @@ type CachedNoteRow = {
   updated_at: string
   folder_id: string | null
   project_id: string | null
+  __serverUpdatedAt?: string
+}
+
+/** Strip cache-only fields before a folder leaves the data layer. */
+function toFolder(row: CachedFolder): Folder {
+  const { __serverUpdatedAt: _serverUpdatedAt, ...folder } = row
+  return folder
+}
+
+/** Newest of two ISO-8601 timestamps (undefined-safe). */
+function newestTimestamp(a?: string, b?: string): string | undefined {
+  if (!a) return b
+  if (!b) return a
+  return a > b ? a : b
 }
 
 const FOLDER_COLUMNS =
@@ -66,6 +85,23 @@ const FOLDER_COLUMNS =
 const REFRESH_TTL_MS = 15_000
 
 const lastRefresh = new Map<string, number>()
+
+/** Serializes folder saves so overlapping writes can't race the conflict guard. */
+const folderWriteChains = new Map<string, Promise<unknown>>()
+
+function withFolderWriteLock<T>(folderId: string, task: () => Promise<T>): Promise<T> {
+  const previous = folderWriteChains.get(folderId) ?? Promise.resolve()
+  const run = previous.then(task, task)
+  const guard = run.then(
+    () => undefined,
+    () => undefined
+  )
+  folderWriteChains.set(folderId, guard)
+  void guard.finally(() => {
+    if (folderWriteChains.get(folderId) === guard) folderWriteChains.delete(folderId)
+  })
+  return run
+}
 
 function shouldRefresh(key: string): boolean {
   const now = Date.now()
@@ -100,15 +136,30 @@ async function mergeFolderRows(rows: CachedFolder[], userId: string | null): Pro
   for (const incoming of rows) {
     if (hasPendingMutation('folders', incoming.id)) continue
     const existing = cachedById.get(incoming.id)
+
+    // Ignore a stale fetch that lost the race with a newer save. Only compare
+    // against server-confirmed timestamps (a legacy row without one is accepted
+    // so the marker can be recorded).
+    if (existing) {
+      const newestKnown = existing.__serverUpdatedAt
+      if (
+        newestKnown &&
+        typeof incoming.updated_at === 'string' &&
+        incoming.updated_at < newestKnown
+      ) {
+        continue
+      }
+    }
     if (
       !existing ||
       existing.name !== incoming.name ||
       existing.parent_id !== incoming.parent_id ||
       existing.project_id !== incoming.project_id ||
       existing.position !== incoming.position ||
-      existing.updated_at !== incoming.updated_at
+      existing.updated_at !== incoming.updated_at ||
+      existing.__serverUpdatedAt !== incoming.updated_at
     ) {
-      changed.push({ ...existing, ...incoming })
+      changed.push({ ...existing, ...incoming, __serverUpdatedAt: incoming.updated_at })
     }
   }
 
@@ -164,7 +215,7 @@ export async function getFolders(options?: FolderQueryOptions): Promise<Folder[]
       void refreshFolders(userId)
     }
     return applyPagination(
-      cached.slice().sort((a, b) => a.position - b.position),
+      cached.map(toFolder).slice().sort((a, b) => a.position - b.position),
       options
     )
   }
@@ -180,13 +231,13 @@ export async function getFolders(options?: FolderQueryOptions): Promise<Folder[]
     if (changed || reconciled) emitDataChanged('folders')
     const merged = await readCachedFolders(userId)
     return applyPagination(
-      merged.slice().sort((a, b) => a.position - b.position),
+      merged.map(toFolder).slice().sort((a, b) => a.position - b.position),
       options
     )
   } catch (error) {
     if (cached.length > 0) {
       return applyPagination(
-        cached.slice().sort((a, b) => a.position - b.position),
+        cached.map(toFolder).slice().sort((a, b) => a.position - b.position),
         options
       )
     }
@@ -209,7 +260,7 @@ export async function getSubfolders(parentId: string): Promise<Folder[]> {
 /** Get a single folder by ID. */
 export async function getFolder(id: string): Promise<Folder | null> {
   const cached = await getRow<CachedFolder>('folders', id)
-  if (cached) return cached
+  if (cached) return toFolder(cached)
 
   const { data, error } = await supabase
     .from('folders')
@@ -290,23 +341,57 @@ export async function createFolder(input: CreateFolderInput): Promise<Folder> {
   if (entry) await flushEntry(entry.id)
 
   const stored = await getRow<CachedFolder>('folders', folder.id)
-  return stored ?? folder
+  return stored ? toFolder(stored) : folder
 }
 
-/** Update a folder optimistically with an `updated_at` conflict guard. */
-export async function updateFolder(id: string, input: UpdateFolderInput): Promise<Folder> {
+/**
+ * Update a folder optimistically with an `updated_at` conflict guard. The
+ * cache+enqueue phase is serialized per folder and uses the last
+ * server-confirmed timestamp as the guard base (the DB trigger rewrites
+ * `updated_at`); the flush happens outside the lock.
+ */
+export function updateFolder(id: string, input: UpdateFolderInput): Promise<Folder> {
+  const prepared = withFolderWriteLock(id, () => prepareFolderUpdate(id, input))
+  return prepared.then(async ({ optimistic, entry }) => {
+    void notifySyncState()
+    if (entry) await flushEntry(entry.id)
+    const stored = await getRow<CachedFolder>('folders', id)
+    return stored ? toFolder(stored) : optimistic
+  })
+}
+
+interface PreparedFolderUpdate {
+  optimistic: Folder
+  entry: Awaited<ReturnType<typeof enqueueMutation>>
+}
+
+async function prepareFolderUpdate(
+  id: string,
+  input: UpdateFolderInput
+): Promise<PreparedFolderUpdate> {
+  if (hasPendingDelete('folders', id)) {
+    throw new Error('This folder is being deleted.')
+  }
+
   let cached = await getRow<CachedFolder>('folders', id)
 
   if (!cached) {
     const remote = await getFolder(id)
     if (!remote) throw new Error('Folder not found')
-    cached = remote
+    // Re-read so the server-confirmed timestamp marker is available.
+    cached = (await getRow<CachedFolder>('folders', id)) ?? { ...remote }
   }
 
   const now = new Date().toISOString()
-  const optimistic: Folder = { ...cached, ...input, updated_at: now }
+  const optimistic: Folder = { ...toFolder(cached), ...input, updated_at: now }
 
-  await putRow('folders', optimistic)
+  const storedAfterWrite = await mutateRow<CachedFolder>('folders', id, (current) => {
+    const serverUpdatedAt = newestTimestamp(current?.__serverUpdatedAt, cached.__serverUpdatedAt)
+    return {
+      ...optimistic,
+      ...(serverUpdatedAt ? { __serverUpdatedAt: serverUpdatedAt } : {}),
+    }
+  })
   emitDataChanged('folders', id)
 
   const entry = await enqueueMutation({
@@ -315,14 +400,12 @@ export async function updateFolder(id: string, input: UpdateFolderInput): Promis
     recordId: id,
     userId: cached.user_id ?? (await getCurrentUserId()),
     payload: { ...input, updated_at: now },
-    baseUpdatedAt: cached.updated_at,
+    // Guard against the last server version, not the optimistic local clock.
+    baseUpdatedAt:
+      storedAfterWrite?.__serverUpdatedAt ?? cached.__serverUpdatedAt ?? cached.updated_at,
   })
 
-  void notifySyncState()
-  if (entry) await flushEntry(entry.id)
-
-  const stored = await getRow<CachedFolder>('folders', id)
-  return stored ?? optimistic
+  return { optimistic, entry }
 }
 
 async function collectDescendantIds(folderId: string, folders: Folder[]): Promise<Set<string>> {
@@ -478,7 +561,9 @@ export async function moveFolder(
       recordId: note.id,
       userId: note.user_id ?? userId,
       payload: { project_id: targetProjectId, updated_at: now },
-      baseUpdatedAt: note.updated_at,
+      // Use the server-confirmed timestamp when the note was never edited
+      // locally; a queued note update keeps its own (older) base.
+      baseUpdatedAt: note.__serverUpdatedAt ?? note.updated_at,
     })
   }
 
@@ -552,7 +637,19 @@ export async function applyRealtimeFolder(row: CachedFolder | null, deletedId?: 
   if (hasPendingMutation('folders', row.id)) return
 
   const existing = await getRow<CachedFolder>('folders', row.id)
-  await putRow('folders', { ...existing, ...row })
+  // Realtime echoes can arrive out of order; keep the newest server version.
+  if (
+    existing?.__serverUpdatedAt &&
+    typeof row.updated_at === 'string' &&
+    row.updated_at < existing.__serverUpdatedAt
+  ) {
+    return
+  }
+  await putRow('folders', {
+    ...existing,
+    ...row,
+    ...(typeof row.updated_at === 'string' ? { __serverUpdatedAt: row.updated_at } : {}),
+  })
   emitDataChanged('folders', row.id)
 }
 
@@ -605,15 +702,23 @@ export async function reorderFolders(
 
   for (const { sibling, position } of updates) {
     if (sibling.position === position) continue
-    const optimistic = { ...sibling, position, updated_at: now }
-    await putRow('folders', optimistic)
-    await enqueueMutation({
-      table: 'folders',
-      operation: 'update',
-      recordId: sibling.id,
-      userId: sibling.user_id ?? userId,
-      payload: { position, updated_at: now },
-      baseUpdatedAt: sibling.updated_at,
+    // Re-read and write under the per-folder lock so a concurrent rename is
+    // not clobbered by the reorder snapshot.
+    await withFolderWriteLock(sibling.id, async () => {
+      const latest = (await getRow<CachedFolder>('folders', sibling.id)) ?? sibling
+      const optimistic: Folder = { ...toFolder(latest), position, updated_at: now }
+      await putRow('folders', {
+        ...optimistic,
+        __serverUpdatedAt: latest.__serverUpdatedAt,
+      })
+      await enqueueMutation({
+        table: 'folders',
+        operation: 'update',
+        recordId: sibling.id,
+        userId: latest.user_id ?? userId,
+        payload: { position, updated_at: now },
+        baseUpdatedAt: latest.__serverUpdatedAt ?? latest.updated_at,
+      })
     })
   }
 
@@ -625,4 +730,5 @@ export async function reorderFolders(
 /** Test helper: reset refresh throttles between tests. */
 export function __resetFoldersOfflineForTests(): void {
   lastRefresh.clear()
+  folderWriteChains.clear()
 }

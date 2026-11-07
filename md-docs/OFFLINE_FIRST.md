@@ -41,6 +41,41 @@ network round-trip.
 
 Rapid edits to the same record are coalesced into a single queued mutation.
 
+## Concurrency & ordering guarantees
+
+Several invariants keep rapid saves (e.g. fast PDF page switching) from
+producing false conflicts or losing edits:
+
+1. **Saves are serialized per record.** `updateNote` / `updateFolder` run
+   their cache-write + enqueue phase through a per-id promise chain, so a
+   second save reads the cache (and the server-confirmed base) after the first
+   local write; the network flush happens outside that lock so a slow save does
+   not block the next edit.
+2. **The guard uses the last server-confirmed timestamp.** The `notes` /
+   `folders` tables have a `handle_updated_at()` trigger that overwrites
+   `updated_at` with the server clock, so the optimistic local timestamp can
+   never be used as the conflict base. Cached rows carry
+   `__serverUpdatedAt` (set from every server row / realtime echo) and that is
+   the value sent in `WHERE updated_at = ?`.
+3. **Flushes are chained, not shared.** A flush requested by a newer save gets
+   its own pass after the running one instead of being swallowed.
+4. **In-flight edits are never dropped.** Outbox mutations carry a `revision`
+   that is bumped when an edit is coalesced into them. Before removing an
+   applied mutation the flusher checks the revision; if it changed, the newer
+   payload is rebased on the server row that was just written and sent in the
+   same flush (an insert that was edited in flight is converted to an update).
+5. **Stale responses are ignored.** Merges from background fetches and
+   realtime echoes are rejected when they are older than the cached
+   server-confirmed `updated_at`, so a slow fetch cannot roll the cache back.
+6. **Deletes are terminal.** A queued deletion drops later updates for the
+   record, and a delete that lands while an update is in flight never
+   resurrects the row in the cache or on the server.
+7. **Duplicate flushes are idempotent.** If another window already applied the
+   mutation (it is gone, or the remote row already contains the payload), the
+   zero-row guard result is treated as success instead of a conflict. The
+   conditional removal runs in one IndexedDB transaction, so a concurrent
+   revision bump cannot be deleted by mistake.
+
 ## Conflicts
 
 Updates are sent with a timestamp guard:
@@ -59,7 +94,8 @@ Conflicts are surfaced in the toast system and in the bottom-right sync
 indicator. From there the user can:
 
 - **Keep my version** — re-queue the local row (re-inserting it if the remote
-  row was deleted).
+  row was deleted). Cache-only fields (`__full`, `__serverUpdatedAt`) are
+  stripped before the payload is sent to PostgREST.
 - **Use server version** — replace the local cache row with the server row.
 
 ## Sync status

@@ -5,14 +5,17 @@ import { createOfflineId, getCurrentUserId } from './offline/identity'
 import {
   enqueueMutation,
   getMutation,
+  hasPendingDelete,
   hasPendingMutation,
   loadPendingState,
 } from './offline/queue'
 import { flushOutbox, notifySyncState } from './offline/sync'
+import type { QueuedMutation } from './offline/types'
 import {
   getAllRows,
   getMeta,
   getRow,
+  mutateRow,
   putRow,
   putRows,
   deleteRow,
@@ -130,6 +133,12 @@ type CachedNote = NoteSummary & {
   content?: string
   /** True when the cached row contains the full body. */
   __full?: boolean
+  /**
+   * Last `updated_at` confirmed by the server. Local saves use it as the
+   * conflict-guard base, because the DB trigger rewrites updated_at server-side
+   * and the optimistic local timestamp can never match it.
+   */
+  __serverUpdatedAt?: string
 }
 
 type CachedFolder = {
@@ -139,6 +148,27 @@ type CachedFolder = {
 }
 
 const lastRefresh = new Map<string, number>()
+
+/**
+ * Per-note write chains. Overlapping saves for the same note are serialized so
+ * the second save always reads the cache after the first save's flush settled
+ * (and therefore uses the correct server-issued `updated_at` as its base).
+ */
+const noteWriteChains = new Map<string, Promise<unknown>>()
+
+function withNoteWriteLock<T>(noteId: string, task: () => Promise<T>): Promise<T> {
+  const previous = noteWriteChains.get(noteId) ?? Promise.resolve()
+  const run = previous.then(task, task)
+  const guard = run.then(
+    () => undefined,
+    () => undefined
+  )
+  noteWriteChains.set(noteId, guard)
+  void guard.finally(() => {
+    if (noteWriteChains.get(noteId) === guard) noteWriteChains.delete(noteId)
+  })
+  return run
+}
 
 function shouldRefresh(key: string): boolean {
   const now = Date.now()
@@ -153,7 +183,12 @@ function metaKey(kind: string, userId: string | null): string {
 }
 
 function toSummary(row: CachedNote): NoteSummary {
-  const { content: _content, __full: _full, ...summary } = row
+  const {
+    content: _content,
+    __full: _full,
+    __serverUpdatedAt: _serverUpdatedAt,
+    ...summary
+  } = row
   return summary
 }
 
@@ -205,18 +240,38 @@ async function mergeNoteRows(rows: CachedNote[], options: MergeOptions): Promise
     if (hasPendingMutation('notes', incoming.id)) continue
 
     const existing = cachedById.get(incoming.id)
+    if (existing) {
+      // Ignore a stale fetch that lost the race with a newer save. Without this,
+      // an in-flight refresh could roll the cache back and make the next save
+      // fail its updated_at guard. Only compare against server-confirmed
+      // timestamps: a legacy row without one must still be accepted so the
+      // marker can be recorded.
+      const newestKnown = existing.__serverUpdatedAt
+      if (
+        newestKnown &&
+        typeof incoming.updated_at === 'string' &&
+        incoming.updated_at < newestKnown
+      ) {
+        continue
+      }
+    }
     if (!existing) {
-      changed.push({ ...incoming, __full: options.full })
+      changed.push({
+        ...incoming,
+        __full: options.full,
+        __serverUpdatedAt: incoming.updated_at,
+      })
       continue
     }
 
     const merged: CachedNote = options.full
-      ? { ...existing, ...incoming, __full: true }
+      ? { ...existing, ...incoming, __full: true, __serverUpdatedAt: incoming.updated_at }
       : {
           ...existing,
           ...incoming,
           content: existing.content,
           __full: existing.__full ?? false,
+          __serverUpdatedAt: incoming.updated_at,
         }
 
     const isChanged =
@@ -227,6 +282,7 @@ async function mergeNoteRows(rows: CachedNote[], options: MergeOptions): Promise
       existing.position !== merged.position ||
       existing.note_type !== merged.note_type ||
       existing.__full !== merged.__full ||
+      existing.__serverUpdatedAt !== merged.__serverUpdatedAt ||
       (options.full && existing.content !== merged.content)
 
     if (isChanged) changed.push(merged)
@@ -256,8 +312,30 @@ async function reconcileMissingNotes(
   return missing.length > 0
 }
 
-async function putCachedNote(note: Note): Promise<void> {
-  await putRow('notes', { ...note, __full: true })
+/** Newest of two ISO-8601 timestamps (undefined-safe). */
+function newestTimestamp(a?: string, b?: string): string | undefined {
+  if (!a) return b
+  if (!b) return a
+  return a > b ? a : b
+}
+
+/**
+ * Optimistic cache write. Runs as a single IndexedDB transaction and keeps the
+ * newest server-confirmed timestamp, so a concurrent flush recording a fresh
+ * `__serverUpdatedAt` can never be clobbered by a stale save snapshot.
+ */
+async function putCachedNote(
+  note: Note,
+  extra?: { __serverUpdatedAt?: string }
+): Promise<CachedNote | undefined> {
+  return mutateRow<CachedNote>('notes', note.id, (current) => {
+    const serverUpdatedAt = newestTimestamp(current?.__serverUpdatedAt, extra?.__serverUpdatedAt)
+    return {
+      ...note,
+      __full: true,
+      ...(serverUpdatedAt ? { __serverUpdatedAt: serverUpdatedAt } : {}),
+    }
+  })
 }
 
 function stripCacheFields(note: Note): Record<string, unknown> {
@@ -852,8 +930,32 @@ export async function createNote(input: CreateNoteInput): Promise<Note> {
 /**
  * Update a note optimistically. A conditional `updated_at` guard is sent with
  * the queued mutation so concurrent edits are detected instead of clobbered.
+ *
+ * The cache write + enqueue phase is serialized per note so the second save
+ * always reads the cache (and the server-confirmed base) after the first
+ * local phase; the network flush happens outside the lock so a slow save does
+ * not block the next edit.
  */
-export async function updateNote(id: string, input: UpdateNoteInput): Promise<Note> {
+export function updateNote(id: string, input: UpdateNoteInput): Promise<Note> {
+  const prepared = withNoteWriteLock(id, () => prepareNoteUpdate(id, input))
+  return prepared.then(async ({ optimistic, entry }) => {
+    void notifySyncState()
+    if (entry) await flushEntry(entry.id)
+    const latest = await getCachedNote(id)
+    return latest ? toNote(latest) : optimistic
+  })
+}
+
+interface PreparedNoteUpdate {
+  optimistic: Note
+  entry: QueuedMutation | null
+}
+
+async function prepareNoteUpdate(id: string, input: UpdateNoteInput): Promise<PreparedNoteUpdate> {
+  if (hasPendingDelete('notes', id)) {
+    throw new NoteSyncError(id, 'This note is being deleted.')
+  }
+
   let cached = await getCachedNote(id)
 
   if (!cached) {
@@ -872,8 +974,13 @@ export async function updateNote(id: string, input: UpdateNoteInput): Promise<No
     updated_at: now,
   }
 
-  await putCachedNote(optimistic)
+  const storedAfterWrite = await putCachedNote(optimistic, {
+    __serverUpdatedAt: cached.__serverUpdatedAt,
+  })
   emitDataChanged('notes', id)
+
+  const baseUpdatedAt =
+    storedAfterWrite?.__serverUpdatedAt ?? cached.__serverUpdatedAt ?? cached.updated_at
 
   const entry = await enqueueMutation({
     table: 'notes',
@@ -881,18 +988,19 @@ export async function updateNote(id: string, input: UpdateNoteInput): Promise<No
     recordId: id,
     userId,
     payload: { ...input, updated_at: now },
-    baseUpdatedAt: cached.updated_at,
+    // Guard against the last server version, not the optimistic local clock.
+    baseUpdatedAt,
   })
 
-  void notifySyncState()
-  if (entry) await flushEntry(entry.id)
-
-  const latest = await getCachedNote(id)
-  return latest ? toNote(latest) : optimistic
+  return { optimistic, entry }
 }
 
 /** Delete a note locally and queue the remote deletion. */
-export async function deleteNote(id: string): Promise<void> {
+export function deleteNote(id: string): Promise<void> {
+  return withNoteWriteLock(id, () => deleteNoteLocked(id))
+}
+
+async function deleteNoteLocked(id: string): Promise<void> {
   const cached = await getCachedNote(id)
   const userId = cached?.user_id ?? (await getCurrentUserId())
 
@@ -1005,12 +1113,22 @@ export async function applyRealtimeNote(row: CachedNote | null, deletedId?: stri
   if (hasPendingMutation('notes', row.id)) return
 
   const existing = await getCachedNote(row.id)
+  // Realtime echoes can arrive out of order; never let an older server row
+  // replace a newer cached server version.
+  if (
+    existing?.__serverUpdatedAt &&
+    typeof row.updated_at === 'string' &&
+    row.updated_at < existing.__serverUpdatedAt
+  ) {
+    return
+  }
   const hasContent = typeof row.content === 'string'
   await putRow('notes', {
     ...existing,
     ...row,
     content: hasContent ? row.content : existing?.content,
     __full: hasContent || (existing?.__full ?? false),
+    ...(typeof row.updated_at === 'string' ? { __serverUpdatedAt: row.updated_at } : {}),
   })
   emitDataChanged('notes', row.id)
 }
@@ -1142,4 +1260,5 @@ export async function deleteNoteAttachment(id: string): Promise<void> {
 /** Test helper: reset refresh throttles between tests. */
 export function __resetNotesOfflineForTests(): void {
   lastRefresh.clear()
+  noteWriteChains.clear()
 }

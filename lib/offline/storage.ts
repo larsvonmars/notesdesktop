@@ -180,6 +180,94 @@ export async function deleteRow(storeName: OfflineStoreName, key: string): Promi
   }
 }
 
+export interface ConditionalDeleteResult<T> {
+  deleted: boolean
+  row?: T
+}
+
+/**
+ * Deletes a row only when `predicate` accepts the stored value. The check and
+ * the delete run inside one IndexedDB readwrite transaction, so another tab
+ * cannot modify the row between them (plain read-then-delete is racy across
+ * windows that share the same database).
+ */
+export async function deleteRowIf<T>(
+  storeName: OfflineStoreName,
+  key: string,
+  predicate: (row: T) => boolean
+): Promise<ConditionalDeleteResult<T>> {
+  if (!canUseIndexedDb()) {
+    const store = getMemoryState().rows[storeName]
+    const row = store.get(key) as T | undefined
+    if (row === undefined || !predicate(clone(row))) {
+      return { deleted: false, row: row === undefined ? undefined : clone(row) }
+    }
+    store.delete(key)
+    return { deleted: true, row: clone(row) }
+  }
+
+  try {
+    return await withStore(storeName, 'readwrite', async (store) => {
+      const row = (await requestToPromise(store.get(key) as IDBRequest<T | undefined>)) as
+        | T
+        | undefined
+      if (row === undefined || !predicate(row)) {
+        return { deleted: false, row }
+      }
+      store.delete(key)
+      return { deleted: true, row }
+    })
+  } catch {
+    const store = getMemoryState().rows[storeName]
+    const row = store.get(key) as T | undefined
+    if (row === undefined || !predicate(clone(row))) {
+      return { deleted: false, row: row === undefined ? undefined : clone(row) }
+    }
+    store.delete(key)
+    return { deleted: true, row: clone(row) }
+  }
+}
+
+/**
+ * Reads a row, lets `mutator` produce its replacement and writes it — all in
+ * one IndexedDB readwrite transaction. `mutator` returning `null` aborts the
+ * write. This prevents another tab from changing the row between the read and
+ * the write.
+ */
+export async function mutateRow<T extends StoredRow>(
+  storeName: OfflineStoreName,
+  key: string,
+  mutator: (current: T | undefined) => T | null
+): Promise<T | undefined> {
+  const apply = (current: T | undefined): T | null => mutator(current === undefined ? undefined : clone(current))
+
+  if (!canUseIndexedDb()) {
+    const store = getMemoryState().rows[storeName]
+    const next = apply(store.get(key) as T | undefined)
+    if (next === null) return store.get(key) as T | undefined
+    store.set(key, clone(next))
+    return clone(next)
+  }
+
+  try {
+    return await withStore(storeName, 'readwrite', async (store) => {
+      const current = (await requestToPromise(store.get(key) as IDBRequest<T | undefined>)) as
+        | T
+        | undefined
+      const next = apply(current)
+      if (next === null) return current
+      store.put(next)
+      return next
+    })
+  } catch {
+    const store = getMemoryState().rows[storeName]
+    const next = apply(store.get(key) as T | undefined)
+    if (next === null) return store.get(key) as T | undefined
+    store.set(key, clone(next))
+    return clone(next)
+  }
+}
+
 export async function clearRows(storeName: OfflineStoreName): Promise<void> {
   if (!canUseIndexedDb()) {
     getMemoryState().rows[storeName].clear()

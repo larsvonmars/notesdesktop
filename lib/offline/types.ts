@@ -20,6 +20,13 @@ export interface QueuedMutation {
   attempts: number
   status: MutationStatus
   lastError?: string
+  /**
+   * Bumped whenever an edit is coalesced into this mutation. The flusher
+   * snapshots the revision before sending; if it changed while the request was
+   * in flight the newer payload is rebased on the server row and re-sent
+   * instead of being discarded.
+   */
+  revision?: number
   /** Local row kept when a conflict was detected. */
   local?: Record<string, unknown> | null
   /** Latest server row captured when a conflict was detected. */

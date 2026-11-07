@@ -178,7 +178,11 @@ class MockQuery implements PromiseLike<{ data: any; error: any; count?: number }
         const nextRow = {
           ...row,
           ...patch,
-          updated_at: patch.updated_at ?? nowIso(),
+          // Mirrors the DB trigger on public.notes/folders, which overwrites
+          // any client-supplied updated_at with the server clock.
+          updated_at: mockState.serverUpdatedAt
+            ? nextServerTimestamp()
+            : patch.updated_at ?? nowIso(),
         }
         updated.push(nextRow)
         return nextRow
@@ -246,7 +250,14 @@ class MockQuery implements PromiseLike<{ data: any; error: any; count?: number }
     return rows.map((row) => applyProjection(row, this.projection))
   }
 
+  private async settle(): Promise<void> {
+    if (mockState.latencyMs > 0) {
+      await new Promise((resolve) => setTimeout(resolve, mockState.latencyMs))
+    }
+  }
+
   private async runSingle(strict: boolean): Promise<{ data: any; error: any }> {
+    await this.settle()
     const result = this.execute()
     if (result.error) return { data: null, error: result.error }
 
@@ -271,7 +282,9 @@ class MockQuery implements PromiseLike<{ data: any; error: any; count?: number }
     onfulfilled?: ((value: { data: any; error: any; count?: number }) => TResult1 | PromiseLike<TResult1>) | null,
     onrejected?: ((reason: any) => TResult2 | PromiseLike<TResult2>) | null
   ): PromiseLike<TResult1 | TResult2> {
-    return Promise.resolve(this.execute()).then(onfulfilled, onrejected)
+    return this.settle()
+      .then(() => this.execute())
+      .then(onfulfilled, onrejected)
   }
 }
 
@@ -283,6 +296,19 @@ const mockState = {
   user: { id: 'user-1' } as { id: string } | null,
   offline: false,
   nextError: null as any,
+  /** Simulate the `handle_updated_at` DB trigger rewriting updated_at. */
+  serverUpdatedAt: false,
+  /** Artificial network latency (ms) applied to every request. */
+  latencyMs: 0,
+}
+
+// Monotonic server clock. Anchored at/after the fixed BASE_TIME used by the
+// tests so the assertions also hold on machines with an older system clock.
+let serverTimestampMs = Math.max(Date.now(), Date.parse('2026-01-01T10:00:00.000Z'))
+
+function nextServerTimestamp(): string {
+  serverTimestampMs += 1
+  return new Date(serverTimestampMs).toISOString()
 }
 
 function rowsForTable(table: string): Row[] {
@@ -340,6 +366,9 @@ export const supabase = {
     mockState.user = { id: 'user-1' }
     mockState.offline = false
     mockState.nextError = null
+    mockState.serverUpdatedAt = false
+    mockState.latencyMs = 0
+    serverTimestampMs = Math.max(Date.now(), Date.parse('2026-01-01T10:00:00.000Z'))
   },
 }
 
