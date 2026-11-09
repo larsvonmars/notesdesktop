@@ -41,7 +41,7 @@ export const RAIL_DESTINATIONS: readonly ViewNavigationItem[] = [
   {
     id: 'tasks',
     view: 'tasks',
-    label: 'Tasks',
+    label: 'Planner',
     icon: ListTodo,
     shortcut: '3',
     description: 'Tasks, calendar and smart plans',

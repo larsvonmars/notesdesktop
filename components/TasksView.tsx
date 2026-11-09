@@ -3,18 +3,13 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import {
   AlertTriangle,
-  CalendarDays,
   CalendarPlus,
   Columns3,
-  LayoutDashboard,
-  Layers,
   List,
-  ListTodo,
   Loader2,
+  Menu,
   Plus,
-  Repeat,
-  Settings2,
-  Wand2,
+  Star,
 } from 'lucide-react'
 import { Button } from '@/components/ui/Button'
 import { useToast } from '@/components/ToastProvider'
@@ -63,6 +58,10 @@ import type {
 import CalendarView from './planner/CalendarView'
 import EventFormModal from './planner/EventFormModal'
 import OverviewView from './planner/OverviewView'
+import PlannerSidebar, {
+  PlannerSidebarDrawer,
+  type PlannerSection,
+} from './planner/PlannerSidebar'
 import PlannerSettingsView from './planner/PlannerSettingsView'
 import ProjectsView from './planner/ProjectsView'
 import SmartPlannerView from './planner/SmartPlannerView'
@@ -72,26 +71,20 @@ import TaskKanbanView from './planner/TaskKanbanView'
 import TaskListView from './planner/TaskListView'
 import TimetableView from './planner/TimetableView'
 
-type PlannerSection =
-  | 'overview'
-  | 'tasks'
-  | 'calendar'
-  | 'timetable'
-  | 'plan'
-  | 'projects'
-  | 'settings'
-
 type TaskMode = 'list' | 'board'
 
-const SECTIONS: { key: PlannerSection; label: string; icon: typeof ListTodo }[] = [
-  { key: 'overview', label: 'Overview', icon: LayoutDashboard },
-  { key: 'tasks', label: 'Tasks', icon: ListTodo },
-  { key: 'calendar', label: 'Calendar', icon: CalendarDays },
-  { key: 'timetable', label: 'Timetable', icon: Repeat },
-  { key: 'plan', label: 'Smart plan', icon: Wand2 },
-  { key: 'projects', label: 'Projects', icon: Layers },
-  { key: 'settings', label: 'Settings', icon: Settings2 },
-]
+const SIDEBAR_STORAGE_KEY = 'planner:sidebar-collapsed'
+
+const SECTION_SHORTCUTS: Record<string, PlannerSection> = {
+  '1': 'overview',
+  '2': 'tasks',
+  '3': 'starred',
+  '4': 'projects',
+  '5': 'calendar',
+  '6': 'timetable',
+  '7': 'plan',
+  '8': 'settings',
+}
 
 export interface TasksViewProps {
   notes: NoteSummary[]
@@ -141,6 +134,15 @@ export default function TasksView({
   const [eventDefaultRecurring, setEventDefaultRecurring] = useState(false)
 
   const [detailTaskId, setDetailTaskId] = useState<string | null>(null)
+  const [mobileNavOpen, setMobileNavOpen] = useState(false)
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(() => {
+    if (typeof window === 'undefined') return false
+    try {
+      return window.localStorage.getItem(SIDEBAR_STORAGE_KEY) === '1'
+    } catch {
+      return false
+    }
+  })
 
   const notifiedRef = useRef<Set<string>>(new Set())
 
@@ -206,6 +208,40 @@ export default function TasksView({
   useEffect(() => {
     void loadData()
   }, [loadData])
+
+  useEffect(() => {
+    const handler = (event: KeyboardEvent) => {
+      if (!event.altKey || event.ctrlKey || event.metaKey || event.shiftKey) return
+      const target = SECTION_SHORTCUTS[event.key]
+      if (!target) return
+      const element = event.target as HTMLElement | null
+      if (
+        element &&
+        (element.tagName === 'INPUT' ||
+          element.tagName === 'TEXTAREA' ||
+          element.tagName === 'SELECT' ||
+          element.isContentEditable)
+      ) {
+        return
+      }
+      event.preventDefault()
+      setSection(target)
+    }
+    document.addEventListener('keydown', handler)
+    return () => document.removeEventListener('keydown', handler)
+  }, [])
+
+  const toggleSidebar = useCallback(() => {
+    setSidebarCollapsed((current) => {
+      const next = !current
+      try {
+        window.localStorage.setItem(SIDEBAR_STORAGE_KEY, next ? '1' : '0')
+      } catch {
+        // ignore
+      }
+      return next
+    })
+  }, [])
 
   const refreshPatterns = useCallback(async () => {
     try {
@@ -620,7 +656,7 @@ export default function TasksView({
 
   // ── Render ─────────────────────────────────────────────────────────
 
-  const counts = useMemo(
+  const headerCounts = useMemo(
     () => ({
       open: openTasks.length,
       events: events.filter((event) => !event.is_cancelled).length,
@@ -632,9 +668,50 @@ export default function TasksView({
     [openTasks, events],
   )
 
+  const starredTasks = useMemo(() => tasks.filter((task) => task.is_starred), [tasks])
+
+  const sidebarCounts = useMemo(() => {
+    const now = new Date()
+    const todayStart = getStartOfDay(now)
+    const weekEnd = addDays(todayStart, 7)
+    const activePlan = plans.find((plan) => plan.status === 'active') ?? null
+    const planProgress =
+      activePlan && activePlan.items.length > 0
+        ? Math.round(
+            (activePlan.items.filter(
+              (item) => item.status === 'completed' || item.status === 'skipped',
+            ).length /
+              activePlan.items.length) *
+              100,
+          )
+        : activePlan
+          ? 0
+          : null
+
+    return {
+      open: openTasks.length,
+      starred: tasks.filter((task) => task.is_starred && isTaskOpen(task)).length,
+      projects: localProjects.length,
+      upcomingEvents: events.filter((event) => {
+        if (event.is_cancelled) return false
+        const start = new Date(event.start_time)
+        return start >= todayStart && start <= weekEnd
+      }).length,
+      overdue: openTasks.filter(
+        (task) => task.due_date && new Date(task.due_date).getTime() < todayStart.getTime(),
+      ).length,
+      dueToday: openTasks.filter(
+        (task) => task.due_date && isSameDay(new Date(task.due_date), now),
+      ).length,
+      freeHours: Math.round(availableMinutes / 60),
+      activePlanProgress: planProgress,
+    }
+  }, [openTasks, tasks, localProjects, events, plans, availableMinutes])
+
   return (
-    <div className="h-full overflow-y-auto scroll-thin">
-      <div className="mx-auto w-full max-w-7xl px-4 pb-24 pt-6 sm:px-6 lg:px-8 lg:pb-12">
+    <div className="flex h-full min-h-0">
+      <div className="min-h-0 flex-1 overflow-y-auto scroll-thin">
+        <div className="mx-auto w-full max-w-7xl px-4 pb-24 pt-6 sm:px-6 lg:px-8 lg:pb-12">
         <header className="animate-rise-in flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
           <div className="min-w-0">
             <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-muted">
@@ -644,15 +721,26 @@ export default function TasksView({
               Planner
             </h1>
             <p className="mt-1.5 text-sm leading-6 text-muted">
-              {counts.open} open {counts.open === 1 ? 'task' : 'tasks'}
-              {counts.overdue > 0 ? ` · ${counts.overdue} overdue` : ''}
-              {counts.events > 0
-                ? ` · ${counts.events} ${counts.events === 1 ? 'event' : 'events'}`
+              {headerCounts.open} open {headerCounts.open === 1 ? 'task' : 'tasks'}
+              {headerCounts.overdue > 0 ? ` · ${headerCounts.overdue} overdue` : ''}
+              {headerCounts.events > 0
+                ? ` · ${headerCounts.events} ${headerCounts.events === 1 ? 'event' : 'events'}`
                 : ''}
             </p>
           </div>
 
           <div className="flex w-full flex-col gap-2 sm:flex-row lg:w-auto">
+            <Button
+              type="button"
+              variant="secondary"
+              size="md"
+              icon={Menu}
+              className="lg:hidden"
+              onClick={() => setMobileNavOpen(true)}
+              aria-label="Open planner navigation"
+            >
+              Sections
+            </Button>
             <Button
               type="button"
               variant="secondary"
@@ -668,30 +756,6 @@ export default function TasksView({
           </div>
         </header>
 
-        <nav
-          aria-label="Planner sections"
-          className="animate-rise-in mt-5 flex items-center gap-1 overflow-x-auto pb-1 scrollbar-hide"
-        >
-          {SECTIONS.map(({ key, label, icon: Icon }) => {
-            const active = section === key
-            return (
-              <button
-                key={key}
-                type="button"
-                onClick={() => setSection(key)}
-                aria-current={active ? 'page' : undefined}
-                className={`focus-ring flex shrink-0 items-center gap-1.5 rounded-full px-3 py-1.5 text-[12px] font-semibold transition-colors ${
-                  active
-                    ? 'bg-accent text-accent-foreground shadow-sm'
-                    : 'text-muted hover:bg-[var(--surface-hover)] hover:text-foreground'
-                }`}
-              >
-                <Icon size={14} strokeWidth={active ? 2.1 : 1.85} />
-                {label}
-              </button>
-            )
-          })}
-        </nav>
 
         {(loadError || eventsError) && (
           <div className="mt-4 flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-danger bg-[var(--danger-light)] px-4 py-3 text-sm text-danger">
@@ -823,6 +887,45 @@ export default function TasksView({
               </div>
             )}
 
+            {section === 'starred' && (
+              <div className="space-y-3">
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <div>
+                    <h2 className="flex items-center gap-2 font-display text-base font-semibold text-foreground">
+                      <Star size={15} className="fill-amber-500 text-amber-500" />
+                      Starred tasks
+                    </h2>
+                    <p className="mt-0.5 text-[11px] text-muted">
+                      {starredTasks.filter(isTaskOpen).length} open · {starredTasks.length} total
+                    </p>
+                  </div>
+                  <Button
+                    type="button"
+                    variant="secondary"
+                    size="sm"
+                    icon={Plus}
+                    onClick={() => openNewTask()}
+                  >
+                    New task
+                  </Button>
+                </div>
+                <TaskListView
+                  tasks={starredTasks}
+                  projects={localProjects}
+                  notes={notes}
+                  recurrencePatterns={recurrencePatterns}
+                  starredOnly
+                  onOpenTask={(task) => setDetailTaskId(task.id)}
+                  onEditTask={openEditTask}
+                  onToggleComplete={(task) => void handleToggleComplete(task)}
+                  onToggleStar={(task) => void handleToggleStar(task)}
+                  onDeleteTask={(task) => void handleDeleteTask(task)}
+                  onQuickAdd={(title, date) => void handleQuickAdd(title, date)}
+                  onNewTask={() => openNewTask()}
+                />
+              </div>
+            )}
+
             {section === 'calendar' && (
               <CalendarView
                 events={events}
@@ -897,7 +1000,29 @@ export default function TasksView({
             )}
           </div>
         )}
+        </div>
       </div>
+
+      <PlannerSidebar
+        className="hidden lg:flex"
+        activeSection={section}
+        counts={sidebarCounts}
+        collapsed={sidebarCollapsed}
+        onToggleCollapsed={toggleSidebar}
+        onSelect={setSection}
+        onNewTask={() => openNewTask()}
+        onNewEvent={() => openNewEvent()}
+      />
+
+      <PlannerSidebarDrawer
+        open={mobileNavOpen}
+        onClose={() => setMobileNavOpen(false)}
+        activeSection={section}
+        counts={sidebarCounts}
+        onSelect={setSection}
+        onNewTask={() => openNewTask()}
+        onNewEvent={() => openNewEvent()}
+      />
 
       <TaskFormModal
         isOpen={taskModalOpen}

@@ -25,4 +25,20 @@ describe('Planner shell', () => {
     expect(html).toContain('Smart plan')
     expect(html).toContain('Loading your planner')
   })
+
+  it('renders the planner navigation inside a right-hand sidebar', () => {
+    const html = renderToStaticMarkup(
+      <ToastProvider>
+        <TasksView notes={[]} projects={[]} onSelectNote={() => {}} onOpenProject={() => {}} />
+      </ToastProvider>,
+    )
+
+    expect(html).toContain('aria-label="Planner navigation"')
+    expect(html).toContain('Your work')
+    expect(html).toContain('Schedule')
+    expect(html).toContain('Starred')
+    expect(html).toContain('Alt+2')
+    expect(html).toContain('Collapse planner sidebar')
+    expect(html).toContain('Sections')
+  })
 })
