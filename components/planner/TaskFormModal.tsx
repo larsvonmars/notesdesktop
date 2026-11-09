@@ -1,6 +1,7 @@
 'use client'
 
 import { useEffect, useMemo, useState, type FormEvent } from 'react'
+import { ListTodo } from 'lucide-react'
 import { useToast } from '@/components/ToastProvider'
 import BaseModal, {
   ModalBody,
@@ -360,6 +361,9 @@ export default function TaskFormModal({
       closeOnEscape={!saving && !deleting}
     >
       <ModalHeader onClose={onClose}>
+        <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-[var(--accent-light)] text-accent">
+          <ListTodo size={18} strokeWidth={1.9} />
+        </span>
         <div className="min-w-0">
           <ModalTitle>{editing ? 'Edit task' : 'New task'}</ModalTitle>
           <p className="mt-0.5 text-[11px] text-muted">
@@ -591,7 +595,7 @@ export default function TaskFormModal({
               </div>
             </div>
 
-            <div className="grid grid-cols-1 gap-4 rounded-2xl border border-[var(--border)] bg-[var(--surface-sunken)] p-4 sm:grid-cols-2">
+            <div className="grid grid-cols-1 gap-4 glass rounded-2xl p-4 sm:grid-cols-2">
               <ToggleSwitch
                 label="Starred"
                 description="Pin to the top of starred views"
@@ -629,7 +633,7 @@ export default function TaskFormModal({
               </div>
             </div>
 
-            <div className="space-y-3 rounded-2xl border border-[var(--border)] bg-[var(--surface-sunken)] p-4">
+            <div className="space-y-3 glass rounded-2xl p-4">
               <ToggleSwitch
                 label="Recurring task"
                 description="Completing it advances the due date to the next occurrence"

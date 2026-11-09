@@ -21,6 +21,7 @@ import {
   Trash2,
 } from 'lucide-react'
 import { Button } from '@/components/ui/Button'
+import { EmptyState } from '@/components/ui/EmptyState'
 import type { NoteSummary } from '@/lib/notes'
 import type { Project } from '@/lib/projects'
 import type { RecurrencePattern } from '@/lib/events'
@@ -73,6 +74,8 @@ export interface TaskListViewProps {
   notes: NoteSummary[]
   recurrencePatterns: RecurrencePattern[]
   starredOnly?: boolean
+  emptyTitle?: string
+  emptyDescription?: string
   onOpenTask: (task: Task) => void
   onEditTask: (task: Task) => void
   onToggleComplete: (task: Task) => void
@@ -88,6 +91,8 @@ export default function TaskListView({
   notes,
   recurrencePatterns,
   starredOnly = false,
+  emptyTitle,
+  emptyDescription,
   onOpenTask,
   onEditTask,
   onToggleComplete,
@@ -209,9 +214,6 @@ export default function TaskListView({
             className="glass-input h-9 w-full pl-9 pr-3 text-sm"
           />
         </form>
-        <Button type="button" variant="primary" size="sm" icon={Plus} onClick={onNewTask}>
-          New task
-        </Button>
       </div>
 
       <div className="flex flex-wrap items-center gap-2">
@@ -279,37 +281,42 @@ export default function TaskListView({
           </select>
         </label>
 
-        <button
-          type="button"
-          onClick={() => setOnlyStarred((current) => !current)}
-          aria-pressed={onlyStarred}
-          className={`focus-ring flex h-8 items-center gap-1.5 rounded-full border px-2.5 text-[11px] font-semibold transition-colors ${
-            onlyStarred
-              ? 'border-amber-500 bg-[var(--warning-light)] text-amber-600 dark:text-amber-400'
-              : 'border-[var(--border)] text-muted hover:text-foreground'
-          }`}
-        >
-          <Star size={12} fill={onlyStarred ? 'currentColor' : 'none'} />
-          Starred
-        </button>
+        {!starredOnly && (
+          <button
+            type="button"
+            onClick={() => setOnlyStarred((current) => !current)}
+            aria-pressed={onlyStarred}
+            className={`focus-ring flex h-8 items-center gap-1.5 rounded-full border px-2.5 text-[11px] font-semibold transition-colors ${
+              onlyStarred
+                ? 'border-amber-500 bg-[var(--warning-light)] text-amber-600 dark:text-amber-400'
+                : 'border-[var(--border)] text-muted hover:text-foreground'
+            }`}
+          >
+            <Star size={12} fill={onlyStarred ? 'currentColor' : 'none'} />
+            Starred
+          </button>
+        )}
       </div>
 
       {filtered.length === 0 ? (
-        <div className="glass-card flex flex-col items-center px-6 py-14 text-center">
-          <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-[var(--accent-light)] text-accent">
-            <ListTodo size={22} />
-          </div>
-          <p className="mt-3 text-sm font-semibold text-foreground">
-            {tasks.length === 0 ? 'No tasks yet' : 'No tasks match these filters'}
-          </p>
-          <p className="mt-1 text-xs text-muted">
-            {tasks.length === 0
-              ? 'Add your first task to get organised.'
-              : 'Try clearing the search or filters.'}
-          </p>
-          <Button type="button" variant="primary" size="sm" icon={Plus} onClick={onNewTask} className="mt-4">
-            New task
-          </Button>
+        <div className="glass-card">
+          <EmptyState
+            icon={ListTodo}
+            title={
+              emptyTitle ?? (tasks.length === 0 ? 'No tasks yet' : 'No tasks match these filters')
+            }
+            description={
+              emptyDescription ??
+              (tasks.length === 0
+                ? 'Add your first task to get organised.'
+                : 'Try clearing the search or filters.')
+            }
+            action={
+              <Button type="button" variant="primary" size="md" icon={Plus} onClick={onNewTask}>
+                New task
+              </Button>
+            }
+          />
         </div>
       ) : (
         <div className="space-y-3">

@@ -453,7 +453,7 @@ export default function SmartPlannerView({
       )}
 
       {step === 'configure' && (
-        <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_300px]">
+        <div className="grid gap-4 2xl:grid-cols-[minmax(0,1fr)_300px]">
           <div className="space-y-4">
             <section className="glass-card p-4">
               <h2 className="mb-1 flex items-center gap-2 font-display text-sm font-semibold text-foreground">
@@ -786,7 +786,7 @@ export default function SmartPlannerView({
       )}
 
       {step === 'review' && result && (
-        <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_300px]">
+        <div className="grid gap-4 2xl:grid-cols-[minmax(0,1fr)_300px]">
           <section className="glass-card overflow-hidden">
             <div className="flex flex-wrap items-center justify-between gap-2 border-b border-[var(--border)] px-4 py-3">
               <div>
@@ -899,7 +899,7 @@ export default function SmartPlannerView({
       )}
 
       {step === 'history' && (
-        <div className="grid gap-4 lg:grid-cols-[300px_minmax(0,1fr)]">
+        <div className="grid gap-4 2xl:grid-cols-[300px_minmax(0,1fr)]">
           <aside className="space-y-2">
             {loadingPlans ? (
               <div className="glass-card flex items-center justify-center gap-2 py-8 text-[11px] text-muted">

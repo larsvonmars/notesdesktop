@@ -1,6 +1,6 @@
 'use client'
 
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import {
   CalendarDays,
@@ -93,6 +93,17 @@ export default function TaskDetailPanel({
   const [now, setNow] = useState(() => Date.now())
   const [confirmingDelete, setConfirmingDelete] = useState(false)
   const [error, setError] = useState<string | null>(null)
+
+  const panelRef = useRef<HTMLDivElement | null>(null)
+
+  useEffect(() => {
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') onClose()
+    }
+    document.addEventListener('keydown', onKeyDown)
+    panelRef.current?.focus({ preventScroll: true })
+    return () => document.removeEventListener('keydown', onKeyDown)
+  }, [onClose])
 
   const project = useMemo(
     () => (task.project_id ? projects.find((candidate) => candidate.id === task.project_id) : undefined),
@@ -239,13 +250,15 @@ export default function TaskDetailPanel({
         type="button"
         aria-label="Close task detail"
         onClick={onClose}
-        className="absolute inset-0 cursor-default bg-black/30 backdrop-blur-[2px]"
+        className="animate-fade-in absolute inset-0 cursor-default bg-[rgb(9_8_18_/_0.45)] backdrop-blur-[2px]"
       />
       <div
+        ref={panelRef}
         role="dialog"
         aria-modal="true"
         aria-label={task.title}
-        className="glass-strong animate-rise-in relative z-10 m-3 flex max-h-[calc(100dvh-1.5rem)] w-full max-w-lg flex-col overflow-hidden rounded-3xl sm:m-4"
+        tabIndex={-1}
+        className="glass-strong animate-rise-in relative z-10 m-3 flex max-h-[calc(100dvh-1.5rem)] w-full max-w-lg flex-col overflow-hidden rounded-3xl shadow-glass-lg outline-none sm:m-4"
       >
         <div
           className="relative px-5 pb-4 pt-5"

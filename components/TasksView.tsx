@@ -6,7 +6,6 @@ import {
   CalendarPlus,
   Columns3,
   List,
-  Loader2,
   Menu,
   Plus,
   Star,
@@ -75,6 +74,58 @@ type TaskMode = 'list' | 'board'
 
 const SIDEBAR_STORAGE_KEY = 'planner:sidebar-collapsed'
 
+/** Bound network calls so the planner never sits on a skeleton indefinitely. */
+function withTimeout<T>(promise: Promise<T>, ms: number): Promise<T> {
+  return new Promise<T>((resolve, reject) => {
+    const timer = window.setTimeout(() => reject(new Error('Request timed out')), ms)
+    promise.then(
+      (value) => {
+        window.clearTimeout(timer)
+        resolve(value)
+      },
+      (error) => {
+        window.clearTimeout(timer)
+        reject(error)
+      },
+    )
+  })
+}
+
+const SECTION_META: Record<PlannerSection, { title: string; description: string }> = {
+  overview: {
+    title: 'Overview',
+    description: 'Your day, week and plans at a glance.',
+  },
+  tasks: {
+    title: 'Tasks',
+    description: 'Everything on your plate, as a list or a board.',
+  },
+  starred: {
+    title: 'Starred',
+    description: 'Tasks you flagged to keep close.',
+  },
+  projects: {
+    title: 'Projects',
+    description: 'Tasks grouped by the projects in this workspace.',
+  },
+  calendar: {
+    title: 'Calendar',
+    description: 'Month, week, day and agenda views of your time.',
+  },
+  timetable: {
+    title: 'Timetable',
+    description: 'Your repeating weekly schedule, generated on the fly.',
+  },
+  plan: {
+    title: 'Smart plan',
+    description: 'Let the planner block out time for what matters.',
+  },
+  settings: {
+    title: 'Planner settings',
+    description: 'Scheduling, calendar display and reminder preferences.',
+  },
+}
+
 const SECTION_SHORTCUTS: Record<string, PlannerSection> = {
   '1': 'overview',
   '2': 'tasks',
@@ -91,6 +142,10 @@ export interface TasksViewProps {
   projects: Project[]
   onSelectNote: (note: NoteSummary) => void
   onOpenProject: (projectId: string) => void
+  /** Optional deep-link target (e.g. from the command palette). */
+  initialSection?: PlannerSection
+  /** Notifies the shell so breadcrumbs can mirror the active section. */
+  onSectionChange?: (section: PlannerSection) => void
 }
 
 export default function TasksView({
@@ -98,10 +153,12 @@ export default function TasksView({
   projects,
   onSelectNote,
   onOpenProject,
+  initialSection,
+  onSectionChange,
 }: TasksViewProps) {
   const toast = useToast()
 
-  const [section, setSection] = useState<PlannerSection>('overview')
+  const [section, setSection] = useState<PlannerSection>(initialSection ?? 'overview')
   const [taskMode, setTaskMode] = useState<TaskMode>('list')
 
   const [tasks, setTasks] = useState<Task[]>([])
@@ -162,14 +219,17 @@ export default function TasksView({
 
     const today = getStartOfDay(new Date())
     const [taskResult, eventResult, patternResult, listResult] = await Promise.allSettled([
-      getTasks({ includeArchived: false, includeCompleted: true }),
-      getEvents({
-        startDate: addDays(today, -120),
-        endDate: addDays(today, 400),
-        includeCancelled: true,
-      }),
-      getRecurrencePatterns(),
-      getTaskLists(),
+      withTimeout(getTasks({ includeArchived: false, includeCompleted: true }), 12000),
+      withTimeout(
+        getEvents({
+          startDate: addDays(today, -120),
+          endDate: addDays(today, 400),
+          includeCancelled: true,
+        }),
+        12000,
+      ),
+      withTimeout(getRecurrencePatterns(), 12000),
+      withTimeout(getTaskLists(), 12000),
     ])
 
     if (taskResult.status === 'fulfilled') {
@@ -196,18 +256,30 @@ export default function TasksView({
       setTaskLists(listResult.value)
     }
 
+    setIsLoading(false)
+  }, [])
+
+  // Plans load independently so a slow planner-table round-trip never blocks
+  // the task and calendar data from rendering.
+  const loadPlans = useCallback(async () => {
     try {
       setPlans(await fetchPlans())
     } catch {
       setPlans([])
     }
-
-    setIsLoading(false)
   }, [])
 
   useEffect(() => {
     void loadData()
   }, [loadData])
+
+  useEffect(() => {
+    void loadPlans()
+  }, [loadPlans])
+
+  useEffect(() => {
+    onSectionChange?.(section)
+  }, [section, onSectionChange])
 
   useEffect(() => {
     const handler = (event: KeyboardEvent) => {
@@ -656,6 +728,8 @@ export default function TasksView({
 
   // ── Render ─────────────────────────────────────────────────────────
 
+  const sectionMeta = SECTION_META[section]
+
   const headerCounts = useMemo(
     () => ({
       open: openTasks.length,
@@ -709,50 +783,62 @@ export default function TasksView({
   }, [openTasks, tasks, localProjects, events, plans, availableMinutes])
 
   return (
-    <div className="flex h-full min-h-0">
+    <div className="planner-shell flex h-full min-h-0">
       <div className="min-h-0 flex-1 overflow-y-auto scroll-thin">
         <div className="mx-auto w-full max-w-7xl px-4 pb-24 pt-6 sm:px-6 lg:px-8 lg:pb-12">
-        <header className="animate-rise-in flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
-          <div className="min-w-0">
-            <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-muted">
-              Plan and review
-            </p>
-            <h1 className="mt-1.5 font-display text-[28px] font-semibold tracking-[-0.02em] text-foreground sm:text-3xl">
-              Planner
-            </h1>
-            <p className="mt-1.5 text-sm leading-6 text-muted">
-              {headerCounts.open} open {headerCounts.open === 1 ? 'task' : 'tasks'}
-              {headerCounts.overdue > 0 ? ` · ${headerCounts.overdue} overdue` : ''}
-              {headerCounts.events > 0
-                ? ` · ${headerCounts.events} ${headerCounts.events === 1 ? 'event' : 'events'}`
-                : ''}
-            </p>
-          </div>
+        <header className="animate-rise-in">
+          <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-muted">
+            Planner
+          </p>
+          <div className="mt-1.5 flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
+            <div className="min-w-0">
+              <h1 className="font-display text-[28px] font-semibold tracking-[-0.02em] text-foreground sm:text-3xl">
+                {sectionMeta.title}
+              </h1>
+              <p className="mt-1.5 max-w-2xl text-sm leading-6 text-muted">
+                {sectionMeta.description}
+              </p>
+              <p className="mt-1 text-[11px] tabular-nums text-muted">
+                {headerCounts.open} open {headerCounts.open === 1 ? 'task' : 'tasks'}
+                {headerCounts.overdue > 0 ? ` · ${headerCounts.overdue} overdue` : ''}
+                {headerCounts.events > 0
+                  ? ` · ${headerCounts.events} ${headerCounts.events === 1 ? 'event' : 'events'}`
+                  : ''}
+              </p>
+            </div>
 
-          <div className="flex w-full flex-col gap-2 sm:flex-row lg:w-auto">
-            <Button
-              type="button"
-              variant="secondary"
-              size="md"
-              icon={Menu}
-              className="lg:hidden"
-              onClick={() => setMobileNavOpen(true)}
-              aria-label="Open planner navigation"
-            >
-              Sections
-            </Button>
-            <Button
-              type="button"
-              variant="secondary"
-              size="md"
-              icon={CalendarPlus}
-              onClick={() => openNewEvent()}
-            >
-              New event
-            </Button>
-            <Button type="button" variant="primary" size="md" icon={Plus} onClick={() => openNewTask()}>
-              New task
-            </Button>
+            <div className="flex shrink-0 flex-wrap items-center gap-2">
+              <Button
+                type="button"
+                variant="secondary"
+                size="md"
+                icon={Menu}
+                className="h-11 sm:h-9 xl:hidden"
+                onClick={() => setMobileNavOpen(true)}
+                aria-label="Open planner navigation"
+                title="Sections"
+              />
+              <Button
+                type="button"
+                variant="secondary"
+                size="md"
+                icon={CalendarPlus}
+                className="h-11 sm:h-9"
+                onClick={() => openNewEvent()}
+              >
+                New event
+              </Button>
+              <Button
+                type="button"
+                variant="primary"
+                size="md"
+                icon={Plus}
+                className="h-11 sm:h-9"
+                onClick={() => openNewTask()}
+              >
+                New task
+              </Button>
+            </div>
           </div>
         </header>
 
@@ -770,10 +856,7 @@ export default function TasksView({
         )}
 
         {isLoading ? (
-          <div className="mt-6 flex items-center justify-center gap-2 rounded-2xl border border-[var(--border)] bg-[var(--surface)] py-16 text-sm text-muted">
-            <Loader2 size={16} className="animate-spin" />
-            Loading your planner…
-          </div>
+          <PlannerLoadingSkeleton />
         ) : (
           <div className="mt-4 space-y-4">
             {section === 'overview' && (
@@ -915,6 +998,8 @@ export default function TasksView({
                   notes={notes}
                   recurrencePatterns={recurrencePatterns}
                   starredOnly
+                  emptyTitle="No starred tasks"
+                  emptyDescription="Star a task to keep it within easy reach."
                   onOpenTask={(task) => setDetailTaskId(task.id)}
                   onEditTask={openEditTask}
                   onToggleComplete={(task) => void handleToggleComplete(task)}
@@ -962,13 +1047,7 @@ export default function TasksView({
                 planningMode={display.planningMode}
                 onPlanningModeChange={(mode) => handleUpdateDisplay({ planningMode: mode })}
                 onOpenTask={(task) => setDetailTaskId(task.id)}
-                onPlansChanged={async () => {
-                  try {
-                    setPlans(await fetchPlans())
-                  } catch {
-                    setPlans([])
-                  }
-                }}
+                onPlansChanged={() => void loadPlans()}
               />
             )}
 
@@ -1004,7 +1083,7 @@ export default function TasksView({
       </div>
 
       <PlannerSidebar
-        className="hidden lg:flex"
+        className="hidden xl:flex"
         activeSection={section}
         counts={sidebarCounts}
         collapsed={sidebarCollapsed}
@@ -1082,6 +1161,35 @@ export default function TasksView({
           }}
         />
       )}
+    </div>
+  )
+}
+
+function PlannerLoadingSkeleton() {
+  return (
+    <div className="mt-5 animate-fade-in" aria-busy="true" aria-label="Loading planner">
+      <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+        {[0, 1, 2, 3].map((index) => (
+          <div key={index} className="glass-card p-4">
+            <div className="skeleton-shimmer h-2.5 w-20 rounded-full" />
+            <div className="skeleton-shimmer mt-2.5 h-6 w-12 rounded-lg" />
+            <div className="skeleton-shimmer mt-2 h-2 w-28 rounded-full" />
+          </div>
+        ))}
+      </div>
+      <div className="mt-4 grid gap-4 lg:grid-cols-[minmax(0,1fr)_320px]">
+        <div className="glass-card space-y-3 p-4">
+          <div className="skeleton-shimmer h-3 w-32 rounded-full" />
+          <div className="skeleton-shimmer h-24 w-full rounded-2xl" />
+          <div className="skeleton-shimmer h-24 w-full rounded-2xl" />
+        </div>
+        <div className="glass-card space-y-2 p-4">
+          <div className="skeleton-shimmer h-3 w-24 rounded-full" />
+          <div className="skeleton-shimmer h-2.5 w-full rounded-full" />
+          <div className="skeleton-shimmer h-2.5 w-4/5 rounded-full" />
+          <div className="skeleton-shimmer h-2.5 w-2/3 rounded-full" />
+        </div>
+      </div>
     </div>
   )
 }

@@ -1916,7 +1916,7 @@ export default function SidebarTree({
             {showHeader && onOpenTasks && (
               <button onClick={onOpenTasks} className={footerRowCls}>
                 <ListTodo size={15} className="shrink-0" />
-                <span className="flex-1 truncate text-left">Tasks</span>
+                <span className="flex-1 truncate text-left">Planner</span>
               </button>
             )}
             {showHeader && onOpenLearn && (

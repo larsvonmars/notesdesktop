@@ -1,0 +1,25 @@
+/* ==========================================================================
+   Planner — surface-specific integration tweaks
+   --------------------------------------------------------------------------
+   The planner adds many bespoke controls (calendar blocks, chips, swatches).
+   Scope a single focus treatment to the planner shell so every custom
+   control matches the workspace `.focus-ring` affordance without repeating
+   the utility on dozens of elements.
+   ========================================================================== */
+
+.planner-shell :is(button, [role='button'], [tabindex='0']):focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 3px var(--accent-glow);
+}
+
+/* Calendar event blocks sit on coloured backgrounds; keep the ring readable. */
+.planner-shell .planner-event-block:focus-visible {
+  box-shadow:
+    0 0 0 2px var(--surface-solid),
+    0 0 0 4px var(--accent-glow);
+}
+
+/* Keep horizontal scroll containers from adding a visible scrollbar gutter. */
+.planner-shell .segmented {
+  max-width: 100%;
+}

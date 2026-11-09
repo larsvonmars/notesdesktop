@@ -119,8 +119,9 @@ describe('Planner views render', () => {
         onExport={noop}
       />,
     )
-    expect(html).toContain('New event')
+    expect(html).toContain('Agenda')
     expect(html).toContain('Keyboard shortcuts')
+    expect(html).toContain('Month')
   })
 
   it('renders the task list with priority and project context', () => {

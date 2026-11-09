@@ -87,10 +87,10 @@ export const COLOR_SWATCHES = [
   '#f45d8c',
 ]
 
-export const FIELD_CLASS = 'glass-input h-10 px-3.5 text-sm'
+export const FIELD_CLASS = 'glass-input h-11 px-3.5 text-sm'
 export const TEXTAREA_CLASS =
   'glass-input h-auto min-h-[80px] w-full resize-none px-3.5 py-2.5 text-sm leading-6'
-export const SELECT_CLASS = 'glass-input h-10 px-3 text-sm'
+export const SELECT_CLASS = 'glass-input h-11 px-3 text-sm'
 export const LABEL_CLASS =
   'mb-1.5 block text-[11px] font-semibold uppercase tracking-[0.08em] text-muted'
 
@@ -218,29 +218,6 @@ export function SegmentedTabs<T extends string>({
           )}
         </button>
       ))}
-    </div>
-  )
-}
-
-export function PlannerEmpty({
-  icon: Icon,
-  title,
-  description,
-  action,
-}: {
-  icon: LucideIcon
-  title: string
-  description?: string
-  action?: ReactNode
-}) {
-  return (
-    <div className="glass-card flex flex-col items-center px-6 py-14 text-center">
-      <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-[var(--accent-light)] text-accent">
-        <Icon size={22} />
-      </div>
-      <p className="mt-3 text-sm font-semibold text-foreground">{title}</p>
-      {description && <p className="mt-1 max-w-sm text-xs leading-5 text-muted">{description}</p>}
-      {action && <div className="mt-4">{action}</div>}
     </div>
   )
 }

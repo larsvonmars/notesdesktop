@@ -23,7 +23,7 @@ describe('Planner shell', () => {
     expect(html).toContain('Calendar')
     expect(html).toContain('Timetable')
     expect(html).toContain('Smart plan')
-    expect(html).toContain('Loading your planner')
+    expect(html).toContain('aria-label="Loading planner"')
   })
 
   it('renders the planner navigation inside a right-hand sidebar', () => {

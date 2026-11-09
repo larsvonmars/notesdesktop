@@ -14,6 +14,7 @@ const NoteEditor = dynamic(() => import('@/components/NoteEditor'), {
 })
 import HomeDashboard from '@/components/HomeDashboard'
 import TasksView from '@/components/TasksView'
+import { PLANNER_SECTION_LABELS, type PlannerSection } from '@/components/planner/PlannerSidebar'
 import FileExplorerModal from '@/components/FileExplorerModal'
 import ProjectDashboard from '@/components/ProjectDashboard'
 // The chat view brings the markdown renderer + tool cards; load it on demand.
@@ -647,7 +648,13 @@ function WorkspaceContent() {
     setActiveView('welcome')
   }, [])
 
+  // Lets Home's Planner shortcut deep-link straight into the task list while
+  // the rail/sidebar keep landing on the planner overview.
+  const [plannerStartSection, setPlannerStartSection] = useState<'overview' | 'tasks' | null>(null)
+  const [plannerSection, setPlannerSection] = useState<PlannerSection>('overview')
+
   const openTasksView = useCallback(() => {
+    setPlannerStartSection(null)
     setActiveView('tasks')
   }, [])
 
@@ -659,6 +666,7 @@ function WorkspaceContent() {
 
   const switchWorkspaceView = useCallback(
     (view: WorkspaceView) => {
+      if (view !== 'tasks') setPlannerStartSection(null)
       setActiveView(view)
       setWorkspaceNavOpen(false)
       recordNav({
@@ -1041,7 +1049,11 @@ function WorkspaceContent() {
 
     if (activeView === 'welcome') return [{ id: 'home', label: 'Home', icon: Home }]
     if (activeView === 'tasks') {
-      return [home, { id: 'tasks', label: 'Planner', icon: ListTodo }]
+      return [
+        home,
+        { id: 'tasks', label: 'Planner', icon: ListTodo },
+        { id: 'planner-section', label: PLANNER_SECTION_LABELS[plannerSection] },
+      ]
     }
     if (activeView === 'files') {
       return [home, { id: 'files', label: 'Files', icon: FolderOpen }]
@@ -1354,7 +1366,10 @@ function WorkspaceContent() {
                 onOpenProject={openProjectDashboard}
                 onCreateProject={handleCreateProject}
                 onOpenSearch={() => setCommandPaletteOpen(true)}
-                onOpenTasks={() => setActiveView('tasks')}
+                onOpenTasks={() => {
+                  setPlannerStartSection('tasks')
+                  setActiveView('tasks')
+                }}
                 onOpenUnfiled={() => {
                   handleSelectFolder(null)
                   setActiveView('notes')
@@ -1368,6 +1383,8 @@ function WorkspaceContent() {
               <TasksView
                 notes={allNotes}
                 projects={projects}
+                initialSection={plannerStartSection ?? 'overview'}
+                onSectionChange={setPlannerSection}
                 onSelectNote={(note) => {
                   void handleSelectNote(note)
                   setActiveView('notes')

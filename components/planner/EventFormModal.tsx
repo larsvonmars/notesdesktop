@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect, useMemo, useState, type FormEvent } from 'react'
-import { AlertTriangle, Clock3, MapPin, Repeat } from 'lucide-react'
+import { AlertTriangle, CalendarPlus, Clock3, MapPin, Repeat } from 'lucide-react'
 import { useToast } from '@/components/ToastProvider'
 import BaseModal, {
   ModalBody,
@@ -392,6 +392,9 @@ export default function EventFormModal({
       closeOnEscape={!saving && !deleting}
     >
       <ModalHeader onClose={onClose}>
+        <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-[var(--accent-light)] text-accent">
+          <CalendarPlus size={18} strokeWidth={1.9} />
+        </span>
         <div className="min-w-0">
           <ModalTitle>{editing ? 'Edit event' : 'New event'}</ModalTitle>
           <p className="mt-0.5 text-[11px] text-muted">
@@ -431,7 +434,7 @@ export default function EventFormModal({
               />
             </div>
 
-            <div className="rounded-2xl border border-[var(--border)] bg-[var(--surface-sunken)] p-4">
+            <div className="glass rounded-2xl p-4">
               <ToggleSwitch
                 label="All-day event"
                 checked={form.allDay}
@@ -726,7 +729,7 @@ export default function EventFormModal({
               </div>
             </div>
 
-            <div className="space-y-3 rounded-2xl border border-[var(--border)] bg-[var(--surface-sunken)] p-4">
+            <div className="space-y-3 glass rounded-2xl p-4">
               <ToggleSwitch
                 label="Repeats"
                 description="Create a recurring event from this one"

@@ -31,7 +31,7 @@ const MORE_VIEWS: WorkspaceView[] = ['files', 'chat', 'learn', 'projects']
 
 /**
  * Bottom glass navigation for phones. Five equal tabs (Home, Notes, Search,
- * Tasks, More) with a safe-area gutter; the active tab gets an accent pill and
+ * Planner, More) with a safe-area gutter; the active tab gets an accent pill and
  * aria-current="page". "Search" and "More" are actions, not destinations.
  */
 export default function MobileTabBar({
@@ -108,12 +108,12 @@ export default function MobileTabBar({
           onClick={() => onNavigate('tasks')}
           className={tabClass(activeView === 'tasks')}
           aria-current={activeView === 'tasks' ? 'page' : undefined}
-          aria-label="Tasks"
+          aria-label="Planner"
         >
           <span className={iconWrapClass(activeView === 'tasks')} aria-hidden="true">
             <ListTodo className="h-[19px] w-[19px]" strokeWidth={activeView === 'tasks' ? 2.2 : 1.85} />
           </span>
-          <span>Tasks</span>
+          <span>Planner</span>
         </button>
 
         {onOpenMore ? (

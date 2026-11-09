@@ -207,7 +207,7 @@ export default function CommandPalette({
 
     const navigateItems: PaletteItem[] = [
       { key: 'nav-home', label: 'Go to Home', hint: 'Recent notes and quick actions', icon: Home, run: onOpenHome },
-      { key: 'nav-tasks', label: 'Open Tasks & Agenda', hint: 'Plan tasks and upcoming events', icon: ListTodo, run: onOpenTasks },
+      { key: 'nav-tasks', label: 'Open Planner', hint: 'Tasks, calendar, timetable and smart plans', icon: ListTodo, run: onOpenTasks },
       { key: 'nav-files', label: 'Open File Explorer', hint: 'Browse files', icon: FolderOpen, run: onOpenFiles },
       { key: 'nav-learn', label: 'Open Learn', hint: 'Flashcards, study modes and AI tutoring', icon: GraduationCap, run: () => onOpenLearn?.() },
       { key: 'nav-settings', label: 'Open Settings', hint: 'Account, appearance, startup', icon: Settings, run: onOpenSettings },

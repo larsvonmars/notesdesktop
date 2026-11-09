@@ -9,7 +9,6 @@ import {
   Clock3,
   Flame,
   ListTodo,
-  Plus,
   Sparkles,
   Target,
   TrendingUp,
@@ -191,7 +190,7 @@ export default function OverviewView({
 
   return (
     <div className="space-y-4">
-      <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+      <div className="grid gap-3 sm:grid-cols-2 2xl:grid-cols-4">
         <div className="glass-card p-4">
           <div className="flex items-start justify-between">
             <div>
@@ -267,7 +266,7 @@ export default function OverviewView({
         </div>
       </div>
 
-      <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_320px]">
+      <div className="grid gap-4 2xl:grid-cols-[minmax(0,1fr)_320px]">
         <div className="space-y-4">
           <section className="glass-card p-4">
             <div className="mb-3 flex items-center justify-between">
@@ -540,13 +539,7 @@ export default function OverviewView({
           )}
 
           <section className="glass-card space-y-2 p-4">
-            <h2 className="font-display text-sm font-semibold text-foreground">Quick actions</h2>
-            <Button type="button" variant="primary" size="sm" icon={Plus} className="w-full" onClick={onNewTask}>
-              New task
-            </Button>
-            <Button type="button" variant="secondary" size="sm" icon={CalendarDays} className="w-full" onClick={onNewEvent}>
-              New event
-            </Button>
+            <h2 className="font-display text-sm font-semibold text-foreground">Jump back in</h2>
             <Button
               type="button"
               variant="secondary"
@@ -556,6 +549,26 @@ export default function OverviewView({
               onClick={() => onNavigate('plan')}
             >
               Smart plan
+            </Button>
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
+              icon={CalendarDays}
+              className="w-full justify-start"
+              onClick={() => onNavigate('calendar')}
+            >
+              Open calendar
+            </Button>
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
+              icon={ListTodo}
+              className="w-full justify-start"
+              onClick={() => onNavigate('timetable')}
+            >
+              Weekly timetable
             </Button>
           </section>
         </aside>

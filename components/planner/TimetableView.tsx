@@ -16,6 +16,7 @@ import {
 import type { Project } from '@/lib/projects'
 import type { CalendarEvent, RecurrencePattern } from '@/lib/events'
 import { Button } from '@/components/ui/Button'
+import { EmptyState } from '@/components/ui/EmptyState'
 import {
   describeRecurrence,
   formatTime,
@@ -207,18 +208,17 @@ export default function TimetableView({
       </p>
 
       {entries.length === 0 ? (
-        <div className="glass-card flex flex-col items-center px-6 py-14 text-center">
-          <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-[var(--accent-light)] text-accent">
-            <Repeat size={22} />
-          </div>
-          <p className="mt-3 text-sm font-semibold text-foreground">Your timetable is empty</p>
-          <p className="mt-1 max-w-md text-xs leading-5 text-muted">
-            Add recurring blocks for classes, gym sessions or weekly habits. They repeat every week
-            and also appear in the calendar.
-          </p>
-          <Button type="button" variant="primary" size="sm" icon={Plus} onClick={() => onCreate()} className="mt-4">
-            Add timetable entry
-          </Button>
+        <div className="glass-card">
+          <EmptyState
+            icon={Repeat}
+            title="Your timetable is empty"
+            description="Add recurring blocks for classes, gym sessions or weekly habits. They repeat every week and also appear in the calendar."
+            action={
+              <Button type="button" variant="primary" size="md" icon={Plus} onClick={() => onCreate()}>
+                Add timetable entry
+              </Button>
+            }
+          />
         </div>
       ) : mode === 'schedule' ? (
         <ScheduleView

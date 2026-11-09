@@ -1,6 +1,6 @@
 'use client'
 
-import { Keyboard, Sparkles } from 'lucide-react'
+import { CalendarDays, Keyboard, Sparkles } from 'lucide-react'
 import { AUTOFORMAT_HELP, formatShortcutKeys, getShortcutsByCategory } from '@/lib/editor/keyboardShortcuts'
 import BaseModal, { ModalHeader, ModalBody, ModalFooter, ModalTitle } from './BaseModal'
 
@@ -76,6 +76,38 @@ export default function KeyboardShortcutsHelp({ isOpen, onClose }: KeyboardShort
                   <code className="shrink-0 rounded-md bg-[var(--surface-sunken)] px-1.5 py-0.5 font-mono text-[11px] text-accent">
                     {item.pattern}
                   </code>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          {/* Planner */}
+          <div>
+            <h3 className="mb-2 flex items-center gap-1.5 px-1 text-[11px] font-medium uppercase tracking-[0.08em] text-muted">
+              <CalendarDays size={12} strokeWidth={1.9} aria-hidden />
+              Planner
+            </h3>
+            <div className="grid grid-cols-1 gap-1.5 md:grid-cols-2">
+              {[
+                ['Overview', 'Alt+1'],
+                ['Tasks', 'Alt+2'],
+                ['Starred', 'Alt+3'],
+                ['Projects', 'Alt+4'],
+                ['Calendar', 'Alt+5'],
+                ['Timetable', 'Alt+6'],
+                ['Smart plan', 'Alt+7'],
+                ['Planner settings', 'Alt+8'],
+                ['Previous / next period', '← →'],
+                ['Jump to today', 'T'],
+                ['Month / week / day / agenda', 'M W D A'],
+                ['Zoom week ↔ day', '↑ ↓'],
+              ].map(([description, keys]) => (
+                <div
+                  key={description}
+                  className="flex items-center justify-between gap-3 rounded-lg px-1.5 py-1.5 transition-colors duration-150 hover:bg-[var(--surface-sunken)]"
+                >
+                  <span className="min-w-0 text-[13px] leading-5 text-foreground">{description}</span>
+                  <kbd className="kbd shrink-0">{keys}</kbd>
                 </div>
               ))}
             </div>

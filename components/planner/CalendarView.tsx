@@ -24,6 +24,7 @@ import type { Project } from '@/lib/projects'
 import type { CalendarEvent, RecurrencePattern } from '@/lib/events'
 import type { Task } from '@/lib/tasks'
 import { Button } from '@/components/ui/Button'
+import { EmptyState } from '@/components/ui/EmptyState'
 import {
   addDays,
   addMonths,
@@ -496,9 +497,56 @@ export default function CalendarView({
     [projects],
   )
 
+  const todayEvents = useMemo(() => {
+    const today = new Date()
+    return filteredEvents
+      .filter(
+        (event) =>
+          !event.is_cancelled && isSameDay(new Date(event.start_time), today),
+      )
+      .sort(
+        (a, b) => new Date(a.start_time).getTime() - new Date(b.start_time).getTime(),
+      )
+  }, [filteredEvents])
+
   return (
-    <div className="flex flex-col gap-5 lg:flex-row">
+    <div className="flex flex-col gap-5 min-[1700px]:flex-row">
       <div className="min-w-0 flex-1 space-y-4">
+        {todayEvents.length > 0 && (
+          <div className="glass-card flex items-center gap-2 overflow-x-auto px-3 py-2 scrollbar-hide">
+            <span className="shrink-0 text-[10px] font-semibold uppercase tracking-[0.1em] text-muted">
+              Today
+            </span>
+            {todayEvents.slice(0, 6).map((event) => (
+              <button
+                key={event.occurrence_id}
+                type="button"
+                onClick={() => {
+                  setConfirmingDelete(false)
+                  setSelectedEvent(event)
+                }}
+                className="focus-ring flex shrink-0 items-center gap-1.5 rounded-full border border-[var(--border)] px-2.5 py-1 text-[11px] font-medium text-foreground transition-colors hover:border-accent hover:text-accent"
+              >
+                <span
+                  className="h-1.5 w-1.5 rounded-full"
+                  style={{ backgroundColor: eventColor(event) }}
+                />
+                {event.is_all_day ? 'All day' : formatTime(new Date(event.start_time))}
+                <span className="max-w-[140px] truncate text-muted">{event.title}</span>
+              </button>
+            ))}
+            {todayEvents.length > 6 && (
+              <button
+                type="button"
+                onClick={() => viewDay(new Date())}
+                className="shrink-0 text-[11px] font-semibold text-accent hover:underline"
+              >
+                +{todayEvents.length - 6} more
+              </button>
+            )}
+          </div>
+        )}
+
         <div className="animate-rise-in flex flex-wrap items-center gap-2">
           <div className="flex items-center gap-1.5">
             <Button type="button" variant="secondary" size="sm" icon={ChevronLeft} onClick={goPrev} aria-label="Previous" />
@@ -515,6 +563,7 @@ export default function CalendarView({
             ariaLabel="Calendar view"
             value={view}
             onChange={changeView}
+            className="order-last w-full justify-between sm:order-none sm:w-auto"
             options={[
               { key: 'month', label: 'Month' },
               { key: 'week', label: 'Week' },
@@ -523,9 +572,6 @@ export default function CalendarView({
             ]}
           />
 
-          <Button type="button" variant="primary" size="sm" icon={CalendarPlus} onClick={() => onNewEvent()}>
-            New event
-          </Button>
           <button
             type="button"
             onClick={() => setShowFilters((current) => !current)}
@@ -714,7 +760,7 @@ export default function CalendarView({
         </div>
       </div>
 
-      <aside className="hidden w-72 shrink-0 flex-col gap-4 lg:flex">
+      <aside className="hidden w-72 shrink-0 flex-col gap-4 min-[1700px]:flex">
         <MiniCalendar
           selectedDate={selectedDate}
           weekStartsOn={display.weekStartsOn}
@@ -989,8 +1035,8 @@ function MonthView({
   }, [tasks])
 
   return (
-    <div className="glass-card overflow-x-auto">
-      <div className="min-w-[720px]">
+    <div className="glass-card overflow-hidden md:overflow-x-auto">
+      <div className="min-w-0 md:min-w-[720px]">
         <div className="grid grid-cols-7 border-b border-[var(--border)] bg-[var(--surface-sunken)]">
           {labels.map((label) => (
             <div
@@ -1013,7 +1059,7 @@ function MonthView({
             <div
               key={weekIndex}
               className="relative grid grid-cols-7 border-b border-[var(--border)] last:border-b-0"
-              style={{ minHeight: 108 + maxBars * 20 }}
+              style={{ minHeight: 92 + maxBars * 20 }}
             >
               {spans.map((span) => {
                 const lane = lanes.get(span.event.occurrence_id) ?? 0
@@ -1088,6 +1134,30 @@ function MonthView({
                     </div>
 
                     <div className="flex-1 space-y-px">
+                      {dayEvents.length + dayTasks.length > 0 && (
+                        <div className="flex flex-wrap items-center gap-1 px-0.5 md:hidden">
+                          {[...dayEvents, ...dayTasks].slice(0, 4).map((item, index) =>
+                            'occurrence_id' in item ? (
+                              <span
+                                key={`dot-${item.occurrence_id}`}
+                                className="h-1.5 w-1.5 rounded-full"
+                                style={{ backgroundColor: eventColor(item) }}
+                              />
+                            ) : (
+                              <span
+                                key={`dot-${item.id}`}
+                                className="h-1.5 w-1.5 rounded-full border"
+                                style={{ borderColor: taskColor(item) }}
+                              />
+                            ),
+                          )}
+                          {dayEvents.length + dayTasks.length > 4 && (
+                            <span className="text-[9px] font-semibold text-muted">
+                              +{dayEvents.length + dayTasks.length - 4}
+                            </span>
+                          )}
+                        </div>
+                      )}
                       {visibleEvents.map((event) => (
                         <button
                           key={event.occurrence_id}
@@ -1096,7 +1166,7 @@ function MonthView({
                             clickEvent.stopPropagation()
                             onEventClick(event)
                           }}
-                          className="flex w-full items-center gap-1 overflow-hidden rounded px-1.5 py-px text-left text-[10px] font-semibold leading-tight transition-[filter] hover:brightness-95"
+                          className="hidden w-full items-center gap-1 overflow-hidden rounded px-1.5 py-px text-left text-[10px] font-semibold leading-tight transition-[filter] hover:brightness-95 md:flex"
                           style={{
                             backgroundColor: `${eventColor(event)}1A`,
                             color: eventColor(event),
@@ -1122,7 +1192,7 @@ function MonthView({
                               clickEvent.stopPropagation()
                               onTaskClick(task)
                             }}
-                            className="flex w-full items-center gap-1 overflow-hidden rounded border-l-2 border-dashed px-1.5 py-px text-left text-[10px] font-semibold leading-tight transition-[filter] hover:brightness-95"
+                            className="hidden w-full items-center gap-1 overflow-hidden rounded border-l-2 border-dashed px-1.5 py-px text-left text-[10px] font-semibold leading-tight transition-[filter] hover:brightness-95 md:flex"
                             style={{
                               borderLeftColor: color,
                               backgroundColor: `${color}0F`,
@@ -1144,7 +1214,7 @@ function MonthView({
                             clickEvent.stopPropagation()
                             onMoreClick(day, dayEvents, dayTasks, clickEvent)
                           }}
-                          className="w-full rounded px-1.5 py-0.5 text-left text-[10px] font-semibold text-muted hover:text-foreground"
+                          className="hidden w-full rounded px-1.5 py-0.5 text-left text-[10px] font-semibold text-muted hover:text-foreground md:block"
                         >
                           +{hidden} more
                         </button>
@@ -1712,10 +1782,12 @@ function AgendaView({
 
   if (groups.length === 0) {
     return (
-      <div className="glass-card flex flex-col items-center px-6 py-16 text-center">
-        <CalendarDays size={26} className="text-accent" />
-        <p className="mt-3 text-sm font-semibold text-foreground">Your agenda is clear</p>
-        <p className="mt-1 text-xs text-muted">Add an event or a task to fill the coming days.</p>
+      <div className="glass-card">
+        <EmptyState
+          icon={CalendarDays}
+          title="Your agenda is clear"
+          description="Add an event or a task to fill the coming days."
+        />
       </div>
     )
   }
@@ -1972,6 +2044,16 @@ function EventDetailPanel({
   const start = new Date(event.start_time)
   const end = new Date(event.end_time)
   const color = eventColor(event)
+  const panelRef = useRef<HTMLDivElement | null>(null)
+
+  useEffect(() => {
+    const onKeyDown = (keyEvent: KeyboardEvent) => {
+      if (keyEvent.key === 'Escape') onClose()
+    }
+    document.addEventListener('keydown', onKeyDown)
+    panelRef.current?.focus({ preventScroll: true })
+    return () => document.removeEventListener('keydown', onKeyDown)
+  }, [onClose])
 
   return (
     <div className="fixed inset-0 z-[55] flex items-start justify-end">
@@ -1979,13 +2061,15 @@ function EventDetailPanel({
         type="button"
         aria-label="Close event"
         onClick={onClose}
-        className="absolute inset-0 cursor-default bg-black/30 backdrop-blur-[2px]"
+        className="animate-fade-in absolute inset-0 cursor-default bg-[rgb(9_8_18_/_0.45)] backdrop-blur-[2px]"
       />
       <div
+        ref={panelRef}
         role="dialog"
         aria-modal="true"
         aria-label={event.title}
-        className="glass-strong animate-rise-in relative z-10 m-3 flex max-h-[calc(100dvh-1.5rem)] w-full max-w-md flex-col overflow-hidden rounded-3xl sm:m-4"
+        tabIndex={-1}
+        className="glass-strong animate-rise-in relative z-10 m-3 flex max-h-[calc(100dvh-1.5rem)] w-full max-w-md flex-col overflow-hidden rounded-3xl shadow-glass-lg outline-none sm:m-4"
       >
         <div className="relative px-5 pb-4 pt-5" style={{ backgroundColor: `${color}14` }}>
           <div

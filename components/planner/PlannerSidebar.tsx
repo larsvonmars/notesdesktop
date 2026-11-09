@@ -50,6 +50,17 @@ interface NavItem {
   badge?: number | string | null
 }
 
+export const PLANNER_SECTION_LABELS: Record<PlannerSection, string> = {
+  overview: 'Overview',
+  tasks: 'Tasks',
+  starred: 'Starred',
+  projects: 'Projects',
+  calendar: 'Calendar',
+  timetable: 'Timetable',
+  plan: 'Smart plan',
+  settings: 'Settings',
+}
+
 const NAV_GROUPS: { title: string; items: PlannerSection[] }[] = [
   { title: 'Overview', items: ['overview'] },
   { title: 'Your work', items: ['tasks', 'projects', 'starred'] },
@@ -178,12 +189,14 @@ function NavContent({
 function SidebarFooter({
   counts,
   collapsed,
+  activeSection,
   onNewTask,
   onNewEvent,
   onSelect,
 }: {
   counts: PlannerSidebarCounts
   collapsed: boolean
+  activeSection: PlannerSection
   onNewTask: () => void
   onNewEvent: () => void
   onSelect: (section: PlannerSection) => void
@@ -208,6 +221,21 @@ function SidebarFooter({
           className="focus-ring flex h-9 w-full items-center justify-center rounded-xl border border-[var(--border)] text-muted hover:text-foreground"
         >
           <CalendarPlus size={15} />
+        </button>
+        <button
+          type="button"
+          onClick={() => onSelect('settings')}
+          title="Planner settings"
+          aria-label="Planner settings"
+          aria-current={activeSection === 'settings' ? 'page' : undefined}
+          className={cn(
+            'focus-ring flex h-9 w-full items-center justify-center rounded-xl transition-colors',
+            activeSection === 'settings'
+              ? 'bg-[var(--accent-light)] text-accent'
+              : 'text-muted hover:bg-[var(--surface-hover)] hover:text-foreground',
+          )}
+        >
+          <Settings2 size={15} />
         </button>
       </div>
     )
@@ -277,7 +305,13 @@ function SidebarFooter({
       <button
         type="button"
         onClick={() => onSelect('settings')}
-        className="focus-ring flex w-full items-center gap-2 rounded-xl px-2 py-1.5 text-[11px] font-medium text-muted transition-colors hover:bg-[var(--surface-hover)] hover:text-foreground"
+        aria-current={activeSection === 'settings' ? 'page' : undefined}
+        className={cn(
+          'focus-ring flex w-full items-center gap-2 rounded-xl px-2 py-1.5 text-[11px] font-medium transition-colors',
+          activeSection === 'settings'
+            ? 'bg-[var(--accent-light)] text-accent'
+            : 'text-muted hover:bg-[var(--surface-hover)] hover:text-foreground',
+        )}
       >
         <Settings2 size={12} />
         Settings
@@ -314,8 +348,8 @@ export default function PlannerSidebar({
     <aside
       aria-label="Planner navigation"
       className={cn(
-        'glass-subtle relative flex h-full shrink-0 flex-col border-l border-[var(--border)] transition-[width] duration-300 ease-out',
-        collapsed ? 'w-[64px]' : 'w-[248px]',
+        'glass-subtle relative flex h-full shrink-0 flex-col overflow-hidden border-l border-[var(--border)] transition-[width] duration-300 ease-out',
+        collapsed ? 'w-[68px]' : 'w-[248px]',
         className,
       )}
     >
@@ -352,6 +386,7 @@ export default function PlannerSidebar({
       <SidebarFooter
         counts={counts}
         collapsed={collapsed}
+        activeSection={activeSection}
         onNewTask={onNewTask}
         onNewEvent={onNewEvent}
         onSelect={onSelect}
@@ -389,25 +424,31 @@ export function PlannerSidebarDrawer({
       if (event.key === 'Escape') onClose()
     }
     document.addEventListener('keydown', onKeyDown)
+    panelRef.current?.focus({ preventScroll: true })
     return () => document.removeEventListener('keydown', onKeyDown)
   }, [open, onClose])
 
   if (!open) return null
 
   const drawer = (
-    <div className="fixed inset-0 z-[60] lg:hidden">
+    <div className="fixed inset-0 z-50 xl:hidden">
       <button
         type="button"
         aria-label="Close planner navigation"
         onClick={onClose}
-        className="absolute inset-0 bg-black/35 backdrop-blur-[2px]"
+        className="animate-fade-in absolute inset-0 bg-[rgb(9_8_18_/_0.45)] backdrop-blur-[2px]"
       />
       <div
         ref={panelRef}
         role="dialog"
         aria-modal="true"
         aria-label="Planner navigation"
-        className="glass-strong animate-rise-in absolute inset-y-0 right-0 flex w-[min(85vw,300px)] flex-col border-l border-[var(--border)]"
+        tabIndex={-1}
+        style={{
+          paddingTop: 'max(var(--sat), 0.5rem)',
+          paddingBottom: 'max(var(--sab), 0.5rem)',
+        }}
+        className="glass-strong animate-rise-in absolute inset-y-0 right-0 flex w-[min(85vw,300px)] flex-col overflow-hidden border-l border-[var(--border)] shadow-glass-lg outline-none"
       >
         <div className="flex h-12 shrink-0 items-center justify-between border-b border-[var(--border)] px-3">
           <span className="font-display text-[13px] font-semibold text-foreground">Planner</span>
@@ -432,6 +473,7 @@ export function PlannerSidebarDrawer({
         <SidebarFooter
           counts={counts}
           collapsed={false}
+          activeSection={activeSection}
           onNewTask={() => {
             onNewTask()
             onClose()

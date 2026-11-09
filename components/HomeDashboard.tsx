@@ -625,7 +625,7 @@ export default function HomeDashboard({
           </button>
           <button type="button" onClick={onOpenTasks} className="glass-btn h-11 sm:h-9">
             <ListTodo size={14} />
-            Tasks
+            Planner
             {dueTodayCount > 0 && (
               <span className="rounded-full bg-accent-light px-1.5 py-0.5 text-[10px] font-semibold tabular-nums text-accent">
                 {dueTodayCount}

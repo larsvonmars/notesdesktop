@@ -61,7 +61,7 @@ describe('PlannerSidebar', () => {
       />,
     )
 
-    expect(html).toContain('w-[64px]')
+    expect(html).toContain('w-[68px]')
     expect(html).toContain('Expand planner sidebar')
     // Labels are replaced with icon-only buttons (still present in tooltips).
     expect(html).not.toContain('>Smart plan<')

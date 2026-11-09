@@ -165,7 +165,7 @@ export default function ProjectsView({
   }
 
   return (
-    <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_320px]">
+    <div className="grid gap-4 2xl:grid-cols-[minmax(0,1fr)_320px]">
       <div className="space-y-4">
         <section className="glass-card p-4">
           <div className="flex items-center justify-between">
