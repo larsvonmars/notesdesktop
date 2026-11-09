@@ -90,11 +90,36 @@ If no usable selection can be established, `handleCommand` **skips the command**
 * A short enter animation (`.selection-toolbar-in`) plays once per show; it is
   disabled under `prefers-reduced-motion`.
 
+## AI actions (selection → chat)
+
+The toolbar can hand the selected passage to the Chat assistant:
+
+* `components/SelectionToolbar.tsx` renders an **AI** trigger (only when the
+  `onAskAI` prop is supplied, i.e. inside `NoteEditor`). Opening it captures
+  `window.getSelection().toString()` while the selection is still intact, so the
+  dropdown items do not need a live range.
+* `lib/chat/selection-actions.ts` owns the action list (Summarise, Improve
+  writing, Explain, Translate, Make flashcards, Extract tasks, Ask about this…)
+  and the prompt builders. Selection text is quoted as a markdown blockquote and
+  capped at 6 000 characters.
+* `WorkspaceShell.tsx` (`handleAskAIFromSelection`) switches to the Chat view and
+  hands `ChatView` two one-shot props: `initialPrompt` (auto-sent) or
+  `initialDraft` (prefilled composer for the open-ended action), plus a
+  `ChatFocusContext` describing the open note.
+* `ChatView` consumes each prop once after its transcript is restored and reports
+  back through `onInitialPromptConsumed` / `onInitialDraftConsumed`. The focus is
+  appended to the system prompt by `buildChatSystemPrompt` and shown as an
+  "About <note>" chip above the composer.
+
 ## Tests
 
 * `tests/toolbarPosition.test.ts` — placement/clamping/flip cases.
 * `tests/selectionSnapshot.test.ts` — capture/restore, node-identity restore
   across wrapping, offset fallback across block rebuilds, focus handling.
+* `tests/selectionToolbar.test.tsx` — AI trigger visibility, selection capture
+  and action dispatch (happy-dom), empty-selection no-op.
+* `tests/chat.selection-actions.test.ts` — prompt builders, quoting/truncation and
+  the focus block of the chat system prompt.
 * Browser harness (built with esbuild, real `useFloatingToolbar` +
   `SelectionToolbar` in Chromium) verified: no toolbar during drag; placement
   above/below with clamping; button press keeps selection + focus; selection

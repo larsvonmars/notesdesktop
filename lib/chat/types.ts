@@ -43,6 +43,13 @@ export interface ChatMessage {
   error?: string
 }
 
+/** The note the user is looking at while chatting (drives the focus prompt). */
+export interface ChatFocusContext {
+  noteId?: string | null
+  noteTitle?: string | null
+  noteType?: string | null
+}
+
 export interface ChatConversationSummary {
   id: string
   title: string

@@ -111,4 +111,23 @@ describe('ChatPanel', () => {
     expect(html).toContain('no answer was generated')
     expect(html).toContain('Upstream timeout')
   })
+
+  it('shows the focused note above the composer', () => {
+    const html = renderToStaticMarkup(
+      <ChatPanel
+        {...baseProps}
+        messages={[]}
+        focus={{ noteId: 'note-1', noteTitle: 'Weekly plan', noteType: 'rich-text' }}
+        onClearFocus={() => {}}
+      />
+    )
+
+    expect(html).toContain('Weekly plan')
+    expect(html).toContain('Stop using this note as context')
+  })
+
+  it('omits the focus chip when no note is focused', () => {
+    const html = renderToStaticMarkup(<ChatPanel {...baseProps} messages={[]} />)
+    expect(html).not.toContain('Stop using this note as context')
+  })
 })

@@ -1,5 +1,7 @@
 /** System prompts and starter prompts for the Chat view. */
 
+import type { ChatFocusContext } from './types'
+
 export const CHAT_SYSTEM_PROMPT = `You are MindViz Chat, the assistant inside the user's notes workspace. You help with notes, folders, projects, tasks and the Learn workspace — all through natural conversation.
 
 Your tools:
@@ -42,6 +44,30 @@ Guidelines:
 - Use the tools you were granted to gather all relevant information.
 - Return concise markdown (lists, short sections) with concrete facts, ids and numbers.
 - If something is missing, say what is missing instead of inventing details.`
+
+/**
+ * Tell the model which note the user is looking at. Without this the model has
+ * to rediscover the note through tools before it can answer anything about
+ * "this note" or "my selection".
+ */
+export function buildChatSystemPrompt(base: string, focus?: ChatFocusContext | null): string {
+  if (!focus?.noteId && !focus?.noteTitle) return base
+
+  const lines = ['', '', '## Current focus']
+  if (focus.noteTitle) {
+    const type = focus.noteType ? ` (${focus.noteType} note)` : ''
+    const id = focus.noteId ? ` [id: ${focus.noteId}]` : ''
+    lines.push(`The user is currently working in "${focus.noteTitle}"${type}${id}.`)
+  } else if (focus.noteId) {
+    lines.push(`The user is currently working in the note [id: ${focus.noteId}].`)
+  }
+  lines.push(
+    'Treat "this note", "my note" and "the selected text" as that note. Read it with read_note before changing it, and prefer append_to_note over rewriting existing content.',
+  )
+
+  return `${base}${lines.join('\n')}`
+}
+
 
 export interface ChatStarterPrompt {
   text: string

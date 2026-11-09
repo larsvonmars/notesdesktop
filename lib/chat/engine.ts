@@ -17,8 +17,13 @@ import {
   type ChatToolSpec,
 } from './tools'
 import { requestChatCompletion, type AccumulatedToolCall } from './transport'
-import { AGENT_SYSTEM_PROMPT, CHAT_SYSTEM_PROMPT, SUB_AGENT_SYSTEM_PROMPT } from './prompts'
-import type { ChatMessage, ChatToolCall, ChatTurnCallbacks, ChatTurnResult } from './types'
+import {
+  AGENT_SYSTEM_PROMPT,
+  CHAT_SYSTEM_PROMPT,
+  SUB_AGENT_SYSTEM_PROMPT,
+  buildChatSystemPrompt,
+} from './prompts'
+import type { ChatFocusContext, ChatMessage, ChatToolCall, ChatTurnCallbacks, ChatTurnResult } from './types'
 
 const CHAT_MAX_STEPS = 6
 const AGENT_MAX_STEPS = 15
@@ -51,6 +56,8 @@ export interface RunChatTurnOptions {
   agentMode: boolean
   /** Tool forced for the first step (chat mode only). */
   forcedTool?: string | null
+  /** Note the user is looking at; appended to the system prompt. */
+  focus?: ChatFocusContext | null
   signal?: AbortSignal
   callbacks?: ChatTurnCallbacks
 }
@@ -355,7 +362,7 @@ async function runConversation(options: RunConversationOptions): Promise<ChatTur
 
 /** Run one user turn and stream the assistant answer. */
 export async function runChatTurn(options: RunChatTurnOptions): Promise<ChatTurnResult> {
-  const { messages, userId, agentMode, forcedTool, signal, callbacks } = options
+  const { messages, userId, agentMode, forcedTool, focus, signal, callbacks } = options
   const ctx: ChatToolContext = { userId, signal }
 
   const tools: Record<string, ChatToolSpec> = { ...BASE_CHAT_TOOLS }
@@ -365,7 +372,7 @@ export async function runChatTurn(options: RunChatTurnOptions): Promise<ChatTurn
 
   return runConversation({
     history: buildOpenAIMessages(messages),
-    system: agentMode ? AGENT_SYSTEM_PROMPT : CHAT_SYSTEM_PROMPT,
+    system: buildChatSystemPrompt(agentMode ? AGENT_SYSTEM_PROMPT : CHAT_SYSTEM_PROMPT, focus),
     tools,
     maxSteps: agentMode ? AGENT_MAX_STEPS : CHAT_MAX_STEPS,
     maxTokens: agentMode ? AGENT_MAX_TOKENS : CHAT_MAX_TOKENS,

@@ -137,8 +137,27 @@ describe('chat engine', () => {
     expect(Array.isArray(payload.tools)).toBe(true)
   })
 
-  it('reports tool failures without breaking the turn', async () => {
-    completionMock
+  it('passes the focused note to the model as system context', async () => {
+    completionMock.mockResolvedValue({ content: 'Done', reasoning: '', toolCalls: [] })
+
+    await runChatTurn({
+      messages: [userMessage({ content: 'Summarise this note' })],
+      userId: 'user-1',
+      agentMode: false,
+      focus: { noteId: 'note-9', noteTitle: 'Weekly plan', noteType: 'rich-text' },
+    })
+
+    const payload = completionMock.mock.calls[0][0] as {
+      messages: Array<{ role: string; content: string }>
+    }
+    const system = payload.messages[0]
+    expect(system.role).toBe('system')
+    expect(system.content).toContain('## Current focus')
+    expect(system.content).toContain('"Weekly plan"')
+    expect(system.content).toContain('[id: note-9]')
+  })
+
+  it('reports tool failures without breaking the turn', async () => {    completionMock
       .mockResolvedValueOnce({
         content: '',
         reasoning: '',

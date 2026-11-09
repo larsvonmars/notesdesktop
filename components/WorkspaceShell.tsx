@@ -106,6 +106,12 @@ import { getNote, searchNotes } from '@/lib/notes'
 import { recordNoteOpened } from '@/lib/note-activity'
 import { readWelcomeOnStartupPreference } from '@/lib/workspace/preferences'
 import { formatModShortcut } from '@/lib/platform'
+import {
+  buildSelectionDraft,
+  buildSelectionPrompt,
+  type SelectionAIActionId,
+} from '@/lib/chat/selection-actions'
+import type { ChatFocusContext } from '@/lib/chat/types'
 
 const SettingsModal = dynamic(() => import('@/components/SettingsModal'), {
   ssr: false,
@@ -234,6 +240,10 @@ function WorkspaceContent() {
 
   // Workspace view state
   const [activeView, setActiveView] = useState<WorkspaceView>('notes')
+  // Chat handover from the editor: the focused note plus a one-shot prompt/draft.
+  const [chatFocus, setChatFocus] = useState<ChatFocusContext | null>(null)
+  const [chatInitialPrompt, setChatInitialPrompt] = useState<string | null>(null)
+  const [chatInitialDraft, setChatInitialDraft] = useState<string | null>(null)
   const [showFilesPanel, setShowFilesPanel] = useState(false)
   const [showFileExplorerModal, setShowFileExplorerModal] = useState(false)
   const [workspaceNavCollapsed, setWorkspaceNavCollapsed] = useState(false)
@@ -692,6 +702,41 @@ function WorkspaceContent() {
     },
     [recordNav]
   )
+
+  /** Selection actions: open chat pre-loaded with the focused note and a prompt. */
+  const handleAskAIFromSelection = useCallback(
+    (actionId: SelectionAIActionId, selectionText: string) => {
+      const selection = selectionText.trim()
+      if (!selection) return
+
+      const noteTitle = selectedNote?.title ?? null
+      setChatFocus(
+        selectedNote
+          ? { noteId: selectedNote.id, noteTitle, noteType: selectedNote.note_type }
+          : null,
+      )
+
+      if (actionId === 'ask') {
+        setChatInitialDraft(buildSelectionDraft(selection, noteTitle))
+        setChatInitialPrompt(null)
+      } else {
+        setChatInitialPrompt(buildSelectionPrompt(actionId, selection, noteTitle))
+        setChatInitialDraft(null)
+      }
+
+      switchWorkspaceView('chat')
+    },
+    [selectedNote, switchWorkspaceView],
+  )
+
+  const clearChatInitialPrompt = useCallback(() => setChatInitialPrompt(null), [])
+  const clearChatInitialDraft = useCallback(() => setChatInitialDraft(null), [])
+  const clearChatFocus = useCallback(() => setChatFocus(null), [])
+
+  // The focused note only stays attached while the chat is on screen.
+  useEffect(() => {
+    if (activeView !== 'chat') setChatFocus(null)
+  }, [activeView])
 
   const beginOpenSwipe = useCallback((clientX: number, clientY: number) => {
     if (!isMobile || workspaceNavOpen) return
@@ -1274,6 +1319,7 @@ function WorkspaceContent() {
           onSave={handleSaveNote}
           onCancel={handleCancel}
           onDelete={selectedNote ? handleDeleteNote : undefined}
+          onAskAI={handleAskAIFromSelection}
           folders={folderTree}
           selectedFolderId={selectedFolderId}
           onSelectFolder={handleSelectFolder}
@@ -1503,7 +1549,14 @@ function WorkspaceContent() {
 
           {activeView === 'chat' && (
             <div className="h-full overflow-hidden">
-              <ChatView />
+              <ChatView
+                focus={chatFocus}
+                initialPrompt={chatInitialPrompt}
+                initialDraft={chatInitialDraft}
+                onInitialPromptConsumed={clearChatInitialPrompt}
+                onInitialDraftConsumed={clearChatInitialDraft}
+                onClearFocus={clearChatFocus}
+              />
             </div>
           )}
 

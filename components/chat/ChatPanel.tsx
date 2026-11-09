@@ -16,6 +16,7 @@ import {
   MessageSquare,
   Plus,
   Sparkles,
+  X,
 } from 'lucide-react'
 import { cn } from '@/components/shell/utils'
 import { MarkdownContent } from '@/components/ai/AIMarkdown'
@@ -23,7 +24,7 @@ import ChatInput from './ChatInput'
 import ChatReasoningBlock from './ChatReasoningBlock'
 import ChatToolCallCard from './ChatToolCallCard'
 import type { ChatStarterPrompt } from '@/lib/chat/prompts'
-import type { ChatAttachment, ChatMessage, ChatStatus } from '@/lib/chat/types'
+import type { ChatAttachment, ChatFocusContext, ChatMessage, ChatStatus } from '@/lib/chat/types'
 
 export interface ChatPanelProps {
   title: string
@@ -48,6 +49,9 @@ export interface ChatPanelProps {
   onAttachmentError: (message: string | null) => void
   forcedTool: string | null
   onForcedToolChange: (tool: string | null) => void
+  /** Note the conversation is anchored to, shown as a chip above the composer. */
+  focus?: ChatFocusContext | null
+  onClearFocus?: () => void
   onOpenHistory?: () => void
 }
 
@@ -213,6 +217,8 @@ export default function ChatPanel({
   onAttachmentError,
   forcedTool,
   onForcedToolChange,
+  focus = null,
+  onClearFocus,
   onOpenHistory,
 }: ChatPanelProps) {
   const scrollRef = useRef<HTMLDivElement>(null)
@@ -427,6 +433,28 @@ export default function ChatPanel({
 
       <div className="shrink-0 px-2.5 pb-2.5 pt-1.5">
         <div className="mx-auto w-full max-w-3xl">
+          {focus?.noteTitle && (
+            <div className="mb-2 flex min-w-0 items-center">
+              <span className="inline-flex min-w-0 max-w-full items-center gap-1.5 rounded-full border border-accent/25 bg-accent-light py-0.5 pl-2.5 pr-1 text-[11px] text-accent">
+                <FileText className="h-3 w-3 shrink-0" aria-hidden="true" />
+                <span className="shrink-0 text-[9.5px] font-semibold uppercase tracking-[0.08em] opacity-70">
+                  About
+                </span>
+                <span className="truncate">{focus.noteTitle}</span>
+                {onClearFocus && (
+                  <button
+                    type="button"
+                    onClick={onClearFocus}
+                    className="focus-ring inline-flex h-4 w-4 shrink-0 items-center justify-center rounded-full transition-colors hover:bg-accent/15"
+                    aria-label="Stop using this note as context"
+                    title="Stop using this note as context"
+                  >
+                    <X className="h-2.5 w-2.5" aria-hidden="true" />
+                  </button>
+                )}
+              </span>
+            </div>
+          )}
           {messages.length > 0 && !input.trim() && !streaming && starters.length > 0 && (
             <div className="mb-2 flex gap-1.5 overflow-x-auto pb-0.5 scroll-thin">
               {starters.slice(0, 4).map((starter) => (

@@ -63,6 +63,7 @@ import MobileNoteActions from '@/components/editor/MobileNoteActions'
 import { useIsMobile, useIsCompact } from '@/lib/useIsMobile'
 import { useFloatingToolbar } from '@/lib/editor/useFloatingToolbar'
 import SelectionToolbar from './SelectionToolbar'
+import type { SelectionAIActionId } from '@/lib/chat/selection-actions'
 import { noteLinkBlock } from '../lib/editor/noteLinkBlock'
 import { imageBlock } from '../lib/editor/imageBlock'
 import { dataSheetTableBlock, type DataSheetTablePayload } from '../lib/editor/dataSheetTableBlock'
@@ -146,6 +147,8 @@ interface NoteEditorProps {
   initialNoteType?: NoteType
   /** When set, the new mindmap uses this template's data instead of the single-root default */
   mindmapTemplateId?: string
+  /** Hand the current selection to the AI chat with a prepared action prompt. */
+  onAskAI?: (actionId: SelectionAIActionId, selectionText: string) => void
 }
 
 const stripHtml = (html: string) => html.replace(/<[^>]*>/g, ' ').replace(/&nbsp;/g, ' ').trim()
@@ -332,6 +335,7 @@ export default function NoteEditor({
   onSignOut,
   onOpenFileExplorer,
   onOpenProjectsView,
+  onAskAI,
 }: NoteEditorWithPanelProps) {
   const toast = useToast()
   const isMobile = useIsMobile()
@@ -3327,6 +3331,7 @@ export default function NoteEditor({
         visible={noteType === 'rich-text' && floatingToolbarState.visible}
         activeFormats={activeFormats}
         onCommand={handleCommand}
+        onAskAI={onAskAI}
         onDismiss={hideFloatingToolbar}
         isDisabled={isSaving || isDeleting}
       />

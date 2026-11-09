@@ -19,10 +19,12 @@ import {
   Copy,
   Eraser,
   MoreHorizontal,
+  Sparkles,
   Undo,
   Redo,
 } from 'lucide-react'
 import type { RichTextCommand } from './RichTextEditor'
+import { SELECTION_AI_ACTIONS, type SelectionAIActionId } from '@/lib/chat/selection-actions'
 import { useIsMobile } from '@/lib/useIsMobile'
 
 /* Types */
@@ -33,6 +35,8 @@ interface SelectionToolbarProps {
   visible: boolean
   activeFormats: Set<string>
   onCommand: (command: RichTextCommand) => void
+  /** Hand the current selection to the AI chat with a prepared action prompt. */
+  onAskAI?: (actionId: SelectionAIActionId, selectionText: string) => void
   isDisabled?: boolean
   /** Touch/compact layout: dock the toolbar at the bottom edge. */
   docked?: boolean
@@ -205,6 +209,7 @@ const SelectionToolbar = forwardRef<HTMLDivElement | null, SelectionToolbarProps
       visible,
       activeFormats,
       onCommand,
+      onAskAI,
       isDisabled,
       docked = false,
       onDismiss,
@@ -215,8 +220,11 @@ const SelectionToolbar = forwardRef<HTMLDivElement | null, SelectionToolbarProps
     const [headingOpen, setHeadingOpen] = useState(false)
     const [headingOpensUp, setHeadingOpensUp] = useState(false)
     const [caseOpen, setCaseOpen] = useState(false)
+    const [aiOpen, setAiOpen] = useState(false)
     const headingRef = useRef<HTMLDivElement>(null)
     const caseRef = useRef<HTMLDivElement>(null)
+    const aiRef = useRef<HTMLDivElement>(null)
+    const aiSelectionRef = useRef('')
     const containerRef = useRef<HTMLDivElement | null>(null)
     const isMobile = useIsMobile()
     const iconSize = isMobile ? 17 : 15
@@ -241,6 +249,7 @@ const SelectionToolbar = forwardRef<HTMLDivElement | null, SelectionToolbarProps
         setShowMore(false)
         setHeadingOpen(false)
         setCaseOpen(false)
+        setAiOpen(false)
       }
     }, [visible])
 
@@ -270,6 +279,42 @@ const SelectionToolbar = forwardRef<HTMLDivElement | null, SelectionToolbarProps
       document.addEventListener('mousedown', handler)
       return () => document.removeEventListener('mousedown', handler)
     }, [caseOpen])
+
+    // Close the AI menu on outside click
+    useEffect(() => {
+      if (!aiOpen) return
+      const handler = (e: MouseEvent) => {
+        if (aiRef.current && !aiRef.current.contains(e.target as Node)) {
+          setAiOpen(false)
+        }
+      }
+      document.addEventListener('mousedown', handler)
+      return () => document.removeEventListener('mousedown', handler)
+    }, [aiOpen])
+
+    const liveSelectionText = useCallback(
+      () => (typeof window === 'undefined' ? '' : window.getSelection()?.toString() ?? ''),
+      [],
+    )
+
+    // Capture the passage while the selection is still intact; the menu closes
+    // it afterwards.
+    const toggleAiMenu = useCallback(() => {
+      setAiOpen((open) => {
+        if (!open) aiSelectionRef.current = liveSelectionText().trim()
+        return !open
+      })
+    }, [liveSelectionText])
+
+    const runAiAction = useCallback(
+      (actionId: SelectionAIActionId) => {
+        const text = (aiSelectionRef.current || liveSelectionText()).trim()
+        setAiOpen(false)
+        if (!text) return
+        onAskAI?.(actionId, text)
+      },
+      [liveSelectionText, onAskAI],
+    )
 
     const fire = useCallback(
       (cmd: RichTextCommand) => {
@@ -301,11 +346,12 @@ const SelectionToolbar = forwardRef<HTMLDivElement | null, SelectionToolbarProps
     const handleKeyDown = useCallback(
       (event: React.KeyboardEvent<HTMLDivElement>) => {
         if (event.key === 'Escape') {
-          if (headingOpen || caseOpen) {
+          if (headingOpen || caseOpen || aiOpen) {
             // Close only the dropdown; the toolbar stays (and keeps the selection).
             event.stopPropagation()
             setHeadingOpen(false)
             setCaseOpen(false)
+            setAiOpen(false)
             return
           }
           // No dropdown: dismiss the toolbar but let the event bubble — the
@@ -355,7 +401,7 @@ const SelectionToolbar = forwardRef<HTMLDivElement | null, SelectionToolbarProps
         }
         buttons[nextIndex]?.focus()
       },
-      [headingOpen, onDismiss]
+      [aiOpen, caseOpen, headingOpen, onDismiss]
     )
     if (!visible) return null
 
@@ -396,6 +442,73 @@ const SelectionToolbar = forwardRef<HTMLDivElement | null, SelectionToolbarProps
       >
         {/* Primary row */}
         <div className="flex flex-wrap items-center gap-0.5 px-0.5">
+          {/* AI actions on the selection */}
+          {onAskAI && (
+            <>
+              <div ref={aiRef} className="relative">
+                <button
+                  type="button"
+                  disabled={isDisabled}
+                  title="Ask AI about the selection"
+                  aria-haspopup="menu"
+                  aria-expanded={aiOpen}
+                  onMouseDown={(e) => e.preventDefault()}
+                  onClick={toggleAiMenu}
+                  className={[
+                    'inline-flex items-center gap-0.5 rounded-full border px-2.5 text-xs font-semibold transition-colors',
+                    'focus-ring',
+                    'disabled:pointer-events-none disabled:opacity-40',
+                    isMobile ? 'h-10' : 'h-8',
+                    aiOpen
+                      ? 'border-accent-light bg-accent-light text-accent'
+                      : 'border-transparent text-accent hover:bg-accent-light/60',
+                  ].join(' ')}
+                >
+                  <Sparkles size={isMobile ? 16 : 14} aria-hidden="true" />
+                  <span className="hidden sm:inline">AI</span>
+                  <ChevronDown
+                    size={12}
+                    className={`transition-transform ${aiOpen ? 'rotate-180' : ''}`}
+                    aria-hidden="true"
+                  />
+                </button>
+
+                {aiOpen && (
+                  <div
+                    role="menu"
+                    tabIndex={-1}
+                    aria-label="AI actions for the selection"
+                    className={`floating-pop-in glass-strong absolute left-0 z-10 min-w-[230px] overflow-y-auto overflow-x-hidden rounded-2xl py-1 ${
+                      docked ? 'bottom-full mb-1.5' : 'top-full mt-1.5'
+                    }`}
+                    style={{ maxHeight: 'min(340px, 50vh)', maxWidth: 'calc(100vw - 24px)' }}
+                    onMouseDown={(e) => e.preventDefault()}
+                  >
+                    {SELECTION_AI_ACTIONS.map((action) => (
+                      <button
+                        key={action.id}
+                        type="button"
+                        role="menuitem"
+                        onClick={() => runAiAction(action.id)}
+                        className="focus-ring flex w-full items-start gap-2 rounded-lg px-3 py-1.5 text-left transition-colors hover:bg-surface-hover"
+                      >
+                        <span className="mt-px shrink-0 text-[13px]" aria-hidden="true">
+                          {action.emoji}
+                        </span>
+                        <span className="min-w-0">
+                          <span className="block text-[13px] font-medium text-foreground">{action.label}</span>
+                          <span className="block text-[10.5px] leading-snug text-muted">{action.description}</span>
+                        </span>
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
+
+              <Divider />
+            </>
+          )}
+
           {/* Heading selector */}
           <div ref={headingRef} className="relative">
             <button

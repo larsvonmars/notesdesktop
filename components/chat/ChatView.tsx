@@ -18,7 +18,7 @@ import {
 } from '@/lib/chat/conversations'
 import ChatPanel from './ChatPanel'
 import ChatSidebar, { ChatSidebarDrawer } from './ChatSidebar'
-import type { ChatAttachment, ChatConversationSummary, ChatMessage, ChatStatus } from '@/lib/chat/types'
+import type { ChatAttachment, ChatConversationSummary, ChatFocusContext, ChatMessage, ChatStatus } from '@/lib/chat/types'
 
 const STORAGE_PREFIX = 'mindviz-notes-chat-'
 const MAX_CACHED_MESSAGES = 50
@@ -60,7 +60,26 @@ function isAbortError(error: unknown): boolean {
 }
 
 /** Full-page AI chat: conversation history, streaming answers, tools and agent mode. */
-export default function ChatView() {
+export interface ChatViewProps {
+  /** Note the user came from; appended to the system prompt and shown as a chip. */
+  focus?: ChatFocusContext | null
+  /** Auto-sent once on mount (e.g. a selection action from the editor). */
+  initialPrompt?: string | null
+  /** Prefilled into the composer once (e.g. "ask about this passage"). */
+  initialDraft?: string | null
+  onInitialPromptConsumed?: () => void
+  onInitialDraftConsumed?: () => void
+  onClearFocus?: () => void
+}
+
+export default function ChatView({
+  focus = null,
+  initialPrompt = null,
+  initialDraft = null,
+  onInitialPromptConsumed,
+  onInitialDraftConsumed,
+  onClearFocus,
+}: ChatViewProps = {}) {
   const { user } = useAuth()
   const userId = user?.id ?? null
 
@@ -207,12 +226,12 @@ export default function ChatView() {
     setInput(text)
   }, [])
 
-  const handleSend = useCallback(async () => {
+  const handleSend = useCallback(async (overrideText?: string) => {
     if (!userId) {
       setAttachmentError('Your account is still loading. Please try again in a moment.')
       return
     }
-    const text = input.trim()
+    const text = (typeof overrideText === 'string' ? overrideText : input).trim()
     if ((!text && attachments.length === 0) || status === 'streaming' || status === 'submitted') return
 
     setAttachmentError(null)
@@ -277,6 +296,7 @@ export default function ChatView() {
         userId,
         agentMode,
         forcedTool,
+        focus,
         signal: controller.signal,
         callbacks: {
           onText: (delta) => {
@@ -355,6 +375,7 @@ export default function ChatView() {
     agentMode,
     attachments,
     currentConversationId,
+    focus,
     forcedTool,
     input,
     messages,
@@ -368,6 +389,32 @@ export default function ChatView() {
     abortRef.current = null
     setStatus('ready')
   }, [])
+
+  // Handover from the editor: prefill the composer once, then tell the shell.
+  const consumedDraftRef = useRef<string | null>(null)
+  useEffect(() => {
+    if (!initialDraft) {
+      consumedDraftRef.current = null
+      return
+    }
+    if (!restored || consumedDraftRef.current === initialDraft) return
+    consumedDraftRef.current = initialDraft
+    setInput(initialDraft)
+    onInitialDraftConsumed?.()
+  }, [initialDraft, onInitialDraftConsumed, restored])
+
+  // Handover from the editor: send the prompt once the transcript is restored.
+  const consumedPromptRef = useRef<string | null>(null)
+  useEffect(() => {
+    if (!initialPrompt) {
+      consumedPromptRef.current = null
+      return
+    }
+    if (!restored || !userId || consumedPromptRef.current === initialPrompt) return
+    consumedPromptRef.current = initialPrompt
+    onInitialPromptConsumed?.()
+    void handleSend(initialPrompt)
+  }, [handleSend, initialPrompt, onInitialPromptConsumed, restored, userId])
 
   return (
     <div className="flex h-full min-h-0">
@@ -383,7 +430,9 @@ export default function ChatView() {
             onToggleAgentMode={() => setAgentMode((previous) => !previous)}
             input={input}
             onInputChange={setInput}
-            onSend={handleSend}
+            onSend={() => {
+              void handleSend()
+            }}
             onStop={handleStop}
             onNewChat={resetConversation}
             starters={starters}
@@ -396,6 +445,8 @@ export default function ChatView() {
             onAttachmentError={setAttachmentError}
             forcedTool={forcedTool}
             onForcedToolChange={setForcedTool}
+            focus={focus}
+            onClearFocus={onClearFocus}
             onOpenHistory={() => setHistoryOpen(true)}
           />
         </div>
