@@ -3,12 +3,10 @@
 import { useMemo, useState } from 'react'
 import {
   BookOpen,
-  Bot,
   Flame,
   GraduationCap,
   LayoutDashboard,
   Settings2,
-  Sparkles,
   Target,
   TrendingUp,
   Zap,
@@ -28,7 +26,6 @@ import { describeLearnError } from '@/lib/learn/db'
 import { DECK_COLORS, cn, resolveDeckColor } from '@/lib/learn/utils'
 import { DecksView } from './DecksView'
 import { DeckEditor } from './DeckEditor'
-import { LearnAssistant } from './LearnAssistant'
 import { LearnDetailsPanel } from './LearnDetailsPanel'
 import { LearnDashboard } from './LearnDashboard'
 import { LearnProgress } from './LearnProgress'
@@ -36,14 +33,13 @@ import { LearnSettings } from './LearnSettings'
 import { StudySession } from './StudySession'
 
 const TABS: Array<{
-  id: 'dashboard' | 'decks' | 'progress' | 'assistant' | 'settings'
+  id: 'dashboard' | 'decks' | 'progress' | 'settings'
   label: string
   icon: typeof LayoutDashboard
 }> = [
   { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard },
   { id: 'decks', label: 'Decks', icon: BookOpen },
   { id: 'progress', label: 'Progress', icon: TrendingUp },
-  { id: 'assistant', label: 'Assistant', icon: Bot },
   { id: 'settings', label: 'Settings', icon: Settings2 },
 ]
 
@@ -84,7 +80,6 @@ function LearnShell({
     isLoadingDecks,
     screen,
     setScreen,
-    openAssistant,
     requestCreateDeck,
   } = useLearning()
   const toast = useToast()
@@ -157,7 +152,7 @@ function LearnShell({
                     Learn
                   </h1>
                   <p className="text-xs text-muted">
-                    Flashcards, spaced repetition and an AI tutor
+                    Flashcards and spaced repetition
                   </p>
                 </div>
               </div>
@@ -196,15 +191,6 @@ function LearnShell({
                       : 'Ready to learn'}
                   </span>
                 )}
-                <Button
-                  type="button"
-                  variant="secondary"
-                  size="sm"
-                  icon={Sparkles}
-                  onClick={() => openAssistant()}
-                >
-                  Ask AI
-                </Button>
               </div>
             </header>
 
@@ -229,7 +215,6 @@ function LearnShell({
                       else if (tab.id === 'decks') setScreen({ kind: 'decks' })
                       else if (tab.id === 'progress')
                         setScreen({ kind: 'progress' })
-                      else if (tab.id === 'assistant') openAssistant()
                       else setScreen({ kind: 'settings' })
                     }}
                     className={cn(
@@ -255,7 +240,6 @@ function LearnShell({
                 onDeleteDeck={(deckId) => setPendingDeleteDeck(deckId)}
                 onEditDeck={(deck) => setEditingDeck(deck)}
                 onOpenProgress={() => setScreen({ kind: 'progress' })}
-                onOpenAssistant={openAssistant}
                 onOpenSettings={() => setScreen({ kind: 'settings' })}
               />
             )}
@@ -264,7 +248,6 @@ function LearnShell({
               <DecksView
                 onOpenDeck={(deckId) => setScreen({ kind: 'deck', deckId })}
                 onStartStudy={(deckId) => setScreen({ kind: 'study', deckId })}
-                onOpenAssistant={openAssistant}
                 onEditDeck={(deck) => setEditingDeck(deck)}
               />
             )}
@@ -276,7 +259,6 @@ function LearnShell({
                 onStartStudy={() =>
                   setScreen({ kind: 'study', deckId: screen.deckId })
                 }
-                onOpenAssistant={openAssistant}
               />
             )}
 
@@ -288,20 +270,10 @@ function LearnShell({
                 onBackToDeck={() =>
                   setScreen({ kind: 'deck', deckId: screen.deckId })
                 }
-                onOpenAssistant={openAssistant}
               />
             )}
 
-            {screen.kind === 'progress' && (
-              <LearnProgress onOpenAssistant={openAssistant} />
-            )}
-
-            {screen.kind === 'assistant' && (
-              <LearnAssistant
-                key={screen.key}
-                initialPrompt={screen.prompt ?? null}
-              />
-            )}
+            {screen.kind === 'progress' && <LearnProgress />}
 
             {screen.kind === 'settings' && (
               <LearnSettings onOpenAppSettings={onOpenAppSettings} />

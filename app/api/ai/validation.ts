@@ -6,20 +6,33 @@ const ALLOWED_TOOL_NAMES = new Set([
   'read_note',
   'search_notes',
   'create_mindmap_note',
-  'replace_note_content',
-  'edit_note_content',
-  // Chat view tools (notes, tasks, projects, workspace metadata)
+  // Chat view tools (notes, tasks, calendar, projects, Learn, workspace)
   'create_note',
   'append_to_note',
+  'update_note',
+  'delete_note',
+  'create_mindmap_note',
+  'create_data_sheet_note',
+  'create_bullet_journal_note',
+  'create_folder',
+  'create_project',
+  'update_project',
   'list_folders',
   'list_projects',
   'list_tasks',
   'create_task',
   'complete_task',
+  'update_task',
+  'delete_task',
   'get_task_stats',
+  'list_events',
+  'create_event',
+  'update_event',
+  'delete_event',
   'get_current_date',
+  'get_workspace_overview',
   'delegate_subtask',
-  // Learn workspace assistant
+  // Learn workspace
   'list_decks',
   'get_cards',
   'create_deck',
@@ -29,23 +42,12 @@ const ALLOWED_TOOL_NAMES = new Set([
   'delete_card',
   'delete_deck',
   'get_stats',
-  'get_daily_progress',
-  'get_study_history',
   'search_cards',
-  'generate_cards_parallel',
-  'analyze_deck_quality',
-  'list_documents',
-  'create_deck_from_document',
-  // Learn tutor / AI-learn sessions
-  'lookup_card',
-  'mark_card_mastered',
-  'suggest_related_cards',
-  'get_study_tip',
 ])
 const MAX_MESSAGES = 100
 const MAX_MESSAGE_CONTENT_CHARS = 320000
 const MAX_TOTAL_MESSAGE_CHARS = 640000
-const MAX_TOOL_COUNT = 32
+const MAX_TOOL_COUNT = 48
 /** A single user message may mix text with a handful of images (vision). */
 const MAX_CONTENT_PARTS = 8
 /** Base64 image payload ceiling (~9 MB decoded) per image part. */

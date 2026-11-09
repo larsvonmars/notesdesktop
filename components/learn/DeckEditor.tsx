@@ -1,23 +1,14 @@
 'use client'
 
-import {
-  useCallback,
-  useEffect,
-  useMemo,
-  useRef,
-  useState,
-  type ChangeEvent,
-} from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import {
   ArrowLeft,
   BookOpen,
-  Bot,
   Check,
   Clock3,
   FileText,
   List,
   Loader2,
-  Paperclip,
   Plus,
   Save,
   Sparkles,
@@ -32,7 +23,6 @@ import BaseModal, {
 } from '@/components/BaseModal'
 import { Button } from '@/components/ui/Button'
 import { useToast } from '@/components/ToastProvider'
-import { generateCardsFromDocument } from '@/lib/learn/ai'
 import {
   createCard,
   createCards,
@@ -42,13 +32,7 @@ import {
 } from '@/lib/learn/cards'
 import { deleteDeck } from '@/lib/learn/decks'
 import { useLearning } from '@/lib/learn/context'
-import {
-  getDocumentText,
-  updateDocument,
-  uploadDocument,
-} from '@/lib/learn/documents'
 import type { Card } from '@/lib/learn/types'
-import { checkTextQuality } from '@/lib/learn/pdf-text'
 import { cn, formatRelativeDate, resolveDeckColor } from '@/lib/learn/utils'
 import { describeLearnError } from '@/lib/learn/db'
 import { ProgressBar } from './LearnPrimitives'
@@ -57,7 +41,6 @@ interface Props {
   deckId: string
   onBack: () => void
   onStartStudy: () => void
-  onOpenAssistant: (prompt?: string) => void
 }
 
 interface CardDraft {
@@ -66,13 +49,8 @@ interface CardDraft {
   mastered: boolean
 }
 
-export function DeckEditor({
-  deckId,
-  onBack,
-  onStartStudy,
-  onOpenAssistant,
-}: Props) {
-  const { decks, refreshDecks, aiRefreshCounter } = useLearning()
+export function DeckEditor({ deckId, onBack, onStartStudy }: Props) {
+  const { decks, refreshDecks } = useLearning()
   const toast = useToast()
   const toastRef = useRef(toast)
   toastRef.current = toast
@@ -90,11 +68,8 @@ export function DeckEditor({
   const [newBack, setNewBack] = useState('')
   const [bulkMode, setBulkMode] = useState(false)
   const [bulkInput, setBulkInput] = useState('')
-  const [uploading, setUploading] = useState(false)
-  const [uploadStatus, setUploadStatus] = useState<string | null>(null)
   const [showDeleteDeck, setShowDeleteDeck] = useState(false)
   const [deletingDeck, setDeletingDeck] = useState(false)
-  const fileInputRef = useRef<HTMLInputElement>(null)
   const mountedRef = useRef(true)
 
   useEffect(() => {
@@ -132,11 +107,6 @@ export function DeckEditor({
   useEffect(() => {
     void loadCards()
   }, [loadCards])
-
-  useEffect(() => {
-    if (aiRefreshCounter > 0) void loadCards()
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [aiRefreshCounter])
 
   const bulkPairs = useMemo(() => {
     if (!bulkInput.trim()) return []
@@ -264,78 +234,6 @@ export function DeckEditor({
     }
   }
 
-  async function handlePdfUpload(event: ChangeEvent<HTMLInputElement>) {
-    const file = event.target.files?.[0]
-    if (!file || !deck) return
-
-    if (file.type !== 'application/pdf') {
-      toastRef.current.push({
-        title: 'Only PDF files are supported',
-        variant: 'error',
-      })
-      if (fileInputRef.current) fileInputRef.current.value = ''
-      return
-    }
-    if (file.size > 10 * 1024 * 1024) {
-      toastRef.current.push({
-        title: 'File too large',
-        description: 'Maximum size is 10 MiB.',
-        variant: 'error',
-      })
-      if (fileInputRef.current) fileInputRef.current.value = ''
-      return
-    }
-
-    setUploading(true)
-    setUploadStatus('Uploading PDF…')
-    try {
-      const document = await uploadDocument(file)
-      setUploadStatus('Extracting text…')
-      const extracted = await getDocumentText(document.id)
-      const warning = checkTextQuality(extracted.text)
-      if (warning) {
-        toastRef.current.push({
-          title: 'Limited PDF text',
-          description: warning,
-          variant: 'warning',
-        })
-      }
-      setUploadStatus('Generating flashcards with AI…')
-      const generated = await generateCardsFromDocument(extracted.text, {
-        deckTitle: deck.title,
-        maxCards: Math.max(
-          10,
-          Math.min(40, Math.ceil(extracted.text.length / 800))
-        ),
-        onProgress: (message) => setUploadStatus(message),
-      })
-      setUploadStatus(`Adding ${generated.length} cards…`)
-      await createCards(deck.id, generated)
-      await updateDocument(document.id, {
-        status: 'processed',
-        deckId: deck.id,
-      })
-      await Promise.all([loadCards(), refreshDecks()])
-      toastRef.current.push({
-        title: `${generated.length} AI cards added`,
-        description: `Generated from ${file.name}`,
-        variant: 'success',
-      })
-    } catch (error) {
-      toastRef.current.push({
-        title: 'PDF import failed',
-        description: describeLearnError(error),
-        variant: 'error',
-      })
-    } finally {
-      if (mountedRef.current) {
-        setUploading(false)
-        setUploadStatus(null)
-      }
-      if (fileInputRef.current) fileInputRef.current.value = ''
-    }
-  }
-
   if (!deck && !loading) {
     return (
       <div className="mx-auto flex min-h-[50vh] max-w-md flex-col items-center justify-center gap-4 text-center">
@@ -396,19 +294,6 @@ export function DeckEditor({
         </div>
 
         <div className="flex flex-wrap items-center gap-2">
-          <Button
-            type="button"
-            variant="secondary"
-            size="sm"
-            icon={Bot}
-            onClick={() =>
-              onOpenAssistant(
-                `Help me improve the deck "${deck?.title ?? ''}" (id: ${deckId}).`
-              )
-            }
-          >
-            Ask AI
-          </Button>
           <Button
             type="button"
             variant="secondary"
@@ -496,33 +381,7 @@ export function DeckEditor({
             </button>
           </div>
 
-          <div className="flex items-center gap-2">
-            <input
-              ref={fileInputRef}
-              type="file"
-              accept="application/pdf"
-              onChange={(event) => void handlePdfUpload(event)}
-              className="hidden"
-            />
-            <Button
-              type="button"
-              variant="secondary"
-              size="sm"
-              icon={Paperclip}
-              loading={uploading}
-              onClick={() => fileInputRef.current?.click()}
-            >
-              Import PDF with AI
-            </Button>
-          </div>
         </div>
-
-        {uploadStatus && (
-          <div className="mt-3 flex items-center gap-2 rounded-xl border border-accent/20 bg-accent-light px-3 py-2 text-xs font-medium text-accent">
-            <Loader2 size={13} className="animate-spin" />
-            {uploadStatus}
-          </div>
-        )}
 
         {!bulkMode ? (
           <div className="mt-3 grid gap-2 sm:grid-cols-2">
@@ -621,8 +480,7 @@ export function DeckEditor({
               No cards in this deck
             </p>
             <p className="mt-1 text-xs leading-5 text-muted">
-              Add cards above, paste a CSV list, or import a PDF and let AI
-              build the deck.
+              Add cards above or paste a CSV list to build the deck.
             </p>
           </div>
         ) : (

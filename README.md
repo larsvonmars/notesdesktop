@@ -40,7 +40,7 @@ An Alpine-themed desktop notes application built with Tauri, Next.js, and Supaba
    DEEPSEEK_API_KEY=your-deepseek-api-key
    ```
 
-   - Desktop builds can also store the key in OS keychain via the integrated AI assistant settings path.
+   - Desktop builds keep the key in the OS keychain and call DeepSeek through the Tauri `ai_chat_json` command.
 
 4. **App Icon** ✅
 
@@ -95,40 +95,38 @@ Navigation model: **rail → library → note list → editor → details**.
 is the single source of truth for destinations and shortcuts.
 
 Keyboard shortcuts: `⌘/Ctrl+K` command palette, `⌘/Ctrl+N` new note,
-`⌘/Ctrl+J` AI assistant, `⌘/Ctrl+1..6` Home/Notes/Tasks/Files/Chat/Learn, `⌘/Ctrl+\` toggle
+`⌘/Ctrl+J` open Chat, `⌘/Ctrl+1..6` Home/Notes/Tasks/Files/Chat/Learn, `⌘/Ctrl+\` toggle
 library, `⌘/Ctrl+[` and `⌘/Ctrl+]` back/forward.
 
-The **AI assistant** (`components/AIAssistant.tsx` with markdown rendering in
-`components/ai/AIMarkdown.tsx`) is a floating glass copilot panel: streaming
-transcript with collapsible reasoning, context picker, quick actions, chat
-history and structured suggestions. Open it from the note details footer, the
-top-bar overflow menu, or `⌘/Ctrl+J`; `Escape` closes it.
-
-The **Chat view** (`components/chat/` with the turn engine in `lib/chat/`) is a
-full-page assistant: conversation history backed by the shared `chat_conversations`
-/ `chat_messages` tables, streamed answers with collapsible reasoning, markdown,
-image and PDF/DOCX attachments, a tool menu, and an agent mode that delegates to
-scoped sub-agents. Tools call the app's own data layer (`lib/chat/tools.ts`), so
-every request runs with the signed-in user's Supabase session. Open it from the
-rail or `⌘/Ctrl+5`.
+The **Chat view** (`components/chat/` with the turn engine in `lib/chat/`) is the
+single assistant in the app and a full-page workspace copilot: conversation
+history backed by the shared `chat_conversations` / `chat_messages` tables,
+streamed answers with collapsible reasoning, markdown, image and PDF/DOCX
+attachments, a tool menu, and an agent mode that delegates to scoped sub-agents.
+Tools call the app's own data layer (`lib/chat/tools.ts`), so every request runs
+with the signed-in user's Supabase session. It can read, search, create, update
+and delete notes; build mindmap notes; create folders and projects; manage tasks;
+read and schedule calendar events; manage Learn decks and flashcards; and report
+workspace/learning statistics. Destructive tools require explicit confirmation.
+Open it from the rail, the top-bar overflow menu, or `⌘/Ctrl+J`.
 
 The **Learn view** (`components/learn/` with the data layer in `lib/learn/`) is the
 workspace for everything flashcard-related, sharing the `learn_*` Supabase tables
 with the MindViz Learn app. It includes a gamified dashboard (XP, level, streak,
-daily goal, badges), deck management with single/bulk-CSV/PDF-AI card creation,
-eight study modes (flashcard, multiple choice, spaced repetition with SM-2,
-typed answer, timed test, smart three-round, AI Learn and AI Tutor), sprint-based
-sessions with XP breakdowns and badge unlocks, a progress page with a study
-heatmap and session history, study preferences, and a tool-using AI assistant
-that can create decks/cards, analyze deck quality and build decks from PDFs.
-Open it from the rail or `⌘/Ctrl+6`. Integration goes beyond the view:
+daily goal, badges), deck management with single/bulk-CSV card creation, six
+study modes (flashcard, multiple choice, spaced repetition with SM-2, typed
+answer, timed test and smart three-round), sprint-based sessions with XP
+breakdowns and badge unlocks, a progress page with a study heatmap and session
+history, and study preferences. Deck and card management is also available
+through the Chat view's Learn tools. Open Learn from the rail or `⌘/Ctrl+6`.
+Integration goes beyond the view:
 the library pane becomes a Learn hub (navigation, deck search, mastery and a
 Continue card), the top bar switches to "New deck" with Learn breadcrumbs and a
 details toggle, Home shows a Learning panel, Settings gets a Learning section,
 the command palette lists decks and searches flashcards, the Chat view gains
 Learn tools, and the mobile bar gets a dedicated Learn tab. In Learn, `⌘/Ctrl+N`
-creates a deck, `⌘/Ctrl+J` opens the Learn assistant, and the right-hand details
-panel surfaces deck context, quick study modes and current-card info.
+creates a deck, and the right-hand details panel surfaces deck context, quick
+study modes and current-card info.
 
 The **PDF annotation workspace** (`components/PdfAnnotationEditor.tsx`) follows the
 same system: a single glass command bar (tools, colour/size popovers, undo/redo,
@@ -239,7 +237,7 @@ Important: do not bind this Worker to `/*` on your main app domain. If you do, b
 - ✅ **Keyboard shortcuts** for efficient workflow
 - ✅ **Note sorting** (by updated date, created date, or title)
 - ✅ **Delete confirmations** with safety warnings
-- ✅ **Learn workspace** - Gamified flashcards with eight study modes, SM-2 spaced repetition, AI tutoring, PDF-to-deck generation, a context-aware library sidebar, Home/Settings panels, command-palette search and Chat tools
+- ✅ **Learn workspace** - Gamified flashcards with six study modes, SM-2 spaced repetition, a context-aware library sidebar, Home/Settings panels, command-palette search and Chat tools
 - ✅ **Real-time synchronization** with Supabase
 - ✅ **Offline-first notes and folders** - local IndexedDB cache, write-behind sync and conflict detection
 - ✅ **100% WebView and Tauri compatible** - Fully optimized for Windows, macOS, and Linux
@@ -254,9 +252,9 @@ Important: do not bind this Worker to `/*` on your main app domain. If you do, b
 │   ├── signup/         # Signup page
 │   ├── layout.tsx      # Root layout with AuthProvider
 │   └── page.tsx        # Home page (redirects)
-├── components/learn/    # Learn view UI (dashboard, decks, 8 study modes, progress, AI)
+├── components/learn/    # Learn view UI (dashboard, decks, study modes, progress)
 ├── lib/                 # Utilities
-│   ├── learn/          # Learn data layer, gamification and AI flows
+│   ├── learn/          # Learn data layer and gamification
 │   ├── supabase.ts     # Supabase client
 │   └── auth-context.tsx # Auth context provider
 ├── src-tauri/          # Tauri backend

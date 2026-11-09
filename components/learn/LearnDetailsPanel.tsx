@@ -3,12 +3,11 @@
 import {
   Award,
   BookOpen,
-  Bot,
   Brain,
   CheckSquare,
   Flame,
   GraduationCap,
-  Sparkles,
+  Keyboard,
   Target,
   TrendingUp,
   Zap,
@@ -43,10 +42,10 @@ const QUICK_MODES: Array<{
     className: 'text-amber-600 dark:text-amber-400',
   },
   {
-    mode: 'tutor',
-    label: 'AI Tutor',
-    icon: Sparkles,
-    className: 'text-indigo-600 dark:text-indigo-400',
+    mode: 'typed-answer',
+    label: 'Typed',
+    icon: Keyboard,
+    className: 'text-emerald-600 dark:text-emerald-400',
   },
 ]
 
@@ -56,8 +55,7 @@ const QUICK_MODES: Array<{
  * else.
  */
 export function LearnDetailsPanel() {
-  const { stats, decks, screen, setScreen, openAssistant, currentCard } =
-    useLearning()
+  const { stats, decks, screen, setScreen, currentCard } = useLearning()
 
   const deckId =
     screen.kind === 'deck' || screen.kind === 'study'
@@ -199,18 +197,6 @@ export function LearnDetailsPanel() {
             >
               Manage cards
             </button>
-            <button
-              type="button"
-              onClick={() =>
-                openAssistant(
-                  `Help me study the deck "${deck.title}" (id: ${deck.id}). What should I focus on?`
-                )
-              }
-              className="glass-btn focus-ring flex h-8 w-full items-center justify-center gap-1.5 text-[11px] font-medium"
-            >
-              <Bot size={12} />
-              Ask Learn AI
-            </button>
           </div>
         </>
       ) : (
@@ -314,14 +300,6 @@ export function LearnDetailsPanel() {
                 </div>
               )}
 
-              <button
-                type="button"
-                onClick={() => openAssistant()}
-                className="glass-btn-ghost mt-3 flex h-8 w-full items-center justify-center gap-1.5 rounded-lg text-[11px] font-medium text-accent"
-              >
-                <Bot size={12} />
-                Ask Learn AI
-              </button>
             </>
           ) : (
             <p className="mt-4 text-[11px] leading-5 text-muted">

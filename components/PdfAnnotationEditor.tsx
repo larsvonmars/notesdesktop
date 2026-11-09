@@ -198,7 +198,6 @@ interface PdfAnnotationEditorProps {
   disabled?: boolean
   noteId?: string | null
   /** Called once after a PDF loads with the full extracted plain text (all pages). */
-  onTextExtracted?: (text: string) => void
 }
 
 // ============================================================================
@@ -288,7 +287,7 @@ async function loadPdfJs() {
 
 const PdfAnnotationEditor = forwardRef<PdfAnnotationEditorHandle, PdfAnnotationEditorProps>(
   function PdfAnnotationEditor(
-  { value, onChange, disabled, noteId, onTextExtracted },
+  { value, onChange, disabled, noteId },
   ref
 ) {
     const toast = useToast()
@@ -1132,7 +1131,6 @@ const PdfAnnotationEditor = forwardRef<PdfAnnotationEditorHandle, PdfAnnotationE
       // before this async load finishes.
       const openedNoteId = noteId
       let cancelled = false
-      let textExtractionTimer: ReturnType<typeof setTimeout> | null = null
 
       async function loadPdf() {
         setPdfLoading(true)
@@ -1177,32 +1175,6 @@ const PdfAnnotationEditor = forwardRef<PdfAnnotationEditorHandle, PdfAnnotationE
           setEditingText(null)
           setCurrentPage(clampPdfPage(savedPage ?? value?.currentPage ?? 0, pageCount))
 
-          // Extract full plain text from all PDF pages for AI context. Defer it
-          // so opening a PDF stays responsive (the text is only needed once the
-          // user actually involves the AI panel).
-          if (onTextExtracted) {
-            const timerId = window.setTimeout(async () => {
-              if (cancelled) return
-              const parts: string[] = []
-              for (let i = 1; i <= doc.numPages; i++) {
-                if (cancelled) return
-                try {
-                  const pg = await doc.getPage(i)
-                  const tc = await pg.getTextContent()
-                  const pageText = tc.items
-                    .map((item: any) => item.str ?? '')
-                    .join(' ')
-                    .replace(/\s+/g, ' ')
-                    .trim()
-                  if (pageText) parts.push(`[Page ${i}]\n${pageText}`)
-                } catch {
-                  // skip unreadable page
-                }
-              }
-              if (!cancelled) onTextExtracted(parts.join('\n\n'))
-            }, 1500)
-            textExtractionTimer = timerId as unknown as ReturnType<typeof setTimeout>
-          }
         } catch (err) {
           if (!cancelled) {
             setPdfError(err instanceof Error ? err.message : 'Failed to load PDF')
@@ -1215,7 +1187,6 @@ const PdfAnnotationEditor = forwardRef<PdfAnnotationEditorHandle, PdfAnnotationE
       loadPdf()
       return () => {
         cancelled = true
-        if (textExtractionTimer !== null) clearTimeout(textExtractionTimer)
       }
       // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [value?.pdfStoragePath])

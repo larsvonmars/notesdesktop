@@ -4,7 +4,6 @@ import { useEffect, useState, type ReactNode } from 'react'
 import {
   ArrowLeft,
   Award,
-  Bot,
   ChevronDown,
   ChevronUp,
   Flame,
@@ -40,7 +39,6 @@ interface Props {
   xpBreakdown?: XPBreakdown
   onStudyAgain: () => void
   onBackToDeck: () => void
-  onAskAi?: () => void
 }
 
 export function SessionComplete({
@@ -56,7 +54,6 @@ export function SessionComplete({
   xpBreakdown,
   onStudyAgain,
   onBackToDeck,
-  onAskAi,
 }: Props) {
   const [displayXp, setDisplayXp] = useState(0)
   const [showBreakdown, setShowBreakdown] = useState(false)
@@ -290,16 +287,6 @@ export function SessionComplete({
           <RotateCcw size={15} />
           Study again
         </ActionButton>
-        {onAskAi && (
-          <ActionButton
-            variant="secondary"
-            onClick={onAskAi}
-            className="flex-1"
-          >
-            <Bot size={15} />
-            Ask AI
-          </ActionButton>
-        )}
         <ActionButton
           variant="secondary"
           onClick={onBackToDeck}

@@ -79,20 +79,12 @@ import {
   type FileBlockPreviewDocxEventDetail,
   type FileBlockAnnotatePdfEventDetail,
 } from '../lib/editor/fileBlock'
-import {
-  extractMindmapForAI,
-  extractBulletJournalForAI,
-  extractDataSheetForAI,
-  generateMindmapOutline,
-  type MindmapOutline,
-} from '@/lib/ai'
 import NoteDetailsSidebar from './NoteDetailsSidebar'
 import { Settings } from 'lucide-react'
 import { htmlToMarkdown } from '@/lib/editor/markdownHelpers'
 import type { NoteType } from '@/lib/notes'
 import { getNoteTypePresentation, type NoteTypeIconKey } from '@/lib/note-types'
 import { deleteFile, getFileSignedUrl, uploadImageFile } from '@/lib/file-storage'
-import { AI_ASSISTANT_OPEN_EVENT } from '@/lib/ai/assistant-events'
 
 export type { Note } from '../lib/notes'
 
@@ -109,7 +101,7 @@ const NOTE_TYPE_CHIP_ICONS: Record<NoteTypeIconKey, LucideIcon> = {
   'file-pen-line': FilePenLine,
 }
 
-// Modal-only UI (file browser, knowledge graph, AI assistant, DOCX preview…)
+// Modal-only UI (file browser, knowledge graph, DOCX preview…)
 // is split out of the note-editor chunk: these components pull in large
 // dependencies and none of them render until the user opens them.
 const modalLoading = () => null
@@ -142,11 +134,6 @@ const SettingsModal = dynamic(() => import('./SettingsModal'), {
   ssr: false,
   loading: modalLoading,
 })
-const AIAssistant = dynamic(() => import('./AIAssistant'), {
-  ssr: false,
-  loading: modalLoading,
-})
-
 interface NoteEditorProps {
   note?: LibNote | null
   // `isAuto` will be passed when the editor triggers an autosave so parents can handle it differently
@@ -162,163 +149,6 @@ interface NoteEditorProps {
 }
 
 const stripHtml = (html: string) => html.replace(/<[^>]*>/g, ' ').replace(/&nbsp;/g, ' ').trim()
-
-const MINDMAP_NODE_COLORS = ['#3B82F6', '#10B981', '#F59E0B', '#EF4444', '#84CC16', '#EC4899', '#06B6D4', '#F97316']
-const MAX_AUTO_MINDMAP_NODES = 12
-const MAX_AI_MINDMAP_FIRST_LEVEL_NODES = 10
-const MINDMAP_ROOT_X = 400
-const MINDMAP_ROOT_Y = 300
-
-const normalizeTextLineForMindmap = (value: string): string => {
-  return value
-    .replace(/^\s*[-*+]\s+/, '')
-    .replace(/^\s*\d+[.)]\s+/, '')
-    .replace(/^\s*#{1,6}\s+/, '')
-    .replace(/\s+/g, ' ')
-    .trim()
-}
-
-const buildFallbackMindmapDataFromText = (sourceText: string, rootText: string): MindmapData => {
-  const rootId = 'root'
-  const lines = sourceText
-    .split(/\r?\n/)
-    .map(normalizeTextLineForMindmap)
-    .filter(Boolean)
-
-  const seen = new Set<string>()
-  const childLabels: string[] = []
-  for (const line of lines) {
-    const normalized = line.toLowerCase()
-    if (normalized === rootText.toLowerCase()) continue
-    if (seen.has(normalized)) continue
-    seen.add(normalized)
-    childLabels.push(line)
-    if (childLabels.length >= MAX_AUTO_MINDMAP_NODES) break
-  }
-
-  if (childLabels.length === 0) {
-    childLabels.push('Main Idea', 'Key Details', 'Next Steps')
-  }
-
-  const nodes: MindmapData['nodes'] = {
-    [rootId]: {
-      id: rootId,
-      text: rootText,
-      x: 400,
-      y: 300,
-      parentId: null,
-      children: [],
-      collapsed: false,
-      color: MINDMAP_NODE_COLORS[0],
-      description: '',
-      attachments: [],
-    },
-  }
-
-  childLabels.forEach((label, index) => {
-    const nodeId = `node-${Date.now()}-${index}`
-    const angle = (Math.PI * 2 * index) / childLabels.length
-    const distance = 190
-
-    nodes[rootId].children.push(nodeId)
-    nodes[nodeId] = {
-      id: nodeId,
-      text: label.slice(0, 80),
-      x: 400 + Math.cos(angle) * distance,
-      y: 300 + Math.sin(angle) * distance,
-      parentId: rootId,
-      children: [],
-      collapsed: false,
-      color: MINDMAP_NODE_COLORS[(index + 1) % MINDMAP_NODE_COLORS.length],
-      description: '',
-      attachments: [],
-    }
-  })
-
-  return { rootId, nodes }
-}
-
-const buildMindmapDataFromOutline = (outline: MindmapOutline, fallbackRootText: string): MindmapData => {
-  const rootId = 'root'
-  const rootText = outline.rootText?.trim().slice(0, 80) || fallbackRootText || 'Central Idea'
-  const nodes: MindmapData['nodes'] = {
-    [rootId]: {
-      id: rootId,
-      text: rootText,
-      x: MINDMAP_ROOT_X,
-      y: MINDMAP_ROOT_Y,
-      parentId: null,
-      children: [],
-      collapsed: false,
-      color: MINDMAP_NODE_COLORS[0],
-      description: outline.rootDescription?.trim() || '',
-      attachments: [],
-    },
-  }
-
-  const idCounter = { value: 0 }
-
-  const addChildren = (
-    parentId: string,
-    parentX: number,
-    parentY: number,
-    children: NonNullable<MindmapOutline['children']>,
-    depth: number,
-    startAngle: number,
-    endAngle: number
-  ) => {
-    if (!children.length || depth > 3) return
-
-    const radius = depth === 1 ? 210 : Math.max(110, 210 - depth * 35)
-    const arcSize = endAngle - startAngle
-
-    children.forEach((child, index) => {
-      idCounter.value += 1
-      const nodeId = `node-ai-${idCounter.value}`
-      const angle = startAngle + (arcSize * (index + 1)) / (children.length + 1)
-      const x = parentX + Math.cos(angle) * radius
-      const y = parentY + Math.sin(angle) * radius
-      const colorIndex = (depth + index) % MINDMAP_NODE_COLORS.length
-
-      nodes[parentId].children.push(nodeId)
-      nodes[nodeId] = {
-        id: nodeId,
-        text: child.text,
-        x,
-        y,
-        parentId,
-        children: [],
-        collapsed: false,
-        color: MINDMAP_NODE_COLORS[colorIndex],
-        description: child.description?.trim() || '',
-        attachments: [],
-      }
-
-      const grandchildren = (child.children || []).slice(0, MAX_AUTO_MINDMAP_NODES)
-      if (grandchildren.length > 0) {
-        const childArcSize = Math.min(Math.PI * 0.9, Math.max(Math.PI / 6, arcSize / Math.max(children.length, 1)))
-        addChildren(
-          nodeId,
-          x,
-          y,
-          grandchildren,
-          depth + 1,
-          angle - childArcSize / 2,
-          angle + childArcSize / 2
-        )
-      }
-    })
-  }
-
-  const firstLevel = outline.children.slice(0, MAX_AI_MINDMAP_FIRST_LEVEL_NODES)
-  addChildren(rootId, MINDMAP_ROOT_X, MINDMAP_ROOT_Y, firstLevel, 1, -Math.PI, Math.PI)
-
-  if (nodes[rootId].children.length === 0) {
-    return buildFallbackMindmapDataFromText(rootText, rootText)
-  }
-
-  return { rootId, nodes }
-}
 
 const escapeHtml = (value: string) =>
   value
@@ -463,7 +293,7 @@ interface NoteEditorWithPanelProps extends NoteEditorProps {
   onDeleteFolder?: (folderId: string) => void
   onMoveFolder?: (folderId: string, newParentId: string | null) => void
   notes?: LibNoteSummary[]
-  allNotes?: LibNoteSummary[]  // Note metadata for AI tool calling; bodies are lazy-loaded
+  allNotes?: LibNoteSummary[]  // Note metadata for links and dashboards; bodies are lazy-loaded
   onSelectNote?: (note: LibNote) => void
   onNewNote?: (noteType?: NoteType, folderId?: string | null, projectId?: string | null) => void
   onDuplicateNote?: (note: LibNoteSummary) => void
@@ -528,7 +358,6 @@ export default function NoteEditor({
   const bulletJournalRef = useRef<BulletJournalEditorHandle | null>(null)
   const dataSheetRef = useRef<DataSheetEditorHandle | null>(null)
   const pdfAnnotationRef = useRef<PdfAnnotationEditorHandle | null>(null)
-  const [pdfExtractedText, setPdfExtractedText] = useState<string>('')
   const headingUpdateTimeoutRef = useRef<number | null>(null)
   const autosaveTimeoutRef = useRef<number | null>(null)
   const isAutosavingRef = useRef(false)
@@ -594,8 +423,6 @@ export default function NoteEditor({
   })
 
   const [showSettings, setShowSettings] = useState(false)
-  const [showAIAssistant, setShowAIAssistant] = useState(false)
-  const [isAIAssistantLarge, setIsAIAssistantLarge] = useState(false)
   const [rightSidebarCollapsed, setRightSidebarCollapsed] = useState(false)
   const isCompact = useIsCompact()
   // Below 1024px the details panel would squeeze the editor, so it becomes an
@@ -648,14 +475,6 @@ export default function NoteEditor({
     return () => { document.documentElement.style.removeProperty('--workspace-right-sidebar-offset') }
   }, [rightSidebarOffset, isMobile])
   
-  // Selected text state for AI assistant integration
-  const [selectedText, setSelectedText] = useState('')
-  const selectedTextRef = useRef<string>('')
-  const selectedTextUpdateTimeoutRef = useRef<number | null>(null)
-  
-  // Selected mindmap node state for AI assistant integration
-  const [selectedMindmapNodeId, setSelectedMindmapNodeId] = useState<string | null>(null)
-
   const scheduleHeadingsUpdate = useCallback(() => {
     if (headingUpdateTimeoutRef.current !== null) {
       window.clearTimeout(headingUpdateTimeoutRef.current)
@@ -2228,51 +2047,11 @@ export default function NoteEditor({
 
   // Listen for selection changes to update active format states
   useEffect(() => {
-    const handleSelectionChange = () => {
-      scheduleActiveFormatsUpdate()
-
-      // Track selected text for AI assistant (debounced to avoid excessive updates)
-      if (noteType === 'rich-text' && editorRef.current) {
-        // Clear any pending update
-        if (selectedTextUpdateTimeoutRef.current !== null) {
-          window.clearTimeout(selectedTextUpdateTimeoutRef.current)
-        }
-        
-        const editorElement = editorRef.current.getRootElement()
-        const selection = window.getSelection()
-        if (selection && selection.rangeCount > 0 && editorElement) {
-          const range = selection.getRangeAt(0)
-          // Only capture selection if it's within the editor
-          if (editorElement.contains(range.commonAncestorContainer)) {
-            const text = selection.toString().trim()
-            if (text !== selectedTextRef.current) {
-              selectedTextRef.current = text
-              // Debounce the state update by 150ms to avoid rapid re-renders during drag selection
-              selectedTextUpdateTimeoutRef.current = window.setTimeout(() => {
-                setSelectedText(text)
-                selectedTextUpdateTimeoutRef.current = null
-              }, 150)
-            }
-          } else if (selectedTextRef.current !== '') {
-            selectedTextRef.current = ''
-            setSelectedText('')
-          }
-        } else if (selectedTextRef.current !== '') {
-          selectedTextRef.current = ''
-          setSelectedText('')
-        }
-      }
-    }
-
-    document.addEventListener('selectionchange', handleSelectionChange)
+    document.addEventListener('selectionchange', scheduleActiveFormatsUpdate)
     return () => {
-      document.removeEventListener('selectionchange', handleSelectionChange)
-      // Clean up pending timeout on unmount
-      if (selectedTextUpdateTimeoutRef.current !== null) {
-        window.clearTimeout(selectedTextUpdateTimeoutRef.current)
-      }
+      document.removeEventListener('selectionchange', scheduleActiveFormatsUpdate)
     }
-  }, [scheduleActiveFormatsUpdate, noteType])
+  }, [scheduleActiveFormatsUpdate])
 
   useEffect(() => {
     resetFloatingToolbar()
@@ -2341,25 +2120,6 @@ export default function NoteEditor({
       cancelled = true
     }
   }, [note?.id, noteType])
-
-  // The assistant can be opened from the shell (top-bar overflow, ⌘J) as well
-  // as from the details panel footer.
-  useEffect(() => {
-    const handleOpen = () => setShowAIAssistant(true)
-    window.addEventListener(AI_ASSISTANT_OPEN_EVENT, handleOpen)
-    return () => window.removeEventListener(AI_ASSISTANT_OPEN_EVENT, handleOpen)
-  }, [])
-
-  // Escape closes the assistant panel.
-  useEffect(() => {
-    if (!showAIAssistant) return
-    const handleKeyDown = (event: KeyboardEvent) => {
-      if (event.key !== 'Escape') return
-      setShowAIAssistant(false)
-    }
-    window.addEventListener('keydown', handleKeyDown)
-    return () => window.removeEventListener('keydown', handleKeyDown)
-  }, [showAIAssistant])
 
   const folderPathMap = useMemo(() => {
     const map = new Map<string, string>()
@@ -3134,234 +2894,6 @@ export default function NoteEditor({
   }, [notesForConnections, onSelectNote, resolveFullNote, toast])
 
 
-
-  // AI Assistant handlers
-  // Build a readable plain-text representation of the current note for the AI,
-  // based on note type (rich-text, mindmap, bullet-journal, data-sheet, etc.)
-  const aiNoteContent = useMemo(() => {
-    if (noteType === 'rich-text') return content
-    if (noteType === 'mindmap' && mindmapData) {
-      return extractMindmapForAI(mindmapData.nodes, mindmapData.rootId)
-    }
-    if (noteType === 'bullet-journal' && bulletJournalData) {
-      return extractBulletJournalForAI(bulletJournalData.entries)
-    }
-    if (noteType === 'data-sheet' && dataSheetData) {
-      return extractDataSheetForAI(dataSheetData.columns, dataSheetData.rows)
-    }
-    if (noteType === 'drawing') return '[This note contains a drawing — no text content is available for AI]'
-    if (noteType === 'pdf-annotation') {
-      if (pdfExtractedText) return `[PDF document — extracted text below]\n\n${pdfExtractedText}`
-      return '[This note contains a PDF — text is still being extracted or the PDF has no selectable text]'
-    }
-    return content
-  }, [noteType, content, mindmapData, bulletJournalData, dataSheetData, pdfExtractedText])
-
-  const handleAICreateMindmapNote = useCallback(async (input: {
-    sourceText: string
-    sourceTitle?: string
-    sourceType: 'selection' | 'current-note'
-    targetTitle?: string
-    additionalPrompt?: string
-  }) => {
-    const sourceText = input.sourceText?.trim()
-    if (!sourceText) {
-      toast.push({ title: 'No text available', description: 'Select text or open a text note first.' })
-      return
-    }
-
-    const baseTitle =
-      input.targetTitle?.trim() ||
-      input.sourceTitle?.trim() ||
-      note?.title?.trim() ||
-      'Untitled'
-    const finalTitle = `${baseTitle.slice(0, 80)} Mindmap`
-
-    const rootHint = baseTitle.slice(0, 80) || 'Central Idea'
-    let mindmapDataForNote: MindmapData
-    let usedAI = true
-
-    try {
-      const outline = await generateMindmapOutline(sourceText, rootHint, input.additionalPrompt)
-      mindmapDataForNote = buildMindmapDataFromOutline(outline, rootHint)
-    } catch (error) {
-      console.warn('AI mindmap generation failed, falling back to text outline conversion:', error)
-      usedAI = false
-      mindmapDataForNote = buildFallbackMindmapDataFromText(sourceText, rootHint)
-    }
-
-    try {
-      const created = await createNote({
-        title: finalTitle,
-        content: JSON.stringify(mindmapDataForNote),
-        folder_id: note?.folder_id ?? selectedFolderId ?? null,
-        project_id: note?.project_id ?? null,
-        note_type: 'mindmap',
-      })
-
-      toast.push({
-        title: 'Mindmap note created',
-        description: usedAI
-          ? input.sourceType === 'selection'
-            ? 'AI generated from selected text.'
-            : 'AI generated from current note content.'
-          : input.sourceType === 'selection'
-            ? 'Built from selected text (fallback mode).'
-            : 'Built from current note content (fallback mode).',
-      })
-
-      setShowAIAssistant(false)
-      onSelectNote(created)
-    } catch (error) {
-      console.error('Failed to create mindmap note from AI action:', error)
-      toast.push({ title: 'Creation failed', description: 'Could not create the mindmap note.' })
-    }
-  }, [note?.title, note?.folder_id, note?.project_id, selectedFolderId, onSelectNote, toast])
-
-  const handleAIInsertText = useCallback((text: string) => {
-    if (noteType === 'rich-text' && editorRef.current) {
-      // Insert the HTML at the end of the current content
-      const currentHtml = editorRef.current.getHTML()
-      const newContent = currentHtml + text
-      editorRef.current.setHTML(newContent)
-      toast.push({ title: 'Content inserted' })
-    }
-  }, [noteType, toast])
-
-  const handleAIReplaceText = useCallback((text: string) => {
-    if (noteType === 'rich-text' && editorRef.current) {
-      editorRef.current.setHTML(text)
-      toast.push({ title: 'Content replaced' })
-    }
-  }, [noteType, toast])
-  
-  // Replace selected text with AI-generated text
-  const handleAIReplaceSelection = useCallback((text: string) => {
-    if (noteType === 'rich-text' && editorRef.current) {
-      const selection = window.getSelection()
-      if (selection && selection.rangeCount > 0) {
-        const range = selection.getRangeAt(0)
-        const editorElement = editorRef.current.getRootElement()
-        
-        if (editorElement && editorElement.contains(range.commonAncestorContainer)) {
-          // Delete the selected content and insert new text
-          range.deleteContents()
-          
-          // Create a text node with the new content
-          // If the text contains HTML-like formatting, sanitize and insert as HTML
-          if (text.includes('<') && text.includes('>')) {
-            // Sanitize HTML to prevent XSS
-            const sanitizedHtml = DOMPurify.sanitize(text, {
-              ALLOWED_TAGS: ['p', 'br', 'strong', 'b', 'em', 'i', 'u', 'span', 'ul', 'ol', 'li', 'a', 'h1', 'h2', 'h3', 'h4', 'h5', 'h6', 'blockquote', 'code', 'pre'],
-              ALLOWED_ATTR: ['href', 'target', 'rel', 'class'],
-            })
-            const fragment = range.createContextualFragment(sanitizedHtml)
-            range.insertNode(fragment)
-          } else {
-            const textNode = document.createTextNode(text)
-            range.insertNode(textNode)
-          }
-          
-          // Collapse selection to end
-          selection.collapseToEnd()
-          
-          // Update content state
-          const newContent = editorRef.current.getHTML()
-          handleContentChange(newContent)
-          setHasChanges(true)
-          toast.push({ title: 'Selection replaced' })
-        }
-      }
-    }
-  }, [noteType, handleContentChange, toast])
-  
-  // Insert text at current cursor position
-  const handleAIInsertAtCursor = useCallback((text: string) => {
-    if (noteType === 'rich-text' && editorRef.current) {
-      editorRef.current.focus()
-      
-      const selection = window.getSelection()
-      if (selection && selection.rangeCount > 0) {
-        const range = selection.getRangeAt(0)
-        const editorElement = editorRef.current.getRootElement()
-        
-        if (editorElement && editorElement.contains(range.commonAncestorContainer)) {
-          // Insert at cursor position
-          if (text.includes('<') && text.includes('>')) {
-            // Sanitize HTML to prevent XSS
-            const sanitizedHtml = DOMPurify.sanitize(text, {
-              ALLOWED_TAGS: ['p', 'br', 'strong', 'b', 'em', 'i', 'u', 'span', 'ul', 'ol', 'li', 'a', 'h1', 'h2', 'h3', 'h4', 'h5', 'h6', 'blockquote', 'code', 'pre'],
-              ALLOWED_ATTR: ['href', 'target', 'rel', 'class'],
-            })
-            const fragment = range.createContextualFragment(sanitizedHtml)
-            range.insertNode(fragment)
-          } else {
-            const textNode = document.createTextNode(text)
-            range.insertNode(textNode)
-          }
-          
-          // Move cursor to end of inserted text
-          selection.collapseToEnd()
-          
-          // Update content state
-          const newContent = editorRef.current.getHTML()
-          handleContentChange(newContent)
-          setHasChanges(true)
-          toast.push({ title: 'Content inserted at cursor' })
-        }
-      } else {
-        // No cursor position, append to end
-        handleAIInsertText(text)
-      }
-    }
-  }, [noteType, handleContentChange, toast, handleAIInsertText])
-
-  const handleAIAddMindmapNode = useCallback((nodeText: string, description?: string) => {
-    if (noteType === 'mindmap' && mindmapEditorRef.current) {
-      // Get current data and add a new node
-      const currentData = mindmapEditorRef.current.getData()
-      const rootNode = currentData.nodes[currentData.rootId]
-      
-      const newNodeId = `node-${Date.now()}`
-      const childCount = rootNode.children.length
-      const angle = (Math.PI * 2 * childCount) / Math.max(childCount + 1, 4)
-      const distance = 150
-      const newX = rootNode.x + Math.cos(angle) * distance
-      const newY = rootNode.y + Math.sin(angle) * distance
-      
-      const colors = ['#3B82F6', '#10B981', '#F59E0B', '#EF4444', '#84CC16', '#EC4899', '#06B6D4', '#F97316']
-      const colorIndex = childCount % colors.length
-      
-      const newData = {
-        ...currentData,
-        nodes: {
-          ...currentData.nodes,
-          [currentData.rootId]: {
-            ...rootNode,
-            children: [...rootNode.children, newNodeId],
-          },
-          [newNodeId]: {
-            id: newNodeId,
-            text: nodeText,
-            x: newX,
-            y: newY,
-            parentId: currentData.rootId,
-            children: [],
-            collapsed: false,
-            color: colors[colorIndex],
-            description: description || '',
-            attachments: [],
-          },
-        },
-      }
-      
-      mindmapEditorRef.current.setData(newData)
-      setMindmapData(newData)
-      setHasChanges(true)
-      toast.push({ title: 'Node added to mindmap' })
-    }
-  }, [noteType, toast])
-
   const textNotesForMindmap = useMemo(
     () => (allNotes ?? []).filter((item) => item.note_type === 'rich-text'),
     [allNotes]
@@ -3377,10 +2909,6 @@ export default function NoteEditor({
       })),
     [textNotesForMindmap]
   )
-
-  const handleMindmapSelectedNodeChange = useCallback((nodeId: string | null) => {
-    setSelectedMindmapNodeId(nodeId)
-  }, [])
 
   const handleCreateTextNoteFromMindmap = useCallback(
     async ({ title: sourceTitle, description }: { title: string; description: string }) => {
@@ -3528,7 +3056,6 @@ export default function NoteEditor({
   }, [])
 
   const openSettings = useCallback(() => setShowSettings(true), [])
-  const openAIAssistant = useCallback(() => setShowAIAssistant(true), [])
   const openConnections = useCallback(() => setShowKnowledgeGraph(true), [])
   const toggleRightSidebar = useCallback(() => setRightSidebarCollapsed((prev) => !prev), [])
   const closeCompactDetails = useCallback(() => setCompactDetailsOpen(false), [])
@@ -3571,7 +3098,6 @@ export default function NoteEditor({
           wordGoalProgress={wordGoalProgress}
           onSetWordGoal={handleSetWordGoal}
           onOpenSettings={openSettings}
-          onOpenAIAssistant={openAIAssistant}
           onExportMarkdown={handleExportMarkdown}
           onExportPdf={handleExportPdf}
           onExportDocx={handleExportDocx}
@@ -3731,7 +3257,6 @@ export default function NoteEditor({
                     ref={mindmapEditorRef}
                     initialData={mindmapData || undefined}
                     onChange={handleMindmapDataChange}
-                    onSelectedNodeChange={handleMindmapSelectedNodeChange}
                     textNotes={mindmapTextNotes}
                     resolveTextNote={resolveMindmapTextNote}
                     onCreateTextNote={handleCreateTextNoteFromMindmap}
@@ -3767,7 +3292,6 @@ export default function NoteEditor({
                     onChange={setPdfAnnotationData}
                     disabled={isSaving || isDeleting}
                     noteId={note?.id ?? null}
-                    onTextExtracted={setPdfExtractedText}
                   />
                 </ErrorBoundary>
               ) : (
@@ -3998,48 +3522,6 @@ export default function NoteEditor({
         ]}
       />
 
-      {/* AI Assistant Popup */}
-      {showAIAssistant && (
-        <div className="fixed inset-0 z-50">
-          <button
-            onClick={() => setShowAIAssistant(false)}
-            className="absolute inset-0 bg-[rgb(14_12_32_/_0.32)] backdrop-blur-[1px]"
-            aria-label="Close AI Assistant"
-          />
-
-          <div className="pointer-events-none absolute bottom-3 right-3 sm:bottom-5 sm:right-5">
-            <div
-              className={`glass-strong animate-rise-in pointer-events-auto flex flex-col overflow-hidden rounded-3xl shadow-glass-lg md:resize ${
-                isAIAssistantLarge
-                  ? 'w-[calc(100vw-1rem)] h-[calc(100dvh-2rem)] sm:w-[min(92vw,880px)] sm:h-[min(88vh,880px)]'
-                  : 'w-[calc(100vw-1rem)] h-[calc(100dvh-2rem)] sm:w-[460px] sm:h-[640px] sm:max-h-[90vh]'
-              }`}
-              style={{ minHeight: '440px', maxWidth: '92vw', maxHeight: '88vh' }}
-            >
-              <div className="flex-1 min-h-0">
-                <AIAssistant
-                  note={note ?? null}
-                  noteContent={aiNoteContent}
-                  allNotes={allNotes}
-                  projects={projects}
-                  selectedText={selectedText || undefined}
-                  mindmapData={mindmapData}
-                  selectedMindmapNodeId={selectedMindmapNodeId}
-                  onInsertText={handleAIInsertText}
-                  onReplaceText={handleAIReplaceText}
-                  onReplaceSelection={handleAIReplaceSelection}
-                  onInsertAtCursor={handleAIInsertAtCursor}
-                  onAddMindmapNode={noteType === 'mindmap' ? handleAIAddMindmapNode : undefined}
-                  onCreateMindmapNote={handleAICreateMindmapNote}
-                  onClose={() => setShowAIAssistant(false)}
-                  onToggleSize={() => setIsAIAssistantLarge(prev => !prev)}
-                  isLargeWindow={isAIAssistantLarge}
-                />
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
     </>
   )
 }

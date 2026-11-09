@@ -5,7 +5,6 @@ import {
   ArrowRight,
   Award,
   BookOpen,
-  Bot,
   Flame,
   Moon,
   Plus,
@@ -38,7 +37,6 @@ interface Props {
   onDeleteDeck: (deckId: string) => void
   onEditDeck: (deck: Deck) => void
   onOpenProgress: () => void
-  onOpenAssistant: (prompt?: string) => void
   onOpenSettings: () => void
 }
 
@@ -59,7 +57,6 @@ export function LearnDashboard({
   onDeleteDeck,
   onEditDeck,
   onOpenProgress,
-  onOpenAssistant,
   onOpenSettings,
 }: Props) {
   const { stats, decks, isLoadingStats, isLoadingDecks } = useLearning()
@@ -155,15 +152,6 @@ export function LearnDashboard({
             onClick={onCreateDeck}
           >
             New deck
-          </Button>
-          <Button
-            type="button"
-            variant="secondary"
-            size="sm"
-            icon={Bot}
-            onClick={() => onOpenAssistant()}
-          >
-            Ask AI
           </Button>
         </div>
       </div>
@@ -366,10 +354,10 @@ export function LearnDashboard({
           onClick={onOpenProgress}
         />
         <QuickAction
-          icon={Bot}
-          title="AI study assistant"
-          description="Generate cards, analyze decks and plan reviews"
-          onClick={() => onOpenAssistant()}
+          icon={BookOpen}
+          title="Browse decks"
+          description="Open a deck and manage its cards"
+          onClick={onOpenDecks}
         />
         <QuickAction
           icon={Award}

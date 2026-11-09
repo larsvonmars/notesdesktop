@@ -60,7 +60,7 @@ export const RAIL_DESTINATIONS: readonly ViewNavigationItem[] = [
     label: 'Chat',
     icon: MessagesSquare,
     shortcut: '5',
-    description: 'Ask the AI about your notes, projects and tasks',
+    description: 'Ask about your notes, projects and tasks',
   },
   {
     id: 'learn',
@@ -68,7 +68,7 @@ export const RAIL_DESTINATIONS: readonly ViewNavigationItem[] = [
     label: 'Learn',
     icon: GraduationCap,
     shortcut: '6',
-    description: 'Flashcards, spaced repetition and AI tutoring',
+    description: 'Flashcards and spaced repetition',
   },
 ]
 

@@ -40,8 +40,6 @@ export type StudyMode =
   | 'typed-answer'
   | 'test'
   | 'smart'
-  | 'ai-learn'
-  | 'tutor'
 
 export interface SessionResult {
   cardsReviewed: number
@@ -131,7 +129,6 @@ export type LearnScreen =
   | { kind: 'deck'; deckId: string }
   | { kind: 'study'; deckId: string; mode?: StudyMode }
   | { kind: 'progress' }
-  | { kind: 'assistant'; prompt?: string; key: number }
   | { kind: 'settings' }
 
 export interface LearnProfile {
@@ -245,6 +242,4 @@ export const STUDY_MODE_LABELS: Record<StudyMode, string> = {
   'typed-answer': 'Typed Answer',
   test: 'Test',
   smart: 'Smart Learning',
-  'ai-learn': 'AI Learn',
-  tutor: 'AI Tutor',
 }

@@ -19,12 +19,10 @@ import {
   Table2,
   FilePenLine,
   Edit3,
-  AlertCircle,
   Type,
   Star,
   Calendar,
   TrendingUp,
-  Sparkles,
 } from 'lucide-react'
 import type { LucideIcon } from 'lucide-react'
 import { getNote, getNotesWithContentByProject, type Note, type NoteSummary, type NoteType } from '@/lib/notes'
@@ -41,7 +39,6 @@ import {
   type NoteTypeIconKey,
   type NoteTypePresentation,
 } from '@/lib/note-types'
-import { sendAIRequestStream, type AIMessage } from '@/lib/ai'
 import NoteGraph from '@/components/NoteGraph'
 
 // ────────────────────────────────────────────────────────────────────────────
@@ -197,8 +194,8 @@ export default function ProjectDashboard({
   // ── State ───────────────────────────────────────────────────────────────
   const [tasks, setTasks] = useState<Task[]>([])
   const [isLoadingTasks, setIsLoadingTasks] = useState(true)
-  // Bodies for word counts and AI summaries are loaded only while this
-  // dashboard is open, not during normal workspace startup.
+  // Note bodies for word counts are loaded only while this dashboard is open,
+  // not during normal workspace startup.
   const [contentNotes, setContentNotes] = useState<Note[]>([])
   const [quickLinks, setQuickLinks] = useState<QuickLink[]>(project.quick_links ?? [])
   const [showAddLink, setShowAddLink] = useState(false)
@@ -206,10 +203,6 @@ export default function ProjectDashboard({
   const [newLinkUrl, setNewLinkUrl] = useState('')
   const [editingDescription, setEditingDescription] = useState(false)
   const [descriptionDraft, setDescriptionDraft] = useState(project.description ?? '')
-  const [aiSummary, setAiSummary] = useState('')
-  const [isGeneratingSummary, setIsGeneratingSummary] = useState(false)
-  const [summaryError, setSummaryError] = useState<string | null>(null)
-  const summaryAbortRef = useRef<AbortController | null>(null)
   const descriptionRef = useRef<HTMLTextAreaElement>(null)
   const linkLabelRef = useRef<HTMLInputElement>(null)
 
@@ -388,80 +381,6 @@ export default function ProjectDashboard({
     }
   }, [quickLinks, project.id, onUpdateProject])
 
-  // ── AI Summary handler ─────────────────────────────────────────────────
-  const handleGenerateSummary = useCallback(async () => {
-    if (isGeneratingSummary) {
-      summaryAbortRef.current?.abort()
-      return
-    }
-
-    setIsGeneratingSummary(true)
-    setSummaryError(null)
-    setAiSummary('')
-
-    const controller = new AbortController()
-    summaryAbortRef.current = controller
-
-    // Extract readable text from note JSON content
-    const extractText = (content: string, maxLen: number = 500): string => {
-      try {
-        const parsed = JSON.parse(content)
-        const text = JSON.stringify(parsed)
-          .replace(/"type":"[^"]+"/g, '')
-          .replace(/[{}[\]":,]/g, ' ')
-          .replace(/\s+/g, ' ')
-          .trim()
-        return text.length > maxLen ? text.slice(0, maxLen) + '…' : text
-      } catch {
-        const text = content.replace(/\s+/g, ' ').trim()
-        return text.length > maxLen ? text.slice(0, maxLen) + '…' : text
-      }
-    }
-
-    // Build context about the project for the AI
-    const recentWithContent = [...notesWithContent]
-      .sort((a, b) => new Date(b.updated_at).getTime() - new Date(a.updated_at).getTime())
-      .slice(0, 10)
-      .map(n => {
-        const pres = getNoteTypePresentation(n.note_type)
-        const content = n.content ? extractText(n.content) : '(empty)'
-        return `- "${n.title || 'Untitled'}" (${pres.label}, updated ${relativeTime(n.updated_at)})\n  Content: ${content}`
-      }).join('\n')
-
-    const taskSummaries = tasks.slice(0, 30).map(t => {
-      const status = STATUS_LABELS[t.status] ?? t.status
-      const due = t.due_date ? `, due ${new Date(t.due_date).toLocaleDateString()}` : ', no due date'
-      return `- [${status}] "${t.title}" (${t.priority} priority${due})`
-    }).join('\n')
-
-    const messages: AIMessage[] = [
-      {
-        role: 'system',
-        content: 'You are a concise project analyst. Generate a brief, high-level project summary in 3-5 short paragraphs. Cover: overall status, key areas of focus based on note content, task progress with specific deadlines worth noting, and any notable patterns. Use plain text, no markdown headers or bullet lists. Be direct and insightful.',
-      },
-      {
-        role: 'user',
-        content: `Summarize this project:\n\nProject: ${project.name}\nDescription: ${project.description || 'No description'}\nCreated: ${new Date(project.created_at).toLocaleDateString()}\nNotes: ${projectNotes.length} total, ${projectFolders.length} folders, ~${stats.totalWords.toLocaleString()} words\nTasks: ${tasks.length} total (${completedTaskCount} completed, ${openTasks.length} open)\n\nRecent Notes (with content excerpts):\n${recentWithContent || 'None yet'}\n\nTasks:\n${taskSummaries || 'None yet'}`,
-      },
-    ]
-
-    try {
-      await sendAIRequestStream(messages, {
-        onToken: (token) => setAiSummary(prev => prev + token),
-        onError: (error) => setSummaryError(error.message),
-      }, {
-        signal: controller.signal,
-      })
-    } catch (err: unknown) {
-      if (err instanceof Error && err.name !== 'AbortError') {
-        setSummaryError(err.message)
-      }
-    } finally {
-      setIsGeneratingSummary(false)
-      summaryAbortRef.current = null
-    }
-  }, [isGeneratingSummary, notesWithContent, projectNotes, projectFolders, tasks, openTasks, completedTaskCount, stats.totalWords, project])
-
   // ── Render helpers ──────────────────────────────────────────────────────
   const NoteTypeIcon = ({ noteType, size = 14 }: { noteType: NoteType; size?: number }) => {
     const pres = getNoteTypePresentation(noteType)
@@ -582,56 +501,6 @@ export default function ProjectDashboard({
             <StatCard icon={CheckCircle2} label="Open tasks" value={stats.openTasks} accent="var(--hue-mint)" />
             <StatCard icon={Type} label="Words" value={stats.totalWords.toLocaleString()} accent="var(--hue-lime)" />
           </div>
-
-          {/* ────── AI Summary ────── */}
-          <DashboardCard
-            title="AI Summary"
-            icon={Sparkles}
-            action={
-              <button
-                type="button"
-                onClick={handleGenerateSummary}
-                disabled={projectNotes.length === 0 && tasks.length === 0}
-                className="glass-btn-ghost w-auto gap-1.5 px-2.5 text-[11px]"
-                title={isGeneratingSummary ? 'Stop generating' : 'Generate AI summary'}
-              >
-                {isGeneratingSummary ? (
-                  <>
-                    <div className="h-3 w-3 animate-spin rounded-full border-[1.5px] border-accent border-t-transparent" />
-                    Stop
-                  </>
-                ) : (
-                  <>
-                    <Sparkles size={12} />
-                    {aiSummary ? 'Regenerate' : 'Generate'}
-                  </>
-                )}
-              </button>
-            }
-          >
-            {summaryError ? (
-              <div className="flex items-center gap-2 rounded-xl bg-danger-light px-3 py-2 text-xs text-danger">
-                <AlertCircle size={14} />
-                <span>{summaryError}</span>
-              </div>
-            ) : aiSummary ? (
-              <div className="whitespace-pre-wrap text-sm leading-6 text-foreground">
-                {aiSummary}
-                {isGeneratingSummary && (
-                  <span className="ml-0.5 inline-block h-4 w-1.5 animate-pulse rounded-sm bg-accent align-text-bottom opacity-70" />
-                )}
-              </div>
-            ) : (
-              <EmptyState
-                text={
-                  projectNotes.length === 0 && tasks.length === 0
-                    ? 'Add notes or tasks first'
-                    : 'Click Generate to create an AI-powered project summary'
-                }
-                icon={Sparkles}
-              />
-            )}
-          </DashboardCard>
 
           {/* ────── 7-Day Activity Heatmap ────── */}
           <DashboardCard title="Weekly Activity" icon={TrendingUp}>

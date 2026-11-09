@@ -509,7 +509,7 @@ export async function getNoteSummaries(options?: NoteQueryOptions): Promise<Note
   }
 }
 
-/** Fetch every note summary (bounded) for workspace/AI listings. */
+/** Fetch every note summary (bounded) for workspace/Chat listings. */
 export async function getAllNoteSummaries(limit = 5000): Promise<NoteSummary[]> {
   return getNoteSummaries({ limit, offset: 0 })
 }

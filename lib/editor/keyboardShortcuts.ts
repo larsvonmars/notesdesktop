@@ -229,7 +229,7 @@ export const KEYBOARD_SHORTCUTS: KeyboardShortcut[] = [
   },
   {
     keys: ['⌘J', 'Ctrl+J'],
-    description: 'Open the AI assistant (Learn assistant in Learn)',
+    description: 'Open Chat',
     category: 'navigation'
   },
   {

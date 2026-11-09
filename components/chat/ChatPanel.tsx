@@ -13,6 +13,7 @@ import {
   FileText,
   History,
   Loader2,
+  MessageSquare,
   Plus,
   Sparkles,
 } from 'lucide-react'
@@ -266,54 +267,76 @@ export default function ChatPanel({
 
   return (
     <div className="relative flex h-full min-h-0 flex-col">
-      <header className="flex shrink-0 items-center justify-between gap-2 px-3 pb-2 pt-3">
+      <header className="flex h-14 shrink-0 items-center justify-between gap-2 border-b border-[var(--border)] px-3">
         <div className="flex min-w-0 items-center gap-2">
           {onOpenHistory && (
             <button
               type="button"
               onClick={onOpenHistory}
-              className="focus-ring rounded-lg p-1.5 text-muted transition-colors hover:bg-surface-hover hover:text-foreground lg:hidden"
-              aria-label="Show conversations"
-              title="Show conversations"
+              className="focus-ring flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-muted transition-colors hover:bg-[var(--surface-hover)] hover:text-foreground xl:hidden"
+              aria-label="Show chat history"
+              title="Show chat history"
             >
               <History className="h-4 w-4" aria-hidden="true" />
             </button>
           )}
-          <span
-            className={cn(
-              'h-1.5 w-1.5 shrink-0 rounded-full transition-colors',
-              streaming ? 'animate-pulse-soft bg-warning' : agentMode ? 'bg-accent' : 'bg-success'
-            )}
-            aria-hidden="true"
-          />
-          <span className="text-[12px] font-medium text-muted">{agentMode ? 'Agent' : 'Chat'}</span>
-          <span className="hidden min-w-0 truncate text-[12px] text-muted sm:inline">· {title}</span>
-          <span className="hidden items-center gap-1 rounded-full border border-border bg-surface/70 px-2 py-0.5 text-[10px] text-muted md:flex">
-            <Cpu className="h-3 w-3" aria-hidden="true" />
-            {modelLabel}
-          </span>
+          <div className="min-w-0">
+            <h1 className="truncate font-display text-[13.5px] font-semibold tracking-[-0.01em] text-foreground">
+              {title}
+            </h1>
+            <p className="mt-0.5 flex min-w-0 items-center gap-1.5 text-[10.5px] text-muted">
+              <span
+                className={cn(
+                  'h-1.5 w-1.5 shrink-0 rounded-full transition-colors',
+                  streaming ? 'animate-pulse-soft bg-warning' : agentMode ? 'bg-accent' : 'bg-success'
+                )}
+                aria-hidden="true"
+              />
+              <span className="shrink-0">
+                {streaming ? 'Replying…' : agentMode ? 'Agent mode' : 'Ready'}
+              </span>
+              <span className="shrink-0" aria-hidden="true">
+                ·
+              </span>
+              <span className="flex min-w-0 items-center gap-1">
+                <Cpu className="h-3 w-3 shrink-0" aria-hidden="true" />
+                <span className="truncate">{modelLabel}</span>
+              </span>
+            </p>
+          </div>
         </div>
 
-        <div className="flex shrink-0 items-center gap-1">
-          <button
-            type="button"
-            onClick={onToggleAgentMode}
-            className={cn(
-              'focus-ring flex items-center gap-1 rounded-full px-2.5 py-1 text-[11px] font-medium transition-colors',
-              agentMode
-                ? 'border border-accent/25 bg-accent-light text-accent'
-                : 'text-muted hover:bg-surface-hover hover:text-foreground'
-            )}
-            aria-pressed={agentMode}
-            title="Agent mode plans, delegates to sub-agents and acts autonomously"
-          >
-            <Brain className="h-3 w-3" aria-hidden="true" />
-            <span className="hidden sm:inline">Agent</span>
-          </button>
+        <div className="flex shrink-0 items-center gap-1.5">
+          <div className="segmented" role="group" aria-label="Conversation mode">
+            <button
+              type="button"
+              onClick={() => {
+                if (agentMode) onToggleAgentMode()
+              }}
+              aria-pressed={!agentMode}
+              className="segmented-item"
+              title="Chat mode"
+            >
+              <MessageSquare className="h-3 w-3" aria-hidden="true" />
+              <span className="hidden sm:inline">Chat</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                if (!agentMode) onToggleAgentMode()
+              }}
+              aria-pressed={agentMode}
+              className="segmented-item"
+              title="Agent mode plans, delegates to sub-agents and acts autonomously"
+            >
+              <Brain className="h-3 w-3" aria-hidden="true" />
+              <span className="hidden sm:inline">Agent</span>
+            </button>
+          </div>
           <button
             type="button"
             onClick={onNewChat}
-            className="focus-ring flex items-center gap-1 rounded-full px-2 py-1 text-[11px] font-medium text-muted transition-colors hover:bg-surface-hover hover:text-foreground"
+            className="focus-ring flex h-8 items-center gap-1 rounded-lg px-2 text-[11.5px] font-medium text-muted transition-colors hover:bg-[var(--surface-hover)] hover:text-foreground"
             title="New chat"
           >
             <Plus className="h-3.5 w-3.5" aria-hidden="true" />
@@ -346,7 +369,7 @@ export default function ChatPanel({
                   key={starter.text}
                   type="button"
                   onClick={() => onStarterClick(starter.text)}
-                  className="glass-btn glass-btn-ghost focus-ring flex items-center gap-1.5 rounded-full px-3 py-1.5 text-[12px] animate-rise-in"
+                  className="focus-ring inline-flex animate-rise-in items-center gap-1.5 rounded-full border border-[var(--border)] bg-[var(--surface)] px-3 py-1.5 text-[12px] text-foreground shadow-sm transition-colors hover:border-accent/40 hover:text-accent"
                   style={{ animationDelay: `${index * 50}ms` }}
                 >
                   <span aria-hidden="true">{starter.emoji}</span>
@@ -402,16 +425,16 @@ export default function ChatPanel({
         )}
       </div>
 
-      <div className="shrink-0 px-2.5 pb-2.5 pt-1">
+      <div className="shrink-0 px-2.5 pb-2.5 pt-1.5">
         <div className="mx-auto w-full max-w-3xl">
           {messages.length > 0 && !input.trim() && !streaming && starters.length > 0 && (
-            <div className="mb-1.5 flex gap-1.5 overflow-x-auto pb-1">
+            <div className="mb-2 flex gap-1.5 overflow-x-auto pb-0.5 scroll-thin">
               {starters.slice(0, 4).map((starter) => (
                 <button
                   key={starter.text}
                   type="button"
                   onClick={() => onStarterClick(starter.text)}
-                  className="glass-btn glass-btn-ghost focus-ring flex shrink-0 items-center gap-1 whitespace-nowrap rounded-full px-2.5 py-1 text-[11px] text-muted"
+                  className="focus-ring inline-flex shrink-0 items-center gap-1 whitespace-nowrap rounded-full border border-[var(--border)] bg-[var(--surface)] px-2.5 py-1 text-[11px] text-muted transition-colors hover:border-accent/40 hover:text-foreground"
                 >
                   <span aria-hidden="true">{starter.emoji}</span>
                   <span>{starter.text.length > 30 ? `${starter.text.slice(0, 30)}…` : starter.text}</span>
@@ -420,7 +443,7 @@ export default function ChatPanel({
             </div>
           )}
 
-          <div className="rounded-2xl border border-border bg-surface-solid/70 shadow-sm transition-shadow focus-within:border-accent/40 focus-within:shadow-md">
+          <div className="rounded-2xl border border-[var(--border)] bg-surface-solid/70 shadow-sm transition-shadow focus-within:border-accent/40 focus-within:shadow-md">
             <ChatInput
               value={input}
               onChange={onInputChange}

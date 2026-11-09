@@ -42,7 +42,7 @@ export async function createCard(input: {
   return mapCard(data)
 }
 
-/** Insert several cards in one round-trip (used by bulk import and AI). */
+/** Insert several cards in one round-trip (used by bulk import and Chat tools). */
 export async function createCards(
   deckId: string,
   cards: Array<{ front: string; back: string }>

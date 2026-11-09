@@ -22,7 +22,7 @@ const ChatView = dynamic(() => import('@/components/chat/ChatView'), {
   ssr: false,
   loading: () => null,
 })
-// Learn brings decks, study modes and the AI tutor; load it on demand.
+// Learn brings decks and study modes; load it on demand.
 const LearnView = dynamic(() => import('@/components/learn/LearnView'), {
   ssr: false,
   loading: () => null,
@@ -31,7 +31,6 @@ import ArchivedProjectsModal from '@/components/ArchivedProjectsModal'
 import NewProjectModal from '@/components/NewProjectModal'
 import {
   FileEdit,
-  Sparkles,
   FileText,
   PenTool,
   Network,
@@ -46,7 +45,6 @@ import {
   GraduationCap,
   LayoutDashboard,
   TrendingUp,
-  Bot,
   Zap,
   FileQuestion,
   Target,
@@ -76,8 +74,6 @@ import { EmptyState } from '@/components/ui/EmptyState'
 import { useWorkspaceData } from '@/lib/workspace/useWorkspaceData'
 import { LearningProvider, useLearning } from '@/lib/learn/context'
 import { searchCards as searchLearnCards } from '@/lib/learn/cards'
-import { createCards as createLearnCards } from '@/lib/learn/cards'
-import { createDeck as createLearnDeck } from '@/lib/learn/decks'
 import { useNoteActions } from '@/lib/workspace/useNoteActions'
 import { useFolderActions } from '@/lib/workspace/useFolderActions'
 import { useProjectActions } from '@/lib/workspace/useProjectActions'
@@ -97,7 +93,6 @@ import type {
   TopBarMenuItem,
 } from '@/components/shell/types'
 import { useNavHistory, type NavLocation } from '@/lib/navigation/nav-history'
-import { requestOpenAIAssistant } from '@/lib/ai/assistant-events'
 import type { WorkspaceView } from '@/lib/workspace/types'
 import { subscribeToConflicts } from '@/lib/offline/events'
 import { installOfflineSync } from '@/lib/offline/sync'
@@ -139,7 +134,6 @@ function WorkspaceContent() {
     decks: learnDecks,
     screen: learnScreen,
     setScreen: setLearnScreen,
-    openAssistant: openLearnAssistant,
     requestCreateDeck: requestCreateLearnDeck,
     refreshDecks: refreshLearnDecks,
   } = useLearning()
@@ -158,7 +152,6 @@ function WorkspaceContent() {
   // Mindmap template picker state
   const [pendingMindmapTemplateContext, setPendingMindmapTemplateContext] = useState<NoteCreationContext | null>(null)
   const [selectedMindmapTemplateId, setSelectedMindmapTemplateId] = useState<string | undefined>(undefined)
-  const [isCreatingLearnDeck, setIsCreatingLearnDeck] = useState(false)
   const [learnDetailsOpen, setLearnDetailsOpen] = useState(true)
   const suppressRealtimeRef = useRef(false)
   const isApplyingUrlRef = useRef(false)
@@ -685,62 +678,6 @@ function WorkspaceContent() {
 
   const searchLearnCardContent = useCallback((query: string) => searchLearnCards(query), [])
 
-  /** Turn the open note into a Learn deck with AI-generated flashcards. */
-  const handleCreateLearnDeckFromNote = useCallback(async () => {
-    if (!selectedNote || isCreatingLearnDeck) return
-
-    setIsCreatingLearnDeck(true)
-    toast.push({
-      title: 'Generating flashcards…',
-      description: 'The AI is reading your note.',
-      variant: 'info',
-      duration: 5000,
-    })
-    try {
-      // Keep the Learn AI stack out of the workspace's initial bundle.
-      const [{ generateCardsFromDocument }, { stripHtmlForAI }] = await Promise.all([
-        import('@/lib/learn/ai'),
-        import('@/lib/ai'),
-      ])
-      const plainText = stripHtmlForAI(selectedNote.content ?? '').trim()
-      if (!plainText) {
-        toast.push({
-          title: 'This note has no text',
-          description: 'Flashcards need text to generate from.',
-          variant: 'warning',
-        })
-        return
-      }
-
-      const cards = await generateCardsFromDocument(plainText.slice(0, 24000), {
-        deckTitle: selectedNote.title || 'Note deck',
-        maxCards: 15,
-      })
-      const deck = await createLearnDeck({
-        title: selectedNote.title || 'Untitled deck',
-        description: `Generated from the note “${selectedNote.title || 'Untitled'}”`,
-        color: 'bg-accent',
-      })
-      await createLearnCards(deck.id, cards)
-      await refreshLearnDecks()
-      setActiveView('learn')
-      setLearnScreen({ kind: 'deck', deckId: deck.id })
-      toast.push({
-        title: `${cards.length} flashcards generated`,
-        description: `Created the deck “${deck.title}”`,
-        variant: 'success',
-      })
-    } catch (error) {
-      toast.push({
-        title: 'Could not create flashcards',
-        description: error instanceof Error ? error.message : 'Please try again.',
-        variant: 'error',
-      })
-    } finally {
-      setIsCreatingLearnDeck(false)
-    }
-  }, [isCreatingLearnDeck, refreshLearnDecks, selectedNote, setLearnScreen, toast])
-
   const switchWorkspaceView = useCallback(
     (view: WorkspaceView) => {
       if (view !== 'tasks') setPlannerStartSection(null)
@@ -1001,7 +938,7 @@ function WorkspaceContent() {
     goBack: () => {},
     goForward: () => {},
     switchView: (_view: WorkspaceView) => {},
-    openAssistantPrimary: () => {},
+    openChat: () => {},
   })
   shortcutActionsRef.current = {
     newPrimary: () => {
@@ -1015,16 +952,7 @@ function WorkspaceContent() {
     goBack,
     goForward,
     switchView: switchWorkspaceView,
-    openAssistantPrimary: () => {
-      if (activeView === 'learn') {
-        openLearnAssistant()
-        return
-      }
-      // The assistant only mounts with an editor, so ignore the shortcut
-      // everywhere else instead of silently doing nothing after a view switch.
-      if (activeView !== 'notes' || (!isCreatingNew && !selectedNote)) return
-      requestOpenAIAssistant()
-    },
+    openChat: () => switchWorkspaceView('chat'),
   }
 
   useEffect(() => {
@@ -1054,7 +982,7 @@ function WorkspaceContent() {
         shortcutActionsRef.current.newPrimary()
       } else if (key === 'j') {
         event.preventDefault()
-        shortcutActionsRef.current.openAssistantPrimary()
+        shortcutActionsRef.current.openChat()
       } else if (key === '\\') {
         event.preventDefault()
         shortcutActionsRef.current.toggleSidebar()
@@ -1196,8 +1124,6 @@ function WorkspaceContent() {
         }
         case 'progress':
           return [home, learnRoot, { id: 'learn-progress', label: 'Progress', icon: TrendingUp }]
-        case 'assistant':
-          return [home, learnRoot, { id: 'learn-assistant', label: 'AI assistant', icon: Bot }]
         case 'settings':
           return [home, learnRoot, { id: 'learn-settings', label: 'Settings', icon: Settings }]
       }
@@ -1244,8 +1170,6 @@ function WorkspaceContent() {
     return crumbs
   })()
 
-  const assistantAvailable = activeView === 'notes' && (isCreatingNew || selectedNote !== null)
-
   const overflowItems: TopBarMenuItem[] = [
     ...(activeView === 'learn'
       ? [
@@ -1256,41 +1180,11 @@ function WorkspaceContent() {
             onSelect: () => setLearnScreen({ kind: 'dashboard' }),
           } satisfies TopBarMenuItem,
           {
-            id: 'learn-assistant',
-            label: 'Ask Learn AI',
-            icon: Bot,
-            shortcut: formatModShortcut('J'),
-            onSelect: () => openLearnAssistant(),
-          } satisfies TopBarMenuItem,
-          {
             id: 'learn-new-deck',
             label: 'New deck',
             icon: Plus,
             shortcut: formatModShortcut('N'),
             onSelect: () => requestCreateLearnDeck(),
-          } satisfies TopBarMenuItem,
-        ]
-      : []),
-    ...(activeView === 'notes' && selectedNote && !isCreatingNew
-      ? [
-          {
-            id: 'create-learn-deck',
-            label: isCreatingLearnDeck ? 'Generating flashcards…' : 'Create flashcards from note',
-            icon: GraduationCap,
-            onSelect: () => {
-              void handleCreateLearnDeckFromNote()
-            },
-          } satisfies TopBarMenuItem,
-        ]
-      : []),
-    ...(assistantAvailable
-      ? [
-          {
-            id: 'ai-assistant',
-            label: 'Ask AI assistant',
-            icon: Sparkles,
-            shortcut: formatModShortcut('J'),
-            onSelect: () => requestOpenAIAssistant(),
           } satisfies TopBarMenuItem,
         ]
       : []),
@@ -1575,10 +1469,6 @@ function WorkspaceContent() {
                   setActiveView('learn')
                   setLearnScreen({ kind: 'study', deckId })
                 }}
-                onOpenLearnAssistant={(prompt) => {
-                  setActiveView('learn')
-                  openLearnAssistant(prompt)
-                }}
                 onOpenUnfiled={() => {
                   handleSelectFolder(null)
                   setActiveView('notes')
@@ -1784,10 +1674,6 @@ function WorkspaceContent() {
           onCreateLearnDeck={() => {
             setActiveView('learn')
             requestCreateLearnDeck()
-          }}
-          onOpenLearnAssistant={() => {
-            setActiveView('learn')
-            openLearnAssistant()
           }}
           onSearchLearnCards={searchLearnCardContent}
           onOpenSettings={() => setShowSettings(true)}

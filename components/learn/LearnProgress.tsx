@@ -2,7 +2,6 @@
 
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import {
-  Bot,
   Flame,
   Layers,
   RefreshCw,
@@ -29,11 +28,7 @@ import {
   XpBar,
 } from './LearnPrimitives'
 
-export function LearnProgress({
-  onOpenAssistant,
-}: {
-  onOpenAssistant: (prompt?: string) => void
-}) {
+export function LearnProgress() {
   const { stats, decks, isLoadingStats, refreshStats, refreshDecks } =
     useLearning()
   const [sessions, setSessions] = useState<StudySessionSummary[]>([])
@@ -98,19 +93,6 @@ export function LearnProgress({
           </p>
         </div>
         <div className="flex items-center gap-2">
-          <Button
-            type="button"
-            variant="secondary"
-            size="sm"
-            icon={Bot}
-            onClick={() =>
-              onOpenAssistant(
-                'How am I doing? Review my progress and suggest what to focus on next.'
-              )
-            }
-          >
-            Ask AI
-          </Button>
           <Button
             type="button"
             variant="secondary"

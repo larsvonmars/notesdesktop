@@ -43,7 +43,7 @@ export function useWorkspaceData({
   suppressRealtimeRef,
 }: WorkspaceDataOptions) {
   const [notes, setNotes] = useState<NoteSummary[]>([])
-  // Subset of `notes` across every folder, used by the sidebar, AI context and
+  // Subset of `notes` across every folder, used by the sidebar, Chat context and
   // dashboards. Bodies are intentionally not loaded here.
   const [allNotes, setAllNotes] = useState<NoteSummary[]>([])
   const [folders, setFolders] = useState<Folder[]>([])
@@ -115,7 +115,7 @@ export function useWorkspaceData({
     }
   }, [filterOutArchivedContent])
 
-  // Load note metadata for AI tool calling, the sidebar and dashboards.
+  // Load note metadata for Chat tools, the sidebar and dashboards.
   // Bodies are fetched on demand (getNote) so login does not download them all.
   const loadAllNotes = useCallback(async (options?: { silent?: boolean }) => {
     if (!options?.silent) setIsLoadingAllNotes(true)

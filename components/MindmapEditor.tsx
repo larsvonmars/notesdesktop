@@ -257,7 +257,7 @@ const MindmapEditor = forwardRef<MindmapEditorHandle, MindmapEditorProps>(
       mindmapDataRef.current = mindmapData
     }, [mindmapData])
 
-    // Notify parent when selected node changes (for AI integration)
+    // Notify the parent when the selected node changes
     useEffect(() => {
       if (onSelectedNodeChange) {
         const node = selectedNodeId ? mindmapData.nodes[selectedNodeId] : null

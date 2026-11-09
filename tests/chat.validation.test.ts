@@ -69,7 +69,7 @@ describe('AI validation for the chat view', () => {
   })
 
   it('rejects more tools than the chat can register', () => {
-    const names = Array.from({ length: 33 }, () => 'list_notes')
+    const names = Array.from({ length: 49 }, () => 'list_notes')
     const result = validateAndSanitizeAIPayload({
       messages: [{ role: 'user', content: 'hi' }],
       tools: names.map(tool),

@@ -5,13 +5,13 @@ import { useRouter } from 'next/navigation'
 import { useEffect } from 'react'
 import {
   ArrowRight,
-  Bot,
   Check,
   FileText,
   FolderTree,
   LayoutDashboard,
   ListChecks,
   Loader2,
+  MessagesSquare,
   Network,
   PenSquare,
   Plus,
@@ -46,10 +46,10 @@ const features = [
     tile: 'bg-teal-500/10 text-teal-600 ring-teal-500/20 dark:bg-teal-400/10 dark:text-teal-300 dark:ring-teal-400/20',
   },
   {
-    title: 'AI beside your notes',
+    title: 'Chat across your workspace',
     description:
-      'Summarise, draft, and reshape ideas in a panel next to the page — without leaving your train of thought.',
-    icon: Bot,
+      'Draft notes, plan tasks, search your library and build decks from one conversation — with tools that act on your real data.',
+    icon: MessagesSquare,
     tile: 'bg-amber-500/10 text-amber-600 ring-amber-500/20 dark:bg-amber-400/10 dark:text-amber-300 dark:ring-amber-400/20',
   },
   {
@@ -71,7 +71,7 @@ const noteRows = [
 const checklist = [
   { label: 'Finalise the onboarding checklist', done: true },
   { label: 'Link the release dashboard', done: true },
-  { label: 'Draft the launch brief with AI summary', done: false },
+  { label: 'Draft the launch brief in Chat', done: false },
 ]
 
 export default function Home() {
@@ -196,7 +196,7 @@ export default function Home() {
 
             <div
               role="img"
-              aria-label="Product preview: a MindViz note called Launch retrospective with a checklist, a note list, and an AI summary panel."
+              aria-label="Product preview: a MindViz note called Launch retrospective with a checklist, a note list, and a chat panel."
               className="glass-card animate-rise-in relative overflow-hidden"
               style={{ animationDelay: '120ms' }}
             >
@@ -325,19 +325,19 @@ export default function Home() {
               </div>
             </div>
 
-            {/* Floating AI panel */}
+            {/* Floating chat panel */}
             <div className="absolute -bottom-7 -left-3 z-10 hidden w-56 -rotate-1 xl:block">
               <div className="glass-strong animate-rise-in p-3.5" style={{ animationDelay: '300ms' }}>
                 <div className="flex items-center gap-1.5 text-[10px] font-semibold uppercase tracking-[0.08em] text-muted">
-                  <Sparkles className="h-3 w-3 text-accent" />
-                  AI summary
+                  <MessagesSquare className="h-3 w-3 text-accent" />
+                  Chat
                 </div>
                 <p className="mt-1.5 text-[11px] leading-[1.6] text-foreground">
                   Three decisions, two owners, one open question — the launch is on track for
                   Friday.
                 </p>
                 <div className="mt-2 flex items-center justify-between rounded-md bg-surface-sunken px-2 py-1 text-[10px] text-muted">
-                  <span>Ask about this note…</span>
+                  <span>Ask across your workspace…</span>
                   <kbd className="kbd">↵</kbd>
                 </div>
               </div>

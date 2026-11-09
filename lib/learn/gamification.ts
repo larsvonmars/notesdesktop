@@ -10,8 +10,6 @@ const MODE_MULTIPLIERS: Record<StudyMode, number> = {
   'spaced-repetition': 1.3,
   test: 2.0,
   smart: 1.5,
-  tutor: 0.8,
-  'ai-learn': 0.8,
 }
 
 /** Cumulative XP needed to complete levels 1..50. */

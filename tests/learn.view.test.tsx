@@ -22,13 +22,7 @@ describe('Learn view shell', () => {
     )
 
     expect(html).toContain('Learn')
-    for (const tab of [
-      'Dashboard',
-      'Decks',
-      'Progress',
-      'Assistant',
-      'Settings',
-    ]) {
+    for (const tab of ['Dashboard', 'Decks', 'Progress', 'Settings']) {
       expect(html).toContain(tab)
     }
   })

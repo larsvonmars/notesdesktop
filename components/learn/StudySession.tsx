@@ -16,7 +16,6 @@ import { useLearning } from '@/lib/learn/context'
 import { completeSession, type CompleteSessionResult } from '@/lib/learn/study'
 import type { Card, SessionResult, StudyMode } from '@/lib/learn/types'
 import { cn } from '@/lib/learn/utils'
-import { AiLearnStudy } from './AiLearnStudy'
 import { FlashcardStudy } from './FlashcardStudy'
 import { ModePicker } from './ModePicker'
 import { MultipleChoiceStudy } from './MultipleChoiceStudy'
@@ -24,7 +23,6 @@ import { SessionComplete } from './SessionComplete'
 import { SmartStudy } from './SmartStudy'
 import { SpacedRepetitionStudy } from './SpacedRepetitionStudy'
 import { TestStudy } from './TestStudy'
-import { TutorStudy } from './TutorStudy'
 import { TypedAnswerStudy } from './TypedAnswerStudy'
 
 const SPRINT_SIZE = 10
@@ -36,8 +34,6 @@ const VALID_MODES: StudyMode[] = [
   'typed-answer',
   'test',
   'smart',
-  'ai-learn',
-  'tutor',
 ]
 
 function chunkCards(cards: Card[], size: number): Card[][] {
@@ -52,15 +48,9 @@ interface Props {
   deckId: string
   initialMode?: StudyMode | null
   onBackToDeck: () => void
-  onOpenAssistant: (prompt?: string) => void
 }
 
-export function StudySession({
-  deckId,
-  initialMode,
-  onBackToDeck,
-  onOpenAssistant,
-}: Props) {
+export function StudySession({ deckId, initialMode, onBackToDeck }: Props) {
   const { decks, refreshStats, refreshDecks } = useLearning()
   const toast = useToast()
   const toastRef = useRef(toast)
@@ -311,11 +301,6 @@ export function StudySession({
         xpBreakdown={extra?.xpBreakdown}
         onStudyAgain={handleStudyAgain}
         onBackToDeck={onBackToDeck}
-        onAskAi={() =>
-          onOpenAssistant(
-            `I just finished a ${sessionResult.mode} session on "${deck.title}": ${sessionResult.correct}/${sessionResult.cardsReviewed} correct. What should I review next?`
-          )
-        }
       />
     )
   }
@@ -475,27 +460,6 @@ export function StudySession({
       />
     )
   }
-  if (mode === 'ai-learn') {
-    return (
-      <AiLearnStudy
-        deck={deck}
-        cards={currentSprintCards}
-        onComplete={handleSprintComplete}
-        onExit={exitToDeck}
-      />
-    )
-  }
-  if (mode === 'tutor') {
-    return (
-      <TutorStudy
-        deck={deck}
-        cards={currentSprintCards}
-        onComplete={handleSprintComplete}
-        onExit={exitToDeck}
-      />
-    )
-  }
-
   return (
     <div className="mx-auto flex min-h-[40vh] max-w-md flex-col items-center justify-center gap-3 text-center">
       <Sparkles size={26} className="text-accent" />

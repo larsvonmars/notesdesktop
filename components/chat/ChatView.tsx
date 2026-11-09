@@ -1,9 +1,7 @@
 'use client'
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { X } from 'lucide-react'
 import { useAuth } from '@/lib/auth-context'
-import { useIsMobile } from '@/lib/useIsMobile'
 import { AI_MODEL_LABEL } from '@/lib/ai-model'
 import { cn } from '@/components/shell/utils'
 import { runChatTurn } from '@/lib/chat/engine'
@@ -18,8 +16,8 @@ import {
   renameConversation,
   saveMessage,
 } from '@/lib/chat/conversations'
-import ChatConversationList from './ChatConversationList'
 import ChatPanel from './ChatPanel'
+import ChatSidebar, { ChatSidebarDrawer } from './ChatSidebar'
 import type { ChatAttachment, ChatConversationSummary, ChatMessage, ChatStatus } from '@/lib/chat/types'
 
 const STORAGE_PREFIX = 'mindviz-notes-chat-'
@@ -64,7 +62,6 @@ function isAbortError(error: unknown): boolean {
 /** Full-page AI chat: conversation history, streaming answers, tools and agent mode. */
 export default function ChatView() {
   const { user } = useAuth()
-  const isMobile = useIsMobile()
   const userId = user?.id ?? null
 
   const [conversations, setConversations] = useState<ChatConversationSummary[]>([])
@@ -80,6 +77,7 @@ export default function ChatView() {
   const [attachmentError, setAttachmentError] = useState<string | null>(null)
   const [copiedId, setCopiedId] = useState<string | null>(null)
   const [historyOpen, setHistoryOpen] = useState(false)
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(false)
   const [restored, setRestored] = useState(false)
 
   const abortRef = useRef<AbortController | null>(null)
@@ -371,76 +369,66 @@ export default function ChatView() {
     setStatus('ready')
   }, [])
 
-  const historyPane = (
-    <ChatConversationList
-      conversations={conversations}
-      currentId={currentConversationId}
-      loading={conversationsLoading}
-      onSelect={handleSelectConversation}
-      onNew={() => {
-        resetConversation()
-        setHistoryOpen(false)
-      }}
-      onDelete={handleDeleteConversation}
-    />
-  )
-
   return (
-    <div className="flex h-full min-h-0 gap-2 p-2 sm:gap-3 sm:p-3">
-      <aside className="glass-card hidden w-[248px] shrink-0 flex-col overflow-hidden md:flex">
-        {historyPane}
-      </aside>
-
-      {isMobile && historyOpen && (
-        <div className="fixed inset-0 z-50 flex">
-          <div
-            className="absolute inset-0 bg-black/30 backdrop-blur-sm"
-            onClick={() => setHistoryOpen(false)}
-            aria-hidden="true"
+    <div className="flex h-full min-h-0">
+      <div className="flex min-h-0 min-w-0 flex-1 flex-col p-2 sm:p-3">
+        <div className={cn('glass-card flex min-h-0 flex-1 flex-col overflow-hidden')}>
+          <ChatPanel
+            title={title}
+            modelLabel={AI_MODEL_LABEL}
+            messages={messages}
+            status={status}
+            error={error}
+            agentMode={agentMode}
+            onToggleAgentMode={() => setAgentMode((previous) => !previous)}
+            input={input}
+            onInputChange={setInput}
+            onSend={handleSend}
+            onStop={handleStop}
+            onNewChat={resetConversation}
+            starters={starters}
+            onStarterClick={handleStarterClick}
+            copiedId={copiedId}
+            onCopy={handleCopy}
+            attachments={attachments}
+            onAttachmentsChange={setAttachments}
+            attachmentError={attachmentError}
+            onAttachmentError={setAttachmentError}
+            forcedTool={forcedTool}
+            onForcedToolChange={setForcedTool}
+            onOpenHistory={() => setHistoryOpen(true)}
           />
-          <div className="glass-strong relative z-10 flex h-full w-[280px] max-w-[85vw] flex-col overflow-hidden">
-            <div className="flex items-center justify-end px-2 pt-2">
-              <button
-                type="button"
-                onClick={() => setHistoryOpen(false)}
-                className="focus-ring rounded-lg p-1.5 text-muted hover:text-foreground"
-                aria-label="Close conversations"
-              >
-                <X className="h-4 w-4" aria-hidden="true" />
-              </button>
-            </div>
-            <div className="min-h-0 flex-1 overflow-hidden">{historyPane}</div>
-          </div>
         </div>
-      )}
-
-      <div className={cn('glass-card flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden')}>
-        <ChatPanel
-          title={title}
-          modelLabel={AI_MODEL_LABEL}
-          messages={messages}
-          status={status}
-          error={error}
-          agentMode={agentMode}
-          onToggleAgentMode={() => setAgentMode((previous) => !previous)}
-          input={input}
-          onInputChange={setInput}
-          onSend={handleSend}
-          onStop={handleStop}
-          onNewChat={resetConversation}
-          starters={starters}
-          onStarterClick={handleStarterClick}
-          copiedId={copiedId}
-          onCopy={handleCopy}
-          attachments={attachments}
-          onAttachmentsChange={setAttachments}
-          attachmentError={attachmentError}
-          onAttachmentError={setAttachmentError}
-          forcedTool={forcedTool}
-          onForcedToolChange={setForcedTool}
-          onOpenHistory={isMobile ? () => setHistoryOpen(true) : undefined}
-        />
       </div>
+
+      <ChatSidebar
+        className="hidden xl:flex"
+        conversations={conversations}
+        currentId={currentConversationId}
+        loading={conversationsLoading}
+        collapsed={sidebarCollapsed}
+        onToggleCollapsed={() => setSidebarCollapsed((previous) => !previous)}
+        onSelect={handleSelectConversation}
+        onNew={() => {
+          resetConversation()
+          setHistoryOpen(false)
+        }}
+        onDelete={handleDeleteConversation}
+      />
+
+      <ChatSidebarDrawer
+        open={historyOpen}
+        onClose={() => setHistoryOpen(false)}
+        conversations={conversations}
+        currentId={currentConversationId}
+        loading={conversationsLoading}
+        onSelect={handleSelectConversation}
+        onNew={() => {
+          resetConversation()
+          setHistoryOpen(false)
+        }}
+        onDelete={handleDeleteConversation}
+      />
     </div>
   )
 }

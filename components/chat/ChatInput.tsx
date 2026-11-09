@@ -1,7 +1,7 @@
 'use client'
 
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { FileText, ImagePlus, Paperclip, Send, Square, Wrench, X } from 'lucide-react'
+import { ChevronDown, FileText, ImagePlus, Paperclip, Send, Square, Wrench, X } from 'lucide-react'
 import { cn } from '@/components/shell/utils'
 import { CHAT_TOOL_MENU, getToolMenuEntry } from '@/lib/chat/tool-menu'
 import {
@@ -32,6 +32,10 @@ export interface ChatInputProps {
 }
 
 const MAX_HEIGHT = 200
+
+/** Shared sizing for the composer toolbar controls. */
+const toolbarButton =
+  'focus-ring inline-flex h-8 items-center gap-1.5 rounded-lg px-2 text-[11.5px] font-medium text-muted transition-colors hover:bg-[var(--surface-hover)] hover:text-foreground'
 
 export default function ChatInput({
   value,
@@ -208,139 +212,151 @@ export default function ChatInput({
         </p>
       )}
 
-      <div className="flex items-end gap-1.5 px-2.5 py-2">
-        {agentMode && (
-          <span className="mb-0.5 flex shrink-0 items-center gap-1 rounded-full border border-accent/25 bg-accent-light px-2 py-0.5 text-[10px] font-medium text-accent">
-            Agent
-          </span>
-        )}
-
-        {activeTool && (
-          <span className="mb-0.5 flex shrink-0 items-center gap-1 rounded-full border border-border bg-surface px-2 py-0.5 text-[10px] font-medium text-muted">
+      {activeTool && (
+        <div className="flex flex-wrap items-center gap-1.5 px-3 pt-2.5">
+          <span className="inline-flex items-center gap-1.5 rounded-full border border-accent/25 bg-accent-light px-2 py-0.5 text-[10.5px] font-medium text-accent">
             <span aria-hidden="true">{activeTool.emoji}</span>
-            <span className="hidden sm:inline">{activeTool.label}</span>
+            <span>{activeTool.label}</span>
             <button
               type="button"
               onClick={() => onForcedToolChange(null)}
-              className="focus-ring rounded-full hover:text-danger"
+              className="focus-ring rounded-full p-0.5 transition-colors hover:text-danger"
               aria-label="Clear selected tool"
+              title="Clear selected tool"
             >
               <X className="h-2.5 w-2.5" aria-hidden="true" />
             </button>
           </span>
-        )}
+        </div>
+      )}
 
-        <div className="relative mb-0.5 shrink-0">
-          <button
-            type="button"
-            onClick={() => setToolMenuOpen((prev) => !prev)}
-            className={cn(
-              'focus-ring rounded-lg p-1 transition-colors',
-              toolMenuOpen || forcedTool
-                ? 'bg-accent-light text-accent'
-                : 'text-muted hover:bg-surface-hover hover:text-foreground'
-            )}
-            aria-label="Use a specific tool"
-            title="Use a specific tool"
-            aria-expanded={toolMenuOpen}
-          >
-            <Wrench className="h-[18px] w-[18px]" aria-hidden="true" />
-          </button>
-          {toolMenuOpen && (
-            <>
-              <button
-                type="button"
-                className="fixed inset-0 z-30 cursor-default"
-                onClick={() => setToolMenuOpen(false)}
-                aria-label="Close tool menu"
-                tabIndex={-1}
+      <textarea
+        ref={textareaRef}
+        value={value}
+        onChange={(event) => onChange(event.target.value)}
+        onKeyDown={handleKeyDown}
+        onPaste={(event) => {
+          const files = Array.from(event.clipboardData?.items ?? [])
+            .map((item) => item.getAsFile())
+            .filter((file): file is File => Boolean(file))
+          if (files.length > 0) {
+            event.preventDefault()
+            void addFiles(files)
+          }
+        }}
+        rows={1}
+        placeholder={agentMode ? 'Tell your agent what to do…' : 'Message MindViz…'}
+        className="block max-h-[200px] w-full resize-none bg-transparent px-3 pb-1 pt-2.5 text-[13.5px] leading-relaxed text-foreground placeholder:text-muted focus:outline-none"
+        aria-label="Chat message"
+      />
+
+      <div className="flex items-center justify-between gap-2 border-t border-[var(--border)] px-2 py-1.5">
+        <div className="flex min-w-0 items-center gap-0.5">
+          <div className="relative">
+            <button
+              type="button"
+              onClick={() => setToolMenuOpen((prev) => !prev)}
+              className={cn(
+                toolbarButton,
+                (toolMenuOpen || Boolean(forcedTool)) &&
+                  'bg-accent-light text-accent hover:bg-accent-light hover:text-accent'
+              )}
+              aria-label="Choose a tool"
+              title="Choose a tool"
+              aria-expanded={toolMenuOpen}
+            >
+              <Wrench className="h-4 w-4" aria-hidden="true" />
+              <span className="hidden sm:inline">Tools</span>
+              <ChevronDown
+                className={cn('hidden h-3 w-3 transition-transform sm:block', toolMenuOpen && 'rotate-180')}
+                aria-hidden="true"
               />
-              <div className="glass-popover absolute bottom-full left-0 z-40 mb-2 w-64 rounded-2xl py-1 animate-rise-in">
-                <p className="px-3 pb-1 pt-1.5 text-[10px] font-semibold uppercase tracking-[0.14em] text-muted">
-                  Use a specific tool
-                </p>
-                {CHAT_TOOL_MENU.map((entry) => (
-                  <button
-                    key={entry.toolName}
-                    type="button"
-                    onClick={() => {
-                      onForcedToolChange(forcedTool === entry.toolName ? null : entry.toolName)
-                      setToolMenuOpen(false)
-                    }}
-                    className={cn(
-                      'flex w-full items-start gap-2.5 px-3 py-2 text-left transition-colors',
-                      forcedTool === entry.toolName ? 'bg-accent-light' : 'hover:bg-surface-hover'
-                    )}
-                  >
-                    <span className="text-sm leading-5" aria-hidden="true">
-                      {entry.emoji}
-                    </span>
-                    <span className="min-w-0">
-                      <span className="block text-[12px] font-medium text-foreground">{entry.label}</span>
-                      <span className="block text-[10.5px] leading-snug text-muted">{entry.description}</span>
-                    </span>
-                  </button>
-                ))}
-              </div>
-            </>
+            </button>
+
+            {toolMenuOpen && (
+              <>
+                <button
+                  type="button"
+                  className="fixed inset-0 z-30 cursor-default"
+                  onClick={() => setToolMenuOpen(false)}
+                  aria-label="Close tool menu"
+                  tabIndex={-1}
+                />
+                <div className="glass-popover scroll-thin absolute bottom-full left-0 z-40 mb-2 max-h-[340px] w-64 overflow-y-auto rounded-2xl py-1 animate-rise-in">
+                  <p className="px-3 pb-1 pt-1.5 text-[10px] font-semibold uppercase tracking-[0.14em] text-muted">
+                    Use a specific tool
+                  </p>
+                  {CHAT_TOOL_MENU.map((entry) => (
+                    <button
+                      key={entry.toolName}
+                      type="button"
+                      onClick={() => {
+                        onForcedToolChange(forcedTool === entry.toolName ? null : entry.toolName)
+                        setToolMenuOpen(false)
+                      }}
+                      className={cn(
+                        'flex w-full items-start gap-2.5 px-3 py-2 text-left transition-colors',
+                        forcedTool === entry.toolName ? 'bg-accent-light' : 'hover:bg-[var(--surface-hover)]'
+                      )}
+                    >
+                      <span className="text-sm leading-5" aria-hidden="true">
+                        {entry.emoji}
+                      </span>
+                      <span className="min-w-0">
+                        <span className="block text-[12px] font-medium text-foreground">{entry.label}</span>
+                        <span className="block text-[10.5px] leading-snug text-muted">{entry.description}</span>
+                      </span>
+                    </button>
+                  ))}
+                </div>
+              </>
+            )}
+          </div>
+
+          {images.length < MAX_IMAGE_ATTACHMENTS && (
+            <label
+              className={cn(toolbarButton, 'cursor-pointer')}
+              title="Attach images"
+              aria-label="Attach images"
+            >
+              <ImagePlus className="h-4 w-4" aria-hidden="true" />
+              <span className="hidden sm:inline">Image</span>
+              <input
+                type="file"
+                accept="image/*"
+                multiple
+                className="hidden"
+                onChange={(event) => {
+                  if (event.target.files) void addFiles(event.target.files)
+                  event.target.value = ''
+                }}
+              />
+            </label>
+          )}
+
+          {documents.length < MAX_DOCUMENT_ATTACHMENTS && (
+            <label
+              className={cn(toolbarButton, 'cursor-pointer')}
+              title="Attach documents"
+              aria-label="Attach documents"
+            >
+              <Paperclip className="h-4 w-4" aria-hidden="true" />
+              <span className="hidden sm:inline">File</span>
+              <input
+                type="file"
+                accept=".pdf,.docx"
+                multiple
+                className="hidden"
+                onChange={(event) => {
+                  if (event.target.files) void addFiles(event.target.files)
+                  event.target.value = ''
+                }}
+              />
+            </label>
           )}
         </div>
 
-        {images.length < MAX_IMAGE_ATTACHMENTS && (
-          <label className="mb-0.5 shrink-0 cursor-pointer rounded-lg p-1 text-muted transition-colors hover:bg-surface-hover hover:text-foreground">
-            <ImagePlus className="h-[18px] w-[18px]" aria-hidden="true" />
-            <span className="sr-only">Attach images</span>
-            <input
-              type="file"
-              accept="image/*"
-              multiple
-              className="hidden"
-              onChange={(event) => {
-                if (event.target.files) void addFiles(event.target.files)
-                event.target.value = ''
-              }}
-            />
-          </label>
-        )}
-
-        {documents.length < MAX_DOCUMENT_ATTACHMENTS && (
-          <label className="mb-0.5 shrink-0 cursor-pointer rounded-lg p-1 text-muted transition-colors hover:bg-surface-hover hover:text-foreground">
-            <Paperclip className="h-[18px] w-[18px]" aria-hidden="true" />
-            <span className="sr-only">Attach documents</span>
-            <input
-              type="file"
-              accept=".pdf,.docx"
-              multiple
-              className="hidden"
-              onChange={(event) => {
-                if (event.target.files) void addFiles(event.target.files)
-                event.target.value = ''
-              }}
-            />
-          </label>
-        )}
-
-        <textarea
-          ref={textareaRef}
-          value={value}
-          onChange={(event) => onChange(event.target.value)}
-          onKeyDown={handleKeyDown}
-          onPaste={(event) => {
-            const files = Array.from(event.clipboardData?.items ?? [])
-              .map((item) => item.getAsFile())
-              .filter((file): file is File => Boolean(file))
-            if (files.length > 0) {
-              event.preventDefault()
-              void addFiles(files)
-            }
-          }}
-          rows={1}
-          placeholder={agentMode ? 'Tell your agent what to do…' : 'Message MindViz…'}
-          className="max-h-[200px] min-h-6 flex-1 resize-none bg-transparent py-1 text-[13.5px] leading-relaxed text-foreground placeholder:text-muted focus:outline-none"
-          aria-label="Chat message"
-        />
-
-        <div className="mb-0.5 flex shrink-0 items-center gap-1">
+        <div className="flex shrink-0 items-center gap-1.5">
           {hasContent && !streaming && (
             <span className="hidden text-[10px] tabular-nums text-muted sm:inline">{value.length}</span>
           )}
@@ -348,7 +364,7 @@ export default function ChatInput({
             <button
               type="button"
               onClick={onStop}
-              className="focus-ring flex h-8 w-8 items-center justify-center rounded-full bg-danger text-white transition-transform hover:bg-danger/90 active:scale-95"
+              className="focus-ring flex h-9 w-9 items-center justify-center rounded-full bg-danger text-white transition-transform hover:bg-danger/90 active:scale-95"
               aria-label="Stop generating"
               title="Stop generating"
             >
@@ -360,7 +376,7 @@ export default function ChatInput({
               onClick={onSubmit}
               disabled={!hasContent}
               className={cn(
-                'focus-ring flex h-8 w-8 items-center justify-center rounded-full bg-accent text-white transition-transform',
+                'focus-ring flex h-9 w-9 items-center justify-center rounded-full bg-accent text-white transition-transform',
                 'hover:bg-accent-strong active:scale-95 disabled:cursor-not-allowed disabled:opacity-35'
               )}
               aria-label="Send message"

@@ -29,7 +29,7 @@ function makeCard(index: number): Card {
 }
 
 describe('Learn mode picker', () => {
-  it('lists every study mode including the two AI modes', () => {
+  it('lists every study mode', () => {
     const html = renderToStaticMarkup(
       <ModePicker
         deck={deck}
@@ -46,8 +46,6 @@ describe('Learn mode picker', () => {
       'Typed answer',
       'Test',
       'Smart learning',
-      'AI Learn',
-      'AI Tutor',
     ]) {
       expect(html).toContain(label)
     }

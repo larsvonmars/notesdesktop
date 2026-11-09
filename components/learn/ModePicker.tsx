@@ -8,7 +8,6 @@ import {
   ClipboardList,
   Keyboard,
   Sparkles,
-  Wand2,
 } from 'lucide-react'
 import type { LucideIcon } from 'lucide-react'
 import type { Card, Deck, StudyMode } from '@/lib/learn/types'
@@ -51,16 +50,6 @@ const MODE_STYLES: Record<
     text: 'text-rose-600 dark:text-rose-400',
   },
   smart: { icon: Sparkles, soft: 'bg-accent-light', text: 'text-accent' },
-  'ai-learn': {
-    icon: Wand2,
-    soft: 'bg-fuchsia-500/10',
-    text: 'text-fuchsia-600 dark:text-fuchsia-400',
-  },
-  tutor: {
-    icon: Sparkles,
-    soft: 'bg-indigo-500/10',
-    text: 'text-indigo-600 dark:text-indigo-400',
-  },
 }
 
 export function ModePicker({ deck, cards, onSelect, onBack }: Props) {
@@ -121,20 +110,6 @@ export function ModePicker({ deck, cards, onSelect, onBack }: Props) {
       description:
         'Adaptive three-round flow: multiple choice, then typed answers, then flashcards.',
       meta: `${cards.length} cards × 3 rounds`,
-    },
-    {
-      id: 'ai-learn',
-      label: 'AI Learn',
-      description:
-        'An AI coach walks you through the deck card by card, scores each answer and adapts.',
-      meta: `${cards.length} cards`,
-    },
-    {
-      id: 'tutor',
-      label: 'AI Tutor',
-      description:
-        'Choose a tutoring style: Socratic, Oral Exam, Conversational or Rapid Fire.',
-      meta: `${cards.length} cards`,
     },
   ]
 

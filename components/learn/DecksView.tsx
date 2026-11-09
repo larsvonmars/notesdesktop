@@ -6,7 +6,6 @@ import {
   Plus,
   Search,
   SlidersHorizontal,
-  Sparkles,
 } from 'lucide-react'
 import BaseModal, {
   ModalBody,
@@ -29,16 +28,10 @@ type SortBy = 'recent' | 'name' | 'cards' | 'mastery'
 interface Props {
   onOpenDeck: (deckId: string) => void
   onStartStudy: (deckId: string) => void
-  onOpenAssistant: (prompt?: string) => void
   onEditDeck: (deck: Deck) => void
 }
 
-export function DecksView({
-  onOpenDeck,
-  onStartStudy,
-  onOpenAssistant,
-  onEditDeck,
-}: Props) {
+export function DecksView({ onOpenDeck, onStartStudy, onEditDeck }: Props) {
   const {
     decks,
     refreshDecks,
@@ -164,15 +157,6 @@ export function DecksView({
         <div className="flex items-center gap-2">
           <Button
             type="button"
-            variant="secondary"
-            size="sm"
-            icon={Sparkles}
-            onClick={() => onOpenAssistant()}
-          >
-            Ask AI
-          </Button>
-          <Button
-            type="button"
             variant="primary"
             size="sm"
             icon={Plus}
@@ -266,8 +250,8 @@ export function DecksView({
             No decks yet
           </h2>
           <p className="mx-auto mt-1 max-w-sm text-sm text-muted">
-            Create your first deck, then add cards manually, paste a CSV list,
-            or import a PDF with AI.
+            Create your first deck, then add cards manually or paste a CSV
+            list.
           </p>
           <Button
             type="button"

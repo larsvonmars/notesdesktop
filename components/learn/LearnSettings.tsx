@@ -205,8 +205,8 @@ export function LearnSettings({
       <section className="glass-card space-y-4 p-5">
         <SectionHeading icon={ShieldAlert} label="Account" danger />
         <p className="text-sm leading-6 text-muted">
-          Password, account deletion, data export and AI settings live in the
-          app-wide settings.
+          Password, account deletion and data export live in the app-wide
+          settings.
         </p>
         <Button
           type="button"

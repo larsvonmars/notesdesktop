@@ -315,7 +315,6 @@ aside  (fixed inset-y-0 right-0 z-30, transition-all duration-300)
       ├── Word-goal progress bar
       ├── Table of Contents  (collapsible, level-indent via paddingLeft)
       ├── Connections  (backlinks + outgoing links)
-      ├── AI Assistant shortcut
       └── Export / Share actions
 ```
 

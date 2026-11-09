@@ -24,13 +24,9 @@ interface LearningContextValue {
   refreshDecks: () => Promise<void>
   currentCard: Card | null
   setCurrentCard: (card: Card | null) => void
-  /** Bumped when the AI changes data so open screens reload. */
-  aiRefreshCounter: number
-  triggerAiRefresh: () => void
   /** Current Learn destination, shared by the Learn sidebar, top bar and view. */
   screen: LearnScreen
   setScreen: (screen: LearnScreen) => void
-  openAssistant: (prompt?: string) => void
   /** Switch to the deck list and open the create-deck dialog. */
   requestCreateDeck: () => void
   consumeCreateDeckRequest: () => void
@@ -49,7 +45,6 @@ export function LearningProvider({ children }: { children: ReactNode }) {
   const [isLoadingStats, setIsLoadingStats] = useState(true)
   const [isLoadingDecks, setIsLoadingDecks] = useState(true)
   const [currentCard, setCurrentCard] = useState<Card | null>(null)
-  const [aiRefreshCounter, setAiRefreshCounter] = useState(0)
   const [screen, setScreen] = useState<LearnScreen>({ kind: 'dashboard' })
   const [createDeckSignal, setCreateDeckSignal] = useState(0)
   const loadedForUserRef = useRef<string | null>(null)
@@ -98,15 +93,6 @@ export function LearningProvider({ children }: { children: ReactNode }) {
     void refreshDecks()
   }, [authLoading, user, refreshStats, refreshDecks])
 
-  const triggerAiRefresh = useCallback(
-    () => setAiRefreshCounter((count) => count + 1),
-    []
-  )
-
-  const openAssistant = useCallback((prompt?: string) => {
-    setScreen({ kind: 'assistant', prompt, key: Date.now() })
-  }, [])
-
   const requestCreateDeck = useCallback(() => {
     setScreen({ kind: 'decks' })
     setCreateDeckSignal(Date.now())
@@ -133,11 +119,8 @@ export function LearningProvider({ children }: { children: ReactNode }) {
       refreshDecks,
       currentCard,
       setCurrentCard,
-      aiRefreshCounter,
-      triggerAiRefresh,
       screen,
       setScreen,
-      openAssistant,
       requestCreateDeck,
       consumeCreateDeckRequest,
       createDeckSignal,
@@ -152,10 +135,7 @@ export function LearningProvider({ children }: { children: ReactNode }) {
       refreshStats,
       refreshDecks,
       currentCard,
-      aiRefreshCounter,
-      triggerAiRefresh,
       screen,
-      openAssistant,
       requestCreateDeck,
       consumeCreateDeckRequest,
       createDeckSignal,

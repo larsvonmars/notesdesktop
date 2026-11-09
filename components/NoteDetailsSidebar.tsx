@@ -23,7 +23,6 @@ import {
   Download,
   FileDown,
   FileUp,
-  Sparkles,
   Copy,
   ExternalLink,
   Globe,
@@ -84,9 +83,6 @@ export interface NoteDetailsSidebarProps {
   outgoingLinks?: Array<{ id: string; title: string; folderPath?: string }>
   onSelectOutgoing?: (noteId: string) => void
   
-  // AI Assistant
-  onOpenAIAssistant?: () => void
-
   // Share
   shareUrl?: string | null
   shareHint?: string | null
@@ -160,7 +156,6 @@ function NoteDetailsSidebar({
   onSelectBacklink,
   outgoingLinks = [],
   onSelectOutgoing,
-  onOpenAIAssistant,
   shareUrl,
   shareHint,
   sharePublishedDisplay,
@@ -273,17 +268,6 @@ function NoteDetailsSidebar({
               aria-label="Show table of contents"
             >
               <ListTree size={15} />
-            </button>
-          )}
-          {/* AI Assistant */}
-          {onOpenAIAssistant && (
-            <button
-              onClick={onOpenAIAssistant}
-              className={`${ICON_BUTTON} hover:text-accent`}
-              title="Open AI Assistant"
-              aria-label="Open AI Assistant"
-            >
-              <Sparkles size={14} />
             </button>
           )}
           {/* Settings */}
@@ -666,15 +650,6 @@ function NoteDetailsSidebar({
                 <Globe size={9} className="text-accent" />
               </span>
             )}
-          </button>
-        )}
-        {onOpenAIAssistant && (
-          <button
-            onClick={onOpenAIAssistant}
-            className={`${ROW_BUTTON} hover:text-accent`}
-          >
-            <Sparkles className="h-3.5 w-3.5 shrink-0" />
-            <span>AI Assistant</span>
           </button>
         )}
         <button

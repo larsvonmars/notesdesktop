@@ -2,7 +2,6 @@
 
 import { useMemo, useState } from 'react'
 import {
-  Bot,
   BookOpen,
   Flame,
   GraduationCap,
@@ -26,14 +25,13 @@ interface LearnSidebarProps {
 }
 
 const NAV_ITEMS: Array<{
-  id: 'dashboard' | 'decks' | 'progress' | 'assistant' | 'settings'
+  id: 'dashboard' | 'decks' | 'progress' | 'settings'
   label: string
   icon: typeof LayoutDashboard
 }> = [
   { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard },
   { id: 'decks', label: 'Decks', icon: BookOpen },
   { id: 'progress', label: 'Progress', icon: TrendingUp },
-  { id: 'assistant', label: 'AI assistant', icon: Bot },
   { id: 'settings', label: 'Study settings', icon: Settings2 },
 ]
 
@@ -46,7 +44,6 @@ export function LearnSidebar({
     decks,
     screen,
     setScreen,
-    openAssistant,
     requestCreateDeck,
     startStudy,
   } = useLearning()
@@ -116,7 +113,7 @@ export function LearnSidebar({
             <p className="truncate text-[10px] text-muted">
               {stats
                 ? `Level ${stats.level} · ${pendingCards} card${pendingCards === 1 ? '' : 's'} to learn`
-                : 'Flashcards & AI tutoring'}
+                : 'Flashcards & spaced repetition'}
             </p>
           </div>
           {stats && stats.streak > 0 && (
@@ -155,11 +152,6 @@ export function LearnSidebar({
               type="button"
               aria-current={active ? 'page' : undefined}
               onClick={() => {
-                if (item.id === 'assistant') {
-                  openAssistant()
-                  onNavigate?.()
-                  return
-                }
                 navigate({ kind: item.id } as LearnScreen)
               }}
               className={cn(

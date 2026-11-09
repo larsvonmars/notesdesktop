@@ -7,7 +7,6 @@ import {
   ArrowRight,
   ArrowUpRight,
   BookOpen,
-  Bot,
   CalendarDays,
   Check,
   ChevronRight,
@@ -122,7 +121,6 @@ export interface HomeDashboardProps {
   onOpenLearn: () => void
   onOpenLearnDeck: (deckId: string) => void
   onStartLearnStudy: (deckId: string) => void
-  onOpenLearnAssistant: (prompt?: string) => void
 }
 
 interface SectionHeaderProps {
@@ -294,7 +292,6 @@ export default function HomeDashboard({
   onOpenLearn,
   onOpenLearnDeck,
   onStartLearnStudy,
-  onOpenLearnAssistant,
 }: HomeDashboardProps) {
   const { stats: learnStats, decks: learnDecks } = useLearning()
   const toast = useToast()
@@ -834,7 +831,7 @@ export default function HomeDashboard({
                     </span>
                     <span className="min-w-0 flex-1">
                       <span className="block text-[13px] font-medium text-foreground">Create your first deck</span>
-                      <span className="block text-[10px] text-muted">Flashcards, spaced repetition and AI tutoring</span>
+                      <span className="block text-[10px] text-muted">Flashcards and spaced repetition</span>
                     </span>
                     <ChevronRight size={13} className="shrink-0 text-muted" />
                   </button>
@@ -852,14 +849,6 @@ export default function HomeDashboard({
                     Study
                   </button>
                 )}
-                <button
-                  type="button"
-                  onClick={() => onOpenLearnAssistant()}
-                  className="glass-btn h-9 shrink-0 gap-1.5 px-3 text-[12px] font-medium"
-                >
-                  <Bot size={13} />
-                  Ask AI
-                </button>
               </div>
             </div>
           </section>
