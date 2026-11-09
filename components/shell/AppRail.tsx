@@ -19,6 +19,8 @@ export interface AppRailProps {
   onSignOut?: () => void
   /** Signed-in identity for the avatar menu. */
   user?: ShellUser | null
+  /** Optional small counters rendered on destinations (e.g. Learn pending cards). */
+  badges?: Partial<Record<WorkspaceView, string | number>>
   className?: string
 }
 
@@ -28,10 +30,12 @@ interface RailButtonProps {
   /** Digit shortcut rendered in the tooltip, e.g. '1' → ⌘1. */
   shortcut?: string | null
   active?: boolean
+  /** Optional counter badge (e.g. pending Learn cards). */
+  badge?: string | number
   onClick: () => void
 }
 
-function RailButton({ icon: Icon, label, shortcut, active, onClick }: RailButtonProps) {
+function RailButton({ icon: Icon, label, shortcut, active, badge, onClick }: RailButtonProps) {
   const hint = shortcut ? `${label} (${formatModShortcut(shortcut)})` : label
   return (
     <li className="flex w-full justify-center">
@@ -39,11 +43,19 @@ function RailButton({ icon: Icon, label, shortcut, active, onClick }: RailButton
         type="button"
         className="nav-pill focus-ring"
         onClick={onClick}
-        aria-label={hint}
-        title={hint}
+        aria-label={badge !== undefined ? `${hint} — ${badge}` : hint}
+        title={badge !== undefined ? `${hint} — ${badge}` : hint}
         aria-current={active ? 'page' : undefined}
       >
         <Icon className="h-[19px] w-[19px] shrink-0" strokeWidth={active ? 2.15 : 1.85} />
+        {badge !== undefined && badge !== 0 && (
+          <span
+            className="pointer-events-none absolute -right-0.5 -top-0.5 flex h-4 min-w-4 items-center justify-center rounded-full bg-warning px-1 text-[9px] font-bold leading-none text-white shadow-sm"
+            aria-hidden="true"
+          >
+            {badge}
+          </span>
+        )}
         <span className="nav-pill-label" aria-hidden="true">
           {label}
           {shortcut ? <span className="ml-1.5 text-muted">{formatModShortcut(shortcut)}</span> : null}
@@ -66,6 +78,7 @@ export default function AppRail({
   onOpenSettings,
   onSignOut,
   user,
+  badges,
   className = '',
 }: AppRailProps) {
   const { resolvedTheme, toggleTheme } = useTheme()
@@ -150,6 +163,7 @@ export default function AppRail({
             label={destination.label}
             shortcut={destination.shortcut}
             active={activeView === destination.view}
+            badge={badges?.[destination.view]}
             onClick={() => onNavigate(destination.view)}
           />
         ))}

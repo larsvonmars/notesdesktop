@@ -1,5 +1,10 @@
 import { supabase } from '@/lib/supabase'
-import type { LearnCardRow, LearnDeckRow, LearnDocumentRow, LearnUserStatsRow } from '@/lib/database.types'
+import type {
+  LearnCardRow,
+  LearnDeckRow,
+  LearnDocumentRow,
+  LearnUserStatsRow,
+} from '@/lib/database.types'
 import type { Card, DocumentStatus, LearnDocument } from './types'
 
 export class LearnAuthError extends Error {
@@ -21,10 +26,16 @@ export async function requireUserId(): Promise<string> {
 }
 
 export function isLearnAuthError(error: unknown): boolean {
-  return error instanceof LearnAuthError || (error as { message?: string } | null)?.message === 'Not authenticated'
+  return (
+    error instanceof LearnAuthError ||
+    (error as { message?: string } | null)?.message === 'Not authenticated'
+  )
 }
 
-export function describeLearnError(error: unknown, fallback = 'Something went wrong.'): string {
+export function describeLearnError(
+  error: unknown,
+  fallback = 'Something went wrong.'
+): string {
   if (error instanceof Error && error.message) return error.message
   const candidate = error as { message?: string; details?: string } | null
   return candidate?.message ?? candidate?.details ?? fallback

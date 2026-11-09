@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import {
   BookOpen,
+  Bot,
   CornerDownLeft,
   FilePenLine,
   FileText,
@@ -15,14 +16,17 @@ import {
   Loader2,
   Network,
   PenTool,
+  Plus,
   Search,
   Settings,
   Table2,
+  Zap,
   type LucideIcon,
 } from 'lucide-react'
 import type { NoteSummary, NoteType } from '@/lib/notes'
 import type { FolderNode } from '@/lib/folders'
 import type { Project } from '@/lib/projects'
+import type { Card, Deck } from '@/lib/learn/types'
 import {
   getNoteTypePresentation,
   getOrderedNoteTypePresentations,
@@ -70,6 +74,14 @@ export interface CommandPaletteProps {
   onOpenTasks: () => void
   onOpenFiles: () => void
   onOpenLearn?: () => void
+  /** Decks surface directly in the palette. */
+  learnDecks?: Deck[]
+  onOpenLearnDeck?: (deckId: string) => void
+  onStartLearnStudy?: (deckId: string) => void
+  onCreateLearnDeck?: () => void
+  onOpenLearnAssistant?: () => void
+  /** Async card search across every deck. */
+  onSearchLearnCards?: (query: string) => Promise<Card[]>
   onOpenSettings: () => void
   onOpenShortcuts: () => void
 }
@@ -94,6 +106,12 @@ export default function CommandPalette({
   onOpenTasks,
   onOpenFiles,
   onOpenLearn,
+  learnDecks,
+  onOpenLearnDeck,
+  onStartLearnStudy,
+  onCreateLearnDeck,
+  onOpenLearnAssistant,
+  onSearchLearnCards,
   onOpenSettings,
   onOpenShortcuts,
 }: CommandPaletteProps) {
@@ -101,6 +119,31 @@ export default function CommandPalette({
   const [activeIndex, setActiveIndex] = useState(0)
   const [contentMatches, setContentMatches] = useState<NoteSummary[]>([])
   const [isSearchingContent, setIsSearchingContent] = useState(false)
+  const [learnCardMatches, setLearnCardMatches] = useState<Card[]>([])
+
+  // Learn cards are searched in the data layer too (debounced).
+  useEffect(() => {
+    const term = query.trim()
+    let cancelled = false
+
+    if (!onSearchLearnCards) return () => {}
+    if (term.length < 2) return () => {}
+
+    const timer = window.setTimeout(() => {
+      onSearchLearnCards(term)
+        .then((results) => {
+          if (!cancelled) setLearnCardMatches(results.slice(0, 6))
+        })
+        .catch(() => {
+          if (!cancelled) setLearnCardMatches([])
+        })
+    }, 200)
+
+    return () => {
+      cancelled = true
+      window.clearTimeout(timer)
+    }
+  }, [query, onSearchLearnCards])
 
   // Notes can match on body text too; that lives in the data layer, so ask it
   // (debounced) instead of filtering `notes` alone.
@@ -205,6 +248,54 @@ export default function CommandPalette({
       }))
       .filter((item) => matchesPaletteQuery(item.label, item.hint, query))
 
+    const learnDeckItems: PaletteItem[] = (learnDecks ?? [])
+      .filter((deck) => matchesPaletteQuery(deck.title, 'Learn deck', query))
+      .map((deck) => ({
+        key: `learn-deck-${deck.id}`,
+        label: deck.title,
+        hint: `Learn deck · ${deck.cardCount} cards · ${deck.masteredCount} mastered`,
+        icon: BookOpen,
+        run: () => onOpenLearnDeck?.(deck.id),
+      }))
+
+    const learnCommandItems: PaletteItem[] = [
+      {
+        key: 'learn-new-deck',
+        label: 'New Learn deck',
+        hint: 'Create a flashcard deck',
+        icon: Plus,
+        run: () => onCreateLearnDeck?.(),
+      },
+      {
+        key: 'learn-assistant',
+        label: 'Ask Learn AI',
+        hint: 'Generate cards, analyze decks or import a PDF',
+        icon: Bot,
+        run: () => onOpenLearnAssistant?.(),
+      },
+      ...(learnDecks?.[0]
+        ? [
+            {
+              key: 'learn-study-first',
+              label: `Study “${learnDecks[0].title}”`,
+              hint: 'Start a study session',
+              icon: Zap,
+              run: () => onStartLearnStudy?.(learnDecks[0].id),
+            } satisfies PaletteItem,
+          ]
+        : []),
+    ].filter((item) => matchesPaletteQuery(item.label, item.hint, query))
+
+    const learnCardItems: PaletteItem[] = learnCardMatches
+      .filter((card) => onOpenLearnDeck)
+      .map((card) => ({
+        key: `learn-card-${card.id}`,
+        label: card.front,
+        hint: `Card in a Learn deck · ${card.back}`,
+        icon: BookOpen,
+        run: () => onOpenLearnDeck?.(card.deckId),
+      }))
+
     const navigateItems: PaletteItem[] = [
       { key: 'nav-home', label: 'Go to Home', hint: 'Recent notes and quick actions', icon: Home, run: onOpenHome },
       { key: 'nav-tasks', label: 'Open Planner', hint: 'Tasks, calendar, timetable and smart plans', icon: ListTodo, run: onOpenTasks },
@@ -218,6 +309,10 @@ export default function CommandPalette({
       { title: 'Notes', items: limit(noteItems, MAX_IDLE_NOTES) },
       { title: 'Folders', items: limit(folderItems, MAX_IDLE_FOLDERS) },
       { title: 'Projects', items: limit(projectItems, MAX_IDLE_PROJECTS) },
+      {
+        title: 'Learn',
+        items: [...learnCommandItems, ...limit(learnDeckItems, query.trim() ? MAX_MATCHES : 3), ...limit(learnCardItems, 5)],
+      },
       { title: 'Create', items: createItems },
       { title: 'Navigate', items: navigateItems },
     ].filter((group) => group.items.length > 0)
@@ -235,6 +330,12 @@ export default function CommandPalette({
     onOpenTasks,
     onOpenFiles,
     onOpenLearn,
+    learnDecks,
+    learnCardMatches,
+    onOpenLearnDeck,
+    onStartLearnStudy,
+    onCreateLearnDeck,
+    onOpenLearnAssistant,
     onOpenSettings,
     onOpenShortcuts,
   ])

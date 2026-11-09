@@ -7,13 +7,16 @@ import {
   ArrowRight,
   ArrowUpRight,
   BookOpen,
+  Bot,
   CalendarDays,
   Check,
   ChevronRight,
   Clock3,
   FilePenLine,
   FileText,
+  Flame,
   FolderOpen,
+  GraduationCap,
   Inbox,
   Layers,
   ListTodo,
@@ -24,12 +27,15 @@ import {
   Search,
   Sparkles,
   Table2,
+  Target,
   TrendingUp,
   Zap,
   type LucideIcon,
 } from 'lucide-react'
 import { Button } from '@/components/ui/Button'
 import { useToast } from '@/components/ToastProvider'
+import { ProgressBar } from '@/components/learn/LearnPrimitives'
+import { useLearning } from '@/lib/learn/context'
 import { createNote, getNote, type NoteSummary, type NoteType } from '@/lib/notes'
 import { getLastOpenedNote } from '@/lib/note-activity'
 import type { Folder } from '@/lib/folders'
@@ -112,6 +118,11 @@ export interface HomeDashboardProps {
   onOpenSearch: () => void
   onOpenTasks: () => void
   onOpenUnfiled: () => void
+  /** Jump to the Learn dashboard. */
+  onOpenLearn: () => void
+  onOpenLearnDeck: (deckId: string) => void
+  onStartLearnStudy: (deckId: string) => void
+  onOpenLearnAssistant: (prompt?: string) => void
 }
 
 interface SectionHeaderProps {
@@ -280,7 +291,12 @@ export default function HomeDashboard({
   onOpenSearch,
   onOpenTasks,
   onOpenUnfiled,
+  onOpenLearn,
+  onOpenLearnDeck,
+  onStartLearnStudy,
+  onOpenLearnAssistant,
 }: HomeDashboardProps) {
+  const { stats: learnStats, decks: learnDecks } = useLearning()
   const toast = useToast()
   const [now, setNow] = useState(() => new Date())
   const [captureText, setCaptureText] = useState('')
@@ -583,6 +599,14 @@ export default function HomeDashboard({
     }
   }
 
+  const continueLearnDeck =
+    learnDecks.find((deck) => deck.lastStudied && deck.cardCount > 0) ??
+    learnDecks.find((deck) => deck.cardCount > 0)
+  const learnDailyPercent =
+    learnStats && learnStats.dailyGoal > 0
+      ? Math.min(100, Math.round((learnStats.dailyCardsReviewed / learnStats.dailyGoal) * 100))
+      : 0
+
   const greeting = getGreeting(now)
   const hasAgendaItems =
     overdueTasks.length + todayTasks.length + upcomingTasks.length + upcomingEvents.length > 0
@@ -629,6 +653,16 @@ export default function HomeDashboard({
             {dueTodayCount > 0 && (
               <span className="rounded-full bg-accent-light px-1.5 py-0.5 text-[10px] font-semibold tabular-nums text-accent">
                 {dueTodayCount}
+              </span>
+            )}
+          </button>
+          <button type="button" onClick={onOpenLearn} className="glass-btn h-11 sm:h-9">
+            <GraduationCap size={14} />
+            Learn
+            {learnStats && learnStats.streak > 0 && (
+              <span className="inline-flex items-center gap-0.5 rounded-full bg-warning-light px-1.5 py-0.5 text-[10px] font-semibold tabular-nums text-warning">
+                <Flame size={9} />
+                {learnStats.streak}
               </span>
             )}
           </button>
@@ -714,6 +748,122 @@ export default function HomeDashboard({
             })}
           </div>
         </section>
+
+        {learnStats && (
+          <section className="glass-card animate-rise-in mt-5 overflow-hidden">
+            <SectionHeader
+              icon={GraduationCap}
+              title="Learning"
+              iconClassName="bg-accent-light text-accent"
+            >
+              <button
+                type="button"
+                onClick={onOpenLearn}
+                className="glass-btn-ghost w-auto gap-1 px-2.5 text-[11px]"
+              >
+                Open Learn
+                <ChevronRight size={11} />
+              </button>
+            </SectionHeader>
+
+            <div className="grid gap-4 px-5 pb-5 md:grid-cols-[1fr_1fr_auto] md:items-center">
+              <div className="grid grid-cols-3 gap-2">
+                <div className="rounded-xl border border-[var(--border)] bg-[var(--surface-sunken)] px-2.5 py-2">
+                  <p className="text-[10px] font-medium uppercase tracking-[0.06em] text-muted">Level</p>
+                  <p className="mt-0.5 text-lg font-semibold tabular-nums text-foreground">
+                    {learnStats.level}
+                  </p>
+                  <p className="text-[10px] tabular-nums text-muted">{learnStats.xp.toLocaleString()} XP</p>
+                </div>
+                <div className="rounded-xl border border-[var(--border)] bg-[var(--surface-sunken)] px-2.5 py-2">
+                  <p className="text-[10px] font-medium uppercase tracking-[0.06em] text-muted">Streak</p>
+                  <p className="mt-0.5 flex items-center gap-1 text-lg font-semibold tabular-nums text-foreground">
+                    <Flame size={14} className="text-warning" />
+                    {learnStats.streak}
+                  </p>
+                  <p className="text-[10px] text-muted">day{learnStats.streak === 1 ? '' : 's'}</p>
+                </div>
+                <div className="rounded-xl border border-[var(--border)] bg-[var(--surface-sunken)] px-2.5 py-2">
+                  <p className="flex items-center gap-1 text-[10px] font-medium uppercase tracking-[0.06em] text-muted">
+                    <Target size={10} />
+                    Today
+                  </p>
+                  <p className="mt-0.5 text-lg font-semibold tabular-nums text-foreground">
+                    {learnStats.dailyCardsReviewed}
+                    <span className="text-[11px] font-normal text-muted">/{learnStats.dailyGoal}</span>
+                  </p>
+                  <ProgressBar
+                    value={learnDailyPercent}
+                    className="mt-1 h-1"
+                    barClassName={learnStats.dailyGoalMet ? 'bg-success' : 'bg-gradient-to-r from-accent to-success'}
+                  />
+                </div>
+              </div>
+
+              <div className="min-w-0">
+                {continueLearnDeck ? (
+                  <button
+                    type="button"
+                    onClick={() => onOpenLearnDeck(continueLearnDeck.id)}
+                    className="glass-row flex w-full items-center gap-2 rounded-xl px-2.5 py-2 text-left"
+                  >
+                    <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-xl bg-accent-light text-accent">
+                      <BookOpen size={14} />
+                    </span>
+                    <span className="min-w-0 flex-1">
+                      <span className="block text-[10px] font-semibold uppercase tracking-[0.08em] text-accent">
+                        Continue studying
+                      </span>
+                      <span className="block truncate text-[13px] font-medium text-foreground">
+                        {continueLearnDeck.title}
+                      </span>
+                      <span className="block text-[10px] text-muted">
+                        {continueLearnDeck.cardCount} cards · {continueLearnDeck.masteredCount} mastered
+                      </span>
+                    </span>
+                    <ChevronRight size={13} className="shrink-0 text-muted" />
+                  </button>
+                ) : (
+                  <button
+                    type="button"
+                    onClick={onOpenLearn}
+                    className="glass-row flex w-full items-center gap-2 rounded-xl px-2.5 py-2 text-left"
+                  >
+                    <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-xl bg-accent-light text-accent">
+                      <Plus size={14} />
+                    </span>
+                    <span className="min-w-0 flex-1">
+                      <span className="block text-[13px] font-medium text-foreground">Create your first deck</span>
+                      <span className="block text-[10px] text-muted">Flashcards, spaced repetition and AI tutoring</span>
+                    </span>
+                    <ChevronRight size={13} className="shrink-0 text-muted" />
+                  </button>
+                )}
+              </div>
+
+              <div className="flex items-center gap-2 md:flex-col md:items-stretch">
+                {continueLearnDeck && (
+                  <button
+                    type="button"
+                    onClick={() => onStartLearnStudy(continueLearnDeck.id)}
+                    className="glass-btn-primary h-9 shrink-0 gap-1.5 px-3 text-[12px] font-semibold text-accent-foreground"
+                  >
+                    <Zap size={13} />
+                    Study
+                  </button>
+                )}
+                <button
+                  type="button"
+                  onClick={() => onOpenLearnAssistant()}
+                  className="glass-btn h-9 shrink-0 gap-1.5 px-3 text-[12px] font-medium"
+                >
+                  <Bot size={13} />
+                  Ask AI
+                </button>
+              </div>
+            </div>
+          </section>
+        )}
 
         <div className="mt-5 grid gap-5 lg:grid-cols-12">
           <div className="min-w-0 space-y-5 lg:col-span-7">

@@ -1,4 +1,6 @@
-export function cn(...classes: Array<string | false | null | undefined>): string {
+export function cn(
+  ...classes: Array<string | false | null | undefined>
+): string {
   return classes.filter(Boolean).join(' ')
 }
 
@@ -25,7 +27,9 @@ export function formatSeconds(totalSeconds: number): string {
   return `${minutes}:${seconds.toString().padStart(2, '0')}`
 }
 
-export function formatRelativeDate(value: Date | string | null | undefined): string {
+export function formatRelativeDate(
+  value: Date | string | null | undefined
+): string {
   if (!value) return 'Never'
   const date = typeof value === 'string' ? new Date(value) : value
   if (Number.isNaN(date.getTime())) return 'Never'
@@ -36,7 +40,12 @@ export function formatRelativeDate(value: Date | string | null | undefined): str
   if (diffDays <= 0) return 'Today'
   if (diffDays === 1) return 'Yesterday'
   if (diffDays < 7) return `${diffDays} days ago`
-  return date.toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: date.getFullYear() === new Date().getFullYear() ? undefined : 'numeric' })
+  return date.toLocaleDateString(undefined, {
+    month: 'short',
+    day: 'numeric',
+    year:
+      date.getFullYear() === new Date().getFullYear() ? undefined : 'numeric',
+  })
 }
 
 export interface DeckColorOption {
@@ -136,7 +145,9 @@ export const DECK_COLORS: DeckColorOption[] = [
 
 const FALLBACK_COLOR = DECK_COLORS[0]
 
-export function resolveDeckColor(value: string | null | undefined): DeckColorOption {
+export function resolveDeckColor(
+  value: string | null | undefined
+): DeckColorOption {
   return DECK_COLORS.find((color) => color.value === value) ?? FALLBACK_COLOR
 }
 

@@ -4,7 +4,10 @@ import type { Card } from './types'
 
 /** Strip PostgREST filter delimiters so user input cannot break the `or` filter. */
 function sanitizeSearchTerm(query: string): string {
-  return query.replace(/[,()%_\\]/g, ' ').trim().slice(0, 120)
+  return query
+    .replace(/[,()%_\\]/g, ' ')
+    .trim()
+    .slice(0, 120)
 }
 
 export async function getCardsByDeck(deckId: string): Promise<Card[]> {
@@ -18,7 +21,11 @@ export async function getCardsByDeck(deckId: string): Promise<Card[]> {
   return (data ?? []).map(mapCard)
 }
 
-export async function createCard(input: { deckId: string; front: string; back: string }): Promise<Card> {
+export async function createCard(input: {
+  deckId: string
+  front: string
+  back: string
+}): Promise<Card> {
   const userId = await requireUserId()
   const { data, error } = await supabase
     .from('learn_cards')
@@ -38,7 +45,7 @@ export async function createCard(input: { deckId: string; front: string; back: s
 /** Insert several cards in one round-trip (used by bulk import and AI). */
 export async function createCards(
   deckId: string,
-  cards: Array<{ front: string; back: string }>,
+  cards: Array<{ front: string; back: string }>
 ): Promise<Card[]> {
   if (cards.length === 0) return []
   const userId = await requireUserId()
@@ -51,7 +58,7 @@ export async function createCards(
         user_id: userId,
         front: card.front,
         back: card.back,
-      })),
+      }))
     )
     .select()
 
@@ -70,7 +77,7 @@ export async function updateCard(
     intervalDays?: number
     correctCount?: number
     incorrectCount?: number
-  },
+  }
 ): Promise<void> {
   const payload: Record<string, unknown> = {}
   if (input.front !== undefined) payload.front = input.front
@@ -78,13 +85,19 @@ export async function updateCard(
   if (input.mastered !== undefined) payload.mastered = input.mastered
   if (input.dueDate !== undefined) payload.due_date = input.dueDate
   if (input.easeFactor !== undefined) payload.ease_factor = input.easeFactor
-  if (input.intervalDays !== undefined) payload.interval_days = input.intervalDays
-  if (input.correctCount !== undefined) payload.correct_count = input.correctCount
-  if (input.incorrectCount !== undefined) payload.incorrect_count = input.incorrectCount
+  if (input.intervalDays !== undefined)
+    payload.interval_days = input.intervalDays
+  if (input.correctCount !== undefined)
+    payload.correct_count = input.correctCount
+  if (input.incorrectCount !== undefined)
+    payload.incorrect_count = input.incorrectCount
 
   if (Object.keys(payload).length === 0) return
 
-  const { error } = await supabase.from('learn_cards').update(payload).eq('id', id)
+  const { error } = await supabase
+    .from('learn_cards')
+    .update(payload)
+    .eq('id', id)
   if (error) throw error
 }
 
@@ -93,7 +106,10 @@ export async function deleteCard(id: string): Promise<void> {
   if (error) throw error
 }
 
-export async function searchCards(query: string, deckId?: string): Promise<Card[]> {
+export async function searchCards(
+  query: string,
+  deckId?: string
+): Promise<Card[]> {
   const userId = await requireUserId()
   const term = sanitizeSearchTerm(query)
   if (!term) return []

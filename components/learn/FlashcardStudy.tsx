@@ -20,10 +20,15 @@ export function FlashcardStudy({ deck, cards, onComplete, onExit }: Props) {
   const [shuffled, setShuffled] = useState(false)
   const [index, setIndex] = useState(0)
   const [flippedMap, setFlippedMap] = useState<Record<number, boolean>>({})
-  const [results, setResults] = useState<Record<number, 'know' | 'learning'>>({})
+  const [results, setResults] = useState<Record<number, 'know' | 'learning'>>(
+    {}
+  )
   const [streak, setStreak] = useState(0)
 
-  const orderedCards = useMemo(() => (shuffled ? shuffle(cards) : cards), [shuffled, cards])
+  const orderedCards = useMemo(
+    () => (shuffled ? shuffle(cards) : cards),
+    [shuffled, cards]
+  )
   const currentCard = orderedCards[index]
   const isFlipped = flippedMap[index] ?? false
   const rated = results[index] !== undefined
@@ -49,11 +54,15 @@ export function FlashcardStudy({ deck, cards, onComplete, onExit }: Props) {
       setStreak((value) => (verdict === 'know' ? value + 1 : 0))
 
       if (index + 1 >= orderedCards.length) {
-        const correct = Object.values(next).filter((value) => value === 'know').length
+        const correct = Object.values(next).filter(
+          (value) => value === 'know'
+        ).length
         onComplete({
           cardsReviewed: orderedCards.length,
           correct,
-          perfect: correct === orderedCards.length && Object.keys(next).length === orderedCards.length,
+          perfect:
+            correct === orderedCards.length &&
+            Object.keys(next).length === orderedCards.length,
           mode: 'flashcard',
         })
       } else {
@@ -61,7 +70,7 @@ export function FlashcardStudy({ deck, cards, onComplete, onExit }: Props) {
         setFlippedMap((map) => ({ ...map, [index + 1]: false }))
       }
     },
-    [currentCard, index, orderedCards.length, onComplete, results],
+    [currentCard, index, orderedCards.length, onComplete, results]
   )
 
   const prev = useCallback(() => {
@@ -101,7 +110,9 @@ export function FlashcardStudy({ deck, cards, onComplete, onExit }: Props) {
           aria-label={shuffled ? 'Disable shuffle' : 'Shuffle cards'}
           className={cn(
             'focus-ring rounded-xl p-2 transition-all',
-            shuffled ? 'bg-accent-light text-accent' : 'text-muted hover:bg-surface-hover',
+            shuffled
+              ? 'bg-accent-light text-accent'
+              : 'text-muted hover:bg-surface-hover'
           )}
         >
           <Shuffle size={16} />
@@ -118,23 +129,37 @@ export function FlashcardStudy({ deck, cards, onComplete, onExit }: Props) {
       </div>
 
       <div className="flex items-center justify-center gap-3 pt-2">
-        <ActionButton onClick={prev} variant="secondary" disabled={index === 0} className="px-3">
+        <ActionButton
+          onClick={prev}
+          variant="secondary"
+          disabled={index === 0}
+          className="px-3"
+        >
           <ChevronLeft size={18} />
         </ActionButton>
 
         {isFlipped ? (
           <>
-            <ActionButton onClick={() => rate('learning')} variant="danger" className="max-w-[170px] flex-1">
+            <ActionButton
+              onClick={() => rate('learning')}
+              variant="danger"
+              className="max-w-[170px] flex-1"
+            >
               <RotateCcw size={15} />
               Still learning
             </ActionButton>
-            <ActionButton onClick={() => rate('know')} variant="primary" className="max-w-[170px] flex-1">
+            <ActionButton
+              onClick={() => rate('know')}
+              variant="primary"
+              className="max-w-[170px] flex-1"
+            >
               Know it ✓
             </ActionButton>
           </>
         ) : (
           <p className="text-sm font-medium text-muted">
-            Tap the card or press <kbd className="kbd text-[10px]">Space</kbd> to reveal
+            Tap the card or press <kbd className="kbd text-[10px]">Space</kbd>{' '}
+            to reveal
           </p>
         )}
       </div>
@@ -146,7 +171,7 @@ export function FlashcardStudy({ deck, cards, onComplete, onExit }: Props) {
               'rounded-full border px-4 py-1.5 text-xs font-bold',
               results[index] === 'know'
                 ? 'border-success/20 bg-success-light text-success'
-                : 'border-warning/20 bg-warning-light text-warning',
+                : 'border-warning/20 bg-warning-light text-warning'
             )}
           >
             {results[index] === 'know' ? '✓ Know it' : '↻ Still learning'}
@@ -156,9 +181,15 @@ export function FlashcardStudy({ deck, cards, onComplete, onExit }: Props) {
 
       {isFlipped && (
         <div className="flex justify-center gap-3 text-[10px] text-muted/70">
-          <span><kbd className="kbd text-[9px]">1</kbd> Learning</span>
-          <span><kbd className="kbd text-[9px]">2</kbd> Know it</span>
-          <span><kbd className="kbd text-[9px]">←</kbd> Back</span>
+          <span>
+            <kbd className="kbd text-[9px]">1</kbd> Learning
+          </span>
+          <span>
+            <kbd className="kbd text-[9px]">2</kbd> Know it
+          </span>
+          <span>
+            <kbd className="kbd text-[9px]">←</kbd> Back
+          </span>
         </div>
       )}
     </StudyLayout>

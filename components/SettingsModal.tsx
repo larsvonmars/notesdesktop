@@ -12,13 +12,17 @@ import {
   readWelcomeOnStartupPreference,
   setWelcomeOnStartupPreference,
 } from '@/lib/workspace/preferences'
-import { Palette, PenLine, Rocket, Settings2, User, type LucideProps } from 'lucide-react'
+import { Flame, GraduationCap, Palette, PenLine, Rocket, Settings2, User, Zap, type LucideProps } from 'lucide-react'
 import ThemeSelector from './ThemeSelector'
+import { useLearning } from '@/lib/learn/context'
+import { updateStudyPreferences } from '@/lib/learn/stats'
 import BaseModal, { ModalHeader, ModalTitle } from './BaseModal'
 
 interface SettingsModalProps {
   isOpen: boolean
   onClose: () => void
+  /** Close settings and open the Learn view. */
+  onOpenLearn?: () => void
 }
 
 const deleteAccountApiRoute = '/api/account/delete'
@@ -28,13 +32,14 @@ const supabaseEdgeDeleteAccountEndpoint = process.env.NEXT_PUBLIC_SUPABASE_URL
   : null
 
 const SETTINGS_SECTIONS: ReadonlyArray<{
-  id: 'account' | 'appearance' | 'editor' | 'startup'
+  id: 'account' | 'appearance' | 'editor' | 'learning' | 'startup'
   label: string
   icon: ComponentType<LucideProps>
 }> = [
   { id: 'account', label: 'Account', icon: User },
   { id: 'appearance', label: 'Appearance', icon: Palette },
   { id: 'editor', label: 'Editor', icon: PenLine },
+  { id: 'learning', label: 'Learning', icon: GraduationCap },
   { id: 'startup', label: 'Startup', icon: Rocket },
 ]
 
@@ -117,9 +122,10 @@ function ToggleRow({
   )
 }
 
-export default function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
+export default function SettingsModal({ isOpen, onClose, onOpenLearn }: SettingsModalProps) {
   const isMobile = useIsMobile()
   const { user, session, signOut } = useAuth()
+  const { stats: learnStats, refreshStats: refreshLearnStats } = useLearning()
   const [displayName, setDisplayName] = useState('')
   const [emailDraft, setEmailDraft] = useState('')
   const [newPassword, setNewPassword] = useState('')
@@ -136,6 +142,9 @@ export default function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
   const [grammarCheckEnabled, setGrammarCheckEnabled] = useState(() => readGrammarEnabledPreference())
   const [welcomeOnStartup, setWelcomeOnStartup] = useState(() => readWelcomeOnStartupPreference())
   const [activeSection, setActiveSection] = useState<SettingsSectionId>('account')
+  const [learnDailyGoal, setLearnDailyGoal] = useState(20)
+  const [learnStreakReminder, setLearnStreakReminder] = useState(true)
+  const [isSavingLearnPrefs, setIsSavingLearnPrefs] = useState(false)
   const scrollRef = useRef<HTMLDivElement | null>(null)
 
   const userEmail = user?.email ?? ''
@@ -143,6 +152,27 @@ export default function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
     () => (typeof user?.user_metadata?.display_name === 'string' ? user.user_metadata.display_name : ''),
     [user?.user_metadata?.display_name]
   )
+
+  useEffect(() => {
+    if (!isOpen || !learnStats) return
+    setLearnDailyGoal(learnStats.dailyGoal ?? 20)
+    setLearnStreakReminder(learnStats.streakReminderEnabled ?? true)
+  }, [isOpen, learnStats])
+
+  const saveLearnPreferences = async (next: { dailyGoal?: number; streakReminder?: boolean }) => {
+    if (isSavingLearnPrefs) return
+    setIsSavingLearnPrefs(true)
+    clearMessages()
+    try {
+      await updateStudyPreferences(next)
+      await refreshLearnStats()
+      setSuccess('Learning preferences saved.')
+    } catch (error) {
+      setError(error instanceof Error ? error.message : 'Could not save learning preferences.')
+    } finally {
+      setIsSavingLearnPrefs(false)
+    }
+  }
 
   useEffect(() => {
     if (!isOpen) return
@@ -449,7 +479,7 @@ export default function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
           <div className="min-w-0">
             <ModalTitle>Settings</ModalTitle>
             <p className="mt-0.5 text-xs leading-5 text-muted">
-              Account, appearance, editor and startup
+              Account, appearance, editor, learning and startup
             </p>
           </div>
         </ModalHeader>
@@ -694,6 +724,93 @@ export default function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
                   checked={grammarCheckEnabled}
                   onClick={handleToggleGrammarCheck}
                 />
+              </section>
+
+              {/* ─── Learning ─── */}
+              <section data-settings-section="learning" className="space-y-4">
+                <SectionHeading
+                  icon={GraduationCap}
+                  title="Learning"
+                  description="Flashcards, streaks and daily study goals."
+                />
+
+                <div className="grid gap-2 sm:grid-cols-3">
+                  <div className="glass rounded-2xl p-3">
+                    <p className="text-[10px] font-semibold uppercase tracking-[0.08em] text-muted">Level</p>
+                    <p className="mt-1 text-xl font-semibold tabular-nums text-foreground">
+                      {learnStats?.level ?? '—'}
+                    </p>
+                    <p className="text-[11px] tabular-nums text-muted">
+                      {learnStats ? `${learnStats.xp.toLocaleString()} XP` : 'No sessions yet'}
+                    </p>
+                  </div>
+                  <div className="glass rounded-2xl p-3">
+                    <p className="flex items-center gap-1 text-[10px] font-semibold uppercase tracking-[0.08em] text-muted">
+                      <Flame size={10} /> Streak
+                    </p>
+                    <p className="mt-1 text-xl font-semibold tabular-nums text-foreground">
+                      {learnStats?.streak ?? 0}
+                    </p>
+                    <p className="text-[11px] text-muted">day{learnStats?.streak === 1 ? '' : 's'} in a row</p>
+                  </div>
+                  <div className="glass rounded-2xl p-3">
+                    <p className="flex items-center gap-1 text-[10px] font-semibold uppercase tracking-[0.08em] text-muted">
+                      <Zap size={10} /> Today
+                    </p>
+                    <p className="mt-1 text-xl font-semibold tabular-nums text-foreground">
+                      {learnStats?.dailyCardsReviewed ?? 0}
+                    </p>
+                    <p className="text-[11px] text-muted">
+                      of {learnStats?.dailyGoal ?? 20} cards
+                      {learnStats?.dailyGoalMet ? ' · goal met' : ''}
+                    </p>
+                  </div>
+                </div>
+
+                <div className="glass flex items-center justify-between gap-4 rounded-2xl p-4">
+                  <div className="min-w-0">
+                    <p className="text-[13px] font-medium text-foreground">Daily goal</p>
+                    <p className="mt-1 text-xs leading-5 text-muted">
+                      Cards to review each day before the goal bonus applies.
+                    </p>
+                  </div>
+                  <select
+                    value={learnDailyGoal}
+                    disabled={isSavingLearnPrefs}
+                    onChange={(event) => {
+                      const next = Number(event.target.value)
+                      setLearnDailyGoal(next)
+                      void saveLearnPreferences({ dailyGoal: next })
+                    }}
+                    className="glass-input h-9 shrink-0 px-3 text-[13px] font-medium"
+                    aria-label="Daily study goal"
+                  >
+                    {[10, 20, 30, 50, 100].map((goal) => (
+                      <option key={goal} value={goal}>
+                        {goal} cards
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                <ToggleRow
+                  label="Streak reminder"
+                  title="Streak reminder"
+                  description="Show a reminder when your daily streak is at risk."
+                  checked={learnStreakReminder}
+                  onClick={() => {
+                    const next = !learnStreakReminder
+                    setLearnStreakReminder(next)
+                    void saveLearnPreferences({ streakReminder: next })
+                  }}
+                />
+
+                {onOpenLearn && (
+                  <button type="button" onClick={onOpenLearn} className={wideActionClass}>
+                    <GraduationCap size={14} className="mr-2" />
+                    Open Learn
+                  </button>
+                )}
               </section>
 
               {/* ─── Startup ─── */}

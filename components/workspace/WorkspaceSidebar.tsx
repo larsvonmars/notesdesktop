@@ -11,6 +11,7 @@ import {
   X,
 } from 'lucide-react'
 import SidebarTree from '@/components/SidebarTree'
+import { LearnSidebar } from '@/components/learn/LearnSidebar'
 import AppRail from '@/components/shell/AppRail'
 import { cn, getInitials } from '@/components/shell/utils'
 import type { NoteSummary } from '@/lib/notes'
@@ -58,6 +59,8 @@ interface WorkspaceSidebarProps {
   /** Optional identity for the rail avatar + drawer footer. */
   userName?: string | null
   userEmail?: string | null
+  /** Pending Learn cards rendered as a rail badge. */
+  learnBadge?: number | string
 }
 
 /**
@@ -90,6 +93,7 @@ export default function WorkspaceSidebar({
   onMobileTouchEnd,
   userName,
   userEmail,
+  learnBadge,
 }: WorkspaceSidebarProps) {
   const { resolvedTheme, toggleTheme } = useTheme()
 
@@ -146,6 +150,7 @@ export default function WorkspaceSidebar({
           onOpenSettings={onOpenSettings}
           onSignOut={onSignOut}
           user={{ name: userName, email: userEmail }}
+          badges={learnBadge !== undefined ? { learn: learnBadge } : undefined}
         />
 
         <aside
@@ -157,12 +162,16 @@ export default function WorkspaceSidebar({
           )}
         >
           {!sidebarCollapsed ? (
-            <SidebarTree
-              {...sharedTreeProps}
-              dense
-              collapsed={false}
-              onToggleCollapsed={onToggleCollapsed}
-            />
+            activeView === 'learn' ? (
+              <LearnSidebar />
+            ) : (
+              <SidebarTree
+                {...sharedTreeProps}
+                dense
+                collapsed={false}
+                onToggleCollapsed={onToggleCollapsed}
+              />
+            )
           ) : null}
         </aside>
 
@@ -237,12 +246,16 @@ export default function WorkspaceSidebar({
 
         {/* Library tree (SidebarTree owns the local filter field) */}
         <div className="min-h-0 flex-1 overflow-hidden">
-          <SidebarTree
-            {...sharedTreeProps}
-            collapsed={false}
-            onToggleCollapsed={onCloseMobileNav}
-            showHeader={false}
-          />
+          {activeView === 'learn' ? (
+            <LearnSidebar onNavigate={onCloseMobileNav} />
+          ) : (
+            <SidebarTree
+              {...sharedTreeProps}
+              collapsed={false}
+              onToggleCollapsed={onCloseMobileNav}
+              showHeader={false}
+            />
+          )}
         </div>
 
         {/* Footer: identity, appearance, settings, sign out */}

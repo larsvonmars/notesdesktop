@@ -15,7 +15,7 @@ async function loadPdfJs() {
   const lib = await import('pdfjs-dist')
   lib.GlobalWorkerOptions.workerSrc = new URL(
     'pdfjs-dist/build/pdf.worker.min.mjs',
-    import.meta.url,
+    import.meta.url
   ).toString()
   pdfjsLib = lib
   return lib
@@ -70,7 +70,10 @@ export async function extractPdfText(data: ArrayBuffer): Promise<PdfContent> {
 }
 
 /** Split text into LLM-sized chunks on paragraph/sentence boundaries. */
-export function chunkText(text: string, maxChunkSize = MAX_CHUNK_SIZE): string[] {
+export function chunkText(
+  text: string,
+  maxChunkSize = MAX_CHUNK_SIZE
+): string[] {
   if (text.length <= maxChunkSize) return [text]
 
   const chunks: string[] = []

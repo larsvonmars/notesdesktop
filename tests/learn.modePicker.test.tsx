@@ -31,7 +31,12 @@ function makeCard(index: number): Card {
 describe('Learn mode picker', () => {
   it('lists every study mode including the two AI modes', () => {
     const html = renderToStaticMarkup(
-      <ModePicker deck={deck} cards={[makeCard(1), makeCard(2), makeCard(3)]} onSelect={vi.fn()} onBack={vi.fn()} />,
+      <ModePicker
+        deck={deck}
+        cards={[makeCard(1), makeCard(2), makeCard(3)]}
+        onSelect={vi.fn()}
+        onBack={vi.fn()}
+      />
     )
 
     for (const label of [
@@ -50,7 +55,12 @@ describe('Learn mode picker', () => {
 
   it('disables multiple choice when the deck has fewer than three cards', () => {
     const html = renderToStaticMarkup(
-      <ModePicker deck={deck} cards={[makeCard(1), makeCard(2)]} onSelect={vi.fn()} onBack={vi.fn()} />,
+      <ModePicker
+        deck={deck}
+        cards={[makeCard(1), makeCard(2)]}
+        onSelect={vi.fn()}
+        onBack={vi.fn()}
+      />
     )
     expect(html).toContain('Need at least 3 cards for multiple choice')
   })
@@ -58,7 +68,12 @@ describe('Learn mode picker', () => {
   it('shows the spaced-repetition due count', () => {
     const dueCard = { ...makeCard(1), dueDate: '2026-01-01' }
     const html = renderToStaticMarkup(
-      <ModePicker deck={deck} cards={[dueCard, makeCard(2), makeCard(3)]} onSelect={vi.fn()} onBack={vi.fn()} />,
+      <ModePicker
+        deck={deck}
+        cards={[dueCard, makeCard(2), makeCard(3)]}
+        onSelect={vi.fn()}
+        onBack={vi.fn()}
+      />
     )
     expect(html).toContain('due today')
   })

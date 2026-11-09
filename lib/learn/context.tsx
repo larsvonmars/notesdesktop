@@ -10,9 +10,10 @@ import {
   useState,
   type ReactNode,
 } from 'react'
+import { useAuth } from '@/lib/auth-context'
 import { getDecks } from './decks'
 import { getUserStats } from './stats'
-import type { Card, Deck, UserStats } from './types'
+import type { Card, Deck, LearnScreen, UserStats } from './types'
 
 interface LearningContextValue {
   stats: UserStats | null
@@ -26,28 +27,32 @@ interface LearningContextValue {
   /** Bumped when the AI changes data so open screens reload. */
   aiRefreshCounter: number
   triggerAiRefresh: () => void
+  /** Current Learn destination, shared by the Learn sidebar, top bar and view. */
+  screen: LearnScreen
+  setScreen: (screen: LearnScreen) => void
   openAssistant: (prompt?: string) => void
-  /** Prompt waiting to be consumed by the assistant screen. */
-  pendingAssistantPrompt: string | null
-  consumeAssistantPrompt: () => void
+  /** Switch to the deck list and open the create-deck dialog. */
+  requestCreateDeck: () => void
+  consumeCreateDeckRequest: () => void
+  /** Timestamp of the pending create-deck request; 0 = none. */
+  createDeckSignal: number
+  openDeck: (deckId: string) => void
+  startStudy: (deckId: string) => void
 }
 
 const LearningContext = createContext<LearningContextValue | null>(null)
 
-export function LearningProvider({
-  children,
-  openAssistant: openAssistantProp,
-}: {
-  children: ReactNode
-  openAssistant?: (prompt?: string) => void
-}) {
+export function LearningProvider({ children }: { children: ReactNode }) {
+  const { user, loading: authLoading } = useAuth()
   const [stats, setStats] = useState<UserStats | null>(null)
   const [decks, setDecks] = useState<Deck[]>([])
   const [isLoadingStats, setIsLoadingStats] = useState(true)
   const [isLoadingDecks, setIsLoadingDecks] = useState(true)
   const [currentCard, setCurrentCard] = useState<Card | null>(null)
   const [aiRefreshCounter, setAiRefreshCounter] = useState(0)
-  const [pendingAssistantPrompt, setPendingAssistantPrompt] = useState<string | null>(null)
+  const [screen, setScreen] = useState<LearnScreen>({ kind: 'dashboard' })
+  const [createDeckSignal, setCreateDeckSignal] = useState(0)
+  const loadedForUserRef = useRef<string | null>(null)
   const mountedRef = useRef(true)
 
   useEffect(() => {
@@ -82,21 +87,41 @@ export function LearningProvider({
   }, [])
 
   useEffect(() => {
+    if (authLoading) return
+    if (!user) {
+      loadedForUserRef.current = null
+      return
+    }
+    if (loadedForUserRef.current === user.id) return
+    loadedForUserRef.current = user.id
     void refreshStats()
     void refreshDecks()
-  }, [refreshStats, refreshDecks])
+  }, [authLoading, user, refreshStats, refreshDecks])
 
-  const triggerAiRefresh = useCallback(() => setAiRefreshCounter((count) => count + 1), [])
-
-  const openAssistant = useCallback(
-    (prompt?: string) => {
-      setPendingAssistantPrompt(prompt ?? null)
-      openAssistantProp?.(prompt)
-    },
-    [openAssistantProp],
+  const triggerAiRefresh = useCallback(
+    () => setAiRefreshCounter((count) => count + 1),
+    []
   )
 
-  const consumeAssistantPrompt = useCallback(() => setPendingAssistantPrompt(null), [])
+  const openAssistant = useCallback((prompt?: string) => {
+    setScreen({ kind: 'assistant', prompt, key: Date.now() })
+  }, [])
+
+  const requestCreateDeck = useCallback(() => {
+    setScreen({ kind: 'decks' })
+    setCreateDeckSignal(Date.now())
+  }, [])
+
+  const consumeCreateDeckRequest = useCallback(() => setCreateDeckSignal(0), [])
+
+  const openDeck = useCallback(
+    (deckId: string) => setScreen({ kind: 'deck', deckId }),
+    []
+  )
+  const startStudy = useCallback(
+    (deckId: string) => setScreen({ kind: 'study', deckId }),
+    []
+  )
 
   const value = useMemo(
     () => ({
@@ -110,9 +135,14 @@ export function LearningProvider({
       setCurrentCard,
       aiRefreshCounter,
       triggerAiRefresh,
+      screen,
+      setScreen,
       openAssistant,
-      pendingAssistantPrompt,
-      consumeAssistantPrompt,
+      requestCreateDeck,
+      consumeCreateDeckRequest,
+      createDeckSignal,
+      openDeck,
+      startStudy,
     }),
     [
       stats,
@@ -124,17 +154,26 @@ export function LearningProvider({
       currentCard,
       aiRefreshCounter,
       triggerAiRefresh,
+      screen,
       openAssistant,
-      pendingAssistantPrompt,
-      consumeAssistantPrompt,
-    ],
+      requestCreateDeck,
+      consumeCreateDeckRequest,
+      createDeckSignal,
+      openDeck,
+      startStudy,
+    ]
   )
 
-  return <LearningContext.Provider value={value}>{children}</LearningContext.Provider>
+  return (
+    <LearningContext.Provider value={value}>
+      {children}
+    </LearningContext.Provider>
+  )
 }
 
 export function useLearning(): LearningContextValue {
   const context = useContext(LearningContext)
-  if (!context) throw new Error('useLearning must be used inside LearningProvider')
+  if (!context)
+    throw new Error('useLearning must be used inside LearningProvider')
   return context
 }

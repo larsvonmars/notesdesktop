@@ -96,10 +96,16 @@ describe('Learn badge unlocks', () => {
         totalSessions: 1,
         recentTestTimeSeconds: 20,
       },
-      new Set(),
+      new Set()
     )
     expect(unlocked).toEqual(
-      expect.arrayContaining(['first-deck', 'streak-3', 'level-5', 'century', 'speed-demon']),
+      expect.arrayContaining([
+        'first-deck',
+        'streak-3',
+        'level-5',
+        'century',
+        'speed-demon',
+      ])
     )
 
     const second = checkBadgeUnlocks(
@@ -111,7 +117,7 @@ describe('Learn badge unlocks', () => {
         totalDecks: 1,
         totalSessions: 1,
       },
-      new Set(unlocked),
+      new Set(unlocked)
     )
     expect(second).toEqual([])
   })

@@ -19,6 +19,9 @@ export const CHAT_TOOL_MENU: ChatToolMenuEntry[] = [
   { toolName: 'list_tasks', label: 'My Tasks', emoji: '📋', description: 'Review your tasks and due dates' },
   { toolName: 'create_task', label: 'Create Task', emoji: '✅', description: 'Add a task to your planner' },
   { toolName: 'list_projects', label: 'Projects', emoji: '📁', description: 'List your projects and progress' },
+  { toolName: 'list_decks', label: 'My Decks', emoji: '🎓', description: 'List your Learn flashcard decks' },
+  { toolName: 'add_cards', label: 'Add Flashcards', emoji: '🃏', description: 'Add cards to a Learn deck' },
+  { toolName: 'get_stats', label: 'Learning Stats', emoji: '📈', description: 'Review XP, streaks and study activity' },
   { toolName: 'get_current_date', label: 'Date & Time', emoji: '🕐', description: 'Get the current date and time' },
 ]
 

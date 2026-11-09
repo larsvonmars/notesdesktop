@@ -1,6 +1,14 @@
 'use client'
 
-import { useCallback, useEffect, useMemo, useRef, useState, type ChangeEvent, type FormEvent } from 'react'
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type ChangeEvent,
+  type FormEvent,
+} from 'react'
 import {
   ArrowUpRight,
   Bot,
@@ -13,13 +21,25 @@ import {
   Trash2,
   X,
 } from 'lucide-react'
-import { MarkdownContent, ThinkingSection, TypingDots } from '@/components/ai/AIMarkdown'
-import BaseModal, { ModalBody, ModalHeader, ModalTitle } from '@/components/BaseModal'
+import {
+  MarkdownContent,
+  ThinkingSection,
+  TypingDots,
+} from '@/components/ai/AIMarkdown'
+import BaseModal, {
+  ModalBody,
+  ModalHeader,
+  ModalTitle,
+} from '@/components/BaseModal'
 import { Button } from '@/components/ui/Button'
 import { useToast } from '@/components/ToastProvider'
 import { useAuth } from '@/lib/auth-context'
 import type { AIMessage } from '@/lib/ai'
-import { generateCardsFromDocument, runLearnAssistant, type LearnAIContext } from '@/lib/learn/ai'
+import {
+  generateCardsFromDocument,
+  runLearnAssistant,
+  type LearnAIContext,
+} from '@/lib/learn/ai'
 import { createCards } from '@/lib/learn/cards'
 import { createDeck } from '@/lib/learn/decks'
 import { useLearning } from '@/lib/learn/context'
@@ -70,7 +90,8 @@ const TOOL_LABELS: Record<string, string> = {
 }
 
 function makeId(): string {
-  if (typeof crypto !== 'undefined' && 'randomUUID' in crypto) return crypto.randomUUID()
+  if (typeof crypto !== 'undefined' && 'randomUUID' in crypto)
+    return crypto.randomUUID()
   return `entry-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
 }
 
@@ -89,10 +110,14 @@ function ToolPills({ tools }: { tools: ChatTool[] }) {
             'inline-flex items-center gap-1.5 rounded-full border px-2 py-1 text-[10px] font-medium',
             tool.status === 'done'
               ? 'border-border bg-surface-hover text-muted'
-              : 'border-accent/25 bg-accent-light text-accent',
+              : 'border-accent/25 bg-accent-light text-accent'
           )}
         >
-          {tool.status === 'done' ? <CheckCircle2 size={10} /> : <Loader2 size={10} className="animate-spin" />}
+          {tool.status === 'done' ? (
+            <CheckCircle2 size={10} />
+          ) : (
+            <Loader2 size={10} className="animate-spin" />
+          )}
           {formatToolName(tool.name)}
         </span>
       ))}
@@ -114,7 +139,8 @@ function safeParseEntries(raw: string | null): ChatEntry[] {
         id: typeof entry.id === 'string' ? entry.id : makeId(),
         role: entry.role,
         content: entry.content,
-        reasoning: typeof entry.reasoning === 'string' ? entry.reasoning : undefined,
+        reasoning:
+          typeof entry.reasoning === 'string' ? entry.reasoning : undefined,
         tools: Array.isArray(entry.tools) ? (entry.tools as ChatTool[]) : [],
       })
     }
@@ -124,9 +150,14 @@ function safeParseEntries(raw: string | null): ChatEntry[] {
   }
 }
 
-export function LearnAssistant({ initialPrompt }: { initialPrompt?: string | null }) {
+export function LearnAssistant({
+  initialPrompt,
+}: {
+  initialPrompt?: string | null
+}) {
   const { user } = useAuth()
-  const { stats, decks, currentCard, triggerAiRefresh, refreshDecks } = useLearning()
+  const { stats, decks, currentCard, triggerAiRefresh, refreshDecks } =
+    useLearning()
   const toast = useToast()
   const toastRef = useRef(toast)
   toastRef.current = toast
@@ -150,7 +181,10 @@ export function LearnAssistant({ initialPrompt }: { initialPrompt?: string | nul
   const [hydrated, setHydrated] = useState(false)
 
   const storageKey = user?.id ? `mindviz-learn-chat:${user.id}` : null
-  const selectedDeck = useMemo(() => decks.find((deck) => deck.id === selectedDeckId), [decks, selectedDeckId])
+  const selectedDeck = useMemo(
+    () => decks.find((deck) => deck.id === selectedDeckId),
+    [decks, selectedDeckId]
+  )
 
   useEffect(() => {
     if (!storageKey || loadedRef.current) return
@@ -167,7 +201,10 @@ export function LearnAssistant({ initialPrompt }: { initialPrompt?: string | nul
   useEffect(() => {
     if (!storageKey || !loadedRef.current || !hydrated) return
     try {
-      window.localStorage.setItem(storageKey, JSON.stringify(entries.filter((entry) => !entry.pending)))
+      window.localStorage.setItem(
+        storageKey,
+        JSON.stringify(entries.filter((entry) => !entry.pending))
+      )
     } catch {
       // Ignore quota errors.
     }
@@ -203,7 +240,13 @@ export function LearnAssistant({ initialPrompt }: { initialPrompt?: string | nul
     () => ({
       currentDeckId: selectedDeck?.id,
       currentDeckName: selectedDeck?.title,
-      currentCard: currentCard ? { id: currentCard.id, front: currentCard.front, back: currentCard.back } : null,
+      currentCard: currentCard
+        ? {
+            id: currentCard.id,
+            front: currentCard.front,
+            back: currentCard.back,
+          }
+        : null,
       stats: stats
         ? {
             level: stats.level,
@@ -213,11 +256,13 @@ export function LearnAssistant({ initialPrompt }: { initialPrompt?: string | nul
             totalCardsReviewed: stats.totalCardsReviewed,
             totalDecks: stats.totalDecks,
             dailyGoal: stats.dailyGoal,
-            badgeNames: stats.badges.filter((badge) => badge.earnedAt).map((badge) => badge.name),
+            badgeNames: stats.badges
+              .filter((badge) => badge.earnedAt)
+              .map((badge) => badge.name),
           }
         : null,
     }),
-    [currentCard, selectedDeck, stats],
+    [currentCard, selectedDeck, stats]
   )
 
   function buildHistory(): AIMessage[] {
@@ -225,8 +270,12 @@ export function LearnAssistant({ initialPrompt }: { initialPrompt?: string | nul
       .filter((entry) => !entry.pending && entry.content.trim())
       .map((entry) =>
         entry.role === 'assistant'
-          ? { role: 'assistant' as const, content: entry.content, reasoning_content: entry.reasoning }
-          : { role: 'user' as const, content: entry.content },
+          ? {
+              role: 'assistant' as const,
+              content: entry.content,
+              reasoning_content: entry.reasoning,
+            }
+          : { role: 'user' as const, content: entry.content }
       )
   }
 
@@ -239,7 +288,13 @@ export function LearnAssistant({ initialPrompt }: { initialPrompt?: string | nul
     setEntries((previous) => [
       ...previous,
       { id: makeId(), role: 'user', content: trimmed },
-      { id: assistantId, role: 'assistant', content: '', pending: true, tools: [] },
+      {
+        id: assistantId,
+        role: 'assistant',
+        content: '',
+        pending: true,
+        tools: [],
+      },
     ])
     setInput('')
     setBusy(true)
@@ -256,8 +311,10 @@ export function LearnAssistant({ initialPrompt }: { initialPrompt?: string | nul
           onToken: (token) => {
             setEntries((previous) =>
               previous.map((entry) =>
-                entry.id === assistantId ? { ...entry, content: `${entry.content}${token}` } : entry,
-              ),
+                entry.id === assistantId
+                  ? { ...entry, content: `${entry.content}${token}` }
+                  : entry
+              )
             )
           },
           onReasoning: (token) => {
@@ -265,8 +322,8 @@ export function LearnAssistant({ initialPrompt }: { initialPrompt?: string | nul
               previous.map((entry) =>
                 entry.id === assistantId
                   ? { ...entry, reasoning: `${entry.reasoning ?? ''}${token}` }
-                  : entry,
-              ),
+                  : entry
+              )
             )
           },
           onToolCall: (call) => {
@@ -276,10 +333,13 @@ export function LearnAssistant({ initialPrompt }: { initialPrompt?: string | nul
                 entry.id === assistantId
                   ? {
                       ...entry,
-                      tools: [...(entry.tools ?? []), { id: call.id, name: call.name, status: 'running' }],
+                      tools: [
+                        ...(entry.tools ?? []),
+                        { id: call.id, name: call.name, status: 'running' },
+                      ],
                     }
-                  : entry,
-              ),
+                  : entry
+              )
             )
           },
           onToolResult: (result) => {
@@ -289,11 +349,13 @@ export function LearnAssistant({ initialPrompt }: { initialPrompt?: string | nul
                   ? {
                       ...entry,
                       tools: (entry.tools ?? []).map((tool) =>
-                        tool.id === result.id ? { ...tool, status: 'done' } : tool,
+                        tool.id === result.id
+                          ? { ...tool, status: 'done' }
+                          : tool
                       ),
                     }
-                  : entry,
-              ),
+                  : entry
+              )
             )
           },
         },
@@ -301,8 +363,10 @@ export function LearnAssistant({ initialPrompt }: { initialPrompt?: string | nul
 
       setEntries((previous) =>
         previous.map((entry) =>
-          entry.id === assistantId ? { ...entry, content: entry.content || response, pending: false } : entry,
-        ),
+          entry.id === assistantId
+            ? { ...entry, content: entry.content || response, pending: false }
+            : entry
+        )
       )
       if (sawToolCall) {
         triggerAiRefresh()
@@ -321,8 +385,8 @@ export function LearnAssistant({ initialPrompt }: { initialPrompt?: string | nul
                     ? `I couldn't complete that request: ${error.message}`
                     : "I couldn't complete that request. Please try again.",
               }
-            : entry,
-        ),
+            : entry
+        )
       )
     } finally {
       setBusy(false)
@@ -361,14 +425,19 @@ export function LearnAssistant({ initialPrompt }: { initialPrompt?: string | nul
       await loadDocuments()
       toastRef.current.push({
         title: 'PDF uploaded',
-        description: 'Ask the assistant to create a deck, or use “Create deck with AI”.',
+        description:
+          'Ask the assistant to create a deck, or use “Create deck with AI”.',
         variant: 'success',
       })
       void sendMessage(
-        `I uploaded a PDF called "${document.filename}" (id: ${document.id}). ${selectedDeck ? `Create flashcards from it and add them to the deck "${selectedDeck.title}" (id: ${selectedDeck.id}).` : 'Create a deck from this document.'}`,
+        `I uploaded a PDF called "${document.filename}" (id: ${document.id}). ${selectedDeck ? `Create flashcards from it and add them to the deck "${selectedDeck.title}" (id: ${selectedDeck.id}).` : 'Create a deck from this document.'}`
       )
     } catch (error) {
-      toastRef.current.push({ title: 'Upload failed', description: describeLearnError(error), variant: 'error' })
+      toastRef.current.push({
+        title: 'Upload failed',
+        description: describeLearnError(error),
+        variant: 'error',
+      })
     } finally {
       setUploading(false)
       if (fileInputRef.current) fileInputRef.current.value = ''
@@ -386,13 +455,17 @@ export function LearnAssistant({ initialPrompt }: { initialPrompt?: string | nul
         maxCards: 30,
         onProgress: setDocumentProgress,
       })
-      const deckTitle = document.filename.replace(/\.pdf$/i, '') || 'Document deck'
+      const deckTitle =
+        document.filename.replace(/\.pdf$/i, '') || 'Document deck'
       const deck = await createDeck({
         title: deckTitle,
         description: `Generated from ${document.filename} (${extracted.numPages} pages)`,
       })
       await createCards(deck.id, cards)
-      await updateDocument(document.id, { status: 'processed', deckId: deck.id })
+      await updateDocument(document.id, {
+        status: 'processed',
+        deckId: deck.id,
+      })
       await Promise.all([loadDocuments(), refreshDecks()])
       triggerAiRefresh()
       toastRef.current.push({
@@ -401,10 +474,14 @@ export function LearnAssistant({ initialPrompt }: { initialPrompt?: string | nul
         variant: 'success',
       })
       void sendMessage(
-        `I created the deck "${deckTitle}" (id: ${deck.id}) with ${cards.length} cards from "${document.filename}". Suggest how I should study it.`,
+        `I created the deck "${deckTitle}" (id: ${deck.id}) with ${cards.length} cards from "${document.filename}". Suggest how I should study it.`
       )
     } catch (error) {
-      toastRef.current.push({ title: 'Could not create deck', description: describeLearnError(error), variant: 'error' })
+      toastRef.current.push({
+        title: 'Could not create deck',
+        description: describeLearnError(error),
+        variant: 'error',
+      })
     } finally {
       setDocumentProgress(null)
     }
@@ -414,9 +491,17 @@ export function LearnAssistant({ initialPrompt }: { initialPrompt?: string | nul
     try {
       await deleteDocument(document.id)
       await loadDocuments()
-      toastRef.current.push({ title: 'Document deleted', description: document.filename, variant: 'success' })
+      toastRef.current.push({
+        title: 'Document deleted',
+        description: document.filename,
+        variant: 'success',
+      })
     } catch (error) {
-      toastRef.current.push({ title: 'Could not delete document', description: describeLearnError(error), variant: 'error' })
+      toastRef.current.push({
+        title: 'Could not delete document',
+        description: describeLearnError(error),
+        variant: 'error',
+      })
     }
   }
 
@@ -427,7 +512,11 @@ export function LearnAssistant({ initialPrompt }: { initialPrompt?: string | nul
       setPreviewName(document.filename)
       setPreviewUrl(url)
     } catch (error) {
-      toastRef.current.push({ title: 'Could not open PDF', description: describeLearnError(error), variant: 'error' })
+      toastRef.current.push({
+        title: 'Could not open PDF',
+        description: describeLearnError(error),
+        variant: 'error',
+      })
     }
   }
 
@@ -439,7 +528,9 @@ export function LearnAssistant({ initialPrompt }: { initialPrompt?: string | nul
     } else if (decks[0]) {
       prompts.push(`Analyze the quality of the deck "${decks[0].title}"`)
     } else {
-      prompts.push('Create a deck about the basics of machine learning with 10 cards')
+      prompts.push(
+        'Create a deck about the basics of machine learning with 10 cards'
+      )
     }
     prompts.push('How am I doing? Review my stats and suggest a study plan')
     prompts.push('Generate 10 flashcards about the history of the Roman Empire')
@@ -453,7 +544,9 @@ export function LearnAssistant({ initialPrompt }: { initialPrompt?: string | nul
           <span className="flex h-7 w-7 items-center justify-center rounded-xl bg-accent-light text-accent">
             <FileText size={13} />
           </span>
-          <p className="text-xs font-semibold uppercase tracking-[0.08em] text-muted">PDF documents</p>
+          <p className="text-xs font-semibold uppercase tracking-[0.08em] text-muted">
+            PDF documents
+          </p>
         </div>
         <button
           type="button"
@@ -504,12 +597,19 @@ export function LearnAssistant({ initialPrompt }: { initialPrompt?: string | nul
         ) : (
           <ul className="space-y-2">
             {documents.map((document) => (
-              <li key={document.id} className="rounded-xl border border-border bg-surface p-2.5">
+              <li
+                key={document.id}
+                className="rounded-xl border border-border bg-surface p-2.5"
+              >
                 <div className="flex items-start justify-between gap-2">
                   <div className="min-w-0">
-                    <p className="truncate text-[11px] font-semibold text-foreground">{document.filename}</p>
+                    <p className="truncate text-[11px] font-semibold text-foreground">
+                      {document.filename}
+                    </p>
                     <p className="mt-0.5 text-[10px] text-muted">
-                      {(document.fileSize / 1024).toFixed(0)} KB · {document.status} · {formatRelativeDate(document.createdAt)}
+                      {(document.fileSize / 1024).toFixed(0)} KB ·{' '}
+                      {document.status} ·{' '}
+                      {formatRelativeDate(document.createdAt)}
                     </p>
                   </div>
                   <button
@@ -556,8 +656,12 @@ export function LearnAssistant({ initialPrompt }: { initialPrompt?: string | nul
               <Bot size={16} />
             </span>
             <div className="min-w-0">
-              <p className="truncate text-sm font-semibold text-foreground">AI study assistant</p>
-              <p className="truncate text-[11px] text-muted">Decks, cards, stats and PDF imports</p>
+              <p className="truncate text-sm font-semibold text-foreground">
+                AI study assistant
+              </p>
+              <p className="truncate text-[11px] text-muted">
+                Decks, cards, stats and PDF imports
+              </p>
             </div>
           </div>
           <div className="flex items-center gap-1.5">
@@ -603,9 +707,12 @@ export function LearnAssistant({ initialPrompt }: { initialPrompt?: string | nul
               <div className="flex h-16 w-16 items-center justify-center rounded-2xl bg-accent-gradient text-accent-foreground shadow-lg shadow-glow-sm">
                 <Sparkles size={26} />
               </div>
-              <h2 className="mt-4 font-display text-lg font-semibold text-foreground">How can I help you learn?</h2>
+              <h2 className="mt-4 font-display text-lg font-semibold text-foreground">
+                How can I help you learn?
+              </h2>
               <p className="mt-1 max-w-sm text-sm text-muted">
-                Ask about your decks, generate flashcards, analyze quality, or import a PDF.
+                Ask about your decks, generate flashcards, analyze quality, or
+                import a PDF.
               </p>
               <div className="mt-5 grid w-full max-w-md gap-2">
                 {starterPrompts.map((prompt) => (
@@ -622,7 +729,13 @@ export function LearnAssistant({ initialPrompt }: { initialPrompt?: string | nul
             </div>
           ) : (
             entries.map((entry) => (
-              <div key={entry.id} className={cn('flex gap-2.5', entry.role === 'user' ? 'justify-end' : 'justify-start')}>
+              <div
+                key={entry.id}
+                className={cn(
+                  'flex gap-2.5',
+                  entry.role === 'user' ? 'justify-end' : 'justify-start'
+                )}
+              >
                 {entry.role === 'assistant' && (
                   <span className="mt-1 flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-accent-light text-accent">
                     <Bot size={14} />
@@ -633,17 +746,25 @@ export function LearnAssistant({ initialPrompt }: { initialPrompt?: string | nul
                     'max-w-[88%] rounded-2xl border px-3.5 py-2.5',
                     entry.role === 'user'
                       ? 'rounded-br-md border-accent/25 bg-accent-light text-foreground'
-                      : 'rounded-bl-md border-border bg-surface',
+                      : 'rounded-bl-md border-border bg-surface'
                   )}
                 >
                   {entry.role === 'assistant' ? (
                     <>
                       {entry.tools && <ToolPills tools={entry.tools} />}
-                      {entry.reasoning && <ThinkingSection reasoning={entry.reasoning} />}
-                      {entry.content ? <MarkdownContent content={entry.content} /> : entry.pending ? <TypingDots /> : null}
+                      {entry.reasoning && (
+                        <ThinkingSection reasoning={entry.reasoning} />
+                      )}
+                      {entry.content ? (
+                        <MarkdownContent content={entry.content} />
+                      ) : entry.pending ? (
+                        <TypingDots />
+                      ) : null}
                     </>
                   ) : (
-                    <p className="whitespace-pre-wrap text-[13px] leading-relaxed">{entry.content}</p>
+                    <p className="whitespace-pre-wrap text-[13px] leading-relaxed">
+                      {entry.content}
+                    </p>
                   )}
                 </div>
               </div>
@@ -652,7 +773,10 @@ export function LearnAssistant({ initialPrompt }: { initialPrompt?: string | nul
           <div ref={endRef} />
         </div>
 
-        <form onSubmit={handleSubmit} className="shrink-0 border-t border-border p-3">
+        <form
+          onSubmit={handleSubmit}
+          className="shrink-0 border-t border-border p-3"
+        >
           <div className="flex items-end gap-2">
             <textarea
               ref={textareaRef}
@@ -666,7 +790,11 @@ export function LearnAssistant({ initialPrompt }: { initialPrompt?: string | nul
                 if (event.key === 'Escape') setInput('')
               }}
               rows={1}
-              placeholder={busy ? 'Assistant is working…' : 'Ask about decks, cards, stats or a topic…'}
+              placeholder={
+                busy
+                  ? 'Assistant is working…'
+                  : 'Ask about decks, cards, stats or a topic…'
+              }
               className="glass-input max-h-[140px] min-h-[44px] w-full resize-none px-3.5 py-3 text-sm leading-5"
             />
             <button
@@ -675,11 +803,16 @@ export function LearnAssistant({ initialPrompt }: { initialPrompt?: string | nul
               className="glass-btn-primary flex h-11 w-11 shrink-0 items-center justify-center rounded-xl text-accent-foreground disabled:opacity-40"
               aria-label="Send message"
             >
-              {busy ? <Loader2 size={16} className="animate-spin" /> : <Send size={16} />}
+              {busy ? (
+                <Loader2 size={16} className="animate-spin" />
+              ) : (
+                <Send size={16} />
+              )}
             </button>
           </div>
           <p className="mt-1.5 text-[10px] text-muted">
-            <kbd className="kbd text-[9px]">Enter</kbd> send · <kbd className="kbd text-[9px]">Shift</kbd>+
+            <kbd className="kbd text-[9px]">Enter</kbd> send ·{' '}
+            <kbd className="kbd text-[9px]">Shift</kbd>+
             <kbd className="kbd text-[9px]">Enter</kbd> newline
           </p>
         </form>
@@ -698,12 +831,12 @@ export function LearnAssistant({ initialPrompt }: { initialPrompt?: string | nul
           aria-label="Close overlay"
           tabIndex={-1}
         >
-          <div className="mx-auto h-full max-w-sm">
-            {documentsPanel}
-          </div>
+          <div className="mx-auto h-full max-w-sm">{documentsPanel}</div>
         </div>
       ) : (
-        <div className="hidden w-[280px] shrink-0 lg:block">{documentsPanel}</div>
+        <div className="hidden w-[280px] shrink-0 lg:block">
+          {documentsPanel}
+        </div>
       )}
 
       <BaseModal
@@ -715,8 +848,13 @@ export function LearnAssistant({ initialPrompt }: { initialPrompt?: string | nul
         animation="zoom"
         ariaLabel="PDF preview"
       >
-        <ModalHeader onClose={() => setPreviewUrl(null)} closeAriaLabel="Close PDF preview">
-          <ModalTitle className="truncate">{previewName || 'PDF document'}</ModalTitle>
+        <ModalHeader
+          onClose={() => setPreviewUrl(null)}
+          closeAriaLabel="Close PDF preview"
+        >
+          <ModalTitle className="truncate">
+            {previewName || 'PDF document'}
+          </ModalTitle>
         </ModalHeader>
         <ModalBody className="h-full p-0">
           {previewUrl && (
@@ -732,7 +870,11 @@ export function LearnAssistant({ initialPrompt }: { initialPrompt?: string | nul
                   <ArrowUpRight size={12} />
                 </a>
               </div>
-              <iframe title={previewName} src={previewUrl} className="min-h-0 flex-1 bg-white" />
+              <iframe
+                title={previewName}
+                src={previewUrl}
+                className="min-h-0 flex-1 bg-white"
+              />
             </div>
           )}
         </ModalBody>

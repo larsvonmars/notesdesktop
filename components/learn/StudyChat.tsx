@@ -12,7 +12,11 @@ import {
   X,
 } from 'lucide-react'
 import type { LucideIcon } from 'lucide-react'
-import { MarkdownContent, ThinkingSection, TypingDots } from '@/components/ai/AIMarkdown'
+import {
+  MarkdownContent,
+  ThinkingSection,
+  TypingDots,
+} from '@/components/ai/AIMarkdown'
 import { useLearning } from '@/lib/learn/context'
 import type { AIMessage } from '@/lib/ai'
 import type { LearnAICallbacks } from '@/lib/learn/ai'
@@ -64,7 +68,8 @@ const TOOL_LABELS: Record<string, string> = {
 }
 
 function makeId(): string {
-  if (typeof crypto !== 'undefined' && 'randomUUID' in crypto) return crypto.randomUUID()
+  if (typeof crypto !== 'undefined' && 'randomUUID' in crypto)
+    return crypto.randomUUID()
   return `entry-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
 }
 
@@ -83,10 +88,14 @@ function ToolPills({ tools }: { tools: ChatTool[] }) {
             'inline-flex items-center gap-1.5 rounded-full border px-2 py-1 text-[10px] font-medium',
             tool.status === 'done'
               ? 'border-border bg-surface-hover text-muted'
-              : 'border-accent/25 bg-accent-light text-accent',
+              : 'border-accent/25 bg-accent-light text-accent'
           )}
         >
-          {tool.status === 'done' ? <CheckCircle2 size={10} /> : <Loader2 size={10} className="animate-spin" />}
+          {tool.status === 'done' ? (
+            <CheckCircle2 size={10} />
+          ) : (
+            <Loader2 size={10} className="animate-spin" />
+          )}
           {formatToolName(tool.name)}
         </span>
       ))}
@@ -117,10 +126,18 @@ export function StudyChat({
   const textareaRef = useRef<HTMLTextAreaElement>(null)
   const cardIndexRef = useRef(0)
 
-  const cardContent = useMemo(() => cards.map((card) => `Q: ${card.front} → A: ${card.back}`), [cards])
+  const cardContent = useMemo(
+    () => cards.map((card) => `Q: ${card.front} → A: ${card.back}`),
+    [cards]
+  )
   const cardIds = useMemo(() => cards.map((card) => card.id), [cards])
-  const visibleUserMessages = entries.filter((entry) => entry.role === 'user' && !entry.hidden)
-  const estimatedCardsCovered = Math.min(visibleUserMessages.length, cards.length)
+  const visibleUserMessages = entries.filter(
+    (entry) => entry.role === 'user' && !entry.hidden
+  )
+  const estimatedCardsCovered = Math.min(
+    visibleUserMessages.length,
+    cards.length
+  )
 
   const accentClasses =
     accent === 'fuchsia'
@@ -154,15 +171,24 @@ export function StudyChat({
   /** Convert visible chat entries into model history. */
   function buildHistory(): AIMessage[] {
     return entries
-      .filter((entry) => !entry.hidden && !entry.pending && entry.content.trim())
+      .filter(
+        (entry) => !entry.hidden && !entry.pending && entry.content.trim()
+      )
       .map((entry) =>
         entry.role === 'assistant'
-          ? { role: 'assistant' as const, content: entry.content, reasoning_content: entry.reasoning }
-          : { role: 'user' as const, content: entry.content },
+          ? {
+              role: 'assistant' as const,
+              content: entry.content,
+              reasoning_content: entry.reasoning,
+            }
+          : { role: 'user' as const, content: entry.content }
       )
   }
 
-  async function sendMessage(text: string, options?: { hidden?: boolean; endSession?: boolean }) {
+  async function sendMessage(
+    text: string,
+    options?: { hidden?: boolean; endSession?: boolean }
+  ) {
     const trimmed = text.trim()
     if (!trimmed || busy) return
     if (options?.endSession) setSessionEnded(true)
@@ -175,7 +201,13 @@ export function StudyChat({
       ...(options?.hidden
         ? []
         : [{ id: makeId(), role: 'user' as const, content: trimmed }]),
-      { id: assistantId, role: 'assistant' as const, content: '', pending: true, tools: [] },
+      {
+        id: assistantId,
+        role: 'assistant' as const,
+        content: '',
+        pending: true,
+        tools: [],
+      },
     ])
     setInput('')
     setBusy(true)
@@ -190,8 +222,10 @@ export function StudyChat({
       onToken: (token) => {
         setEntries((previous) =>
           previous.map((entry) =>
-            entry.id === assistantId ? { ...entry, content: `${entry.content}${token}` } : entry,
-          ),
+            entry.id === assistantId
+              ? { ...entry, content: `${entry.content}${token}` }
+              : entry
+          )
         )
       },
       onReasoning: (token) => {
@@ -199,8 +233,8 @@ export function StudyChat({
           previous.map((entry) =>
             entry.id === assistantId
               ? { ...entry, reasoning: `${entry.reasoning ?? ''}${token}` }
-              : entry,
-          ),
+              : entry
+          )
         )
       },
       onToolCall: (call) => {
@@ -210,10 +244,13 @@ export function StudyChat({
             entry.id === assistantId
               ? {
                   ...entry,
-                  tools: [...(entry.tools ?? []), { id: call.id, name: call.name, status: 'running' }],
+                  tools: [
+                    ...(entry.tools ?? []),
+                    { id: call.id, name: call.name, status: 'running' },
+                  ],
                 }
-              : entry,
-          ),
+              : entry
+          )
         )
       },
       onToolResult: (result) => {
@@ -223,11 +260,13 @@ export function StudyChat({
               ? {
                   ...entry,
                   tools: (entry.tools ?? []).map((tool) =>
-                    tool.id === result.id ? { ...tool, status: 'done', result: result.result } : tool,
+                    tool.id === result.id
+                      ? { ...tool, status: 'done', result: result.result }
+                      : tool
                   ),
                 }
-              : entry,
-          ),
+              : entry
+          )
         )
       },
     }
@@ -238,8 +277,8 @@ export function StudyChat({
         previous.map((entry) =>
           entry.id === assistantId
             ? { ...entry, content: entry.content || response, pending: false }
-            : entry,
-        ),
+            : entry
+        )
       )
       if (sawToolCall) triggerAiRefresh()
     } catch (error) {
@@ -254,8 +293,8 @@ export function StudyChat({
                     ? `I couldn't complete that request: ${error.message}`
                     : "I couldn't complete that request. Please try again.",
               }
-            : entry,
-        ),
+            : entry
+        )
       )
     } finally {
       setBusy(false)
@@ -266,9 +305,12 @@ export function StudyChat({
   useEffect(() => {
     if (startedRef.current) return
     startedRef.current = true
-    void sendMessage('(Begin tutoring session — introduce yourself and ask the first question)', {
-      hidden: true,
-    })
+    void sendMessage(
+      '(Begin tutoring session — introduce yourself and ask the first question)',
+      {
+        hidden: true,
+      }
+    )
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
@@ -281,7 +323,7 @@ export function StudyChat({
     if (sessionEnded || busy) return
     void sendMessage(
       'Please summarize our tutoring session. Tell me what I did well and what I should review later.',
-      { endSession: true },
+      { endSession: true }
     )
   }
 
@@ -299,18 +341,25 @@ export function StudyChat({
       <div className="flex shrink-0 items-center justify-between gap-3 border-b border-border pb-3">
         <div className="flex min-w-0 items-center gap-3">
           <div className="relative shrink-0">
-            <div className={cn('flex h-9 w-9 items-center justify-center rounded-xl bg-gradient-to-br text-white shadow-md', accentClasses.icon)}>
+            <div
+              className={cn(
+                'flex h-9 w-9 items-center justify-center rounded-xl bg-gradient-to-br text-white shadow-md',
+                accentClasses.icon
+              )}
+            >
               <Icon size={16} />
             </div>
             <span
               className={cn(
                 'absolute -bottom-0.5 -right-0.5 h-2.5 w-2.5 rounded-full border-2 border-[var(--surface-solid)]',
-                busy ? 'animate-pulse bg-warning' : 'bg-success',
+                busy ? 'animate-pulse bg-warning' : 'bg-success'
               )}
             />
           </div>
           <div className="min-w-0">
-            <p className="truncate text-sm font-semibold text-foreground">{title}</p>
+            <p className="truncate text-sm font-semibold text-foreground">
+              {title}
+            </p>
             <p className="truncate text-[11px] text-muted">
               {deck.title} · {cards.length} cards · {subtitle}
             </p>
@@ -338,12 +387,23 @@ export function StudyChat({
         {entries.length === 0 && (
           <div className="flex h-full items-center justify-center px-4">
             <div className="max-w-sm text-center animate-rise-in">
-              <div className={cn('mx-auto mb-5 flex h-16 w-16 items-center justify-center rounded-2xl bg-gradient-to-br text-white shadow-lg', accentClasses.icon)}>
+              <div
+                className={cn(
+                  'mx-auto mb-5 flex h-16 w-16 items-center justify-center rounded-2xl bg-gradient-to-br text-white shadow-lg',
+                  accentClasses.icon
+                )}
+              >
                 <Sparkles size={28} />
               </div>
-              <h2 className="font-display text-lg font-semibold text-foreground">{title}</h2>
+              <h2 className="font-display text-lg font-semibold text-foreground">
+                {title}
+              </h2>
               <p className="mt-2 text-sm leading-relaxed text-muted">
-                Preparing your session on <span className="font-semibold text-foreground">{deck.title}</span>…
+                Preparing your session on{' '}
+                <span className="font-semibold text-foreground">
+                  {deck.title}
+                </span>
+                …
               </p>
             </div>
           </div>
@@ -354,10 +414,18 @@ export function StudyChat({
           .map((entry) => (
             <div
               key={entry.id}
-              className={cn('flex gap-2.5', entry.role === 'user' ? 'justify-end' : 'justify-start')}
+              className={cn(
+                'flex gap-2.5',
+                entry.role === 'user' ? 'justify-end' : 'justify-start'
+              )}
             >
               {entry.role === 'assistant' && (
-                <span className={cn('mt-1 flex h-7 w-7 shrink-0 items-center justify-center rounded-lg', accentClasses.soft)}>
+                <span
+                  className={cn(
+                    'mt-1 flex h-7 w-7 shrink-0 items-center justify-center rounded-lg',
+                    accentClasses.soft
+                  )}
+                >
                   <Bot size={14} />
                 </span>
               )}
@@ -366,13 +434,18 @@ export function StudyChat({
                   'max-w-[85%] rounded-2xl border px-3.5 py-2.5',
                   entry.role === 'user'
                     ? 'rounded-br-md border-accent/25 bg-accent-light text-foreground'
-                    : cn('rounded-bl-md bg-surface', entry.pending ? accentClasses.bubble : 'border-border'),
+                    : cn(
+                        'rounded-bl-md bg-surface',
+                        entry.pending ? accentClasses.bubble : 'border-border'
+                      )
                 )}
               >
                 {entry.role === 'assistant' ? (
                   <>
                     {entry.tools && <ToolPills tools={entry.tools} />}
-                    {entry.reasoning && <ThinkingSection reasoning={entry.reasoning} />}
+                    {entry.reasoning && (
+                      <ThinkingSection reasoning={entry.reasoning} />
+                    )}
                     {entry.content ? (
                       <MarkdownContent content={entry.content} />
                     ) : entry.pending ? (
@@ -380,7 +453,9 @@ export function StudyChat({
                     ) : null}
                   </>
                 ) : (
-                  <p className="whitespace-pre-wrap text-[13px] leading-relaxed">{entry.content}</p>
+                  <p className="whitespace-pre-wrap text-[13px] leading-relaxed">
+                    {entry.content}
+                  </p>
                 )}
               </div>
             </div>
@@ -393,14 +468,21 @@ export function StudyChat({
                 <CheckCircle2 size={18} />
               </span>
               <div>
-                <p className="text-sm font-semibold text-foreground">Session complete!</p>
+                <p className="text-sm font-semibold text-foreground">
+                  Session complete!
+                </p>
                 <p className="text-xs text-muted">
-                  {visibleUserMessages.length} exchange{visibleUserMessages.length === 1 ? '' : 's'} · Great work
+                  {visibleUserMessages.length} exchange
+                  {visibleUserMessages.length === 1 ? '' : 's'} · Great work
                 </p>
               </div>
             </div>
             <div className="mt-3 flex items-center gap-2">
-              <ActionButton variant="primary" onClick={handleFinish} className="flex-1">
+              <ActionButton
+                variant="primary"
+                onClick={handleFinish}
+                className="flex-1"
+              >
                 Finish & earn XP
                 <ArrowRight size={14} />
               </ActionButton>
@@ -414,7 +496,10 @@ export function StudyChat({
         <div ref={endRef} />
       </div>
 
-      <form onSubmit={handleSubmit} className="shrink-0 border-t border-border pt-3">
+      <form
+        onSubmit={handleSubmit}
+        className="shrink-0 border-t border-border pt-3"
+      >
         <div className="flex items-end gap-2">
           <textarea
             ref={textareaRef}
@@ -438,12 +523,17 @@ export function StudyChat({
             className="glass-btn-primary flex h-11 w-11 shrink-0 items-center justify-center rounded-xl text-accent-foreground disabled:opacity-40"
             aria-label="Send message"
           >
-            {busy ? <Loader2 size={16} className="animate-spin" /> : <Send size={16} />}
+            {busy ? (
+              <Loader2 size={16} className="animate-spin" />
+            ) : (
+              <Send size={16} />
+            )}
           </button>
         </div>
         <div className="mt-2 flex items-center justify-between gap-2">
           <p className="text-[10px] text-muted">
-            <kbd className="kbd text-[9px]">Enter</kbd> send · <kbd className="kbd text-[9px]">Shift</kbd>+
+            <kbd className="kbd text-[9px]">Enter</kbd> send ·{' '}
+            <kbd className="kbd text-[9px]">Shift</kbd>+
             <kbd className="kbd text-[9px]">Enter</kbd> newline
           </p>
           <button

@@ -11,7 +11,11 @@ function safeFileName(name: string): string {
   return name.replace(/[^a-zA-Z0-9._-]/g, '_')
 }
 
-async function uploadToStorage(userId: string, path: string, data: ArrayBuffer): Promise<string> {
+async function uploadToStorage(
+  userId: string,
+  path: string,
+  data: ArrayBuffer
+): Promise<string> {
   const { error } = await supabase.storage.from(BUCKET).upload(path, data, {
     contentType: 'application/pdf',
     upsert: false,
@@ -19,13 +23,18 @@ async function uploadToStorage(userId: string, path: string, data: ArrayBuffer):
   })
 
   if (!error) return path
-  if (error.message?.includes('already exists') || error.message?.includes('Duplicate')) {
+  if (
+    error.message?.includes('already exists') ||
+    error.message?.includes('Duplicate')
+  ) {
     const retryPath = `${userId}/${Date.now()}-${Math.random().toString(36).slice(2, 8)}-${path.split('/').pop()}`
-    const { error: retryError } = await supabase.storage.from(BUCKET).upload(retryPath, data, {
-      contentType: 'application/pdf',
-      upsert: false,
-      cacheControl: '3600',
-    })
+    const { error: retryError } = await supabase.storage
+      .from(BUCKET)
+      .upload(retryPath, data, {
+        contentType: 'application/pdf',
+        upsert: false,
+        cacheControl: '3600',
+      })
     if (retryError) throw retryError
     return retryPath
   }
@@ -38,11 +47,13 @@ export async function uploadDocument(file: File): Promise<LearnDocument> {
   const userId = await requireUserId()
 
   if (!ALLOWED_TYPES.includes(file.type)) {
-    throw new Error(`Only PDF files are allowed. Received: ${file.type || 'unknown type'}`)
+    throw new Error(
+      `Only PDF files are allowed. Received: ${file.type || 'unknown type'}`
+    )
   }
   if (file.size > MAX_FILE_SIZE) {
     throw new Error(
-      `File too large (${(file.size / (1024 * 1024)).toFixed(1)} MiB). Maximum is ${MAX_FILE_SIZE / (1024 * 1024)} MiB.`,
+      `File too large (${(file.size / (1024 * 1024)).toFixed(1)} MiB). Maximum is ${MAX_FILE_SIZE / (1024 * 1024)} MiB.`
     )
   }
 
@@ -50,7 +61,7 @@ export async function uploadDocument(file: File): Promise<LearnDocument> {
   const storagePath = await uploadToStorage(
     userId,
     `${userId}/${Date.now()}-${safeFileName(file.name)}`,
-    buffer,
+    buffer
   )
 
   const { data, error } = await supabase
@@ -92,32 +103,46 @@ export async function deleteDocument(id: string): Promise<void> {
 
   if (fetchError) throw fetchError
 
-  const { error: storageError } = await supabase.storage.from(BUCKET).remove([document.file_path])
+  const { error: storageError } = await supabase.storage
+    .from(BUCKET)
+    .remove([document.file_path])
   if (storageError) {
     // Keep going: an orphaned storage object is less harmful than a stuck row.
-    console.warn('Failed to delete learn document from storage:', storageError.message)
+    console.warn(
+      'Failed to delete learn document from storage:',
+      storageError.message
+    )
   }
 
-  const { error } = await supabase.from('learn_documents').delete().eq('id', id).eq('user_id', userId)
+  const { error } = await supabase
+    .from('learn_documents')
+    .delete()
+    .eq('id', id)
+    .eq('user_id', userId)
   if (error) throw error
 }
 
 export async function updateDocument(
   id: string,
-  update: { status?: LearnDocument['status']; deckId?: string | null },
+  update: { status?: LearnDocument['status']; deckId?: string | null }
 ): Promise<void> {
   const payload: Record<string, unknown> = {}
   if (update.status !== undefined) payload.status = update.status
   if (update.deckId !== undefined) payload.deck_id = update.deckId
   if (Object.keys(payload).length === 0) return
 
-  const { error } = await supabase.from('learn_documents').update(payload).eq('id', id)
+  const { error } = await supabase
+    .from('learn_documents')
+    .update(payload)
+    .eq('id', id)
   if (error) throw error
 }
 
 /** Short-lived signed URL for in-app PDF preview. */
 export async function getDocumentUrl(filePath: string): Promise<string | null> {
-  const { data, error } = await supabase.storage.from(BUCKET).createSignedUrl(filePath, 3600)
+  const { data, error } = await supabase.storage
+    .from(BUCKET)
+    .createSignedUrl(filePath, 3600)
   if (error) throw error
   return data?.signedUrl ?? null
 }
@@ -134,9 +159,13 @@ export async function getDocumentText(documentId: string): Promise<PdfContent> {
 
   if (fetchError) throw fetchError
 
-  const { data, error } = await supabase.storage.from(BUCKET).download(document.file_path)
+  const { data, error } = await supabase.storage
+    .from(BUCKET)
+    .download(document.file_path)
   if (error || !data) {
-    throw new Error(`Failed to download document: ${error?.message ?? 'Unknown error'}`)
+    throw new Error(
+      `Failed to download document: ${error?.message ?? 'Unknown error'}`
+    )
   }
 
   await updateDocument(documentId, { status: 'processing' }).catch(() => {})

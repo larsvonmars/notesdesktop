@@ -194,7 +194,7 @@ export const KEYBOARD_SHORTCUTS: KeyboardShortcut[] = [
   },
   {
     keys: ['⌘N', 'Ctrl+N'],
-    description: 'New note',
+    description: 'New note (new deck in Learn)',
     category: 'navigation'
   },
   {
@@ -229,7 +229,7 @@ export const KEYBOARD_SHORTCUTS: KeyboardShortcut[] = [
   },
   {
     keys: ['⌘J', 'Ctrl+J'],
-    description: 'Open the AI assistant',
+    description: 'Open the AI assistant (Learn assistant in Learn)',
     category: 'navigation'
   },
   {

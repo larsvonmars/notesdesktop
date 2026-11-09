@@ -1,7 +1,15 @@
 'use client'
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { ArrowLeft, BookOpen, ChevronRight, Loader2, Search, Sparkles, Zap } from 'lucide-react'
+import {
+  ArrowLeft,
+  BookOpen,
+  ChevronRight,
+  Loader2,
+  Search,
+  Sparkles,
+  Zap,
+} from 'lucide-react'
 import { useToast } from '@/components/ToastProvider'
 import { getCardsByDeck } from '@/lib/learn/cards'
 import { useLearning } from '@/lib/learn/context'
@@ -47,14 +55,24 @@ interface Props {
   onOpenAssistant: (prompt?: string) => void
 }
 
-export function StudySession({ deckId, initialMode, onBackToDeck, onOpenAssistant }: Props) {
+export function StudySession({
+  deckId,
+  initialMode,
+  onBackToDeck,
+  onOpenAssistant,
+}: Props) {
   const { decks, refreshStats, refreshDecks } = useLearning()
   const toast = useToast()
   const toastRef = useRef(toast)
   toastRef.current = toast
-  const deck = useMemo(() => decks.find((candidate) => candidate.id === deckId), [deckId, decks])
+  const deck = useMemo(
+    () => decks.find((candidate) => candidate.id === deckId),
+    [deckId, decks]
+  )
 
-  const [mode, setMode] = useState<StudyMode | null>(initialMode && VALID_MODES.includes(initialMode) ? initialMode : null)
+  const [mode, setMode] = useState<StudyMode | null>(
+    initialMode && VALID_MODES.includes(initialMode) ? initialMode : null
+  )
   const [cards, setCards] = useState<Card[]>([])
   const [loading, setLoading] = useState(true)
   const [sprints, setSprints] = useState<Card[][]>([])
@@ -64,8 +82,13 @@ export function StudySession({ deckId, initialMode, onBackToDeck, onOpenAssistan
   const [completed, setCompleted] = useState(false)
   const [sessionResult, setSessionResult] = useState<SessionResult | null>(null)
   const [xpEarned, setXpEarned] = useState(0)
-  const [newBadges, setNewBadges] = useState<CompleteSessionResult['newBadges']>([])
-  const [extra, setExtra] = useState<Omit<CompleteSessionResult, 'xpEarned' | 'newBadges'> | null>(null)
+  const [newBadges, setNewBadges] = useState<
+    CompleteSessionResult['newBadges']
+  >([])
+  const [extra, setExtra] = useState<Omit<
+    CompleteSessionResult,
+    'xpEarned' | 'newBadges'
+  > | null>(null)
   const mountedRef = useRef(true)
 
   useEffect(() => {
@@ -87,7 +110,11 @@ export function StudySession({ deckId, initialMode, onBackToDeck, onOpenAssistan
       if (mountedRef.current) {
         setCards([])
         setSprints([[]])
-        toastRef.current.push({ title: 'Could not load cards', description: 'Check your connection and try again.', variant: 'error' })
+        toastRef.current.push({
+          title: 'Could not load cards',
+          description: 'Check your connection and try again.',
+          variant: 'error',
+        })
       }
     } finally {
       if (mountedRef.current) setLoading(false)
@@ -104,8 +131,14 @@ export function StudySession({ deckId, initialMode, onBackToDeck, onOpenAssistan
       setSprintResults(nextResults)
 
       if (sprintIndex + 1 >= sprints.length) {
-        const totalCards = nextResults.reduce((sum, entry) => sum + entry.cardsReviewed, 0)
-        const totalCorrect = nextResults.reduce((sum, entry) => sum + entry.correct, 0)
+        const totalCards = nextResults.reduce(
+          (sum, entry) => sum + entry.cardsReviewed,
+          0
+        )
+        const totalCorrect = nextResults.reduce(
+          (sum, entry) => sum + entry.correct,
+          0
+        )
         const allPerfect = nextResults.every((entry) => entry.perfect)
 
         const finalResult: SessionResult = {
@@ -162,7 +195,15 @@ export function StudySession({ deckId, initialMode, onBackToDeck, onOpenAssistan
         setShowSprintComplete(true)
       }
     },
-    [deckId, refreshDecks, refreshStats, sprintIndex, sprintResults, sprints.length, toast],
+    [
+      deckId,
+      refreshDecks,
+      refreshStats,
+      sprintIndex,
+      sprintResults,
+      sprints.length,
+      toast,
+    ]
   )
 
   function handleStudyAgain() {
@@ -185,8 +226,12 @@ export function StudySession({ deckId, initialMode, onBackToDeck, onOpenAssistan
           <BookOpen size={20} />
         </span>
         <div>
-          <h2 className="font-display text-lg font-semibold text-foreground">Deck not found</h2>
-          <p className="mt-1 text-sm text-muted">This deck is unavailable or no longer belongs to you.</p>
+          <h2 className="font-display text-lg font-semibold text-foreground">
+            Deck not found
+          </h2>
+          <p className="mt-1 text-sm text-muted">
+            This deck is unavailable or no longer belongs to you.
+          </p>
         </div>
         <button
           type="button"
@@ -205,7 +250,9 @@ export function StudySession({ deckId, initialMode, onBackToDeck, onOpenAssistan
         <div className="flex h-16 w-16 items-center justify-center rounded-2xl border border-accent/10 bg-accent-light shadow-glass-sm">
           <Loader2 size={26} className="animate-spin text-accent" />
         </div>
-        <p className="text-base font-semibold text-foreground">Loading study session…</p>
+        <p className="text-base font-semibold text-foreground">
+          Loading study session…
+        </p>
         <p className="text-sm text-muted">
           {deck.title} · {deck.cardCount} cards
         </p>
@@ -220,8 +267,12 @@ export function StudySession({ deckId, initialMode, onBackToDeck, onOpenAssistan
           <Search size={28} />
         </span>
         <div>
-          <h2 className="font-display text-lg font-semibold text-foreground">No cards yet</h2>
-          <p className="mt-1 text-sm text-muted">Add some cards to this deck before starting a study session.</p>
+          <h2 className="font-display text-lg font-semibold text-foreground">
+            No cards yet
+          </h2>
+          <p className="mt-1 text-sm text-muted">
+            Add some cards to this deck before starting a study session.
+          </p>
         </div>
         <div className="flex gap-2">
           <button
@@ -262,7 +313,7 @@ export function StudySession({ deckId, initialMode, onBackToDeck, onOpenAssistan
         onBackToDeck={onBackToDeck}
         onAskAi={() =>
           onOpenAssistant(
-            `I just finished a ${sessionResult.mode} session on "${deck.title}": ${sessionResult.correct}/${sessionResult.cardsReviewed} correct. What should I review next?`,
+            `I just finished a ${sessionResult.mode} session on "${deck.title}": ${sessionResult.correct}/${sessionResult.cardsReviewed} correct. What should I review next?`
           )
         }
       />
@@ -272,38 +323,63 @@ export function StudySession({ deckId, initialMode, onBackToDeck, onOpenAssistan
   if (showSprintComplete && sprintResults.length > 0) {
     const lastResult = sprintResults[sprintResults.length - 1]
     const sprintAccuracy =
-      lastResult.cardsReviewed > 0 ? Math.round((lastResult.correct / lastResult.cardsReviewed) * 100) : 0
+      lastResult.cardsReviewed > 0
+        ? Math.round((lastResult.correct / lastResult.cardsReviewed) * 100)
+        : 0
     return (
       <div className="mx-auto flex max-w-lg flex-col items-center justify-center space-y-6 px-4 text-center animate-rise-in">
         <div className="flex h-20 w-20 items-center justify-center rounded-[2rem] border-2 border-accent/20 bg-accent-light shadow-xl">
           <Zap size={38} className="text-accent" />
         </div>
         <div>
-          <h2 className="font-display text-2xl font-semibold text-foreground">Sprint {sprintIndex + 1} complete!</h2>
+          <h2 className="font-display text-2xl font-semibold text-foreground">
+            Sprint {sprintIndex + 1} complete!
+          </h2>
           <p className="mt-1 text-sm text-muted">
             {lastResult.cardsReviewed} cards · {lastResult.correct} correct
           </p>
         </div>
         <div className="grid w-full grid-cols-3 gap-3">
           <div className="glass-card flex flex-col items-center px-2 py-4">
-            <span className={cn('font-display text-2xl font-semibold', sprintAccuracy >= 80 ? 'text-success' : sprintAccuracy >= 50 ? 'text-warning' : 'text-danger')}>
+            <span
+              className={cn(
+                'font-display text-2xl font-semibold',
+                sprintAccuracy >= 80
+                  ? 'text-success'
+                  : sprintAccuracy >= 50
+                    ? 'text-warning'
+                    : 'text-danger'
+              )}
+            >
               {sprintAccuracy}%
             </span>
-            <span className="mt-1 text-[10px] font-semibold uppercase tracking-[0.12em] text-muted">Accuracy</span>
+            <span className="mt-1 text-[10px] font-semibold uppercase tracking-[0.12em] text-muted">
+              Accuracy
+            </span>
           </div>
           <div className="glass-card flex flex-col items-center px-2 py-4">
-            <span className="font-display text-2xl font-semibold text-success">{lastResult.correct}</span>
-            <span className="mt-1 text-[10px] font-semibold uppercase tracking-[0.12em] text-muted">Correct</span>
+            <span className="font-display text-2xl font-semibold text-success">
+              {lastResult.correct}
+            </span>
+            <span className="mt-1 text-[10px] font-semibold uppercase tracking-[0.12em] text-muted">
+              Correct
+            </span>
           </div>
           <div className="glass-card flex flex-col items-center px-2 py-4">
             <span className="font-display text-2xl font-semibold text-foreground">
-              {sprintResults.reduce((sum, entry) => sum + entry.cardsReviewed, 0)}
+              {sprintResults.reduce(
+                (sum, entry) => sum + entry.cardsReviewed,
+                0
+              )}
             </span>
-            <span className="mt-1 text-[10px] font-semibold uppercase tracking-[0.12em] text-muted">Reviewed</span>
+            <span className="mt-1 text-[10px] font-semibold uppercase tracking-[0.12em] text-muted">
+              Reviewed
+            </span>
           </div>
         </div>
         <p className="text-xs text-muted">
-          Sprint {sprintIndex + 1} of {sprints.length} · {sprints[sprintIndex + 1]?.length ?? 0} cards next
+          Sprint {sprintIndex + 1} of {sprints.length} ·{' '}
+          {sprints[sprintIndex + 1]?.length ?? 0} cards next
         </p>
         <button
           type="button"
@@ -339,10 +415,24 @@ export function StudySession({ deckId, initialMode, onBackToDeck, onOpenAssistan
   }
 
   if (mode === 'flashcard') {
-    return <FlashcardStudy deck={deck} cards={currentSprintCards} onComplete={handleSprintComplete} onExit={exitToDeck} />
+    return (
+      <FlashcardStudy
+        deck={deck}
+        cards={currentSprintCards}
+        onComplete={handleSprintComplete}
+        onExit={exitToDeck}
+      />
+    )
   }
   if (mode === 'multiple-choice') {
-    return <MultipleChoiceStudy deck={deck} cards={currentSprintCards} onComplete={handleSprintComplete} onExit={exitToDeck} />
+    return (
+      <MultipleChoiceStudy
+        deck={deck}
+        cards={currentSprintCards}
+        onComplete={handleSprintComplete}
+        onExit={exitToDeck}
+      />
+    )
   }
   if (mode === 'spaced-repetition') {
     return (
@@ -356,26 +446,65 @@ export function StudySession({ deckId, initialMode, onBackToDeck, onOpenAssistan
     )
   }
   if (mode === 'typed-answer') {
-    return <TypedAnswerStudy deck={deck} cards={currentSprintCards} onComplete={handleSprintComplete} onExit={exitToDeck} />
+    return (
+      <TypedAnswerStudy
+        deck={deck}
+        cards={currentSprintCards}
+        onComplete={handleSprintComplete}
+        onExit={exitToDeck}
+      />
+    )
   }
   if (mode === 'test') {
-    return <TestStudy deck={deck} cards={currentSprintCards} onComplete={handleSprintComplete} onExit={exitToDeck} />
+    return (
+      <TestStudy
+        deck={deck}
+        cards={currentSprintCards}
+        onComplete={handleSprintComplete}
+        onExit={exitToDeck}
+      />
+    )
   }
   if (mode === 'smart') {
-    return <SmartStudy deck={deck} cards={currentSprintCards} onComplete={handleSprintComplete} onExit={exitToDeck} />
+    return (
+      <SmartStudy
+        deck={deck}
+        cards={currentSprintCards}
+        onComplete={handleSprintComplete}
+        onExit={exitToDeck}
+      />
+    )
   }
   if (mode === 'ai-learn') {
-    return <AiLearnStudy deck={deck} cards={currentSprintCards} onComplete={handleSprintComplete} onExit={exitToDeck} />
+    return (
+      <AiLearnStudy
+        deck={deck}
+        cards={currentSprintCards}
+        onComplete={handleSprintComplete}
+        onExit={exitToDeck}
+      />
+    )
   }
   if (mode === 'tutor') {
-    return <TutorStudy deck={deck} cards={currentSprintCards} onComplete={handleSprintComplete} onExit={exitToDeck} />
+    return (
+      <TutorStudy
+        deck={deck}
+        cards={currentSprintCards}
+        onComplete={handleSprintComplete}
+        onExit={exitToDeck}
+      />
+    )
   }
 
   return (
     <div className="mx-auto flex min-h-[40vh] max-w-md flex-col items-center justify-center gap-3 text-center">
       <Sparkles size={26} className="text-accent" />
       <p className="text-sm text-muted">This study mode is unavailable.</p>
-      <button type="button" onClick={() => setMode(null)} className="glass-btn rounded-xl px-4 py-2 text-sm">
+      <button
+        type="button"
+        onClick={() => setMode(null)}
+        className="glass-btn rounded-xl px-4 py-2 text-sm"
+      >
         Choose another mode
       </button>
     </div>

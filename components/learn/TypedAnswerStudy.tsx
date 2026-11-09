@@ -5,7 +5,12 @@ import { Eye, EyeOff } from 'lucide-react'
 import { useLearning } from '@/lib/learn/context'
 import type { Card, Deck, SessionResult } from '@/lib/learn/types'
 import { cn, isAnswerCorrect, shuffle } from '@/lib/learn/utils'
-import { ActionButton, FeedbackBanner, QuestionCard, StudyLayout } from './StudyLayout'
+import {
+  ActionButton,
+  FeedbackBanner,
+  QuestionCard,
+  StudyLayout,
+} from './StudyLayout'
 
 interface Props {
   deck: Deck
@@ -26,7 +31,10 @@ export function TypedAnswerStudy({ deck, cards, onComplete, onExit }: Props) {
   const inputRef = useRef<HTMLInputElement>(null)
 
   const currentCard = shuffledCards[index]
-  const isCorrect = submitted && currentCard ? isAnswerCorrect(inputValue, currentCard.back) : false
+  const isCorrect =
+    submitted && currentCard
+      ? isAnswerCorrect(inputValue, currentCard.back)
+      : false
 
   useEffect(() => {
     if (currentCard) setCurrentCard(currentCard)
@@ -44,7 +52,9 @@ export function TypedAnswerStudy({ deck, cards, onComplete, onExit }: Props) {
     event.preventDefault()
     if (!inputValue.trim() || submitted || !currentCard) return
     setSubmitted(true)
-    setStreak((value) => (isAnswerCorrect(inputValue, currentCard.back) ? value + 1 : 0))
+    setStreak((value) =>
+      isAnswerCorrect(inputValue, currentCard.back) ? value + 1 : 0
+    )
   }
 
   function handleNext() {
@@ -115,9 +125,14 @@ export function TypedAnswerStudy({ deck, cards, onComplete, onExit }: Props) {
             autoComplete="off"
             className={cn(
               'h-14 w-full rounded-2xl border bg-surface px-5 pr-12 text-base font-semibold text-foreground outline-none shadow-sm transition-all',
-              !submitted && 'border-border focus:border-accent/50 focus:ring-2 focus:ring-accent/15',
-              submitted && isCorrect && 'border-success/40 bg-success-light text-success',
-              submitted && !isCorrect && 'border-danger/40 bg-danger-light text-danger',
+              !submitted &&
+                'border-border focus:border-accent/50 focus:ring-2 focus:ring-accent/15',
+              submitted &&
+                isCorrect &&
+                'border-success/40 bg-success-light text-success',
+              submitted &&
+                !isCorrect &&
+                'border-danger/40 bg-danger-light text-danger'
             )}
           />
           {!submitted && (
@@ -133,16 +148,32 @@ export function TypedAnswerStudy({ deck, cards, onComplete, onExit }: Props) {
           )}
         </div>
 
-        {hintText && <p className="text-center font-mono text-xs text-muted">Hint: {hintText}</p>}
+        {hintText && (
+          <p className="text-center font-mono text-xs text-muted">
+            Hint: {hintText}
+          </p>
+        )}
 
         {!submitted ? (
-          <ActionButton type="submit" variant="primary" disabled={!inputValue.trim()} className="w-full">
+          <ActionButton
+            type="submit"
+            variant="primary"
+            disabled={!inputValue.trim()}
+            className="w-full"
+          >
             Check answer
           </ActionButton>
         ) : (
           <div className="space-y-3">
-            <FeedbackBanner correct={isCorrect} correctAnswer={currentCard.back} />
-            <ActionButton variant="primary" onClick={handleNext} className="w-full">
+            <FeedbackBanner
+              correct={isCorrect}
+              correctAnswer={currentCard.back}
+            />
+            <ActionButton
+              variant="primary"
+              onClick={handleNext}
+              className="w-full"
+            >
               {index + 1 >= shuffledCards.length ? 'See results' : 'Next card'}
             </ActionButton>
           </div>

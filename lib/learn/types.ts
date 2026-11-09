@@ -125,28 +125,117 @@ export interface StudySessionSummary {
   completedAt: string
 }
 
+export type LearnScreen =
+  | { kind: 'dashboard' }
+  | { kind: 'decks' }
+  | { kind: 'deck'; deckId: string }
+  | { kind: 'study'; deckId: string; mode?: StudyMode }
+  | { kind: 'progress' }
+  | { kind: 'assistant'; prompt?: string; key: number }
+  | { kind: 'settings' }
+
 export interface LearnProfile {
   username: string | null
   email: string | null
 }
 
 export const BADGE_DEFINITIONS: Omit<Badge, 'earnedAt'>[] = [
-  { id: 'first-deck', name: 'First Deck', description: 'Created your first deck', icon: '🎉' },
-  { id: 'collector-5', name: 'Collector', description: 'Created 5 decks', icon: '📚' },
-  { id: 'collector-10', name: 'Archivist', description: 'Created 10 decks', icon: '🗂️' },
-  { id: 'streak-3', name: 'Hot Streak', description: 'Studied 3 days in a row', icon: '🔥' },
-  { id: 'streak-7', name: 'On Fire', description: 'Studied 7 days in a row', icon: '⚡' },
-  { id: 'streak-14', name: 'Unstoppable', description: 'Studied 14 days in a row', icon: '🌋' },
-  { id: 'streak-30', name: 'Legendary', description: 'Studied 30 days in a row', icon: '💎' },
-  { id: 'level-5', name: 'Rising Star', description: 'Reached level 5', icon: '⭐' },
-  { id: 'level-10', name: 'Scholar', description: 'Reached level 10', icon: '📖' },
-  { id: 'level-25', name: 'Master', description: 'Reached level 25', icon: '🎓' },
-  { id: 'century', name: 'Century', description: 'Reviewed 100 cards', icon: '💯' },
-  { id: 'millennium', name: 'Millennium', description: 'Reviewed 1,000 cards', icon: '🏅' },
-  { id: 'marathon', name: 'Marathon', description: 'Reviewed 5,000 cards', icon: '🏃' },
-  { id: 'quiz-master', name: 'Quiz Master', description: '10 perfect multiple-choice sessions', icon: '🧠' },
-  { id: 'speed-demon', name: 'Speed Demon', description: 'Completed a test in under 30 seconds', icon: '⚡' },
-  { id: 'perfect-session', name: 'Perfect Session', description: 'Got every card right in a session', icon: '🏆' },
+  {
+    id: 'first-deck',
+    name: 'First Deck',
+    description: 'Created your first deck',
+    icon: '🎉',
+  },
+  {
+    id: 'collector-5',
+    name: 'Collector',
+    description: 'Created 5 decks',
+    icon: '📚',
+  },
+  {
+    id: 'collector-10',
+    name: 'Archivist',
+    description: 'Created 10 decks',
+    icon: '🗂️',
+  },
+  {
+    id: 'streak-3',
+    name: 'Hot Streak',
+    description: 'Studied 3 days in a row',
+    icon: '🔥',
+  },
+  {
+    id: 'streak-7',
+    name: 'On Fire',
+    description: 'Studied 7 days in a row',
+    icon: '⚡',
+  },
+  {
+    id: 'streak-14',
+    name: 'Unstoppable',
+    description: 'Studied 14 days in a row',
+    icon: '🌋',
+  },
+  {
+    id: 'streak-30',
+    name: 'Legendary',
+    description: 'Studied 30 days in a row',
+    icon: '💎',
+  },
+  {
+    id: 'level-5',
+    name: 'Rising Star',
+    description: 'Reached level 5',
+    icon: '⭐',
+  },
+  {
+    id: 'level-10',
+    name: 'Scholar',
+    description: 'Reached level 10',
+    icon: '📖',
+  },
+  {
+    id: 'level-25',
+    name: 'Master',
+    description: 'Reached level 25',
+    icon: '🎓',
+  },
+  {
+    id: 'century',
+    name: 'Century',
+    description: 'Reviewed 100 cards',
+    icon: '💯',
+  },
+  {
+    id: 'millennium',
+    name: 'Millennium',
+    description: 'Reviewed 1,000 cards',
+    icon: '🏅',
+  },
+  {
+    id: 'marathon',
+    name: 'Marathon',
+    description: 'Reviewed 5,000 cards',
+    icon: '🏃',
+  },
+  {
+    id: 'quiz-master',
+    name: 'Quiz Master',
+    description: '10 perfect multiple-choice sessions',
+    icon: '🧠',
+  },
+  {
+    id: 'speed-demon',
+    name: 'Speed Demon',
+    description: 'Completed a test in under 30 seconds',
+    icon: '⚡',
+  },
+  {
+    id: 'perfect-session',
+    name: 'Perfect Session',
+    description: 'Got every card right in a session',
+    icon: '🏆',
+  },
 ]
 
 export const STUDY_MODE_LABELS: Record<StudyMode, string> = {

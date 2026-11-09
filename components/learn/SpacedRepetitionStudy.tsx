@@ -26,19 +26,53 @@ const RATINGS: Array<{
   interval: string
   className: string
 }> = [
-  { quality: 0, label: 'Again', shortcut: '1', interval: '< 1 min', className: 'border-danger/25 bg-danger-light text-danger' },
-  { quality: 1, label: 'Hard', shortcut: '2', interval: '~ 1 day', className: 'border-warning/25 bg-warning-light text-warning' },
-  { quality: 2, label: 'Good', shortcut: '3', interval: '~ 3 days', className: 'border-success/25 bg-success-light text-success' },
-  { quality: 3, label: 'Easy', shortcut: '4', interval: '~ 1 week', className: 'border-alpine-200 bg-alpine-50 text-alpine-600 dark:border-alpine-900 dark:bg-alpine-950 dark:text-alpine-300' },
+  {
+    quality: 0,
+    label: 'Again',
+    shortcut: '1',
+    interval: '< 1 min',
+    className: 'border-danger/25 bg-danger-light text-danger',
+  },
+  {
+    quality: 1,
+    label: 'Hard',
+    shortcut: '2',
+    interval: '~ 1 day',
+    className: 'border-warning/25 bg-warning-light text-warning',
+  },
+  {
+    quality: 2,
+    label: 'Good',
+    shortcut: '3',
+    interval: '~ 3 days',
+    className: 'border-success/25 bg-success-light text-success',
+  },
+  {
+    quality: 3,
+    label: 'Easy',
+    shortcut: '4',
+    interval: '~ 1 week',
+    className:
+      'border-alpine-200 bg-alpine-50 text-alpine-600 dark:border-alpine-900 dark:bg-alpine-950 dark:text-alpine-300',
+  },
 ]
 
-export function SpacedRepetitionStudy({ deck, allCards, sprintSize = Infinity, onComplete, onExit }: Props) {
+export function SpacedRepetitionStudy({
+  deck,
+  allCards,
+  sprintSize = Infinity,
+  onComplete,
+  onExit,
+}: Props) {
   const { setCurrentCard } = useLearning()
   const today = new Date().toISOString().slice(0, 10)
 
   const dueCards = useMemo(
-    () => allCards.filter((card) => card.dueDate === null || card.dueDate <= today).slice(0, sprintSize),
-    [allCards, today, sprintSize],
+    () =>
+      allCards
+        .filter((card) => card.dueDate === null || card.dueDate <= today)
+        .slice(0, sprintSize),
+    [allCards, today, sprintSize]
   )
 
   const [studyAll, setStudyAll] = useState(false)
@@ -111,7 +145,9 @@ export function SpacedRepetitionStudy({ deck, allCards, sprintSize = Infinity, o
           <Brain size={34} className="text-accent" />
         </div>
         <div>
-          <h2 className="font-display text-xl font-semibold text-foreground">No cards due today</h2>
+          <h2 className="font-display text-xl font-semibold text-foreground">
+            No cards due today
+          </h2>
           <p className="mt-1.5 max-w-xs text-sm text-muted">
             Your spaced repetition schedule is up to date. Great job keeping up!
           </p>
@@ -159,19 +195,24 @@ export function SpacedRepetitionStudy({ deck, allCards, sprintSize = Infinity, o
                 disabled={rating}
                 className={cn(
                   'flex flex-col items-center gap-1 rounded-2xl border px-2 py-3 text-xs font-bold transition-all hover:-translate-y-0.5 hover:shadow-glass-sm disabled:opacity-40',
-                  option.className,
+                  option.className
                 )}
               >
                 <span>{option.label}</span>
-                <span className="text-[10px] font-normal opacity-70">{option.interval}</span>
-                <kbd className="mt-0.5 rounded bg-black/5 px-1 text-[9px] font-mono dark:bg-white/10">{option.shortcut}</kbd>
+                <span className="text-[10px] font-normal opacity-70">
+                  {option.interval}
+                </span>
+                <kbd className="mt-0.5 rounded bg-black/5 px-1 text-[9px] font-mono dark:bg-white/10">
+                  {option.shortcut}
+                </kbd>
               </button>
             ))}
           </div>
         </div>
       ) : (
         <p className="text-center text-sm font-medium text-muted">
-          Tap the card or press <kbd className="kbd text-[10px]">Space</kbd> to reveal
+          Tap the card or press <kbd className="kbd text-[10px]">Space</kbd> to
+          reveal
         </p>
       )}
     </StudyLayout>

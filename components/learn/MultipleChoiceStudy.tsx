@@ -4,7 +4,12 @@ import { useEffect, useMemo, useState } from 'react'
 import { useLearning } from '@/lib/learn/context'
 import type { Card, Deck, SessionResult } from '@/lib/learn/types'
 import { shuffle } from '@/lib/learn/utils'
-import { ActionButton, OptionButton, QuestionCard, StudyLayout } from './StudyLayout'
+import {
+  ActionButton,
+  OptionButton,
+  QuestionCard,
+  StudyLayout,
+} from './StudyLayout'
 
 interface Props {
   deck: Deck
@@ -18,11 +23,18 @@ const OPTION_KEYS = ['a', 'b', 'c', 'd'] as const
 
 function buildOptions(cards: Card[], currentIndex: number): string[] {
   const correct = cards[currentIndex].back
-  const pool = cards.filter((_, index) => index !== currentIndex).map((card) => card.back)
+  const pool = cards
+    .filter((_, index) => index !== currentIndex)
+    .map((card) => card.back)
   return shuffle([correct, ...shuffle(pool).slice(0, 3)])
 }
 
-export function MultipleChoiceStudy({ deck, cards, onComplete, onExit }: Props) {
+export function MultipleChoiceStudy({
+  deck,
+  cards,
+  onComplete,
+  onExit,
+}: Props) {
   const { setCurrentCard } = useLearning()
   const shuffledCards = useMemo(() => shuffle(cards), [cards])
   const [index, setIndex] = useState(0)
@@ -32,7 +44,10 @@ export function MultipleChoiceStudy({ deck, cards, onComplete, onExit }: Props) 
 
   const currentCard = shuffledCards[index]
   const correctAnswer = currentCard?.back ?? ''
-  const options = useMemo(() => buildOptions(shuffledCards, index), [shuffledCards, index])
+  const options = useMemo(
+    () => buildOptions(shuffledCards, index),
+    [shuffledCards, index]
+  )
   const revealed = selected !== null
   const wasCorrect = selected === correctAnswer
 
@@ -68,7 +83,9 @@ export function MultipleChoiceStudy({ deck, cards, onComplete, onExit }: Props) 
     const onKey = (event: KeyboardEvent) => {
       if (!revealed) {
         const key = event.key.toLowerCase()
-        const optionIndex = OPTION_KEYS.indexOf(key as (typeof OPTION_KEYS)[number])
+        const optionIndex = OPTION_KEYS.indexOf(
+          key as (typeof OPTION_KEYS)[number]
+        )
         if (optionIndex >= 0 && optionIndex < options.length) {
           event.preventDefault()
           handleSelect(options[optionIndex])
@@ -85,7 +102,9 @@ export function MultipleChoiceStudy({ deck, cards, onComplete, onExit }: Props) 
 
   if (!currentCard) return null
 
-  function getOptionState(option: string): 'default' | 'correct' | 'wrong' | 'neutral' {
+  function getOptionState(
+    option: string
+  ): 'default' | 'correct' | 'wrong' | 'neutral' {
     if (!revealed) return 'default'
     if (option === correctAnswer) return 'correct'
     if (option === selected) return 'wrong'
@@ -119,10 +138,15 @@ export function MultipleChoiceStudy({ deck, cards, onComplete, onExit }: Props) 
         <div className="flex flex-col items-center gap-3 animate-rise-in">
           {!wasCorrect && (
             <p className="text-xs text-muted">
-              Correct answer: <span className="font-bold text-success">{correctAnswer}</span>
+              Correct answer:{' '}
+              <span className="font-bold text-success">{correctAnswer}</span>
             </p>
           )}
-          <ActionButton variant="primary" onClick={advance} className="w-full max-w-xs">
+          <ActionButton
+            variant="primary"
+            onClick={advance}
+            className="w-full max-w-xs"
+          >
             {index + 1 >= shuffledCards.length ? 'See results' : 'Next card'}
           </ActionButton>
           <p className="text-[10px] text-muted/70">
@@ -134,7 +158,9 @@ export function MultipleChoiceStudy({ deck, cards, onComplete, onExit }: Props) 
       {!revealed && (
         <div className="flex justify-center gap-2 text-[10px] text-muted/60">
           {OPTION_LABELS.slice(0, options.length).map((label) => (
-            <kbd key={label} className="kbd text-[9px]">{label}</kbd>
+            <kbd key={label} className="kbd text-[9px]">
+              {label}
+            </kbd>
           ))}
         </div>
       )}

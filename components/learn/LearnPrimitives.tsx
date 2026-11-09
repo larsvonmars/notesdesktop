@@ -18,7 +18,13 @@ import {
 import type { LucideIcon } from 'lucide-react'
 import { Button } from '@/components/ui/Button'
 import { calcLevelSpan, calcXPInLevel } from '@/lib/learn/gamification'
-import type { Badge, DailyProgress, Deck, StudySessionSummary, UserStats } from '@/lib/learn/types'
+import type {
+  Badge,
+  DailyProgress,
+  Deck,
+  StudySessionSummary,
+  UserStats,
+} from '@/lib/learn/types'
 import { STUDY_MODE_LABELS } from '@/lib/learn/types'
 import { cn, formatRelativeDate, resolveDeckColor } from '@/lib/learn/utils'
 
@@ -35,16 +41,30 @@ export function ProgressBar({
 }) {
   const percent = max > 0 ? Math.max(0, Math.min(100, (value / max) * 100)) : 0
   return (
-    <div className={cn('h-2 w-full overflow-hidden rounded-full bg-surface-sunken', className)}>
+    <div
+      className={cn(
+        'h-2 w-full overflow-hidden rounded-full bg-surface-sunken',
+        className
+      )}
+    >
       <div
-        className={cn('h-full rounded-full transition-[width] duration-500 ease-soft', barClassName)}
+        className={cn(
+          'h-full rounded-full transition-[width] duration-500 ease-soft',
+          barClassName
+        )}
         style={{ width: `${percent}%` }}
       />
     </div>
   )
 }
 
-export function XpBar({ stats, compact = false }: { stats: UserStats; compact?: boolean }) {
+export function XpBar({
+  stats,
+  compact = false,
+}: {
+  stats: UserStats
+  compact?: boolean
+}) {
   const level = stats.level
   const xpInLevel = calcXPInLevel(stats.xp)
   const span = calcLevelSpan(level)
@@ -58,9 +78,13 @@ export function XpBar({ stats, compact = false }: { stats: UserStats; compact?: 
             {level}
           </span>
           <div className="min-w-0">
-            <p className="text-[11px] font-semibold uppercase tracking-[0.08em] text-muted">Level</p>
+            <p className="text-[11px] font-semibold uppercase tracking-[0.08em] text-muted">
+              Level
+            </p>
             <p className="truncate font-display text-sm font-semibold text-foreground">
-              {remaining > 0 ? `${remaining} XP to level ${level + 1}` : 'Max level reached'}
+              {remaining > 0
+                ? `${remaining} XP to level ${level + 1}`
+                : 'Max level reached'}
             </p>
           </div>
         </div>
@@ -72,8 +96,12 @@ export function XpBar({ stats, compact = false }: { stats: UserStats; compact?: 
       <ProgressBar value={xpInLevel} max={span} className="mt-3" />
       {!compact && (
         <div className="mt-2 flex items-center justify-between text-[11px] text-muted">
-          <span>{Math.round(xpInLevel)} / {Math.round(span)} XP this level</span>
-          <span>{stats.totalCardsReviewed.toLocaleString()} cards reviewed</span>
+          <span>
+            {Math.round(xpInLevel)} / {Math.round(span)} XP this level
+          </span>
+          <span>
+            {stats.totalCardsReviewed.toLocaleString()} cards reviewed
+          </span>
         </div>
       )}
     </div>
@@ -116,13 +144,19 @@ export function DailyProgressCard({
             <CheckCircle2 size={12} /> Goal met
           </span>
         ) : (
-          <span className="text-xs font-semibold tabular-nums text-muted">{progress.goalProgress}%</span>
+          <span className="text-xs font-semibold tabular-nums text-muted">
+            {progress.goalProgress}%
+          </span>
         )}
       </div>
       <ProgressBar
         value={progress.goalProgress}
         className="mt-3.5 h-2.5"
-        barClassName={progress.goalMet ? 'bg-success' : 'bg-gradient-to-r from-accent to-success'}
+        barClassName={
+          progress.goalMet
+            ? 'bg-success'
+            : 'bg-gradient-to-r from-accent to-success'
+        }
       />
       <div className="mt-2.5 flex items-center justify-between text-[11px] text-muted">
         <span>{progress.correct} correct today</span>
@@ -156,18 +190,33 @@ export function StatTile({
   return (
     <div className="glass-card p-4">
       <div className="flex items-center gap-2.5">
-        <span className={cn('flex h-8 w-8 items-center justify-center rounded-xl', tones[tone])}>
+        <span
+          className={cn(
+            'flex h-8 w-8 items-center justify-center rounded-xl',
+            tones[tone]
+          )}
+        >
           <Icon size={14} />
         </span>
-        <p className="text-[11px] font-semibold uppercase tracking-[0.08em] text-muted">{label}</p>
+        <p className="text-[11px] font-semibold uppercase tracking-[0.08em] text-muted">
+          {label}
+        </p>
       </div>
-      <p className="mt-3 font-display text-2xl font-semibold tabular-nums text-foreground">{value}</p>
+      <p className="mt-3 font-display text-2xl font-semibold tabular-nums text-foreground">
+        {value}
+      </p>
       {hint && <p className="mt-1 text-[11px] text-muted">{hint}</p>}
     </div>
   )
 }
 
-export function BadgeGrid({ badges, limit }: { badges: Badge[]; limit?: number }) {
+export function BadgeGrid({
+  badges,
+  limit,
+}: {
+  badges: Badge[]
+  limit?: number
+}) {
   const visible = limit ? badges.slice(0, limit) : badges
   const earnedCount = badges.filter((badge) => badge.earnedAt).length
 
@@ -194,11 +243,13 @@ export function BadgeGrid({ badges, limit }: { badges: Badge[]; limit?: number }
               'flex flex-col items-center gap-1.5 rounded-xl border px-2 py-3 text-center transition-colors',
               badge.earnedAt
                 ? 'border-accent/25 bg-accent-light/60'
-                : 'border-border bg-surface-sunken opacity-55',
+                : 'border-border bg-surface-sunken opacity-55'
             )}
             title={`${badge.name} — ${badge.description}${badge.earnedAt ? ` · Earned ${badge.earnedAt.toLocaleDateString()}` : ''}`}
           >
-            <span className={cn('text-xl', !badge.earnedAt && 'grayscale')}>{badge.icon}</span>
+            <span className={cn('text-xl', !badge.earnedAt && 'grayscale')}>
+              {badge.icon}
+            </span>
             <span className="line-clamp-2 text-[10px] font-semibold leading-tight text-foreground">
               {badge.name}
             </span>
@@ -209,7 +260,11 @@ export function BadgeGrid({ badges, limit }: { badges: Badge[]; limit?: number }
   )
 }
 
-export function StudyHeatmap({ sessions }: { sessions: StudySessionSummary[] }) {
+export function StudyHeatmap({
+  sessions,
+}: {
+  sessions: StudySessionSummary[]
+}) {
   const { weeks, monthLabels, maxCount } = useMemo(() => {
     const days = 16 * 7
     const counts = new Map<string, number>()
@@ -241,7 +296,10 @@ export function StudyHeatmap({ sessions }: { sessions: StudySessionSummary[] }) 
         cursor.setDate(cursor.getDate() + 1)
       }
       if (cursor.getDate() <= 7) {
-        labels.push({ index: week, label: cursor.toLocaleDateString(undefined, { month: 'short' }) })
+        labels.push({
+          index: week,
+          label: cursor.toLocaleDateString(undefined, { month: 'short' }),
+        })
       }
       weeks.push(column)
     }
@@ -266,14 +324,27 @@ export function StudyHeatmap({ sessions }: { sessions: StudySessionSummary[] }) 
             <CalendarDays size={16} />
           </span>
           <div>
-            <p className="text-sm font-semibold text-foreground">Study activity</p>
-            <p className="text-xs text-muted">Cards reviewed over the last 16 weeks</p>
+            <p className="text-sm font-semibold text-foreground">
+              Study activity
+            </p>
+            <p className="text-xs text-muted">
+              Cards reviewed over the last 16 weeks
+            </p>
           </div>
         </div>
         <div className="hidden items-center gap-1 text-[10px] text-muted sm:flex">
           <span>Less</span>
-          {['bg-surface-sunken', 'bg-accent/25', 'bg-accent/45', 'bg-accent/70', 'bg-accent'].map((tone) => (
-            <span key={tone} className={cn('h-2.5 w-2.5 rounded-[3px]', tone)} />
+          {[
+            'bg-surface-sunken',
+            'bg-accent/25',
+            'bg-accent/45',
+            'bg-accent/70',
+            'bg-accent',
+          ].map((tone) => (
+            <span
+              key={tone}
+              className={cn('h-2.5 w-2.5 rounded-[3px]', tone)}
+            />
           ))}
           <span>More</span>
         </div>
@@ -286,7 +357,11 @@ export function StudyHeatmap({ sessions }: { sessions: StudySessionSummary[] }) 
               const label = monthLabels.find((entry) => entry.index === index)
               return (
                 <span key={index} className="relative w-3 shrink-0">
-                  {label && <span className="absolute left-0 top-0 whitespace-nowrap">{label.label}</span>}
+                  {label && (
+                    <span className="absolute left-0 top-0 whitespace-nowrap">
+                      {label.label}
+                    </span>
+                  )}
                 </span>
               )
             })}
@@ -298,7 +373,10 @@ export function StudyHeatmap({ sessions }: { sessions: StudySessionSummary[] }) 
                   <span
                     key={day.date}
                     title={`${day.date}: ${day.count} card${day.count === 1 ? '' : 's'}`}
-                    className={cn('h-3 w-3 rounded-[3px]', levelClass(day.count))}
+                    className={cn(
+                      'h-3 w-3 rounded-[3px]',
+                      levelClass(day.count)
+                    )}
                   />
                 ))}
               </div>
@@ -310,7 +388,11 @@ export function StudyHeatmap({ sessions }: { sessions: StudySessionSummary[] }) 
   )
 }
 
-export function SessionHistoryList({ sessions }: { sessions: StudySessionSummary[] }) {
+export function SessionHistoryList({
+  sessions,
+}: {
+  sessions: StudySessionSummary[]
+}) {
   return (
     <div className="glass-card overflow-hidden">
       <div className="flex items-center justify-between px-4 pb-2 pt-4">
@@ -318,7 +400,9 @@ export function SessionHistoryList({ sessions }: { sessions: StudySessionSummary
           <span className="flex h-8 w-8 items-center justify-center rounded-xl bg-alpine-100 text-alpine-600 dark:bg-alpine-950 dark:text-alpine-300">
             <Clock3 size={14} />
           </span>
-          <h3 className="text-sm font-semibold text-foreground">Recent sessions</h3>
+          <h3 className="text-sm font-semibold text-foreground">
+            Recent sessions
+          </h3>
         </div>
         <span className="rounded-full bg-surface-hover px-2 py-0.5 text-[10px] font-semibold tabular-nums text-muted">
           {sessions.length}
@@ -336,7 +420,9 @@ export function SessionHistoryList({ sessions }: { sessions: StudySessionSummary
         <ul className="px-2 pb-2">
           {sessions.map((session) => {
             const accuracy =
-              session.cardsReviewed > 0 ? Math.round((session.correct / session.cardsReviewed) * 100) : 0
+              session.cardsReviewed > 0
+                ? Math.round((session.correct / session.cardsReviewed) * 100)
+                : 0
             return (
               <li
                 key={session.id}
@@ -346,18 +432,31 @@ export function SessionHistoryList({ sessions }: { sessions: StudySessionSummary
                   <BookOpen size={13} />
                 </span>
                 <div className="min-w-0 flex-1">
-                  <p className="truncate text-[13px] font-semibold text-foreground">{session.deckTitle}</p>
+                  <p className="truncate text-[13px] font-semibold text-foreground">
+                    {session.deckTitle}
+                  </p>
                   <p className="text-[11px] text-muted">
-                    {session.mode ? STUDY_MODE_LABELS[session.mode as keyof typeof STUDY_MODE_LABELS] ?? session.mode : 'Study'} ·{' '}
-                    {session.cardsReviewed} cards · {formatRelativeDate(session.completedAt)}
+                    {session.mode
+                      ? (STUDY_MODE_LABELS[
+                          session.mode as keyof typeof STUDY_MODE_LABELS
+                        ] ?? session.mode)
+                      : 'Study'}{' '}
+                    · {session.cardsReviewed} cards ·{' '}
+                    {formatRelativeDate(session.completedAt)}
                   </p>
                 </div>
                 <div className="text-right">
-                  <p className="text-[12px] font-semibold tabular-nums text-foreground">+{session.xpEarned} XP</p>
+                  <p className="text-[12px] font-semibold tabular-nums text-foreground">
+                    +{session.xpEarned} XP
+                  </p>
                   <p
                     className={cn(
                       'text-[11px] font-semibold tabular-nums',
-                      accuracy >= 80 ? 'text-success' : accuracy >= 50 ? 'text-warning' : 'text-danger',
+                      accuracy >= 80
+                        ? 'text-success'
+                        : accuracy >= 50
+                          ? 'text-warning'
+                          : 'text-danger'
                     )}
                   >
                     {accuracy}% correct
@@ -386,15 +485,31 @@ export function DeckCard({
   onEdit?: () => void
 }) {
   const color = resolveDeckColor(deck.color)
-  const mastery = deck.cardCount > 0 ? Math.round((deck.masteredCount / deck.cardCount) * 100) : 0
+  const mastery =
+    deck.cardCount > 0
+      ? Math.round((deck.masteredCount / deck.cardCount) * 100)
+      : 0
   const due = deck.cardCount - deck.masteredCount
 
   return (
     <div className="glass-card group relative flex flex-col overflow-hidden">
-      <span className={cn('absolute inset-x-0 top-0 h-1', color.bar)} aria-hidden />
-      <button type="button" onClick={onOpen} className="flex flex-1 flex-col p-4 text-left focus-ring">
+      <span
+        className={cn('absolute inset-x-0 top-0 h-1', color.bar)}
+        aria-hidden
+      />
+      <button
+        type="button"
+        onClick={onOpen}
+        className="flex flex-1 flex-col p-4 text-left focus-ring"
+      >
         <div className="flex items-start justify-between gap-2">
-          <span className={cn('flex h-9 w-9 items-center justify-center rounded-2xl', color.soft, color.text)}>
+          <span
+            className={cn(
+              'flex h-9 w-9 items-center justify-center rounded-2xl',
+              color.soft,
+              color.text
+            )}
+          >
             <BookOpen size={16} />
           </span>
           <span className="rounded-full bg-surface-hover px-2 py-0.5 text-[10px] font-semibold tabular-nums text-muted">
@@ -410,13 +525,21 @@ export function DeckCard({
         <div className="mt-3">
           <div className="flex items-center justify-between text-[10px] font-medium text-muted">
             <span>{mastery}% mastered</span>
-            <span>{deck.masteredCount}/{deck.cardCount}</span>
+            <span>
+              {deck.masteredCount}/{deck.cardCount}
+            </span>
           </div>
-          <ProgressBar value={mastery} className="mt-1.5 h-1.5" barClassName={color.bar} />
+          <ProgressBar
+            value={mastery}
+            className="mt-1.5 h-1.5"
+            barClassName={color.bar}
+          />
         </div>
         <div className="mt-3 flex items-center gap-1.5 text-[10px] text-muted">
           <Clock3 size={11} />
-          {deck.lastStudied ? `Studied ${formatRelativeDate(deck.lastStudied)}` : 'Not studied yet'}
+          {deck.lastStudied
+            ? `Studied ${formatRelativeDate(deck.lastStudied)}`
+            : 'Not studied yet'}
         </div>
       </button>
 
@@ -499,7 +622,7 @@ export function FlipCard({
         className={cn(
           'relative block min-h-[240px] w-full rounded-3xl border border-border bg-surface text-left transition-shadow duration-300 focus-ring sm:min-h-[280px]',
           'shadow-glass-sm hover:shadow-glass',
-          disabled && 'cursor-default',
+          disabled && 'cursor-default'
         )}
         style={{
           transformStyle: 'preserve-3d',
@@ -511,25 +634,42 @@ export function FlipCard({
           className="absolute inset-0 flex flex-col items-center justify-center gap-4 p-8 text-center"
           style={{ backfaceVisibility: 'hidden' }}
         >
-          <span className="text-[10px] font-bold uppercase tracking-[0.2em] text-muted">Front</span>
-          <p className="font-display text-xl font-semibold leading-relaxed text-foreground sm:text-2xl">{front}</p>
-          <span className="mt-2 text-[11px] text-muted">Tap to reveal the answer</span>
+          <span className="text-[10px] font-bold uppercase tracking-[0.2em] text-muted">
+            Front
+          </span>
+          <p className="font-display text-xl font-semibold leading-relaxed text-foreground sm:text-2xl">
+            {front}
+          </p>
+          <span className="mt-2 text-[11px] text-muted">
+            Tap to reveal the answer
+          </span>
         </div>
         <div
           className="absolute inset-0 flex flex-col items-center justify-center gap-4 p-8 text-center"
           style={{ backfaceVisibility: 'hidden', transform: 'rotateY(180deg)' }}
         >
-          <span className="text-[10px] font-bold uppercase tracking-[0.2em] text-accent">Back</span>
-          <p className="text-base leading-relaxed text-foreground sm:text-lg">{back}</p>
+          <span className="text-[10px] font-bold uppercase tracking-[0.2em] text-accent">
+            Back
+          </span>
+          <p className="text-base leading-relaxed text-foreground sm:text-lg">
+            {back}
+          </p>
         </div>
       </button>
     </div>
   )
 }
 
-export function AccuracyPill({ correct, reviewed }: { correct: number; reviewed: number }) {
+export function AccuracyPill({
+  correct,
+  reviewed,
+}: {
+  correct: number
+  reviewed: number
+}) {
   const accuracy = reviewed > 0 ? Math.round((correct / reviewed) * 100) : 0
-  const Icon: LucideIcon = accuracy >= 80 ? TrendingUp : accuracy >= 50 ? Sparkles : Flame
+  const Icon: LucideIcon =
+    accuracy >= 80 ? TrendingUp : accuracy >= 50 ? Sparkles : Flame
   return (
     <span
       className={cn(
@@ -538,7 +678,7 @@ export function AccuracyPill({ correct, reviewed }: { correct: number; reviewed:
           ? 'bg-success-light text-success'
           : accuracy >= 50
             ? 'bg-warning-light text-warning'
-            : 'bg-danger-light text-danger',
+            : 'bg-danger-light text-danger'
       )}
     >
       <Icon size={11} />

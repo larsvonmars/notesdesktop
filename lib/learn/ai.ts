@@ -32,7 +32,11 @@ export interface LearnAIContext {
 export interface LearnAICallbacks {
   onToken?: (token: string) => void
   onReasoning?: (token: string) => void
-  onToolCall?: (call: { id: string; name: string; arguments: Record<string, unknown> }) => void
+  onToolCall?: (call: {
+    id: string
+    name: string
+    arguments: Record<string, unknown>
+  }) => void
   onToolResult?: (result: { id: string; name: string; result: string }) => void
 }
 
@@ -47,7 +51,11 @@ function parseCardArray(raw: string): Array<{ front: string; back: string }> {
     return parsed
       .map((item) => {
         const candidate = item as { front?: unknown; back?: unknown }
-        if (typeof candidate.front !== 'string' || typeof candidate.back !== 'string') return null
+        if (
+          typeof candidate.front !== 'string' ||
+          typeof candidate.back !== 'string'
+        )
+          return null
         const front = candidate.front.trim()
         const back = candidate.back.trim()
         return front && back ? { front, back } : null
@@ -66,7 +74,10 @@ Every card must be distinct and non-overlapping. The front is one clear question
  * Generate cards with 2–3 parallel sub-agents, each covering a different
  * aspect of the topic, then de-duplicate the combined result.
  */
-export async function generateCards(topic: string, count: number): Promise<Array<{ front: string; back: string }>> {
+export async function generateCards(
+  topic: string,
+  count: number
+): Promise<Array<{ front: string; back: string }>> {
   const safeCount = Math.max(1, Math.min(count, 60))
   const agentCount = safeCount <= 10 ? 2 : 3
   const cardsPerAgent = Math.ceil(safeCount / agentCount)
@@ -86,8 +97,10 @@ Each card must have:
 - "back": A clear, concise answer (1-2 sentences)
 
 ${CARD_JSON_INSTRUCTION}`
-      return sendAIRequest([{ role: 'user', content: prompt }], { maxTokens: 2000 }).catch(() => '')
-    }),
+      return sendAIRequest([{ role: 'user', content: prompt }], {
+        maxTokens: 2000,
+      }).catch(() => '')
+    })
   )
 
   const seen = new Set<string>()
@@ -105,9 +118,14 @@ ${CARD_JSON_INSTRUCTION}`
 }
 
 /** Two parallel reviews: topic coverage and clarity/formatting. */
-export async function analyzeDeckQuality(cards: Card[]): Promise<{ coverage: string; clarity: string }> {
+export async function analyzeDeckQuality(
+  cards: Card[]
+): Promise<{ coverage: string; clarity: string }> {
   const cardList = cards
-    .map((card, index) => `${index + 1}. Front: "${card.front}" / Back: "${card.back}"${card.mastered ? ' [mastered]' : ''}`)
+    .map(
+      (card, index) =>
+        `${index + 1}. Front: "${card.front}" / Back: "${card.back}"${card.mastered ? ' [mastered]' : ''}`
+    )
     .join('\n')
 
   const coveragePrompt = `You are a flashcard quality reviewer. Analyze the TOPIC COVERAGE of these flashcards:
@@ -133,8 +151,12 @@ Evaluate:
 Keep your analysis concise — 3-5 sentences total. Be constructive and specific. Flag specific card numbers when you find issues.`
 
   const [coverage, clarity] = await Promise.all([
-    sendAIRequest([{ role: 'user', content: coveragePrompt }], { maxTokens: 500 }).catch(() => 'Analysis unavailable.'),
-    sendAIRequest([{ role: 'user', content: clarityPrompt }], { maxTokens: 500 }).catch(() => 'Analysis unavailable.'),
+    sendAIRequest([{ role: 'user', content: coveragePrompt }], {
+      maxTokens: 500,
+    }).catch(() => 'Analysis unavailable.'),
+    sendAIRequest([{ role: 'user', content: clarityPrompt }], {
+      maxTokens: 500,
+    }).catch(() => 'Analysis unavailable.'),
   ])
 
   return { coverage: coverage.trim(), clarity: clarity.trim() }
@@ -147,7 +169,7 @@ export async function generateCardsFromDocument(
     deckTitle?: string
     maxCards?: number
     onProgress?: (message: string) => void
-  },
+  }
 ): Promise<Array<{ front: string; back: string }>> {
   const { chunkText, checkTextQuality } = await import('./pdf-text')
   const warning = checkTextQuality(text)
@@ -156,13 +178,17 @@ export async function generateCardsFromDocument(
   const maxCards = Math.max(5, Math.min(options?.maxCards ?? 40, 60))
   const chunks = chunkText(text, 4000)
   const perChunk = Math.max(3, Math.ceil(maxCards / chunks.length))
-  const subject = options?.deckTitle ? `the document "${options.deckTitle}"` : 'the uploaded document'
+  const subject = options?.deckTitle
+    ? `the document "${options.deckTitle}"`
+    : 'the uploaded document'
 
   const collected: Array<{ front: string; back: string }> = []
   const seen = new Set<string>()
 
   for (let index = 0; index < chunks.length; index += 1) {
-    options?.onProgress?.(`Generating cards from part ${index + 1} of ${chunks.length}…`)
+    options?.onProgress?.(
+      `Generating cards from part ${index + 1} of ${chunks.length}…`
+    )
     const prompt = `You are an expert flashcard creator. Create up to ${perChunk} high-quality flashcards from this excerpt of ${subject}.
 
 EXCERPT:
@@ -174,7 +200,9 @@ Focus on the most important facts, definitions, and relationships. Do not invent
 
 ${CARD_JSON_INSTRUCTION}`
 
-    const raw = await sendAIRequest([{ role: 'user', content: prompt }], { maxTokens: 2500 })
+    const raw = await sendAIRequest([{ role: 'user', content: prompt }], {
+      maxTokens: 2500,
+    })
     for (const card of parseCardArray(raw)) {
       const key = `${card.front.toLowerCase()}::${card.back.toLowerCase()}`
       if (seen.has(key)) continue
@@ -186,7 +214,9 @@ ${CARD_JSON_INSTRUCTION}`
   }
 
   if (collected.length === 0) {
-    throw new Error('The AI could not generate flashcards from this document. Try a document with more text.')
+    throw new Error(
+      'The AI could not generate flashcards from this document. Try a document with more text.'
+    )
   }
 
   return collected
@@ -199,7 +229,8 @@ export const LEARN_TOOLS: AITool[] = [
     type: 'function',
     function: {
       name: 'list_decks',
-      description: "List all of the user's study decks with card/mastered counts.",
+      description:
+        "List all of the user's study decks with card/mastered counts.",
       parameters: { type: 'object', properties: {}, required: [] },
     },
   },
@@ -210,7 +241,9 @@ export const LEARN_TOOLS: AITool[] = [
       description: 'Get all cards in a specific deck.',
       parameters: {
         type: 'object',
-        properties: { deckId: { type: 'string', description: 'The id of the deck' } },
+        properties: {
+          deckId: { type: 'string', description: 'The id of the deck' },
+        },
         required: ['deckId'],
       },
     },
@@ -224,7 +257,10 @@ export const LEARN_TOOLS: AITool[] = [
         type: 'object',
         properties: {
           title: { type: 'string', description: 'Title of the new deck' },
-          description: { type: 'string', description: 'Optional description for the deck' },
+          description: {
+            type: 'string',
+            description: 'Optional description for the deck',
+          },
         },
         required: ['title'],
       },
@@ -234,11 +270,15 @@ export const LEARN_TOOLS: AITool[] = [
     type: 'function',
     function: {
       name: 'add_cards',
-      description: 'Add one or more flashcards to a deck. Prefer adding multiple cards in one call.',
+      description:
+        'Add one or more flashcards to a deck. Prefer adding multiple cards in one call.',
       parameters: {
         type: 'object',
         properties: {
-          deckId: { type: 'string', description: 'The id of the deck to add cards to' },
+          deckId: {
+            type: 'string',
+            description: 'The id of the deck to add cards to',
+          },
           cards: {
             type: 'array',
             description: 'Cards to add',
@@ -264,7 +304,10 @@ export const LEARN_TOOLS: AITool[] = [
       parameters: {
         type: 'object',
         properties: {
-          cardId: { type: 'string', description: 'The id of the card to update' },
+          cardId: {
+            type: 'string',
+            description: 'The id of the card to update',
+          },
           front: { type: 'string', description: 'New front text' },
           back: { type: 'string', description: 'New back text' },
           mastered: { type: 'boolean', description: 'Mark as mastered or not' },
@@ -281,7 +324,10 @@ export const LEARN_TOOLS: AITool[] = [
       parameters: {
         type: 'object',
         properties: {
-          deckId: { type: 'string', description: 'The id of the deck to update' },
+          deckId: {
+            type: 'string',
+            description: 'The id of the deck to update',
+          },
           title: { type: 'string', description: 'New title' },
           description: { type: 'string', description: 'New description' },
         },
@@ -298,9 +344,18 @@ export const LEARN_TOOLS: AITool[] = [
       parameters: {
         type: 'object',
         properties: {
-          cardId: { type: 'string', description: 'The id of the card to delete' },
-          cardFront: { type: 'string', description: 'Front text of the card for the confirmation message' },
-          confirmed: { type: 'boolean', description: 'false = preview only; true = actually delete' },
+          cardId: {
+            type: 'string',
+            description: 'The id of the card to delete',
+          },
+          cardFront: {
+            type: 'string',
+            description: 'Front text of the card for the confirmation message',
+          },
+          confirmed: {
+            type: 'boolean',
+            description: 'false = preview only; true = actually delete',
+          },
         },
         required: ['cardId', 'cardFront', 'confirmed'],
       },
@@ -315,9 +370,18 @@ export const LEARN_TOOLS: AITool[] = [
       parameters: {
         type: 'object',
         properties: {
-          deckId: { type: 'string', description: 'The id of the deck to delete' },
-          deckTitle: { type: 'string', description: 'Title of the deck for the confirmation message' },
-          confirmed: { type: 'boolean', description: 'false = preview only; true = actually delete' },
+          deckId: {
+            type: 'string',
+            description: 'The id of the deck to delete',
+          },
+          deckTitle: {
+            type: 'string',
+            description: 'Title of the deck for the confirmation message',
+          },
+          confirmed: {
+            type: 'boolean',
+            description: 'false = preview only; true = actually delete',
+          },
         },
         required: ['deckId', 'deckTitle', 'confirmed'],
       },
@@ -336,7 +400,8 @@ export const LEARN_TOOLS: AITool[] = [
     type: 'function',
     function: {
       name: 'get_daily_progress',
-      description: "Get today's study progress: cards reviewed, correct count and daily goal status.",
+      description:
+        "Get today's study progress: cards reviewed, correct count and daily goal status.",
       parameters: { type: 'object', properties: {}, required: [] },
     },
   },
@@ -348,7 +413,10 @@ export const LEARN_TOOLS: AITool[] = [
       parameters: {
         type: 'object',
         properties: {
-          limit: { type: 'number', description: 'Number of recent sessions (default 5, max 10)' },
+          limit: {
+            type: 'number',
+            description: 'Number of recent sessions (default 5, max 10)',
+          },
         },
         required: [],
       },
@@ -358,12 +426,16 @@ export const LEARN_TOOLS: AITool[] = [
     type: 'function',
     function: {
       name: 'search_cards',
-      description: 'Search cards across all decks (or one deck) by keyword, matching front and back.',
+      description:
+        'Search cards across all decks (or one deck) by keyword, matching front and back.',
       parameters: {
         type: 'object',
         properties: {
           query: { type: 'string', description: 'Search query' },
-          deckId: { type: 'string', description: 'Optional deck id to limit the search' },
+          deckId: {
+            type: 'string',
+            description: 'Optional deck id to limit the search',
+          },
         },
         required: ['query'],
       },
@@ -378,9 +450,18 @@ export const LEARN_TOOLS: AITool[] = [
       parameters: {
         type: 'object',
         properties: {
-          deckId: { type: 'string', description: 'Deck to add the generated cards to' },
-          topic: { type: 'string', description: 'Topic to generate cards about' },
-          count: { type: 'number', description: 'How many cards to generate (1-40)' },
+          deckId: {
+            type: 'string',
+            description: 'Deck to add the generated cards to',
+          },
+          topic: {
+            type: 'string',
+            description: 'Topic to generate cards about',
+          },
+          count: {
+            type: 'number',
+            description: 'How many cards to generate (1-40)',
+          },
         },
         required: ['deckId', 'topic', 'count'],
       },
@@ -393,7 +474,12 @@ export const LEARN_TOOLS: AITool[] = [
       description: "Analyze a deck's quality: topic coverage and card clarity.",
       parameters: {
         type: 'object',
-        properties: { deckId: { type: 'string', description: 'The id of the deck to analyze' } },
+        properties: {
+          deckId: {
+            type: 'string',
+            description: 'The id of the deck to analyze',
+          },
+        },
         required: ['deckId'],
       },
     },
@@ -402,7 +488,8 @@ export const LEARN_TOOLS: AITool[] = [
     type: 'function',
     function: {
       name: 'list_documents',
-      description: 'List uploaded PDF documents with id, filename, status and linked deck.',
+      description:
+        'List uploaded PDF documents with id, filename, status and linked deck.',
       parameters: { type: 'object', properties: {}, required: [] },
     },
   },
@@ -416,8 +503,14 @@ export const LEARN_TOOLS: AITool[] = [
         type: 'object',
         properties: {
           documentId: { type: 'string', description: 'The id of the document' },
-          deckTitle: { type: 'string', description: 'Optional title for the new deck' },
-          cardCount: { type: 'number', description: 'Target number of cards (default 20)' },
+          deckTitle: {
+            type: 'string',
+            description: 'Optional title for the new deck',
+          },
+          cardCount: {
+            type: 'number',
+            description: 'Target number of cards (default 20)',
+          },
         },
         required: ['documentId'],
       },
@@ -428,7 +521,10 @@ export const LEARN_TOOLS: AITool[] = [
 function formatDeckList(decks: Deck[]): string {
   if (decks.length === 0) return 'You have no decks yet.'
   return decks
-    .map((deck) => `• "${deck.title}" (id: ${deck.id}) — ${deck.cardCount} cards, ${deck.masteredCount} mastered`)
+    .map(
+      (deck) =>
+        `• "${deck.title}" (id: ${deck.id}) — ${deck.cardCount} cards, ${deck.masteredCount} mastered`
+    )
     .join('\n')
 }
 
@@ -437,7 +533,7 @@ function formatCards(cards: Card[]): string {
   return cards
     .map(
       (card, index) =>
-        `${index + 1}. Front: "${card.front}" | Back: "${card.back}"${card.mastered ? ' ✓ mastered' : ''} (id: ${card.id})`,
+        `${index + 1}. Front: "${card.front}" | Back: "${card.back}"${card.mastered ? ' ✓ mastered' : ''} (id: ${card.id})`
     )
     .join('\n')
 }
@@ -450,7 +546,7 @@ function formatDocuments(documents: LearnDocument[]): string {
     `📄 **Your uploaded documents (${documents.length})**`,
     ...documents.map(
       (document) =>
-        `• ${document.filename} (id: ${document.id}) — ${document.status}${document.deckId ? ` · Deck linked: ${document.deckId}` : ''} · ${(document.fileSize / 1024).toFixed(0)} KB`,
+        `• ${document.filename} (id: ${document.id}) — ${document.status}${document.deckId ? ` · Deck linked: ${document.deckId}` : ''} · ${(document.fileSize / 1024).toFixed(0)} KB`
     ),
   ].join('\n')
 }
@@ -478,11 +574,18 @@ export function createLearnToolHandler(timezoneOffset = 0): ToolCallHandler {
 
       case 'add_cards': {
         const deckId = String(args.deckId ?? '')
-        const cards = Array.isArray(args.cards) ? (args.cards as Array<{ front: string; back: string }>) : []
+        const cards = Array.isArray(args.cards)
+          ? (args.cards as Array<{ front: string; back: string }>)
+          : []
         const valid = cards.filter(
-          (card) => typeof card?.front === 'string' && typeof card?.back === 'string' && card.front && card.back,
+          (card) =>
+            typeof card?.front === 'string' &&
+            typeof card?.back === 'string' &&
+            card.front &&
+            card.back
         )
-        if (!deckId || valid.length === 0) return 'No valid cards were provided.'
+        if (!deckId || valid.length === 0)
+          return 'No valid cards were provided.'
         await createCards(deckId, valid)
         return `Added ${valid.length} card${valid.length === 1 ? '' : 's'} to the deck.`
       }
@@ -493,7 +596,8 @@ export function createLearnToolHandler(timezoneOffset = 0): ToolCallHandler {
         await updateCard(cardId, {
           front: typeof args.front === 'string' ? args.front : undefined,
           back: typeof args.back === 'string' ? args.back : undefined,
-          mastered: typeof args.mastered === 'boolean' ? args.mastered : undefined,
+          mastered:
+            typeof args.mastered === 'boolean' ? args.mastered : undefined,
         })
         return `Updated card ${cardId}.`
       }
@@ -503,7 +607,8 @@ export function createLearnToolHandler(timezoneOffset = 0): ToolCallHandler {
         if (!deckId) return 'Missing deckId.'
         await updateDeck(deckId, {
           title: typeof args.title === 'string' ? args.title : undefined,
-          description: typeof args.description === 'string' ? args.description : undefined,
+          description:
+            typeof args.description === 'string' ? args.description : undefined,
         })
         return `Updated deck ${deckId}.`
       }
@@ -534,7 +639,9 @@ export function createLearnToolHandler(timezoneOffset = 0): ToolCallHandler {
         if (!stats) return 'Unable to load stats. Please try again.'
         const earnedBadges = stats.badges.filter((badge) => badge.earnedAt)
         const accuracy =
-          stats.totalCardsReviewed > 0 ? Math.round((stats.totalCorrect / stats.totalCardsReviewed) * 100) : 0
+          stats.totalCardsReviewed > 0
+            ? Math.round((stats.totalCorrect / stats.totalCardsReviewed) * 100)
+            : 0
         return [
           '📊 **Your stats**',
           `• Level ${stats.level} — ${stats.xp} XP (${Math.max(0, stats.xpToNextLevel - stats.xp)} XP to next level)`,
@@ -566,7 +673,7 @@ export function createLearnToolHandler(timezoneOffset = 0): ToolCallHandler {
           `📋 **Recent sessions (last ${sessions.length})**`,
           ...sessions.map(
             (session) =>
-              `• ${session.deckTitle} — ${session.cardsReviewed} cards (${session.correct} correct) · ${session.xpEarned} XP · ${session.mode ?? 'flashcard'} mode`,
+              `• ${session.deckTitle} — ${session.cardsReviewed} cards (${session.correct} correct) · ${session.xpEarned} XP · ${session.mode ?? 'flashcard'} mode`
           ),
         ].join('\n')
       }
@@ -574,11 +681,17 @@ export function createLearnToolHandler(timezoneOffset = 0): ToolCallHandler {
       case 'search_cards': {
         const query = String(args.query ?? '').trim()
         if (!query) return 'Please provide a search query.'
-        const cards = await searchCards(query, args.deckId ? String(args.deckId) : undefined)
+        const cards = await searchCards(
+          query,
+          args.deckId ? String(args.deckId) : undefined
+        )
         if (cards.length === 0) return `No cards found matching "${query}".`
         return [
           `🔍 **Search results for "${query}" (${cards.length} cards)**`,
-          ...cards.map((card, index) => `${index + 1}. Front: "${card.front}" → Back: "${card.back}"`),
+          ...cards.map(
+            (card, index) =>
+              `${index + 1}. Front: "${card.front}" → Back: "${card.back}"`
+          ),
         ].join('\n')
       }
 
@@ -588,12 +701,15 @@ export function createLearnToolHandler(timezoneOffset = 0): ToolCallHandler {
         const count = Math.max(1, Math.min(Number(args.count ?? 10) || 10, 40))
         if (!deckId || !topic) return 'Missing deckId or topic.'
         const cards = await generateCards(topic, count)
-        if (cards.length === 0) return 'Card generation failed. Please try again.'
+        if (cards.length === 0)
+          return 'Card generation failed. Please try again.'
         await createCards(deckId, cards)
         return [
           `✅ Generated and added ${cards.length} cards about "${topic}".`,
           '',
-          ...cards.map((card, index) => `${index + 1}. **${card.front}** → ${card.back}`),
+          ...cards.map(
+            (card, index) => `${index + 1}. **${card.front}** → ${card.back}`
+          ),
         ].join('\n')
       }
 
@@ -622,15 +738,28 @@ export function createLearnToolHandler(timezoneOffset = 0): ToolCallHandler {
       case 'create_deck_from_document': {
         const documentId = String(args.documentId ?? '')
         if (!documentId) return 'Missing documentId.'
-        const deckTitle = typeof args.deckTitle === 'string' && args.deckTitle.trim()
-          ? args.deckTitle.trim()
-          : 'Document deck'
-        const cardCount = Math.max(5, Math.min(Number(args.cardCount ?? 20) || 20, 60))
+        const deckTitle =
+          typeof args.deckTitle === 'string' && args.deckTitle.trim()
+            ? args.deckTitle.trim()
+            : 'Document deck'
+        const cardCount = Math.max(
+          5,
+          Math.min(Number(args.cardCount ?? 20) || 20, 60)
+        )
         const extracted = await getDocumentText(documentId)
-        const cards = await generateCardsFromDocument(extracted.text, { deckTitle, maxCards: cardCount })
-        const deck = await createDeck({ title: deckTitle, description: `Generated from a PDF (${extracted.numPages} pages)` })
+        const cards = await generateCardsFromDocument(extracted.text, {
+          deckTitle,
+          maxCards: cardCount,
+        })
+        const deck = await createDeck({
+          title: deckTitle,
+          description: `Generated from a PDF (${extracted.numPages} pages)`,
+        })
         await createCards(deck.id, cards)
-        await updateDocument(documentId, { status: 'processed', deckId: deck.id }).catch(() => {})
+        await updateDocument(documentId, {
+          status: 'processed',
+          deckId: deck.id,
+        }).catch(() => {})
         return `✅ Created deck "${deck.title}" (id: ${deck.id}) with ${cards.length} cards from the document.`
       }
 
@@ -654,7 +783,9 @@ export function buildLearnSystemPrompt(context?: LearnAIContext): string {
 
   const statsContext = context?.stats
     ? `\n\nUser stats: level ${context.stats.level}, ${context.stats.xp}/${context.stats.xpToNextLevel} XP, ${context.stats.streak}-day streak, ${context.stats.totalCardsReviewed} cards reviewed, ${context.stats.totalDecks} decks, daily goal ${context.stats.dailyGoal} cards. Badges: ${
-        context.stats.badgeNames.length > 0 ? context.stats.badgeNames.join(', ') : 'none yet'
+        context.stats.badgeNames.length > 0
+          ? context.stats.badgeNames.join(', ')
+          : 'none yet'
       }. Personalize encouragement naturally.`
     : ''
 
@@ -697,34 +828,47 @@ export async function runLearnAssistant(input: {
     { role: 'user', content: input.message },
   ]
 
-  return chatWithCustomTools(messages, LEARN_TOOLS, createLearnToolHandler(input.timezoneOffset ?? 0), {
-    maxIterations: 12,
-    onToken: input.callbacks?.onToken,
-    onReasoning: input.callbacks?.onReasoning,
-    onToolCall: input.callbacks?.onToolCall,
-    onToolResult: input.callbacks?.onToolResult,
-  })
+  return chatWithCustomTools(
+    messages,
+    LEARN_TOOLS,
+    createLearnToolHandler(input.timezoneOffset ?? 0),
+    {
+      maxIterations: 12,
+      onToken: input.callbacks?.onToken,
+      onReasoning: input.callbacks?.onReasoning,
+      onToolCall: input.callbacks?.onToolCall,
+      onToolResult: input.callbacks?.onToolResult,
+    }
+  )
 }
 
 // ─── Tutor & AI Learn ───────────────────────────────────────────────────────
 
-export type TutorStyle = 'socratic' | 'oral-exam' | 'conversational' | 'rapid-fire'
+export type TutorStyle =
+  'socratic' | 'oral-exam' | 'conversational' | 'rapid-fire'
 
-export const TUTOR_STYLES: Array<{ id: TutorStyle; label: string; description: string }> = [
+export const TUTOR_STYLES: Array<{
+  id: TutorStyle
+  label: string
+  description: string
+}> = [
   {
     id: 'socratic',
     label: 'Socratic',
-    description: 'I ask questions, you answer, and I guide you with hints toward the right answer.',
+    description:
+      'I ask questions, you answer, and I guide you with hints toward the right answer.',
   },
   {
     id: 'oral-exam',
     label: 'Oral Exam',
-    description: 'Formal examination. I grade each answer out of 10 and give a final report.',
+    description:
+      'Formal examination. I grade each answer out of 10 and give a final report.',
   },
   {
     id: 'conversational',
     label: 'Conversational',
-    description: 'Casual, friendly discussion — like talking to a knowledgeable friend.',
+    description:
+      'Casual, friendly discussion — like talking to a knowledgeable friend.',
   },
   {
     id: 'rapid-fire',
@@ -738,7 +882,11 @@ function buildCardContext(cardContent: string[]): string {
   return `\n\nHere are the flashcards the user is studying:\n${cardContent.map((card, index) => `${index + 1}. ${card}`).join('\n')}`
 }
 
-export function buildTutorSystemPrompt(style: TutorStyle, deckTitle: string, cardContent: string[]): string {
+export function buildTutorSystemPrompt(
+  style: TutorStyle,
+  deckTitle: string,
+  cardContent: string[]
+): string {
   const context = buildCardContext(cardContent)
   const tools = `TOOLS YOU CAN USE:
 - lookup_card(cardNumber): get the full content of a flashcard by its 1-based number.
@@ -816,7 +964,10 @@ ${tools}
 Be encouraging and curious. Cover different cards. Keep responses concise (2-4 sentences). When the user says "end session" or "summarize", provide a warm summary with strengths and 1-2 review areas. Do not mention card numbers or IDs.${context}`
 }
 
-export function buildAiLearnSystemPrompt(deckTitle: string, cardContent: string[]): string {
+export function buildAiLearnSystemPrompt(
+  deckTitle: string,
+  cardContent: string[]
+): string {
   const context = buildCardContext(cardContent)
   return `You are an AI tutor for MindViz Learn guiding a student through "${deckTitle}" card by card.
 
@@ -848,11 +999,15 @@ export const TUTOR_TOOLS: AITool[] = [
     type: 'function',
     function: {
       name: 'lookup_card',
-      description: 'Get the full content (front and back) of a flashcard by its 1-based number.',
+      description:
+        'Get the full content (front and back) of a flashcard by its 1-based number.',
       parameters: {
         type: 'object',
         properties: {
-          cardNumber: { type: 'number', description: '1-based index of the card' },
+          cardNumber: {
+            type: 'number',
+            description: '1-based index of the card',
+          },
         },
         required: ['cardNumber'],
       },
@@ -867,7 +1022,10 @@ export const TUTOR_TOOLS: AITool[] = [
       parameters: {
         type: 'object',
         properties: {
-          cardNumber: { type: 'number', description: '1-based index of the card to mark mastered' },
+          cardNumber: {
+            type: 'number',
+            description: '1-based index of the card to mark mastered',
+          },
         },
         required: ['cardNumber'],
       },
@@ -877,10 +1035,13 @@ export const TUTOR_TOOLS: AITool[] = [
     type: 'function',
     function: {
       name: 'suggest_related_cards',
-      description: 'Find cards related to a topic to help the student make connections.',
+      description:
+        'Find cards related to a topic to help the student make connections.',
       parameters: {
         type: 'object',
-        properties: { topic: { type: 'string', description: 'Keyword or topic' } },
+        properties: {
+          topic: { type: 'string', description: 'Keyword or topic' },
+        },
         required: ['topic'],
       },
     },
@@ -914,7 +1075,11 @@ export function createTutorToolHandler(input: {
       case 'lookup_card': {
         const cardNumber = Number(args.cardNumber ?? 0)
         const index = cardNumber - 1
-        if (!Number.isInteger(cardNumber) || index < 0 || index >= input.cardContent.length) {
+        if (
+          !Number.isInteger(cardNumber) ||
+          index < 0 ||
+          index >= input.cardContent.length
+        ) {
           return `Card #${cardNumber} not found. There are ${input.cardContent.length} cards in this deck.`
         }
         return `Card #${cardNumber}: ${input.cardContent[index]}`
@@ -923,7 +1088,8 @@ export function createTutorToolHandler(input: {
       case 'mark_card_mastered': {
         const cardNumber = Number(args.cardNumber ?? 0)
         const cardId = input.cardIds[cardNumber - 1]
-        if (!cardId) return `Card #${cardNumber} cannot be marked — no card ID available.`
+        if (!cardId)
+          return `Card #${cardNumber} cannot be marked — no card ID available.`
         await updateCard(cardId, { mastered: true })
         return `✅ Marked card #${cardNumber} as mastered.`
       }
@@ -935,7 +1101,12 @@ export function createTutorToolHandler(input: {
         if (cards.length === 0) return `No related cards found for "${topic}".`
         return [
           `🔗 **Cards related to "${topic}"** (${cards.length} found):`,
-          ...cards.slice(0, 10).map((card, index) => `${index + 1}. Front: "${card.front}" → Back: "${card.back}"`),
+          ...cards
+            .slice(0, 10)
+            .map(
+              (card, index) =>
+                `${index + 1}. Front: "${card.front}" → Back: "${card.back}"`
+            ),
         ].join('\n')
       }
 
@@ -959,7 +1130,14 @@ export async function runTutorChat(input: {
   callbacks?: LearnAICallbacks
 }): Promise<string> {
   const messages: AIMessage[] = [
-    { role: 'system', content: buildTutorSystemPrompt(input.style, input.deckTitle, input.cardContent) },
+    {
+      role: 'system',
+      content: buildTutorSystemPrompt(
+        input.style,
+        input.deckTitle,
+        input.cardContent
+      ),
+    },
     ...input.history,
     { role: 'user', content: input.message },
   ]
@@ -967,14 +1145,18 @@ export async function runTutorChat(input: {
   return chatWithCustomTools(
     messages,
     TUTOR_TOOLS,
-    createTutorToolHandler({ deckTitle: input.deckTitle, cardContent: input.cardContent, cardIds: input.cardIds }),
+    createTutorToolHandler({
+      deckTitle: input.deckTitle,
+      cardContent: input.cardContent,
+      cardIds: input.cardIds,
+    }),
     {
       maxIterations: 6,
       onToken: input.callbacks?.onToken,
       onReasoning: input.callbacks?.onReasoning,
       onToolCall: input.callbacks?.onToolCall,
       onToolResult: input.callbacks?.onToolResult,
-    },
+    }
   )
 }
 
@@ -988,21 +1170,30 @@ export async function runAiLearnChat(input: {
   callbacks?: LearnAICallbacks
 }): Promise<string> {
   const messages: AIMessage[] = [
-    { role: 'system', content: buildAiLearnSystemPrompt(input.deckTitle, input.cardContent) },
+    {
+      role: 'system',
+      content: buildAiLearnSystemPrompt(input.deckTitle, input.cardContent),
+    },
     ...input.history,
     { role: 'user', content: input.message },
   ]
 
   return chatWithCustomTools(
     messages,
-    TUTOR_TOOLS.filter((tool) => ['lookup_card', 'mark_card_mastered'].includes(tool.function.name)),
-    createTutorToolHandler({ deckTitle: input.deckTitle, cardContent: input.cardContent, cardIds: input.cardIds }),
+    TUTOR_TOOLS.filter((tool) =>
+      ['lookup_card', 'mark_card_mastered'].includes(tool.function.name)
+    ),
+    createTutorToolHandler({
+      deckTitle: input.deckTitle,
+      cardContent: input.cardContent,
+      cardIds: input.cardIds,
+    }),
     {
       maxIterations: 6,
       onToken: input.callbacks?.onToken,
       onReasoning: input.callbacks?.onReasoning,
       onToolCall: input.callbacks?.onToolCall,
       onToolResult: input.callbacks?.onToolResult,
-    },
+    }
   )
 }

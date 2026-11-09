@@ -66,7 +66,10 @@ export function LearnDashboard({
   const greeting = getGreeting()
   const GreetingIcon = greeting.icon
 
-  const accuracy = stats && stats.totalCardsReviewed > 0 ? Math.round((stats.totalCorrect / stats.totalCardsReviewed) * 100) : 0
+  const accuracy =
+    stats && stats.totalCardsReviewed > 0
+      ? Math.round((stats.totalCorrect / stats.totalCardsReviewed) * 100)
+      : 0
   const recentDecks = decks.slice(0, 3)
   const continueDeck = decks.find((deck) => deck.lastStudied) ?? decks[0]
   const dailyProgress = stats
@@ -75,13 +78,27 @@ export function LearnDashboard({
         correct: 0,
         goal: stats.dailyGoal,
         goalMet: stats.dailyGoalMet,
-        goalProgress: stats.dailyGoal > 0 ? Math.min(100, Math.round((stats.dailyCardsReviewed / stats.dailyGoal) * 100)) : 0,
+        goalProgress:
+          stats.dailyGoal > 0
+            ? Math.min(
+                100,
+                Math.round((stats.dailyCardsReviewed / stats.dailyGoal) * 100)
+              )
+            : 0,
       }
-    : { cardsReviewed: 0, correct: 0, goal: 20, goalMet: false, goalProgress: 0 }
+    : {
+        cardsReviewed: 0,
+        correct: 0,
+        goal: 20,
+        goalMet: false,
+        goalProgress: 0,
+      }
 
   const badgePreview = useMemo(() => {
     if (!stats) return []
-    return [...stats.badges].sort((a, b) => Number(Boolean(b.earnedAt)) - Number(Boolean(a.earnedAt)))
+    return [...stats.badges].sort(
+      (a, b) => Number(Boolean(b.earnedAt)) - Number(Boolean(a.earnedAt))
+    )
   }, [stats])
 
   if (isLoadingStats && !stats && isLoadingDecks && decks.length === 0) {
@@ -93,13 +110,19 @@ export function LearnDashboard({
         </div>
         <div className="grid gap-3 sm:grid-cols-4">
           {[1, 2, 3, 4].map((key) => (
-            <div key={key} className="h-24 animate-pulse-soft rounded-2xl bg-surface-hover" />
+            <div
+              key={key}
+              className="h-24 animate-pulse-soft rounded-2xl bg-surface-hover"
+            />
           ))}
         </div>
         <div className="h-28 animate-pulse-soft rounded-2xl bg-surface-hover" />
         <div className="grid gap-3 sm:grid-cols-3">
           {[1, 2, 3].map((key) => (
-            <div key={key} className="h-48 animate-pulse-soft rounded-2xl bg-surface-hover" />
+            <div
+              key={key}
+              className="h-48 animate-pulse-soft rounded-2xl bg-surface-hover"
+            />
           ))}
         </div>
       </div>
@@ -124,10 +147,22 @@ export function LearnDashboard({
           </p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
-          <Button type="button" variant="primary" size="sm" icon={Plus} onClick={onCreateDeck}>
+          <Button
+            type="button"
+            variant="primary"
+            size="sm"
+            icon={Plus}
+            onClick={onCreateDeck}
+          >
             New deck
           </Button>
-          <Button type="button" variant="secondary" size="sm" icon={Bot} onClick={() => onOpenAssistant()}>
+          <Button
+            type="button"
+            variant="secondary"
+            size="sm"
+            icon={Bot}
+            onClick={() => onOpenAssistant()}
+          >
             Ask AI
           </Button>
         </div>
@@ -136,15 +171,44 @@ export function LearnDashboard({
       {stats ? (
         <>
           <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-            <StatTile icon={Flame} label="Streak" value={`${stats.streak}d`} hint={stats.streak > 0 ? 'Study today to continue' : 'Start today'} tone="warning" />
-            <StatTile icon={TrendingUp} label="Accuracy" value={`${accuracy}%`} hint={`${stats.totalCorrect} correct answers`} tone="success" />
-            <StatTile icon={BookOpen} label="Decks" value={stats.totalDecks} hint={`${stats.totalCardsReviewed.toLocaleString()} cards reviewed`} tone="sky" />
-            <StatTile icon={Zap} label="Sessions" value={stats.totalSessions} hint={`Level ${stats.level}`} tone="accent" />
+            <StatTile
+              icon={Flame}
+              label="Streak"
+              value={`${stats.streak}d`}
+              hint={
+                stats.streak > 0 ? 'Study today to continue' : 'Start today'
+              }
+              tone="warning"
+            />
+            <StatTile
+              icon={TrendingUp}
+              label="Accuracy"
+              value={`${accuracy}%`}
+              hint={`${stats.totalCorrect} correct answers`}
+              tone="success"
+            />
+            <StatTile
+              icon={BookOpen}
+              label="Decks"
+              value={stats.totalDecks}
+              hint={`${stats.totalCardsReviewed.toLocaleString()} cards reviewed`}
+              tone="sky"
+            />
+            <StatTile
+              icon={Zap}
+              label="Sessions"
+              value={stats.totalSessions}
+              hint={`Level ${stats.level}`}
+              tone="accent"
+            />
           </div>
 
           <div className="grid gap-3 lg:grid-cols-[1.4fr_1fr]">
             <XpBar stats={stats} />
-            <DailyProgressCard progress={dailyProgress} streak={stats?.streak} />
+            <DailyProgressCard
+              progress={dailyProgress}
+              streak={stats?.streak}
+            />
           </div>
         </>
       ) : (
@@ -157,28 +221,54 @@ export function LearnDashboard({
       {continueDeck ? (
         <div className="glass-card relative overflow-hidden p-5">
           <div
-            className={cn('absolute inset-y-0 left-0 w-1 bg-gradient-to-b', resolveDeckColor(continueDeck.color).gradient)}
+            className={cn(
+              'absolute inset-y-0 left-0 w-1 bg-gradient-to-b',
+              resolveDeckColor(continueDeck.color).gradient
+            )}
             aria-hidden
           />
           <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
             <div className="flex min-w-0 items-center gap-3">
-              <span className={cn('flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl', resolveDeckColor(continueDeck.color).soft, resolveDeckColor(continueDeck.color).text)}>
+              <span
+                className={cn(
+                  'flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl',
+                  resolveDeckColor(continueDeck.color).soft,
+                  resolveDeckColor(continueDeck.color).text
+                )}
+              >
                 <BookOpen size={20} />
               </span>
               <div className="min-w-0">
-                <p className="text-[10px] font-semibold uppercase tracking-[0.12em] text-accent">Continue studying</p>
-                <h2 className="mt-0.5 truncate font-display text-lg font-semibold text-foreground">{continueDeck.title}</h2>
+                <p className="text-[10px] font-semibold uppercase tracking-[0.12em] text-accent">
+                  Continue studying
+                </p>
+                <h2 className="mt-0.5 truncate font-display text-lg font-semibold text-foreground">
+                  {continueDeck.title}
+                </h2>
                 <p className="mt-0.5 text-xs text-muted">
-                  {continueDeck.cardCount} cards · {continueDeck.masteredCount} mastered
-                  {continueDeck.lastStudied ? ' · pick up where you left off' : ' · start your first session'}
+                  {continueDeck.cardCount} cards · {continueDeck.masteredCount}{' '}
+                  mastered
+                  {continueDeck.lastStudied
+                    ? ' · pick up where you left off'
+                    : ' · start your first session'}
                 </p>
               </div>
             </div>
             <div className="flex items-center gap-2">
-              <Button type="button" variant="secondary" size="sm" onClick={() => onOpenDeck(continueDeck.id)}>
+              <Button
+                type="button"
+                variant="secondary"
+                size="sm"
+                onClick={() => onOpenDeck(continueDeck.id)}
+              >
                 Manage
               </Button>
-              <Button type="button" variant="primary" size="sm" onClick={() => onStartStudy(continueDeck.id)}>
+              <Button
+                type="button"
+                variant="primary"
+                size="sm"
+                onClick={() => onStartStudy(continueDeck.id)}
+              >
                 Study now
                 <ArrowRight size={14} />
               </Button>
@@ -187,10 +277,22 @@ export function LearnDashboard({
           <div className="mt-4">
             <div className="flex items-center justify-between text-[10px] font-medium text-muted">
               <span>Mastery</span>
-              <span>{continueDeck.cardCount > 0 ? Math.round((continueDeck.masteredCount / continueDeck.cardCount) * 100) : 0}%</span>
+              <span>
+                {continueDeck.cardCount > 0
+                  ? Math.round(
+                      (continueDeck.masteredCount / continueDeck.cardCount) *
+                        100
+                    )
+                  : 0}
+                %
+              </span>
             </div>
             <ProgressBar
-              value={continueDeck.cardCount > 0 ? (continueDeck.masteredCount / continueDeck.cardCount) * 100 : 0}
+              value={
+                continueDeck.cardCount > 0
+                  ? (continueDeck.masteredCount / continueDeck.cardCount) * 100
+                  : 0
+              }
               className="mt-1.5"
               barClassName={resolveDeckColor(continueDeck.color).bar}
             />
@@ -201,18 +303,30 @@ export function LearnDashboard({
           <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-2xl bg-accent-light text-accent">
             <BookOpen size={24} />
           </div>
-          <h2 className="mt-3 font-display text-lg font-semibold text-foreground">Create your first deck</h2>
+          <h2 className="mt-3 font-display text-lg font-semibold text-foreground">
+            Create your first deck
+          </h2>
           <p className="mx-auto mt-1 max-w-sm text-sm text-muted">
-            Decks group flashcards by topic. Create one and start learning with eight study modes.
+            Decks group flashcards by topic. Create one and start learning with
+            eight study modes.
           </p>
-          <Button type="button" variant="primary" size="sm" icon={Plus} onClick={onCreateDeck} className="mt-4">
+          <Button
+            type="button"
+            variant="primary"
+            size="sm"
+            icon={Plus}
+            onClick={onCreateDeck}
+            className="mt-4"
+          >
             New deck
           </Button>
         </div>
       )}
 
       <div className="flex items-center justify-between gap-3">
-        <h2 className="font-display text-base font-semibold text-foreground">Recent decks</h2>
+        <h2 className="font-display text-base font-semibold text-foreground">
+          Recent decks
+        </h2>
         <button
           type="button"
           onClick={onOpenDecks}
@@ -237,13 +351,20 @@ export function LearnDashboard({
           ))}
         </div>
       ) : (
-        <div className="glass-card px-6 py-8 text-center text-sm text-muted">No decks yet.</div>
+        <div className="glass-card px-6 py-8 text-center text-sm text-muted">
+          No decks yet.
+        </div>
       )}
 
       {badgePreview.length > 0 && <BadgeGrid badges={badgePreview} limit={8} />}
 
       <div className="grid gap-3 sm:grid-cols-3">
-        <QuickAction icon={Target} title="Progress & stats" description="Heatmap, badges and session history" onClick={onOpenProgress} />
+        <QuickAction
+          icon={Target}
+          title="Progress & stats"
+          description="Heatmap, badges and session history"
+          onClick={onOpenProgress}
+        />
         <QuickAction
           icon={Bot}
           title="AI study assistant"
@@ -282,8 +403,12 @@ function QuickAction({
         <Icon size={16} />
       </span>
       <span>
-        <span className="block text-sm font-semibold text-foreground">{title}</span>
-        <span className="mt-0.5 block text-xs leading-5 text-muted">{description}</span>
+        <span className="block text-sm font-semibold text-foreground">
+          {title}
+        </span>
+        <span className="mt-0.5 block text-xs leading-5 text-muted">
+          {description}
+        </span>
       </span>
     </button>
   )

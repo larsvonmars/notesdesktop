@@ -1,6 +1,6 @@
 'use client'
 
-import { Ellipsis, FileText, Home, ListTodo, Search } from 'lucide-react'
+import { Ellipsis, FileText, GraduationCap, Home, ListTodo } from 'lucide-react'
 import type { LucideIcon } from 'lucide-react'
 import type { WorkspaceView } from '@/lib/workspace/types'
 import { cn } from './utils'
@@ -27,12 +27,12 @@ const VIEW_TABS: TabItem[] = [
   { id: 'notes', label: 'Notes', icon: FileText, view: 'notes' },
 ]
 
-const MORE_VIEWS: WorkspaceView[] = ['files', 'chat', 'learn', 'projects']
+const MORE_VIEWS: WorkspaceView[] = ['files', 'chat', 'projects']
 
 /**
- * Bottom glass navigation for phones. Five equal tabs (Home, Notes, Search,
+ * Bottom glass navigation for phones. Five equal tabs (Home, Notes, Learn,
  * Planner, More) with a safe-area gutter; the active tab gets an accent pill and
- * aria-current="page". "Search" and "More" are actions, not destinations.
+ * aria-current="page". Search lives in the top bar; "More" opens the drawer.
  */
 export default function MobileTabBar({
   activeView,
@@ -89,19 +89,21 @@ export default function MobileTabBar({
           )
         })}
 
-        {onOpenSearch ? (
-          <button
-            type="button"
-            onClick={onOpenSearch}
-            className={tabClass(false)}
-            aria-label="Search notes and commands"
-          >
-            <span className={iconWrapClass(false)} aria-hidden="true">
-              <Search className="h-[19px] w-[19px]" strokeWidth={1.85} />
-            </span>
-            <span>Search</span>
-          </button>
-        ) : null}
+        <button
+          type="button"
+          onClick={() => onNavigate('learn')}
+          className={tabClass(activeView === 'learn')}
+          aria-current={activeView === 'learn' ? 'page' : undefined}
+          aria-label="Learn"
+        >
+          <span className={iconWrapClass(activeView === 'learn')} aria-hidden="true">
+            <GraduationCap
+              className="h-[19px] w-[19px]"
+              strokeWidth={activeView === 'learn' ? 2.2 : 1.85}
+            />
+          </span>
+          <span>Learn</span>
+        </button>
 
         <button
           type="button"

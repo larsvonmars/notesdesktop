@@ -39,7 +39,9 @@ export interface CompleteSessionResult {
  * Award XP, update streak/level/totals, record the session and unlock badges.
  * Mirrors the gamification rules of the web Learn app.
  */
-export async function completeSession(input: CompleteSessionInput): Promise<CompleteSessionResult> {
+export async function completeSession(
+  input: CompleteSessionInput
+): Promise<CompleteSessionResult> {
   const userId = await requireUserId()
   const tzOffset = input.timezoneOffset ?? 0
   const userToday = getUserLocalDate(tzOffset)
@@ -56,19 +58,30 @@ export async function completeSession(input: CompleteSessionInput): Promise<Comp
 
   if (todayError) throw todayError
 
-  const todayCardsBefore = (todaySessions ?? []).reduce((sum, row) => sum + (row.cards_reviewed ?? 0), 0)
+  const todayCardsBefore = (todaySessions ?? []).reduce(
+    (sum, row) => sum + (row.cards_reviewed ?? 0),
+    0
+  )
   const dailyGoal = currentStats.daily_goal ?? 20
   const dailyGoalMet = todayCardsBefore + input.cardsReviewed >= dailyGoal
 
-  const { xpEarned, breakdown } = calcXPForSession(input.cardsReviewed, input.mode, {
-    streak: currentStats.streak,
-    perfect: input.perfect,
-    dailyGoalMet,
-  })
+  const { xpEarned, breakdown } = calcXPForSession(
+    input.cardsReviewed,
+    input.mode,
+    {
+      streak: currentStats.streak,
+      perfect: input.perfect,
+      dailyGoalMet,
+    }
+  )
 
   const oldLevel = calcLevel(currentStats.xp)
   const newXP = currentStats.xp + xpEarned
-  const newStreak = calcStreak(currentStats.last_studied_at, currentStats.streak, userToday)
+  const newStreak = calcStreak(
+    currentStats.last_studied_at,
+    currentStats.streak,
+    userToday
+  )
   const newLevel = calcLevel(newXP)
   const newTotalCards = currentStats.total_cards_reviewed + input.cardsReviewed
   const newTotalCorrect = (currentStats.total_correct ?? 0) + input.correct
@@ -76,13 +89,18 @@ export async function completeSession(input: CompleteSessionInput): Promise<Comp
 
   const [earnedResult, decksResult] = await Promise.all([
     supabase.from('learn_user_badges').select('badge_id').eq('user_id', userId),
-    supabase.from('learn_decks').select('*', { count: 'exact', head: true }).eq('user_id', userId),
+    supabase
+      .from('learn_decks')
+      .select('*', { count: 'exact', head: true })
+      .eq('user_id', userId),
   ])
 
   if (earnedResult.error) throw earnedResult.error
   if (decksResult.error) throw decksResult.error
 
-  const alreadyEarned = new Set<BadgeId>((earnedResult.data ?? []).map((row) => row.badge_id as BadgeId))
+  const alreadyEarned = new Set<BadgeId>(
+    (earnedResult.data ?? []).map((row) => row.badge_id as BadgeId)
+  )
 
   let perfectMCSessions = 0
   if (!alreadyEarned.has('quiz-master')) {
@@ -93,9 +111,12 @@ export async function completeSession(input: CompleteSessionInput): Promise<Comp
       .eq('mode', 'multiple-choice')
 
     perfectMCSessions = (mcSessions ?? []).filter(
-      (session) => session.cards_reviewed > 0 && session.correct_count === session.cards_reviewed,
+      (session) =>
+        session.cards_reviewed > 0 &&
+        session.correct_count === session.cards_reviewed
     ).length
-    if (input.mode === 'multiple-choice' && input.perfect) perfectMCSessions += 1
+    if (input.mode === 'multiple-choice' && input.perfect)
+      perfectMCSessions += 1
   }
 
   const newBadges = checkBadgeUnlocks(
@@ -109,7 +130,7 @@ export async function completeSession(input: CompleteSessionInput): Promise<Comp
       perfectMCSessions,
       recentTestTimeSeconds: input.sessionTimeSeconds,
     },
-    alreadyEarned,
+    alreadyEarned
   )
 
   if (input.perfect && !alreadyEarned.has('perfect-session')) {
@@ -141,7 +162,9 @@ export async function completeSession(input: CompleteSessionInput): Promise<Comp
     newBadges.length > 0
       ? supabase
           .from('learn_user_badges')
-          .insert(newBadges.map((badgeId) => ({ user_id: userId, badge_id: badgeId })))
+          .insert(
+            newBadges.map((badgeId) => ({ user_id: userId, badge_id: badgeId }))
+          )
       : Promise.resolve({ error: null }),
   ])
 
@@ -170,7 +193,10 @@ export async function completeSession(input: CompleteSessionInput): Promise<Comp
  * SM-2 spaced-repetition rating.
  * quality: 0 = Again, 1 = Hard, 2 = Good, 3 = Easy.
  */
-export async function rateCard(cardId: string, quality: 0 | 1 | 2 | 3): Promise<void> {
+export async function rateCard(
+  cardId: string,
+  quality: 0 | 1 | 2 | 3
+): Promise<void> {
   const userId = await requireUserId()
 
   const { data: card, error: fetchError } = await supabase
@@ -188,12 +214,17 @@ export async function rateCard(cardId: string, quality: 0 | 1 | 2 | 3): Promise<
   const incorrectCount = card.incorrect_count ?? 0
 
   const q = [0, 2, 4, 5][quality]
-  const newEase = Math.max(1.3, currentEase + 0.1 - (5 - q) * (0.08 + (5 - q) * 0.02))
+  const newEase = Math.max(
+    1.3,
+    currentEase + 0.1 - (5 - q) * (0.08 + (5 - q) * 0.02)
+  )
 
   let newInterval: number
   if (q < 2) newInterval = 1
-  else if (q === 2) newInterval = Math.max(1, Math.ceil(currentInterval * newEase * 0.8))
-  else if (q === 4) newInterval = Math.max(1, Math.ceil(currentInterval * newEase))
+  else if (q === 2)
+    newInterval = Math.max(1, Math.ceil(currentInterval * newEase * 0.8))
+  else if (q === 4)
+    newInterval = Math.max(1, Math.ceil(currentInterval * newEase))
   else newInterval = Math.max(1, Math.ceil(currentInterval * newEase * 1.3))
 
   const due = new Date()

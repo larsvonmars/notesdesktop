@@ -44,6 +44,10 @@ import {
   Home,
   MessagesSquare,
   GraduationCap,
+  LayoutDashboard,
+  TrendingUp,
+  Bot,
+  Zap,
   FileQuestion,
   Target,
   Lightbulb,
@@ -70,6 +74,10 @@ import { Button } from '@/components/ui/Button'
 import { Input } from '@/components/ui/Input'
 import { EmptyState } from '@/components/ui/EmptyState'
 import { useWorkspaceData } from '@/lib/workspace/useWorkspaceData'
+import { LearningProvider, useLearning } from '@/lib/learn/context'
+import { searchCards as searchLearnCards } from '@/lib/learn/cards'
+import { createCards as createLearnCards } from '@/lib/learn/cards'
+import { createDeck as createLearnDeck } from '@/lib/learn/decks'
 import { useNoteActions } from '@/lib/workspace/useNoteActions'
 import { useFolderActions } from '@/lib/workspace/useFolderActions'
 import { useProjectActions } from '@/lib/workspace/useProjectActions'
@@ -126,6 +134,15 @@ function WorkspaceContent() {
   const router = useRouter()
   const searchParams = useSearchParams()
   const toast = useToast()
+  const {
+    stats: learnStats,
+    decks: learnDecks,
+    screen: learnScreen,
+    setScreen: setLearnScreen,
+    openAssistant: openLearnAssistant,
+    requestCreateDeck: requestCreateLearnDeck,
+    refreshDecks: refreshLearnDecks,
+  } = useLearning()
   const isMobile = useIsMobile()
   // Tablet-sized viewports keep the rail but start with the library collapsed so
   // the note list and editor still have room to breathe.
@@ -141,6 +158,8 @@ function WorkspaceContent() {
   // Mindmap template picker state
   const [pendingMindmapTemplateContext, setPendingMindmapTemplateContext] = useState<NoteCreationContext | null>(null)
   const [selectedMindmapTemplateId, setSelectedMindmapTemplateId] = useState<string | undefined>(undefined)
+  const [isCreatingLearnDeck, setIsCreatingLearnDeck] = useState(false)
+  const [learnDetailsOpen, setLearnDetailsOpen] = useState(true)
   const suppressRealtimeRef = useRef(false)
   const isApplyingUrlRef = useRef(false)
 
@@ -664,6 +683,64 @@ function WorkspaceContent() {
     []
   )
 
+  const searchLearnCardContent = useCallback((query: string) => searchLearnCards(query), [])
+
+  /** Turn the open note into a Learn deck with AI-generated flashcards. */
+  const handleCreateLearnDeckFromNote = useCallback(async () => {
+    if (!selectedNote || isCreatingLearnDeck) return
+
+    setIsCreatingLearnDeck(true)
+    toast.push({
+      title: 'Generating flashcards…',
+      description: 'The AI is reading your note.',
+      variant: 'info',
+      duration: 5000,
+    })
+    try {
+      // Keep the Learn AI stack out of the workspace's initial bundle.
+      const [{ generateCardsFromDocument }, { stripHtmlForAI }] = await Promise.all([
+        import('@/lib/learn/ai'),
+        import('@/lib/ai'),
+      ])
+      const plainText = stripHtmlForAI(selectedNote.content ?? '').trim()
+      if (!plainText) {
+        toast.push({
+          title: 'This note has no text',
+          description: 'Flashcards need text to generate from.',
+          variant: 'warning',
+        })
+        return
+      }
+
+      const cards = await generateCardsFromDocument(plainText.slice(0, 24000), {
+        deckTitle: selectedNote.title || 'Note deck',
+        maxCards: 15,
+      })
+      const deck = await createLearnDeck({
+        title: selectedNote.title || 'Untitled deck',
+        description: `Generated from the note “${selectedNote.title || 'Untitled'}”`,
+        color: 'bg-accent',
+      })
+      await createLearnCards(deck.id, cards)
+      await refreshLearnDecks()
+      setActiveView('learn')
+      setLearnScreen({ kind: 'deck', deckId: deck.id })
+      toast.push({
+        title: `${cards.length} flashcards generated`,
+        description: `Created the deck “${deck.title}”`,
+        variant: 'success',
+      })
+    } catch (error) {
+      toast.push({
+        title: 'Could not create flashcards',
+        description: error instanceof Error ? error.message : 'Please try again.',
+        variant: 'error',
+      })
+    } finally {
+      setIsCreatingLearnDeck(false)
+    }
+  }, [isCreatingLearnDeck, refreshLearnDecks, selectedNote, setLearnScreen, toast])
+
   const switchWorkspaceView = useCallback(
     (view: WorkspaceView) => {
       if (view !== 'tasks') setPlannerStartSection(null)
@@ -914,20 +991,30 @@ function WorkspaceContent() {
   // Global keyboard shortcuts. Kept in a ref so the listener binds once while
   // always calling the latest handlers.
   const shortcutActionsRef = useRef({
-    newNote: () => {},
+    newPrimary: () => {},
     toggleSidebar: () => {},
     goBack: () => {},
     goForward: () => {},
     switchView: (_view: WorkspaceView) => {},
-    openAssistant: () => {},
+    openAssistantPrimary: () => {},
   })
   shortcutActionsRef.current = {
-    newNote: () => handleNewNote(),
+    newPrimary: () => {
+      if (activeView === 'learn') {
+        requestCreateLearnDeck()
+        return
+      }
+      handleNewNote()
+    },
     toggleSidebar: () => setSidebarCollapsed((prev) => !prev),
     goBack,
     goForward,
     switchView: switchWorkspaceView,
-    openAssistant: () => {
+    openAssistantPrimary: () => {
+      if (activeView === 'learn') {
+        openLearnAssistant()
+        return
+      }
       // The assistant only mounts with an editor, so ignore the shortcut
       // everywhere else instead of silently doing nothing after a view switch.
       if (activeView !== 'notes' || (!isCreatingNew && !selectedNote)) return
@@ -959,10 +1046,10 @@ function WorkspaceContent() {
 
       if (key === 'n') {
         event.preventDefault()
-        shortcutActionsRef.current.newNote()
+        shortcutActionsRef.current.newPrimary()
       } else if (key === 'j') {
         event.preventDefault()
-        shortcutActionsRef.current.openAssistant()
+        shortcutActionsRef.current.openAssistantPrimary()
       } else if (key === '\\') {
         event.preventDefault()
         shortcutActionsRef.current.toggleSidebar()
@@ -1032,6 +1119,12 @@ function WorkspaceContent() {
   // draft. Creating a note sets isCreatingNew, so that path is unchanged.
   const showEditor = isCreatingNew || selectedNote !== null
 
+  const learnPendingCards = learnDecks.reduce(
+    (sum, deck) => sum + Math.max(0, deck.cardCount - deck.masteredCount),
+    0,
+  )
+  const learnBadge = learnPendingCards > 0 ? (learnPendingCards > 99 ? '99+' : learnPendingCards) : undefined
+
   const listTitle = currentFolder?.name ?? currentProject?.name ?? 'All notes'
   const listSubtitle = currentFolder
     ? currentProject
@@ -1062,7 +1155,47 @@ function WorkspaceContent() {
       return [home, { id: 'chat', label: 'Chat', icon: MessagesSquare }]
     }
     if (activeView === 'learn') {
-      return [home, { id: 'learn', label: 'Learn', icon: GraduationCap }]
+      const learnRoot: Breadcrumb = {
+        id: 'learn',
+        label: 'Learn',
+        icon: GraduationCap,
+        onClick: () => setLearnScreen({ kind: 'dashboard' }),
+      }
+      const decksCrumb: Breadcrumb = {
+        id: 'learn-decks',
+        label: 'Decks',
+        icon: BookOpen,
+        onClick: () => setLearnScreen({ kind: 'decks' }),
+      }
+
+      switch (learnScreen.kind) {
+        case 'dashboard':
+          return [home, learnRoot, { id: 'learn-dashboard', label: 'Dashboard', icon: LayoutDashboard }]
+        case 'decks':
+          return [home, learnRoot, { id: 'learn-decks', label: 'Decks', icon: BookOpen }]
+        case 'deck':
+        case 'study': {
+          const deckTitle = learnDecks.find((deck) => deck.id === learnScreen.deckId)?.title ?? 'Deck'
+          const deckCrumb: Breadcrumb = {
+            id: 'learn-deck',
+            label: deckTitle,
+            icon: BookOpen,
+            onClick:
+              learnScreen.kind === 'study'
+                ? () => setLearnScreen({ kind: 'deck', deckId: learnScreen.deckId })
+                : undefined,
+          }
+          return learnScreen.kind === 'study'
+            ? [home, learnRoot, decksCrumb, deckCrumb, { id: 'learn-study', label: 'Study', icon: Zap }]
+            : [home, learnRoot, decksCrumb, deckCrumb]
+        }
+        case 'progress':
+          return [home, learnRoot, { id: 'learn-progress', label: 'Progress', icon: TrendingUp }]
+        case 'assistant':
+          return [home, learnRoot, { id: 'learn-assistant', label: 'AI assistant', icon: Bot }]
+        case 'settings':
+          return [home, learnRoot, { id: 'learn-settings', label: 'Settings', icon: Settings }]
+      }
     }
     if (activeView === 'projects') {
       return [
@@ -1109,6 +1242,42 @@ function WorkspaceContent() {
   const assistantAvailable = activeView === 'notes' && (isCreatingNew || selectedNote !== null)
 
   const overflowItems: TopBarMenuItem[] = [
+    ...(activeView === 'learn'
+      ? [
+          {
+            id: 'learn-dashboard',
+            label: 'Learn dashboard',
+            icon: LayoutDashboard,
+            onSelect: () => setLearnScreen({ kind: 'dashboard' }),
+          } satisfies TopBarMenuItem,
+          {
+            id: 'learn-assistant',
+            label: 'Ask Learn AI',
+            icon: Bot,
+            shortcut: formatModShortcut('J'),
+            onSelect: () => openLearnAssistant(),
+          } satisfies TopBarMenuItem,
+          {
+            id: 'learn-new-deck',
+            label: 'New deck',
+            icon: Plus,
+            shortcut: formatModShortcut('N'),
+            onSelect: () => requestCreateLearnDeck(),
+          } satisfies TopBarMenuItem,
+        ]
+      : []),
+    ...(activeView === 'notes' && selectedNote && !isCreatingNew
+      ? [
+          {
+            id: 'create-learn-deck',
+            label: isCreatingLearnDeck ? 'Generating flashcards…' : 'Create flashcards from note',
+            icon: GraduationCap,
+            onSelect: () => {
+              void handleCreateLearnDeckFromNote()
+            },
+          } satisfies TopBarMenuItem,
+        ]
+      : []),
     ...(assistantAvailable
       ? [
           {
@@ -1315,6 +1484,7 @@ function WorkspaceContent() {
         onOpenWelcome={openWelcomeView}
         onOpenTasks={openTasksView}
         onOpenLearn={() => setActiveView('learn')}
+        learnBadge={learnBadge}
         onSignOut={handleSignOut}
         onMobileTouchStart={beginCloseSwipe}
         onMobileTouchEnd={endCloseSwipe}
@@ -1333,9 +1503,26 @@ function WorkspaceContent() {
           onForward={goForward}
           onOpenSearch={() => setCommandPaletteOpen(true)}
           onCreateNote={(type) => handleNewNote(type)}
+          primaryAction={
+            activeView === 'learn'
+              ? {
+                  label: 'New deck',
+                  icon: Plus,
+                  shortcut: 'N',
+                  onClick: () => {
+                    setActiveView('learn')
+                    requestCreateLearnDeck()
+                  },
+                }
+              : undefined
+          }
           noteListOpen={noteListOpen}
           onToggleNoteList={
             activeView === 'notes' ? () => setNoteListOpen((prev) => !prev) : undefined
+          }
+          detailsOpen={activeView === 'learn' ? learnDetailsOpen : undefined}
+          onToggleDetails={
+            activeView === 'learn' ? () => setLearnDetailsOpen((prev) => !prev) : undefined
           }
           overflowItems={overflowItems}
           onOpenLibrary={() => setWorkspaceNavOpen(true)}
@@ -1369,6 +1556,22 @@ function WorkspaceContent() {
                 onOpenTasks={() => {
                   setPlannerStartSection('tasks')
                   setActiveView('tasks')
+                }}
+                onOpenLearn={() => {
+                  setActiveView('learn')
+                  setLearnScreen({ kind: 'dashboard' })
+                }}
+                onOpenLearnDeck={(deckId) => {
+                  setActiveView('learn')
+                  setLearnScreen({ kind: 'deck', deckId })
+                }}
+                onStartLearnStudy={(deckId) => {
+                  setActiveView('learn')
+                  setLearnScreen({ kind: 'study', deckId })
+                }}
+                onOpenLearnAssistant={(prompt) => {
+                  setActiveView('learn')
+                  openLearnAssistant(prompt)
                 }}
                 onOpenUnfiled={() => {
                   handleSelectFolder(null)
@@ -1410,7 +1613,11 @@ function WorkspaceContent() {
 
           {activeView === 'learn' && (
             <div className="h-full overflow-hidden">
-              <LearnView onOpenAppSettings={() => setShowSettings(true)} />
+              <LearnView
+                onOpenAppSettings={() => setShowSettings(true)}
+                showSectionTabs={isMobile || sidebarCollapsed}
+                detailsOpen={learnDetailsOpen}
+              />
             </div>
           )}
 
@@ -1521,7 +1728,17 @@ function WorkspaceContent() {
         onClose={() => setShowFileExplorerModal(false)}
       />
 
-      {showSettings && <SettingsModal isOpen onClose={() => setShowSettings(false)} />}
+      {showSettings && (
+        <SettingsModal
+          isOpen
+          onClose={() => setShowSettings(false)}
+          onOpenLearn={() => {
+            setShowSettings(false)
+            setActiveView('learn')
+            setLearnScreen({ kind: 'dashboard' })
+          }}
+        />
+      )}
 
       {showShortcuts && (
         <KeyboardShortcutsHelp isOpen onClose={() => setShowShortcuts(false)} />
@@ -1549,6 +1766,24 @@ function WorkspaceContent() {
           onOpenTasks={openTasksView}
           onOpenFiles={() => setActiveView('files')}
           onOpenLearn={() => setActiveView('learn')}
+          learnDecks={learnDecks}
+          onOpenLearnDeck={(deckId) => {
+            setActiveView('learn')
+            setLearnScreen({ kind: 'deck', deckId })
+          }}
+          onStartLearnStudy={(deckId) => {
+            setActiveView('learn')
+            setLearnScreen({ kind: 'study', deckId })
+          }}
+          onCreateLearnDeck={() => {
+            setActiveView('learn')
+            requestCreateLearnDeck()
+          }}
+          onOpenLearnAssistant={() => {
+            setActiveView('learn')
+            openLearnAssistant()
+          }}
+          onSearchLearnCards={searchLearnCardContent}
           onOpenSettings={() => setShowSettings(true)}
           onOpenShortcuts={() => setShowShortcuts(true)}
         />
@@ -1712,7 +1947,9 @@ export default function WorkspaceShell() {
       <Suspense fallback={
         <WorkspaceSkeleton />
       }>
-        <WorkspaceContent />
+        <LearningProvider>
+          <WorkspaceContent />
+        </LearningProvider>
       </Suspense>
     </ErrorBoundary>
   )

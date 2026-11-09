@@ -8,18 +8,27 @@ vi.mock('../lib/supabase', async () => {
 })
 
 import ToastProvider from '@/components/ToastProvider'
+import { LearningProvider } from '@/lib/learn/context'
 import LearnView from '@/components/learn/LearnView'
 
 describe('Learn view shell', () => {
   it('renders the dashboard chrome and navigation tabs', () => {
     const html = renderToStaticMarkup(
       <ToastProvider>
-        <LearnView onOpenAppSettings={vi.fn()} />
-      </ToastProvider>,
+        <LearningProvider>
+          <LearnView onOpenAppSettings={vi.fn()} showSectionTabs />
+        </LearningProvider>
+      </ToastProvider>
     )
 
     expect(html).toContain('Learn')
-    for (const tab of ['Dashboard', 'Decks', 'Progress', 'Assistant', 'Settings']) {
+    for (const tab of [
+      'Dashboard',
+      'Decks',
+      'Progress',
+      'Assistant',
+      'Settings',
+    ]) {
       expect(html).toContain(tab)
     }
   })

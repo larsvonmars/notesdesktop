@@ -7,9 +7,19 @@ import {
   getUserLocalDate,
   localDayBounds,
 } from './gamification'
-import { BADGE_DEFINITIONS, type Badge, type BadgeId, type DailyProgress, type StudyMode, type StudySessionSummary, type UserStats } from './types'
+import {
+  BADGE_DEFINITIONS,
+  type Badge,
+  type BadgeId,
+  type DailyProgress,
+  type StudyMode,
+  type StudySessionSummary,
+  type UserStats,
+} from './types'
 
-export async function fetchStatsRow(userId: string): Promise<LearnUserStatsRow> {
+export async function fetchStatsRow(
+  userId: string
+): Promise<LearnUserStatsRow> {
   const { data, error } = await supabase
     .from('learn_user_stats')
     .select('*')
@@ -29,25 +39,35 @@ export async function fetchStatsRow(userId: string): Promise<LearnUserStatsRow> 
   return inserted
 }
 
-export async function getUserStats(timezoneOffset = 0): Promise<UserStats | null> {
+export async function getUserStats(
+  timezoneOffset = 0
+): Promise<UserStats | null> {
   const userId = await requireUserId()
 
   const [statsRow, badgesResult, decksCountResult] = await Promise.all([
     fetchStatsRow(userId),
-    supabase.from('learn_user_badges').select('badge_id, earned_at').eq('user_id', userId),
-    supabase.from('learn_decks').select('*', { count: 'exact', head: true }).eq('user_id', userId),
+    supabase
+      .from('learn_user_badges')
+      .select('badge_id, earned_at')
+      .eq('user_id', userId),
+    supabase
+      .from('learn_decks')
+      .select('*', { count: 'exact', head: true })
+      .eq('user_id', userId),
   ])
 
   if (badgesResult.error) throw badgesResult.error
   if (decksCountResult.error) throw decksCountResult.error
 
   const earnedMap = new Map<string, string>(
-    (badgesResult.data ?? []).map((row) => [row.badge_id, row.earned_at]),
+    (badgesResult.data ?? []).map((row) => [row.badge_id, row.earned_at])
   )
 
   const badges: Badge[] = BADGE_DEFINITIONS.map((definition) => ({
     ...definition,
-    earnedAt: earnedMap.has(definition.id) ? new Date(earnedMap.get(definition.id)!) : undefined,
+    earnedAt: earnedMap.has(definition.id)
+      ? new Date(earnedMap.get(definition.id)!)
+      : undefined,
   }))
 
   const today = getUserLocalDate(timezoneOffset)
@@ -61,7 +81,10 @@ export async function getUserStats(timezoneOffset = 0): Promise<UserStats | null
 
   if (sessionsError) throw sessionsError
 
-  const dailyCardsReviewed = (todaySessions ?? []).reduce((sum, row) => sum + (row.cards_reviewed ?? 0), 0)
+  const dailyCardsReviewed = (todaySessions ?? []).reduce(
+    (sum, row) => sum + (row.cards_reviewed ?? 0),
+    0
+  )
   const dailyGoal = statsRow.daily_goal ?? 20
 
   return {
@@ -88,7 +111,8 @@ export async function updateStudyPreferences(input: {
   const userId = await requireUserId()
   const payload: Record<string, unknown> = {}
   if (input.dailyGoal !== undefined) payload.daily_goal = input.dailyGoal
-  if (input.streakReminder !== undefined) payload.streak_reminder_enabled = input.streakReminder
+  if (input.streakReminder !== undefined)
+    payload.streak_reminder_enabled = input.streakReminder
   if (Object.keys(payload).length === 0) return
 
   await fetchStatsRow(userId)
@@ -109,14 +133,20 @@ export async function getUserBadges(): Promise<Badge[]> {
 
   if (error) throw error
 
-  const earnedMap = new Map<string, string>((data ?? []).map((row) => [row.badge_id, row.earned_at]))
+  const earnedMap = new Map<string, string>(
+    (data ?? []).map((row) => [row.badge_id, row.earned_at])
+  )
   return BADGE_DEFINITIONS.map((definition) => ({
     ...definition,
-    earnedAt: earnedMap.has(definition.id) ? new Date(earnedMap.get(definition.id)!) : undefined,
+    earnedAt: earnedMap.has(definition.id)
+      ? new Date(earnedMap.get(definition.id)!)
+      : undefined,
   }))
 }
 
-export async function getDailyProgress(timezoneOffset = 0): Promise<DailyProgress> {
+export async function getDailyProgress(
+  timezoneOffset = 0
+): Promise<DailyProgress> {
   const userId = await requireUserId()
   const today = getUserLocalDate(timezoneOffset)
   const { start, end } = localDayBounds(today, timezoneOffset)
@@ -128,13 +158,23 @@ export async function getDailyProgress(timezoneOffset = 0): Promise<DailyProgres
       .eq('user_id', userId)
       .gte('completed_at', start)
       .lte('completed_at', end),
-    supabase.from('learn_user_stats').select('daily_goal').eq('id', userId).maybeSingle(),
+    supabase
+      .from('learn_user_stats')
+      .select('daily_goal')
+      .eq('id', userId)
+      .maybeSingle(),
   ])
 
   if (sessionsResult.error) throw sessionsResult.error
 
-  const cardsReviewed = (sessionsResult.data ?? []).reduce((sum, row) => sum + (row.cards_reviewed ?? 0), 0)
-  const correct = (sessionsResult.data ?? []).reduce((sum, row) => sum + (row.correct_count ?? 0), 0)
+  const cardsReviewed = (sessionsResult.data ?? []).reduce(
+    (sum, row) => sum + (row.cards_reviewed ?? 0),
+    0
+  )
+  const correct = (sessionsResult.data ?? []).reduce(
+    (sum, row) => sum + (row.correct_count ?? 0),
+    0
+  )
   const goal = statsResult.data?.daily_goal ?? 20
 
   return {
@@ -142,22 +182,34 @@ export async function getDailyProgress(timezoneOffset = 0): Promise<DailyProgres
     correct,
     goal,
     goalMet: cardsReviewed >= goal,
-    goalProgress: goal > 0 ? Math.min(100, Math.round((cardsReviewed / goal) * 100)) : 0,
+    goalProgress:
+      goal > 0 ? Math.min(100, Math.round((cardsReviewed / goal) * 100)) : 0,
   }
 }
 
-export async function getSessionHistory(limit = 10, offset = 0): Promise<StudySessionSummary[]> {
+export async function getSessionHistory(
+  limit = 10,
+  offset = 0
+): Promise<StudySessionSummary[]> {
   const userId = await requireUserId()
   const { data, error } = await supabase
     .from('learn_study_sessions')
-    .select('id, deck_id, cards_reviewed, correct_count, xp_earned, mode, completed_at')
+    .select(
+      'id, deck_id, cards_reviewed, correct_count, xp_earned, mode, completed_at'
+    )
     .eq('user_id', userId)
     .order('completed_at', { ascending: false })
     .range(offset, offset + limit - 1)
 
   if (error || !data) return []
 
-  const deckIds = [...new Set(data.map((session) => session.deck_id).filter((id): id is string => Boolean(id)))]
+  const deckIds = [
+    ...new Set(
+      data
+        .map((session) => session.deck_id)
+        .filter((id): id is string => Boolean(id))
+    ),
+  ]
   const { data: decks } =
     deckIds.length > 0
       ? await supabase.from('learn_decks').select('id, title').in('id', deckIds)
@@ -168,7 +220,9 @@ export async function getSessionHistory(limit = 10, offset = 0): Promise<StudySe
   return data.map((session) => ({
     id: session.id,
     deckId: session.deck_id ?? '',
-    deckTitle: session.deck_id ? deckMap.get(session.deck_id) ?? 'Unknown deck' : 'Unknown deck',
+    deckTitle: session.deck_id
+      ? (deckMap.get(session.deck_id) ?? 'Unknown deck')
+      : 'Unknown deck',
     mode: (session.mode as StudyMode | null) ?? null,
     cardsReviewed: session.cards_reviewed,
     correct: session.correct_count ?? 0,
@@ -185,7 +239,11 @@ export interface Profile {
 export async function getProfile(): Promise<Profile> {
   const userId = await requireUserId()
   const [{ data: profile, error }, { data: userData }] = await Promise.all([
-    supabase.from('learn_profiles').select('username').eq('id', userId).maybeSingle(),
+    supabase
+      .from('learn_profiles')
+      .select('username')
+      .eq('id', userId)
+      .maybeSingle(),
     supabase.auth.getUser(),
   ])
 
@@ -197,7 +255,9 @@ export async function getProfile(): Promise<Profile> {
   }
 }
 
-export async function updateProfile(input: { username: string }): Promise<void> {
+export async function updateProfile(input: {
+  username: string
+}): Promise<void> {
   const userId = await requireUserId()
   const trimmed = input.username.trim()
 

@@ -121,7 +121,14 @@ typed answer, timed test, smart three-round, AI Learn and AI Tutor), sprint-base
 sessions with XP breakdowns and badge unlocks, a progress page with a study
 heatmap and session history, study preferences, and a tool-using AI assistant
 that can create decks/cards, analyze deck quality and build decks from PDFs.
-Open it from the rail or `⌘/Ctrl+6`.
+Open it from the rail or `⌘/Ctrl+6`. Integration goes beyond the view:
+the library pane becomes a Learn hub (navigation, deck search, mastery and a
+Continue card), the top bar switches to "New deck" with Learn breadcrumbs and a
+details toggle, Home shows a Learning panel, Settings gets a Learning section,
+the command palette lists decks and searches flashcards, the Chat view gains
+Learn tools, and the mobile bar gets a dedicated Learn tab. In Learn, `⌘/Ctrl+N`
+creates a deck, `⌘/Ctrl+J` opens the Learn assistant, and the right-hand details
+panel surfaces deck context, quick study modes and current-card info.
 
 The **PDF annotation workspace** (`components/PdfAnnotationEditor.tsx`) follows the
 same system: a single glass command bar (tools, colour/size popovers, undo/redo,
@@ -232,7 +239,7 @@ Important: do not bind this Worker to `/*` on your main app domain. If you do, b
 - ✅ **Keyboard shortcuts** for efficient workflow
 - ✅ **Note sorting** (by updated date, created date, or title)
 - ✅ **Delete confirmations** with safety warnings
-- ✅ **Learn workspace** - Gamified flashcards with eight study modes, SM-2 spaced repetition, AI tutoring and PDF-to-deck generation
+- ✅ **Learn workspace** - Gamified flashcards with eight study modes, SM-2 spaced repetition, AI tutoring, PDF-to-deck generation, a context-aware library sidebar, Home/Settings panels, command-palette search and Chat tools
 - ✅ **Real-time synchronization** with Supabase
 - ✅ **Offline-first notes and folders** - local IndexedDB cache, write-behind sync and conflict detection
 - ✅ **100% WebView and Tauri compatible** - Fully optimized for Windows, macOS, and Linux

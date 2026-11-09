@@ -1,8 +1,19 @@
 'use client'
 
-import { useEffect, useMemo, useRef, useState, type FormEvent } from 'react'
-import { BookOpen, Plus, Search, SlidersHorizontal, Sparkles } from 'lucide-react'
-import BaseModal, { ModalBody, ModalFooter, ModalHeader, ModalTitle } from '@/components/BaseModal'
+import { useEffect, useMemo, useState, type FormEvent } from 'react'
+import {
+  BookOpen,
+  Plus,
+  Search,
+  SlidersHorizontal,
+  Sparkles,
+} from 'lucide-react'
+import BaseModal, {
+  ModalBody,
+  ModalFooter,
+  ModalHeader,
+  ModalTitle,
+} from '@/components/BaseModal'
 import { Button } from '@/components/ui/Button'
 import { Input } from '@/components/ui/Input'
 import { useToast } from '@/components/ToastProvider'
@@ -18,13 +29,23 @@ type SortBy = 'recent' | 'name' | 'cards' | 'mastery'
 interface Props {
   onOpenDeck: (deckId: string) => void
   onStartStudy: (deckId: string) => void
-  openCreateSignal: number
   onOpenAssistant: (prompt?: string) => void
   onEditDeck: (deck: Deck) => void
 }
 
-export function DecksView({ onOpenDeck, onStartStudy, openCreateSignal, onOpenAssistant, onEditDeck }: Props) {
-  const { decks, refreshDecks, isLoadingDecks } = useLearning()
+export function DecksView({
+  onOpenDeck,
+  onStartStudy,
+  onOpenAssistant,
+  onEditDeck,
+}: Props) {
+  const {
+    decks,
+    refreshDecks,
+    isLoadingDecks,
+    createDeckSignal,
+    consumeCreateDeckRequest,
+  } = useLearning()
   const toast = useToast()
   const [showForm, setShowForm] = useState(false)
   const [title, setTitle] = useState('')
@@ -37,16 +58,17 @@ export function DecksView({ onOpenDeck, onStartStudy, openCreateSignal, onOpenAs
   const [pendingDelete, setPendingDelete] = useState<Deck | null>(null)
   const [deleting, setDeleting] = useState(false)
 
-  const initialCreateSignal = useRef(openCreateSignal)
   useEffect(() => {
-    if (openCreateSignal > initialCreateSignal.current) setShowForm(true)
-  }, [openCreateSignal])
+    if (createDeckSignal === 0) return
+    setShowForm(true)
+    consumeCreateDeckRequest()
+  }, [createDeckSignal, consumeCreateDeckRequest])
 
   const filteredDecks = useMemo(() => {
     let result = decks.filter(
       (deck) =>
         deck.title.toLowerCase().includes(search.toLowerCase()) ||
-        (deck.description?.toLowerCase() ?? '').includes(search.toLowerCase()),
+        (deck.description?.toLowerCase() ?? '').includes(search.toLowerCase())
     )
 
     switch (sortBy) {
@@ -92,7 +114,11 @@ export function DecksView({ onOpenDeck, onStartStudy, openCreateSignal, onOpenAs
       setShowForm(false)
       toast.push({ title: 'Deck created', variant: 'success' })
     } catch (error) {
-      toast.push({ title: 'Could not create deck', description: describeLearnError(error), variant: 'error' })
+      toast.push({
+        title: 'Could not create deck',
+        description: describeLearnError(error),
+        variant: 'error',
+      })
     } finally {
       setSaving(false)
     }
@@ -104,10 +130,18 @@ export function DecksView({ onOpenDeck, onStartStudy, openCreateSignal, onOpenAs
     try {
       await deleteDeck(pendingDelete.id)
       await refreshDecks()
-      toast.push({ title: 'Deck deleted', description: pendingDelete.title, variant: 'success' })
+      toast.push({
+        title: 'Deck deleted',
+        description: pendingDelete.title,
+        variant: 'success',
+      })
       setPendingDelete(null)
     } catch (error) {
-      toast.push({ title: 'Could not delete deck', description: describeLearnError(error), variant: 'error' })
+      toast.push({
+        title: 'Could not delete deck',
+        description: describeLearnError(error),
+        variant: 'error',
+      })
     } finally {
       setDeleting(false)
     }
@@ -117,7 +151,9 @@ export function DecksView({ onOpenDeck, onStartStudy, openCreateSignal, onOpenAs
     <div className="space-y-6 animate-rise-in">
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div>
-          <h1 className="font-display text-3xl font-semibold tracking-[-0.02em] text-foreground">Your decks</h1>
+          <h1 className="font-display text-3xl font-semibold tracking-[-0.02em] text-foreground">
+            Your decks
+          </h1>
           <p className="mt-1.5 text-sm text-muted">
             <span className="inline-flex items-center gap-1.5 rounded-full border border-accent/15 bg-accent-light px-2.5 py-0.5 text-xs font-bold text-accent">
               {decks.length}
@@ -126,10 +162,22 @@ export function DecksView({ onOpenDeck, onStartStudy, openCreateSignal, onOpenAs
           </p>
         </div>
         <div className="flex items-center gap-2">
-          <Button type="button" variant="secondary" size="sm" icon={Sparkles} onClick={() => onOpenAssistant()}>
+          <Button
+            type="button"
+            variant="secondary"
+            size="sm"
+            icon={Sparkles}
+            onClick={() => onOpenAssistant()}
+          >
             Ask AI
           </Button>
-          <Button type="button" variant="primary" size="sm" icon={Plus} onClick={() => setShowForm(true)}>
+          <Button
+            type="button"
+            variant="primary"
+            size="sm"
+            icon={Plus}
+            onClick={() => setShowForm(true)}
+          >
             New deck
           </Button>
         </div>
@@ -138,7 +186,10 @@ export function DecksView({ onOpenDeck, onStartStudy, openCreateSignal, onOpenAs
       {decks.length > 0 && (
         <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
           <div className="relative flex-1">
-            <Search size={15} className="pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2 text-muted" />
+            <Search
+              size={15}
+              className="pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2 text-muted"
+            />
             <input
               value={search}
               onChange={(event) => setSearch(event.target.value)}
@@ -151,7 +202,9 @@ export function DecksView({ onOpenDeck, onStartStudy, openCreateSignal, onOpenAs
             onClick={() => setShowSort((value) => !value)}
             className={cn(
               'inline-flex items-center gap-1.5 rounded-xl border px-3.5 py-2.5 text-xs font-bold transition-all',
-              showSort ? 'border-accent/25 bg-accent-light text-accent' : 'border-border bg-surface text-muted hover:text-foreground',
+              showSort
+                ? 'border-accent/25 bg-accent-light text-accent'
+                : 'border-border bg-surface text-muted hover:text-foreground'
             )}
           >
             <SlidersHorizontal size={14} />
@@ -162,28 +215,33 @@ export function DecksView({ onOpenDeck, onStartStudy, openCreateSignal, onOpenAs
 
       {showSort && (
         <div className="flex flex-wrap gap-2 animate-rise-in">
-          {(['recent', 'name', 'cards', 'mastery'] as SortBy[]).map((option) => (
-            <button
-              key={option}
-              type="button"
-              onClick={() => setSortBy(option)}
-              className={cn(
-                'rounded-full px-4 py-1.5 text-xs font-bold capitalize transition-all',
-                sortBy === option
-                  ? 'bg-accent text-accent-foreground shadow-glow-sm'
-                  : 'border border-border bg-surface text-muted hover:text-foreground',
-              )}
-            >
-              {option === 'recent' ? 'Last studied' : option}
-            </button>
-          ))}
+          {(['recent', 'name', 'cards', 'mastery'] as SortBy[]).map(
+            (option) => (
+              <button
+                key={option}
+                type="button"
+                onClick={() => setSortBy(option)}
+                className={cn(
+                  'rounded-full px-4 py-1.5 text-xs font-bold capitalize transition-all',
+                  sortBy === option
+                    ? 'bg-accent text-accent-foreground shadow-glow-sm'
+                    : 'border border-border bg-surface text-muted hover:text-foreground'
+                )}
+              >
+                {option === 'recent' ? 'Last studied' : option}
+              </button>
+            )
+          )}
         </div>
       )}
 
       {isLoadingDecks && decks.length === 0 ? (
         <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
           {[1, 2, 3, 4, 5, 6].map((key) => (
-            <div key={key} className="h-56 animate-pulse-soft rounded-2xl bg-surface-hover" />
+            <div
+              key={key}
+              className="h-56 animate-pulse-soft rounded-2xl bg-surface-hover"
+            />
           ))}
         </div>
       ) : filteredDecks.length > 0 ? (
@@ -204,26 +262,51 @@ export function DecksView({ onOpenDeck, onStartStudy, openCreateSignal, onOpenAs
           <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-2xl bg-accent-light text-accent">
             <BookOpen size={24} />
           </div>
-          <h2 className="mt-3 font-display text-lg font-semibold text-foreground">No decks yet</h2>
+          <h2 className="mt-3 font-display text-lg font-semibold text-foreground">
+            No decks yet
+          </h2>
           <p className="mx-auto mt-1 max-w-sm text-sm text-muted">
-            Create your first deck, then add cards manually, paste a CSV list, or import a PDF with AI.
+            Create your first deck, then add cards manually, paste a CSV list,
+            or import a PDF with AI.
           </p>
-          <Button type="button" variant="primary" size="sm" icon={Plus} onClick={() => setShowForm(true)} className="mt-4">
+          <Button
+            type="button"
+            variant="primary"
+            size="sm"
+            icon={Plus}
+            onClick={() => setShowForm(true)}
+            className="mt-4"
+          >
             Create deck
           </Button>
         </div>
       ) : (
         <div className="glass-card px-6 py-12 text-center">
-          <p className="text-sm font-medium text-foreground">No decks match “{search}”</p>
-          <p className="mt-1 text-xs text-muted">Try a different search term.</p>
+          <p className="text-sm font-medium text-foreground">
+            No decks match “{search}”
+          </p>
+          <p className="mt-1 text-xs text-muted">
+            Try a different search term.
+          </p>
         </div>
       )}
 
-      <BaseModal isOpen={showForm} onClose={() => setShowForm(false)} size="md" animation="zoom" ariaLabel="Create deck">
-        <ModalHeader onClose={() => setShowForm(false)} closeAriaLabel="Close create deck">
+      <BaseModal
+        isOpen={showForm}
+        onClose={() => setShowForm(false)}
+        size="md"
+        animation="zoom"
+        ariaLabel="Create deck"
+      >
+        <ModalHeader
+          onClose={() => setShowForm(false)}
+          closeAriaLabel="Close create deck"
+        >
           <div>
             <ModalTitle>Create new deck</ModalTitle>
-            <p className="mt-1 text-sm text-muted">Start a new learning collection.</p>
+            <p className="mt-1 text-sm text-muted">
+              Start a new learning collection.
+            </p>
           </div>
         </ModalHeader>
         <form onSubmit={handleCreate}>
@@ -241,7 +324,9 @@ export function DecksView({ onOpenDeck, onStartStudy, openCreateSignal, onOpenAs
               placeholder="What will you learn?"
             />
             <div>
-              <p className="mb-2 text-[11px] font-semibold uppercase tracking-[0.08em] text-muted">Color</p>
+              <p className="mb-2 text-[11px] font-semibold uppercase tracking-[0.08em] text-muted">
+                Color
+              </p>
               <div className="flex flex-wrap gap-2.5">
                 {DECK_COLORS.map((option) => (
                   <button
@@ -253,7 +338,9 @@ export function DecksView({ onOpenDeck, onStartStudy, openCreateSignal, onOpenAs
                     className={cn(
                       'flex h-8 w-8 items-center justify-center rounded-full transition-transform',
                       option.dot,
-                      color === option.value ? 'scale-110 ring-2 ring-accent ring-offset-2 ring-offset-[var(--surface-solid)]' : 'hover:scale-105',
+                      color === option.value
+                        ? 'scale-110 ring-2 ring-accent ring-offset-2 ring-offset-[var(--surface-solid)]'
+                        : 'hover:scale-105'
                     )}
                   />
                 ))}
@@ -262,10 +349,21 @@ export function DecksView({ onOpenDeck, onStartStudy, openCreateSignal, onOpenAs
           </ModalBody>
           <ModalFooter>
             <div className="flex justify-end gap-2">
-              <Button type="button" variant="secondary" size="sm" onClick={() => setShowForm(false)}>
+              <Button
+                type="button"
+                variant="secondary"
+                size="sm"
+                onClick={() => setShowForm(false)}
+              >
                 Cancel
               </Button>
-              <Button type="submit" variant="primary" size="sm" loading={saving} disabled={!title.trim()}>
+              <Button
+                type="submit"
+                variant="primary"
+                size="sm"
+                loading={saving}
+                disabled={!title.trim()}
+              >
                 Create deck
               </Button>
             </div>
@@ -280,21 +378,38 @@ export function DecksView({ onOpenDeck, onStartStudy, openCreateSignal, onOpenAs
         animation="zoom"
         ariaLabel="Delete deck"
       >
-        <ModalHeader onClose={() => setPendingDelete(null)} closeAriaLabel="Close delete deck">
+        <ModalHeader
+          onClose={() => setPendingDelete(null)}
+          closeAriaLabel="Close delete deck"
+        >
           <ModalTitle>Delete deck?</ModalTitle>
         </ModalHeader>
         <ModalBody>
           <p className="text-sm leading-6 text-muted">
-            <span className="font-semibold text-foreground">{pendingDelete?.title}</span> and all of its cards
-            will be permanently deleted. This cannot be undone.
+            <span className="font-semibold text-foreground">
+              {pendingDelete?.title}
+            </span>{' '}
+            and all of its cards will be permanently deleted. This cannot be
+            undone.
           </p>
         </ModalBody>
         <ModalFooter>
           <div className="flex justify-end gap-2">
-            <Button type="button" variant="secondary" size="sm" onClick={() => setPendingDelete(null)}>
+            <Button
+              type="button"
+              variant="secondary"
+              size="sm"
+              onClick={() => setPendingDelete(null)}
+            >
               Cancel
             </Button>
-            <Button type="button" variant="danger" size="sm" loading={deleting} onClick={() => void handleDelete()}>
+            <Button
+              type="button"
+              variant="danger"
+              size="sm"
+              loading={deleting}
+              onClick={() => void handleDelete()}
+            >
               Delete deck
             </Button>
           </div>

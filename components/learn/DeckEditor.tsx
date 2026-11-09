@@ -1,6 +1,13 @@
 'use client'
 
-import { useCallback, useEffect, useMemo, useRef, useState, type ChangeEvent } from 'react'
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type ChangeEvent,
+} from 'react'
 import {
   ArrowLeft,
   BookOpen,
@@ -17,14 +24,29 @@ import {
   Trash2,
   Zap,
 } from 'lucide-react'
-import BaseModal, { ModalBody, ModalFooter, ModalHeader, ModalTitle } from '@/components/BaseModal'
+import BaseModal, {
+  ModalBody,
+  ModalFooter,
+  ModalHeader,
+  ModalTitle,
+} from '@/components/BaseModal'
 import { Button } from '@/components/ui/Button'
 import { useToast } from '@/components/ToastProvider'
 import { generateCardsFromDocument } from '@/lib/learn/ai'
-import { createCard, createCards, deleteCard, getCardsByDeck, updateCard } from '@/lib/learn/cards'
+import {
+  createCard,
+  createCards,
+  deleteCard,
+  getCardsByDeck,
+  updateCard,
+} from '@/lib/learn/cards'
 import { deleteDeck } from '@/lib/learn/decks'
 import { useLearning } from '@/lib/learn/context'
-import { getDocumentText, updateDocument, uploadDocument } from '@/lib/learn/documents'
+import {
+  getDocumentText,
+  updateDocument,
+  uploadDocument,
+} from '@/lib/learn/documents'
 import type { Card } from '@/lib/learn/types'
 import { checkTextQuality } from '@/lib/learn/pdf-text'
 import { cn, formatRelativeDate, resolveDeckColor } from '@/lib/learn/utils'
@@ -44,12 +66,20 @@ interface CardDraft {
   mastered: boolean
 }
 
-export function DeckEditor({ deckId, onBack, onStartStudy, onOpenAssistant }: Props) {
+export function DeckEditor({
+  deckId,
+  onBack,
+  onStartStudy,
+  onOpenAssistant,
+}: Props) {
   const { decks, refreshDecks, aiRefreshCounter } = useLearning()
   const toast = useToast()
   const toastRef = useRef(toast)
   toastRef.current = toast
-  const deck = useMemo(() => decks.find((candidate) => candidate.id === deckId), [deckId, decks])
+  const deck = useMemo(
+    () => decks.find((candidate) => candidate.id === deckId),
+    [deckId, decks]
+  )
   const color = resolveDeckColor(deck?.color)
 
   const [cards, setCards] = useState<Card[]>([])
@@ -82,8 +112,11 @@ export function DeckEditor({ deckId, onBack, onStartStudy, onOpenAssistant }: Pr
       setCards(next)
       setDrafts(
         Object.fromEntries(
-          next.map((card) => [card.id, { front: card.front, back: card.back, mastered: card.mastered }]),
-        ),
+          next.map((card) => [
+            card.id,
+            { front: card.front, back: card.back, mastered: card.mastered },
+          ])
+        )
       )
     } catch (error) {
       console.warn('Failed to load deck cards:', error)
@@ -136,7 +169,11 @@ export function DeckEditor({ deckId, onBack, onStartStudy, onOpenAssistant }: Pr
       await Promise.all([loadCards(), refreshDecks()])
       toastRef.current.push({ title: 'Card added', variant: 'success' })
     } catch (error) {
-      toastRef.current.push({ title: 'Could not add card', description: describeLearnError(error), variant: 'error' })
+      toastRef.current.push({
+        title: 'Could not add card',
+        description: describeLearnError(error),
+        variant: 'error',
+      })
     } finally {
       setPendingKey(null)
     }
@@ -154,7 +191,11 @@ export function DeckEditor({ deckId, onBack, onStartStudy, onOpenAssistant }: Pr
         variant: 'success',
       })
     } catch (error) {
-      toastRef.current.push({ title: 'Import failed', description: describeLearnError(error), variant: 'error' })
+      toastRef.current.push({
+        title: 'Import failed',
+        description: describeLearnError(error),
+        variant: 'error',
+      })
     } finally {
       setPendingKey(null)
     }
@@ -173,7 +214,11 @@ export function DeckEditor({ deckId, onBack, onStartStudy, onOpenAssistant }: Pr
       await Promise.all([loadCards(), refreshDecks()])
       toastRef.current.push({ title: 'Card saved', variant: 'success' })
     } catch (error) {
-      toastRef.current.push({ title: 'Could not save card', description: describeLearnError(error), variant: 'error' })
+      toastRef.current.push({
+        title: 'Could not save card',
+        description: describeLearnError(error),
+        variant: 'error',
+      })
     } finally {
       setPendingKey(null)
     }
@@ -185,7 +230,11 @@ export function DeckEditor({ deckId, onBack, onStartStudy, onOpenAssistant }: Pr
       await deleteCard(id)
       await Promise.all([loadCards(), refreshDecks()])
     } catch (error) {
-      toastRef.current.push({ title: 'Could not delete card', description: describeLearnError(error), variant: 'error' })
+      toastRef.current.push({
+        title: 'Could not delete card',
+        description: describeLearnError(error),
+        variant: 'error',
+      })
     } finally {
       setPendingKey(null)
     }
@@ -197,11 +246,19 @@ export function DeckEditor({ deckId, onBack, onStartStudy, onOpenAssistant }: Pr
     try {
       await deleteDeck(deck.id)
       await refreshDecks()
-      toastRef.current.push({ title: 'Deck deleted', description: deck.title, variant: 'success' })
+      toastRef.current.push({
+        title: 'Deck deleted',
+        description: deck.title,
+        variant: 'success',
+      })
       setShowDeleteDeck(false)
       onBack()
     } catch (error) {
-      toastRef.current.push({ title: 'Could not delete deck', description: describeLearnError(error), variant: 'error' })
+      toastRef.current.push({
+        title: 'Could not delete deck',
+        description: describeLearnError(error),
+        variant: 'error',
+      })
     } finally {
       setDeletingDeck(false)
     }
@@ -212,12 +269,19 @@ export function DeckEditor({ deckId, onBack, onStartStudy, onOpenAssistant }: Pr
     if (!file || !deck) return
 
     if (file.type !== 'application/pdf') {
-      toastRef.current.push({ title: 'Only PDF files are supported', variant: 'error' })
+      toastRef.current.push({
+        title: 'Only PDF files are supported',
+        variant: 'error',
+      })
       if (fileInputRef.current) fileInputRef.current.value = ''
       return
     }
     if (file.size > 10 * 1024 * 1024) {
-      toastRef.current.push({ title: 'File too large', description: 'Maximum size is 10 MiB.', variant: 'error' })
+      toastRef.current.push({
+        title: 'File too large',
+        description: 'Maximum size is 10 MiB.',
+        variant: 'error',
+      })
       if (fileInputRef.current) fileInputRef.current.value = ''
       return
     }
@@ -230,17 +294,27 @@ export function DeckEditor({ deckId, onBack, onStartStudy, onOpenAssistant }: Pr
       const extracted = await getDocumentText(document.id)
       const warning = checkTextQuality(extracted.text)
       if (warning) {
-        toastRef.current.push({ title: 'Limited PDF text', description: warning, variant: 'warning' })
+        toastRef.current.push({
+          title: 'Limited PDF text',
+          description: warning,
+          variant: 'warning',
+        })
       }
       setUploadStatus('Generating flashcards with AI…')
       const generated = await generateCardsFromDocument(extracted.text, {
         deckTitle: deck.title,
-        maxCards: Math.max(10, Math.min(40, Math.ceil(extracted.text.length / 800))),
+        maxCards: Math.max(
+          10,
+          Math.min(40, Math.ceil(extracted.text.length / 800))
+        ),
         onProgress: (message) => setUploadStatus(message),
       })
       setUploadStatus(`Adding ${generated.length} cards…`)
       await createCards(deck.id, generated)
-      await updateDocument(document.id, { status: 'processed', deckId: deck.id })
+      await updateDocument(document.id, {
+        status: 'processed',
+        deckId: deck.id,
+      })
       await Promise.all([loadCards(), refreshDecks()])
       toastRef.current.push({
         title: `${generated.length} AI cards added`,
@@ -248,7 +322,11 @@ export function DeckEditor({ deckId, onBack, onStartStudy, onOpenAssistant }: Pr
         variant: 'success',
       })
     } catch (error) {
-      toastRef.current.push({ title: 'PDF import failed', description: describeLearnError(error), variant: 'error' })
+      toastRef.current.push({
+        title: 'PDF import failed',
+        description: describeLearnError(error),
+        variant: 'error',
+      })
     } finally {
       if (mountedRef.current) {
         setUploading(false)
@@ -265,8 +343,12 @@ export function DeckEditor({ deckId, onBack, onStartStudy, onOpenAssistant }: Pr
           <BookOpen size={18} />
         </span>
         <div>
-          <h2 className="font-display text-lg font-semibold text-foreground">Deck not found</h2>
-          <p className="mt-1 text-sm text-muted">This deck is unavailable or no longer belongs to you.</p>
+          <h2 className="font-display text-lg font-semibold text-foreground">
+            Deck not found
+          </h2>
+          <p className="mt-1 text-sm text-muted">
+            This deck is unavailable or no longer belongs to you.
+          </p>
         </div>
         <Button type="button" variant="secondary" size="sm" onClick={onBack}>
           Back to decks
@@ -276,7 +358,8 @@ export function DeckEditor({ deckId, onBack, onStartStudy, onOpenAssistant }: Pr
   }
 
   const masteredCount = cards.filter((card) => card.mastered).length
-  const mastery = cards.length > 0 ? Math.round((masteredCount / cards.length) * 100) : 0
+  const mastery =
+    cards.length > 0 ? Math.round((masteredCount / cards.length) * 100) : 0
 
   return (
     <div className="space-y-6 animate-rise-in">
@@ -291,7 +374,13 @@ export function DeckEditor({ deckId, onBack, onStartStudy, onOpenAssistant }: Pr
             Back to decks
           </button>
           <div className="flex items-center gap-3">
-            <span className={cn('flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl', color.soft, color.text)}>
+            <span
+              className={cn(
+                'flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl',
+                color.soft,
+                color.text
+              )}
+            >
               <BookOpen size={18} />
             </span>
             <div className="min-w-0">
@@ -299,14 +388,25 @@ export function DeckEditor({ deckId, onBack, onStartStudy, onOpenAssistant }: Pr
                 {deck?.title ?? 'Deck'}
               </h1>
               <p className="mt-0.5 text-sm text-muted">
-                {deck?.description || 'Add and maintain the cards used in this study session.'}
+                {deck?.description ||
+                  'Add and maintain the cards used in this study session.'}
               </p>
             </div>
           </div>
         </div>
 
         <div className="flex flex-wrap items-center gap-2">
-          <Button type="button" variant="secondary" size="sm" icon={Bot} onClick={() => onOpenAssistant(`Help me improve the deck "${deck?.title ?? ''}" (id: ${deckId}).`)}>
+          <Button
+            type="button"
+            variant="secondary"
+            size="sm"
+            icon={Bot}
+            onClick={() =>
+              onOpenAssistant(
+                `Help me improve the deck "${deck?.title ?? ''}" (id: ${deckId}).`
+              )
+            }
+          >
             Ask AI
           </Button>
           <Button
@@ -319,7 +419,14 @@ export function DeckEditor({ deckId, onBack, onStartStudy, onOpenAssistant }: Pr
           >
             Delete
           </Button>
-          <Button type="button" variant="primary" size="sm" icon={Zap} onClick={onStartStudy} disabled={cards.length === 0}>
+          <Button
+            type="button"
+            variant="primary"
+            size="sm"
+            icon={Zap}
+            onClick={onStartStudy}
+            disabled={cards.length === 0}
+          >
             Study
           </Button>
         </div>
@@ -329,21 +436,33 @@ export function DeckEditor({ deckId, onBack, onStartStudy, onOpenAssistant }: Pr
         <div className="flex flex-wrap items-center justify-between gap-2">
           <div className="flex items-center gap-4 text-xs text-muted">
             <span>
-              <span className="font-semibold text-foreground">{cards.length}</span> cards
+              <span className="font-semibold text-foreground">
+                {cards.length}
+              </span>{' '}
+              cards
             </span>
             <span>
-              <span className="font-semibold text-foreground">{masteredCount}</span> mastered
+              <span className="font-semibold text-foreground">
+                {masteredCount}
+              </span>{' '}
+              mastered
             </span>
             <span className="inline-flex items-center gap-1">
               <Clock3 size={11} />
-              {deck?.lastStudied ? `Studied ${formatRelativeDate(deck.lastStudied)}` : 'Not studied yet'}
+              {deck?.lastStudied
+                ? `Studied ${formatRelativeDate(deck.lastStudied)}`
+                : 'Not studied yet'}
             </span>
           </div>
           <div className="flex items-center gap-2 text-[11px] font-semibold text-muted">
             {mastery}% mastery
           </div>
         </div>
-        <ProgressBar value={mastery} className="mt-3 h-1.5" barClassName={color.bar} />
+        <ProgressBar
+          value={mastery}
+          className="mt-3 h-1.5"
+          barClassName={color.bar}
+        />
       </div>
 
       <div className="glass-card p-4">
@@ -354,7 +473,9 @@ export function DeckEditor({ deckId, onBack, onStartStudy, onOpenAssistant }: Pr
               onClick={() => setBulkMode(false)}
               className={cn(
                 'inline-flex items-center gap-1 rounded-md px-2.5 py-1 text-xs font-medium transition-colors',
-                !bulkMode ? 'bg-surface text-foreground shadow-sm' : 'text-muted hover:text-foreground',
+                !bulkMode
+                  ? 'bg-surface text-foreground shadow-sm'
+                  : 'text-muted hover:text-foreground'
               )}
             >
               <Plus size={12} />
@@ -365,7 +486,9 @@ export function DeckEditor({ deckId, onBack, onStartStudy, onOpenAssistant }: Pr
               onClick={() => setBulkMode(true)}
               className={cn(
                 'inline-flex items-center gap-1 rounded-md px-2.5 py-1 text-xs font-medium transition-colors',
-                bulkMode ? 'bg-surface text-foreground shadow-sm' : 'text-muted hover:text-foreground',
+                bulkMode
+                  ? 'bg-surface text-foreground shadow-sm'
+                  : 'text-muted hover:text-foreground'
               )}
             >
               <List size={12} />
@@ -452,8 +575,11 @@ export function DeckEditor({ deckId, onBack, onStartStudy, onOpenAssistant }: Pr
             />
             <div className="flex flex-wrap items-center justify-between gap-2">
               <p className="text-[11px] text-muted">
-                One card per line as <span className="font-mono">Front,Back</span>. Detected:{' '}
-                <span className="font-semibold text-foreground">{bulkPairs.length}</span>
+                One card per line as{' '}
+                <span className="font-mono">Front,Back</span>. Detected:{' '}
+                <span className="font-semibold text-foreground">
+                  {bulkPairs.length}
+                </span>
               </p>
               <Button
                 type="button"
@@ -491,20 +617,34 @@ export function DeckEditor({ deckId, onBack, onStartStudy, onOpenAssistant }: Pr
           </div>
         ) : cards.length === 0 ? (
           <div className="px-6 pb-12 pt-4 text-center">
-            <p className="text-sm font-medium text-foreground">No cards in this deck</p>
+            <p className="text-sm font-medium text-foreground">
+              No cards in this deck
+            </p>
             <p className="mt-1 text-xs leading-5 text-muted">
-              Add cards above, paste a CSV list, or import a PDF and let AI build the deck.
+              Add cards above, paste a CSV list, or import a PDF and let AI
+              build the deck.
             </p>
           </div>
         ) : (
           <ul className="space-y-2 px-2 pb-3">
             {cards.map((card, index) => {
-              const draft = drafts[card.id] ?? { front: card.front, back: card.back, mastered: card.mastered }
+              const draft = drafts[card.id] ?? {
+                front: card.front,
+                back: card.back,
+                mastered: card.mastered,
+              }
               const dirty =
-                draft.front !== card.front || draft.back !== card.back || draft.mastered !== card.mastered
-              const dueLabel = card.dueDate ? `Due ${card.dueDate}` : 'Not scheduled'
+                draft.front !== card.front ||
+                draft.back !== card.back ||
+                draft.mastered !== card.mastered
+              const dueLabel = card.dueDate
+                ? `Due ${card.dueDate}`
+                : 'Not scheduled'
               return (
-                <li key={card.id} className="rounded-2xl border border-border bg-surface p-3">
+                <li
+                  key={card.id}
+                  className="rounded-2xl border border-border bg-surface p-3"
+                >
                   <div className="flex items-start gap-2">
                     <span className="mt-1 flex h-6 w-6 shrink-0 items-center justify-center rounded-lg bg-surface-hover text-[10px] font-bold tabular-nums text-muted">
                       {index + 1}
@@ -512,13 +652,17 @@ export function DeckEditor({ deckId, onBack, onStartStudy, onOpenAssistant }: Pr
                     <div className="min-w-0 flex-1 space-y-2">
                       <input
                         value={draft.front}
-                        onChange={(event) => updateDraft(card.id, { front: event.target.value })}
+                        onChange={(event) =>
+                          updateDraft(card.id, { front: event.target.value })
+                        }
                         placeholder="Front (question)"
                         className="glass-input h-9 w-full px-3 text-sm font-medium"
                       />
                       <textarea
                         value={draft.back}
-                        onChange={(event) => updateDraft(card.id, { back: event.target.value })}
+                        onChange={(event) =>
+                          updateDraft(card.id, { back: event.target.value })
+                        }
                         placeholder="Back (answer)"
                         rows={2}
                         className="glass-input w-full resize-y px-3 py-2 text-sm leading-5"
@@ -528,17 +672,34 @@ export function DeckEditor({ deckId, onBack, onStartStudy, onOpenAssistant }: Pr
                           <input
                             type="checkbox"
                             checked={draft.mastered}
-                            onChange={(event) => updateDraft(card.id, { mastered: event.target.checked })}
+                            onChange={(event) =>
+                              updateDraft(card.id, {
+                                mastered: event.target.checked,
+                              })
+                            }
                             className="h-3 w-3 accent-[var(--accent)]"
                           />
                           Mastered
                         </label>
-                        <span className={cn('inline-flex items-center gap-1 rounded-full px-2 py-0.5', card.mastered ? 'bg-success-light text-success' : 'bg-surface-hover')}>
-                          {card.mastered ? <Check size={9} /> : <Clock3 size={9} />}
+                        <span
+                          className={cn(
+                            'inline-flex items-center gap-1 rounded-full px-2 py-0.5',
+                            card.mastered
+                              ? 'bg-success-light text-success'
+                              : 'bg-surface-hover'
+                          )}
+                        >
+                          {card.mastered ? (
+                            <Check size={9} />
+                          ) : (
+                            <Clock3 size={9} />
+                          )}
                           {dueLabel}
                         </span>
                         <span>Ease {card.easeFactor.toFixed(2)}</span>
-                        <span>✓ {card.correctCount} / ✗ {card.incorrectCount}</span>
+                        <span>
+                          ✓ {card.correctCount} / ✗ {card.incorrectCount}
+                        </span>
                       </div>
                     </div>
                     <div className="flex shrink-0 flex-col gap-1.5">
@@ -548,7 +709,9 @@ export function DeckEditor({ deckId, onBack, onStartStudy, onOpenAssistant }: Pr
                         size="sm"
                         icon={Save}
                         loading={pendingKey === `save:${card.id}`}
-                        disabled={!dirty || !draft.front.trim() || !draft.back.trim()}
+                        disabled={
+                          !dirty || !draft.front.trim() || !draft.back.trim()
+                        }
                         onClick={() => void handleSaveCard(card.id)}
                       >
                         Save
@@ -580,21 +743,37 @@ export function DeckEditor({ deckId, onBack, onStartStudy, onOpenAssistant }: Pr
         animation="zoom"
         ariaLabel="Delete deck"
       >
-        <ModalHeader onClose={() => setShowDeleteDeck(false)} closeAriaLabel="Close delete deck">
+        <ModalHeader
+          onClose={() => setShowDeleteDeck(false)}
+          closeAriaLabel="Close delete deck"
+        >
           <ModalTitle>Delete deck?</ModalTitle>
         </ModalHeader>
         <ModalBody>
           <p className="text-sm leading-6 text-muted">
-            <span className="font-semibold text-foreground">{deck?.title}</span> and all {cards.length} card
-            {cards.length === 1 ? '' : 's'} will be permanently deleted. This cannot be undone.
+            <span className="font-semibold text-foreground">{deck?.title}</span>{' '}
+            and all {cards.length} card
+            {cards.length === 1 ? '' : 's'} will be permanently deleted. This
+            cannot be undone.
           </p>
         </ModalBody>
         <ModalFooter>
           <div className="flex justify-end gap-2">
-            <Button type="button" variant="secondary" size="sm" onClick={() => setShowDeleteDeck(false)}>
+            <Button
+              type="button"
+              variant="secondary"
+              size="sm"
+              onClick={() => setShowDeleteDeck(false)}
+            >
               Cancel
             </Button>
-            <Button type="button" variant="danger" size="sm" loading={deletingDeck} onClick={() => void handleDeleteDeck()}>
+            <Button
+              type="button"
+              variant="danger"
+              size="sm"
+              loading={deletingDeck}
+              onClick={() => void handleDeleteDeck()}
+            >
               Delete deck
             </Button>
           </div>

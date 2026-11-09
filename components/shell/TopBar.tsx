@@ -13,6 +13,7 @@ import {
   Plus,
   Search,
 } from 'lucide-react'
+import type { LucideIcon } from 'lucide-react'
 import type { NoteType } from '@/lib/notes'
 import { formatModShortcut } from '@/lib/platform'
 import type { Breadcrumb, TopBarMenuItem } from './types'
@@ -31,6 +32,17 @@ export interface TopBarProps {
   searchShortcut?: string
   /** Called with no type to open the type picker, or with a concrete type. */
   onCreateNote?: (type?: NoteType) => void
+  /**
+   * Contextual primary action that replaces the New note split button.
+   * Used by the Learn view so the top bar offers "New deck" instead.
+   */
+  primaryAction?: {
+    label: string
+    icon?: LucideIcon
+    onClick: () => void
+    /** Digit shortcut rendered in the tooltip; defaults to N. */
+    shortcut?: string
+  }
   noteListOpen?: boolean
   onToggleNoteList?: () => void
   detailsOpen?: boolean
@@ -87,6 +99,7 @@ export default function TopBar({
   onOpenSearch,
   searchShortcut,
   onCreateNote,
+  primaryAction,
   noteListOpen = false,
   onToggleNoteList,
   detailsOpen = false,
@@ -333,7 +346,22 @@ export default function TopBar({
         </button>
       ) : null}
 
-      {onCreateNote ? (
+      {primaryAction ? (
+        <button
+          type="button"
+          onClick={primaryAction.onClick}
+          className="glass-btn-primary focus-ring h-9 shrink-0 gap-1.5 px-3 lg:px-4"
+          title={`${primaryAction.label} (${formatModShortcut(primaryAction.shortcut ?? 'N')})`}
+          aria-label={`${primaryAction.label} (${formatModShortcut(primaryAction.shortcut ?? 'N')})`}
+        >
+          {primaryAction.icon ? (
+            <primaryAction.icon className="h-4 w-4 shrink-0" aria-hidden="true" />
+          ) : (
+            <Plus className="h-4 w-4 shrink-0" aria-hidden="true" />
+          )}
+          <span className="hidden text-[13px] xl:inline">{primaryAction.label}</span>
+        </button>
+      ) : onCreateNote ? (
         <div className="relative flex shrink-0 items-center gap-1">
           <button
             type="button"

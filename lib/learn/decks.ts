@@ -30,7 +30,10 @@ export async function getDecks(): Promise<Deck[]> {
       .select('*')
       .eq('user_id', userId)
       .order('updated_at', { ascending: false }),
-    supabase.from('learn_cards').select('deck_id, mastered').eq('user_id', userId),
+    supabase
+      .from('learn_cards')
+      .select('deck_id, mastered')
+      .eq('user_id', userId),
     supabase
       .from('learn_study_sessions')
       .select('deck_id, completed_at')
@@ -97,7 +100,7 @@ export async function createDeck(input: {
 
 export async function updateDeck(
   id: string,
-  input: { title?: string; description?: string | null; color?: string },
+  input: { title?: string; description?: string | null; color?: string }
 ): Promise<void> {
   const { error } = await supabase
     .from('learn_decks')

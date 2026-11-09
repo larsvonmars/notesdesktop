@@ -61,19 +61,27 @@ export function calcXPForSession(
     streak?: number
     perfect?: boolean
     dailyGoalMet?: boolean
-  },
+  }
 ): XPSessionResult {
-  const multiplier = mode ? MODE_MULTIPLIERS[mode] ?? 1.0 : 1.0
+  const multiplier = mode ? (MODE_MULTIPLIERS[mode] ?? 1.0) : 1.0
   const baseXP = cardsReviewed * XP_PER_CARD
   const modeBonus = Math.round(baseXP * (multiplier - 1))
 
-  const streakMultiplier = options?.streak ? calcStreakMultiplier(options.streak) : 1.0
+  const streakMultiplier = options?.streak
+    ? calcStreakMultiplier(options.streak)
+    : 1.0
   const streakBonus = Math.round(baseXP * multiplier * (streakMultiplier - 1))
 
-  const perfectBonus = options?.perfect ? Math.round(baseXP * multiplier * PERFECT_BONUS) : 0
+  const perfectBonus = options?.perfect
+    ? Math.round(baseXP * multiplier * PERFECT_BONUS)
+    : 0
   const dailyGoalBonus = options?.dailyGoalMet ? DAILY_GOAL_BONUS_XP : 0
 
-  const xpEarned = Math.round(baseXP * multiplier) + streakBonus + perfectBonus + dailyGoalBonus
+  const xpEarned =
+    Math.round(baseXP * multiplier) +
+    streakBonus +
+    perfectBonus +
+    dailyGoalBonus
 
   return {
     xpEarned,
@@ -107,7 +115,10 @@ export function calcXPForLevel(level: number): number {
   if (level <= 1) return 0
   const index = level - 2
   if (index < LEVEL_BOUNDARIES.length) return LEVEL_BOUNDARIES[index]
-  return LEVEL_BOUNDARIES[LEVEL_BOUNDARIES.length - 1] + (level - LEVEL_BOUNDARIES.length - 1) * 1200
+  return (
+    LEVEL_BOUNDARIES[LEVEL_BOUNDARIES.length - 1] +
+    (level - LEVEL_BOUNDARIES.length - 1) * 1200
+  )
 }
 
 /** Total cumulative XP required to reach the next level. */
@@ -140,8 +151,13 @@ export function getUserLocalDate(timezoneOffsetMinutes = 0): string {
 }
 
 /** UTC instant for local midnight of `dateStr`, given the browser's timezone offset. */
-export function localDayBounds(dateStr: string, timezoneOffsetMinutes = 0): { start: string; end: string } {
-  const startMs = new Date(`${dateStr}T00:00:00Z`).getTime() + timezoneOffsetMinutes * 60 * 1000
+export function localDayBounds(
+  dateStr: string,
+  timezoneOffsetMinutes = 0
+): { start: string; end: string } {
+  const startMs =
+    new Date(`${dateStr}T00:00:00Z`).getTime() +
+    timezoneOffsetMinutes * 60 * 1000
   return {
     start: new Date(startMs).toISOString(),
     end: new Date(startMs + 86_400_000 - 1).toISOString(),
@@ -155,7 +171,7 @@ export function localDayBounds(dateStr: string, timezoneOffsetMinutes = 0): { st
 export function calcStreak(
   lastStudiedAt: string | null,
   currentStreak: number,
-  todayStr?: string,
+  todayStr?: string
 ): number {
   const today = todayStr ?? toDateStr(new Date().toISOString())!
   if (!lastStudiedAt) return 1
@@ -163,7 +179,9 @@ export function calcStreak(
   const last = toDateStr(lastStudiedAt)
   if (!last) return 1
 
-  const diffMs = new Date(`${today}T00:00:00Z`).getTime() - new Date(`${last}T00:00:00Z`).getTime()
+  const diffMs =
+    new Date(`${today}T00:00:00Z`).getTime() -
+    new Date(`${last}T00:00:00Z`).getTime()
   const diffDays = Math.round(diffMs / 86_400_000)
 
   if (diffDays === 0) return currentStreak
@@ -183,7 +201,10 @@ export interface BadgeCheckStats {
 }
 
 /** Badge IDs that should be newly awarded for the given stats. */
-export function checkBadgeUnlocks(stats: BadgeCheckStats, alreadyEarned: Set<BadgeId>): BadgeId[] {
+export function checkBadgeUnlocks(
+  stats: BadgeCheckStats,
+  alreadyEarned: Set<BadgeId>
+): BadgeId[] {
   const unlocked: BadgeId[] = []
 
   const maybe = (id: BadgeId, condition: boolean) => {

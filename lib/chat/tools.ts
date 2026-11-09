@@ -15,6 +15,9 @@ import { getProjects } from '@/lib/projects'
 import { completeTask, createTask, getTaskStats, getTasks } from '@/lib/tasks'
 import type { Task, TaskPriority, TaskStatus } from '@/lib/tasks'
 import { stripHtmlForAI, textToHtml } from '@/lib/ai'
+import { createCards as createLearnCards, searchCards as searchLearnCards } from '@/lib/learn/cards'
+import { createDeck as createLearnDeck, getDecks as getLearnDecks } from '@/lib/learn/decks'
+import { getUserStats as getLearnStats } from '@/lib/learn/stats'
 
 export interface ChatToolDefinition {
   type: 'function'
@@ -597,6 +600,155 @@ const getTaskStatsTool: ChatToolSpec = {
   },
 }
 
+
+// ─── Learn tools ────────────────────────────────────────────────────────────
+
+const listLearnDecksTool: ChatToolSpec = {
+  definition: {
+    type: 'function',
+    function: {
+      name: 'list_decks',
+      description:
+        'List the user\'s Learn flashcard decks with card counts, mastery and last-studied date.',
+      parameters: { type: 'object', properties: {}, required: [] },
+    },
+  },
+  execute: async () => {
+    const decks = await getLearnDecks()
+    if (decks.length === 0) return 'No Learn decks yet.'
+    return decks
+      .map(
+        (deck) =>
+          `- ${deck.title}  [id: ${deck.id}]\n  cards: ${deck.cardCount}\n  mastered: ${deck.masteredCount}${deck.lastStudied ? `\n  last studied: ${formatDate(deck.lastStudied as string)}` : ''}`,
+      )
+      .join('\n')
+  },
+}
+
+const createLearnDeckTool: ChatToolSpec = {
+  definition: {
+    type: 'function',
+    function: {
+      name: 'create_deck',
+      description: 'Create a new Learn flashcard deck.',
+      parameters: {
+        type: 'object',
+        properties: {
+          title: { type: 'string', description: 'Deck title' },
+          description: { type: 'string', description: 'Optional deck description' },
+        },
+        required: ['title'],
+      },
+    },
+  },
+  execute: async (args) => {
+    const title = str(args.title)
+    if (!title) return 'Error: provide a deck title.'
+    const deck = await createLearnDeck({
+      title,
+      description: str(args.description) || undefined,
+    })
+    return `Created Learn deck "${deck.title}" [id: ${deck.id}].`
+  },
+}
+
+const addLearnCardsTool: ChatToolSpec = {
+  definition: {
+    type: 'function',
+    function: {
+      name: 'add_cards',
+      description:
+        'Add one or more flashcards (front/back pairs) to a Learn deck. Prefer adding multiple cards in one call.',
+      parameters: {
+        type: 'object',
+        properties: {
+          deckId: { type: 'string', description: 'The Learn deck id' },
+          cards: {
+            type: 'array',
+            description: 'Cards to add',
+            items: {
+              type: 'object',
+              properties: {
+                front: { type: 'string', description: 'Question text' },
+                back: { type: 'string', description: 'Answer text' },
+              },
+              required: ['front', 'back'],
+            },
+          },
+        },
+        required: ['deckId', 'cards'],
+      },
+    },
+  },
+  execute: async (args) => {
+    const deckId = str(args.deckId)
+    const cards = Array.isArray(args.cards)
+      ? (args.cards as Array<Record<string, unknown>>)
+          .map((card) => ({ front: str(card.front), back: str(card.back) }))
+          .filter((card) => card.front && card.back)
+      : []
+    if (!deckId) return 'Error: provide a deckId.'
+    if (cards.length === 0) return 'Error: provide at least one front/back card.'
+    await createLearnCards(deckId, cards)
+    return `Added ${cards.length} card${cards.length === 1 ? '' : 's'} to the Learn deck.`
+  },
+}
+
+const getLearnStatsTool: ChatToolSpec = {
+  definition: {
+    type: 'function',
+    function: {
+      name: 'get_stats',
+      description:
+        'Get the user\'s Learn stats: level, XP, streak, daily goal, totals and earned badges.',
+      parameters: { type: 'object', properties: {}, required: [] },
+    },
+  },
+  execute: async () => {
+    const stats = await getLearnStats(new Date().getTimezoneOffset())
+    if (!stats) return 'Error: could not load Learn stats.'
+    const earned = stats.badges.filter((badge) => badge.earnedAt)
+    return [
+      `level: ${stats.level}`,
+      `xp: ${stats.xp} (next level at ${stats.xpToNextLevel})`,
+      `streak: ${stats.streak} days`,
+      `today: ${stats.dailyCardsReviewed}/${stats.dailyGoal} cards`,
+      `total cards reviewed: ${stats.totalCardsReviewed}`,
+      `total sessions: ${stats.totalSessions}`,
+      `accuracy: ${stats.totalCardsReviewed > 0 ? Math.round((stats.totalCorrect / stats.totalCardsReviewed) * 100) : 0}%`,
+      `decks: ${stats.totalDecks}`,
+      `badges: ${earned.length > 0 ? earned.map((badge) => badge.name).join(', ') : 'none yet'}`,
+    ].join('\n')
+  },
+}
+
+const searchLearnCardsTool: ChatToolSpec = {
+  definition: {
+    type: 'function',
+    function: {
+      name: 'search_cards',
+      description: 'Search flashcards across all Learn decks by keyword, matching front and back.',
+      parameters: {
+        type: 'object',
+        properties: {
+          query: { type: 'string', description: 'Keyword to search for' },
+          deckId: { type: 'string', description: 'Optional Learn deck id to limit the search' },
+        },
+        required: ['query'],
+      },
+    },
+  },
+  execute: async (args) => {
+    const query = str(args.query)
+    if (!query) return 'Error: provide a search query.'
+    const cards = await searchLearnCards(query, str(args.deckId) || undefined)
+    if (cards.length === 0) return `No Learn cards found matching "${query}".`
+    return cards
+      .map((card) => `- "${card.front}" → "${card.back}"  [deck: ${card.deckId}]`)
+      .join('\n')
+  },
+}
+
 /** Tools available in both chat and agent mode. */
 export const BASE_CHAT_TOOLS: Record<string, ChatToolSpec> = {
   get_current_date: getCurrentDate,
@@ -611,6 +763,11 @@ export const BASE_CHAT_TOOLS: Record<string, ChatToolSpec> = {
   create_task: createTaskTool,
   complete_task: completeTaskTool,
   get_task_stats: getTaskStatsTool,
+  list_decks: listLearnDecksTool,
+  create_deck: createLearnDeckTool,
+  add_cards: addLearnCardsTool,
+  get_stats: getLearnStatsTool,
+  search_cards: searchLearnCardsTool,
 }
 
 /** Domain groups a sub-agent can be granted (mirrors the agent's tool picker). */
@@ -618,6 +775,7 @@ export const CHAT_TOOL_GROUPS: Record<string, string[]> = {
   notes: ['list_folders', 'list_notes', 'search_notes', 'read_note', 'create_note', 'append_to_note'],
   tasks: ['list_tasks', 'create_task', 'complete_task', 'get_task_stats'],
   projects: ['list_projects', 'list_folders'],
+  learn: ['list_decks', 'create_deck', 'add_cards', 'get_stats', 'search_cards'],
   datetime: ['get_current_date'],
 }
 

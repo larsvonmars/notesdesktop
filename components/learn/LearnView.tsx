@@ -1,6 +1,6 @@
 'use client'
 
-import { useCallback, useMemo, useState } from 'react'
+import { useMemo, useState } from 'react'
 import {
   BookOpen,
   Bot,
@@ -13,32 +13,33 @@ import {
   TrendingUp,
   Zap,
 } from 'lucide-react'
-import BaseModal, { ModalBody, ModalFooter, ModalHeader, ModalTitle } from '@/components/BaseModal'
+import BaseModal, {
+  ModalBody,
+  ModalFooter,
+  ModalHeader,
+  ModalTitle,
+} from '@/components/BaseModal'
 import { Button } from '@/components/ui/Button'
 import { useToast } from '@/components/ToastProvider'
 import { deleteDeck, updateDeck } from '@/lib/learn/decks'
-import { LearningProvider, useLearning } from '@/lib/learn/context'
-import type { Deck, StudyMode } from '@/lib/learn/types'
+import { useLearning } from '@/lib/learn/context'
+import type { Deck } from '@/lib/learn/types'
 import { describeLearnError } from '@/lib/learn/db'
 import { DECK_COLORS, cn, resolveDeckColor } from '@/lib/learn/utils'
 import { DecksView } from './DecksView'
 import { DeckEditor } from './DeckEditor'
 import { LearnAssistant } from './LearnAssistant'
+import { LearnDetailsPanel } from './LearnDetailsPanel'
 import { LearnDashboard } from './LearnDashboard'
 import { LearnProgress } from './LearnProgress'
 import { LearnSettings } from './LearnSettings'
 import { StudySession } from './StudySession'
 
-type Screen =
-  | { kind: 'dashboard' }
-  | { kind: 'decks' }
-  | { kind: 'deck'; deckId: string }
-  | { kind: 'study'; deckId: string; mode?: StudyMode }
-  | { kind: 'progress' }
-  | { kind: 'assistant'; prompt?: string; key: number }
-  | { kind: 'settings' }
-
-const TABS: Array<{ id: 'dashboard' | 'decks' | 'progress' | 'assistant' | 'settings'; label: string; icon: typeof LayoutDashboard }> = [
+const TABS: Array<{
+  id: 'dashboard' | 'decks' | 'progress' | 'assistant' | 'settings'
+  label: string
+  icon: typeof LayoutDashboard
+}> = [
   { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard },
   { id: 'decks', label: 'Decks', icon: BookOpen },
   { id: 'progress', label: 'Progress', icon: TrendingUp },
@@ -46,32 +47,62 @@ const TABS: Array<{ id: 'dashboard' | 'decks' | 'progress' | 'assistant' | 'sett
   { id: 'settings', label: 'Settings', icon: Settings2 },
 ]
 
-export default function LearnView({ onOpenAppSettings }: { onOpenAppSettings: () => void }) {
+export default function LearnView({
+  onOpenAppSettings,
+  showSectionTabs = true,
+  detailsOpen = true,
+}: {
+  onOpenAppSettings: () => void
+  /** Hidden on desktop while the Learn library panel owns navigation. */
+  showSectionTabs?: boolean
+  /** Right-hand details panel (desktop xl+). */
+  detailsOpen?: boolean
+}) {
   return (
-    <LearningProvider>
-      <LearnShell onOpenAppSettings={onOpenAppSettings} />
-    </LearningProvider>
+    <LearnShell
+      onOpenAppSettings={onOpenAppSettings}
+      showSectionTabs={showSectionTabs}
+      detailsOpen={detailsOpen}
+    />
   )
 }
 
-function LearnShell({ onOpenAppSettings }: { onOpenAppSettings: () => void }) {
-  const { stats, decks, refreshDecks, isLoadingStats, isLoadingDecks } = useLearning()
+function LearnShell({
+  onOpenAppSettings,
+  showSectionTabs,
+  detailsOpen,
+}: {
+  onOpenAppSettings: () => void
+  showSectionTabs: boolean
+  detailsOpen: boolean
+}) {
+  const {
+    stats,
+    decks,
+    refreshDecks,
+    isLoadingStats,
+    isLoadingDecks,
+    screen,
+    setScreen,
+    openAssistant,
+    requestCreateDeck,
+  } = useLearning()
   const toast = useToast()
-  const [screen, setScreen] = useState<Screen>({ kind: 'dashboard' })
-  const [createDeckSignal, setCreateDeckSignal] = useState(0)
-  const [pendingDeleteDeck, setPendingDeleteDeck] = useState<string | null>(null)
+  const [pendingDeleteDeck, setPendingDeleteDeck] = useState<string | null>(
+    null
+  )
   const [editingDeck, setEditingDeck] = useState<Deck | null>(null)
   const [deletingDeck, setDeletingDeck] = useState(false)
 
-  const openAssistant = useCallback((prompt?: string) => {
-    setScreen({ kind: 'assistant', prompt, key: Date.now() })
-  }, [])
-
-  const activeTab = screen.kind === 'deck' || screen.kind === 'study' ? 'decks' : screen.kind
+  const activeTab =
+    screen.kind === 'deck' || screen.kind === 'study' ? 'decks' : screen.kind
 
   const pendingDeck = useMemo(
-    () => (pendingDeleteDeck ? decks.find((deck) => deck.id === pendingDeleteDeck) : undefined),
-    [decks, pendingDeleteDeck],
+    () =>
+      pendingDeleteDeck
+        ? decks.find((deck) => deck.id === pendingDeleteDeck)
+        : undefined,
+    [decks, pendingDeleteDeck]
   )
 
   async function handleDeleteDeck() {
@@ -80,146 +111,204 @@ function LearnShell({ onOpenAppSettings }: { onOpenAppSettings: () => void }) {
     try {
       await deleteDeck(pendingDeck.id)
       await refreshDecks()
-      toast.push({ title: 'Deck deleted', description: pendingDeck.title, variant: 'success' })
+      toast.push({
+        title: 'Deck deleted',
+        description: pendingDeck.title,
+        variant: 'success',
+      })
       setPendingDeleteDeck(null)
-      if ((screen.kind === 'deck' || screen.kind === 'study') && screen.deckId === pendingDeck.id) {
+      if (
+        (screen.kind === 'deck' || screen.kind === 'study') &&
+        screen.deckId === pendingDeck.id
+      ) {
         setScreen({ kind: 'decks' })
       }
     } catch (error) {
-      toast.push({ title: 'Could not delete deck', description: describeLearnError(error), variant: 'error' })
+      toast.push({
+        title: 'Could not delete deck',
+        description: describeLearnError(error),
+        variant: 'error',
+      })
     } finally {
       setDeletingDeck(false)
     }
   }
 
-  const dailyPercent = stats && stats.dailyGoal > 0
-    ? Math.min(100, Math.round((stats.dailyCardsReviewed / stats.dailyGoal) * 100))
-    : 0
+  const dailyPercent =
+    stats && stats.dailyGoal > 0
+      ? Math.min(
+          100,
+          Math.round((stats.dailyCardsReviewed / stats.dailyGoal) * 100)
+        )
+      : 0
 
   return (
-    <div className="h-full overflow-y-auto scroll-thin">
-      <div className="mx-auto w-full max-w-7xl px-4 pb-24 pt-5 sm:px-6 lg:px-8 lg:pb-12">
-        <header className="mb-5 flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
-          <div className="flex items-center gap-3">
-            <span className="flex h-11 w-11 items-center justify-center rounded-2xl bg-accent-gradient text-accent-foreground shadow-glow-sm">
-              <GraduationCap size={21} />
-            </span>
-            <div>
-              <h1 className="font-display text-xl font-semibold tracking-[-0.02em] text-foreground">Learn</h1>
-              <p className="text-xs text-muted">Flashcards, spaced repetition and an AI tutor</p>
-            </div>
-          </div>
+    <>
+      <div className="flex h-full min-h-0">
+        <div className="min-h-0 flex-1 overflow-y-auto scroll-thin">
+          <div className="mx-auto w-full max-w-7xl px-4 pb-24 pt-5 sm:px-6 lg:px-8 lg:pb-12">
+            <header className="mb-5 flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+              <div className="flex items-center gap-3">
+                <span className="flex h-11 w-11 items-center justify-center rounded-2xl bg-accent-gradient text-accent-foreground shadow-glow-sm">
+                  <GraduationCap size={21} />
+                </span>
+                <div>
+                  <h1 className="font-display text-xl font-semibold tracking-[-0.02em] text-foreground">
+                    Learn
+                  </h1>
+                  <p className="text-xs text-muted">
+                    Flashcards, spaced repetition and an AI tutor
+                  </p>
+                </div>
+              </div>
 
-          <div className="flex flex-wrap items-center gap-2">
-            {stats ? (
-              <>
-                <StatChip icon={Zap} label={`Level ${stats.level}`} tone="accent" />
-                <StatChip icon={Flame} label={`${stats.streak}-day streak`} tone="warning" />
-                <StatChip
-                  icon={Target}
-                  label={`${stats.dailyCardsReviewed}/${stats.dailyGoal} today`}
-                  tone={stats.dailyGoalMet ? 'success' : 'default'}
-                  hint={`${dailyPercent}%`}
-                />
-                <button
-                  type="button"
-                  onClick={() => setScreen({ kind: 'progress' })}
-                  className="rounded-full border border-accent/20 bg-accent-light px-3 py-1.5 text-xs font-bold text-accent transition-opacity hover:opacity-80"
-                >
-                  {stats.xp.toLocaleString()} XP
-                </button>
-              </>
-            ) : (
-              <span className="rounded-full border border-border bg-surface px-3 py-1.5 text-xs text-muted">
-                {isLoadingStats || isLoadingDecks ? 'Loading Learn…' : 'Ready to learn'}
-              </span>
-            )}
-            <Button type="button" variant="secondary" size="sm" icon={Sparkles} onClick={() => openAssistant()}>
-              Ask AI
-            </Button>
-          </div>
-        </header>
-
-        <nav aria-label="Learn sections" className="glass-card mb-5 flex flex-wrap items-center gap-1 p-1.5">
-          {TABS.map((tab) => {
-            const Icon = tab.icon
-            const active = activeTab === tab.id
-            return (
-              <button
-                key={tab.id}
-                type="button"
-                aria-current={active ? 'page' : undefined}
-                onClick={() => {
-                  if (tab.id === 'dashboard') setScreen({ kind: 'dashboard' })
-                  else if (tab.id === 'decks') setScreen({ kind: 'decks' })
-                  else if (tab.id === 'progress') setScreen({ kind: 'progress' })
-                  else if (tab.id === 'assistant') openAssistant()
-                  else setScreen({ kind: 'settings' })
-                }}
-                className={cn(
-                  'inline-flex items-center gap-1.5 rounded-xl px-3 py-2 text-xs font-semibold transition-colors focus-ring',
-                  active ? 'bg-accent text-accent-foreground shadow-glow-sm' : 'text-muted hover:bg-surface-hover hover:text-foreground',
+              <div className="flex flex-wrap items-center gap-2">
+                {stats ? (
+                  <>
+                    <StatChip
+                      icon={Zap}
+                      label={`Level ${stats.level}`}
+                      tone="accent"
+                    />
+                    <StatChip
+                      icon={Flame}
+                      label={`${stats.streak}-day streak`}
+                      tone="warning"
+                    />
+                    <StatChip
+                      icon={Target}
+                      label={`${stats.dailyCardsReviewed}/${stats.dailyGoal} today`}
+                      tone={stats.dailyGoalMet ? 'success' : 'default'}
+                      hint={`${dailyPercent}%`}
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setScreen({ kind: 'progress' })}
+                      className="rounded-full border border-accent/20 bg-accent-light px-3 py-1.5 text-xs font-bold text-accent transition-opacity hover:opacity-80"
+                    >
+                      {stats.xp.toLocaleString()} XP
+                    </button>
+                  </>
+                ) : (
+                  <span className="rounded-full border border-border bg-surface px-3 py-1.5 text-xs text-muted">
+                    {isLoadingStats || isLoadingDecks
+                      ? 'Loading Learn…'
+                      : 'Ready to learn'}
+                  </span>
                 )}
-              >
-                <Icon size={14} />
-                {tab.label}
-              </button>
-            )
-          })}
-        </nav>
+                <Button
+                  type="button"
+                  variant="secondary"
+                  size="sm"
+                  icon={Sparkles}
+                  onClick={() => openAssistant()}
+                >
+                  Ask AI
+                </Button>
+              </div>
+            </header>
 
-        {screen.kind === 'dashboard' && (
-          <LearnDashboard
-            onOpenDecks={() => setScreen({ kind: 'decks' })}
-            onOpenDeck={(deckId) => setScreen({ kind: 'deck', deckId })}
-            onStartStudy={(deckId) => setScreen({ kind: 'study', deckId })}
-            onCreateDeck={() => {
-              setScreen({ kind: 'decks' })
-              setCreateDeckSignal((value) => value + 1)
-            }}
-            onDeleteDeck={(deckId) => setPendingDeleteDeck(deckId)}
-            onEditDeck={(deck) => setEditingDeck(deck)}
-            onOpenProgress={() => setScreen({ kind: 'progress' })}
-            onOpenAssistant={openAssistant}
-            onOpenSettings={() => setScreen({ kind: 'settings' })}
-          />
-        )}
+            <nav
+              aria-label="Learn sections"
+              className={cn(
+                'glass-card mb-5 flex flex-wrap items-center gap-1 p-1.5',
+                showSectionTabs ? 'flex' : 'lg:hidden'
+              )}
+            >
+              {TABS.map((tab) => {
+                const Icon = tab.icon
+                const active = activeTab === tab.id
+                return (
+                  <button
+                    key={tab.id}
+                    type="button"
+                    aria-current={active ? 'page' : undefined}
+                    onClick={() => {
+                      if (tab.id === 'dashboard')
+                        setScreen({ kind: 'dashboard' })
+                      else if (tab.id === 'decks') setScreen({ kind: 'decks' })
+                      else if (tab.id === 'progress')
+                        setScreen({ kind: 'progress' })
+                      else if (tab.id === 'assistant') openAssistant()
+                      else setScreen({ kind: 'settings' })
+                    }}
+                    className={cn(
+                      'inline-flex items-center gap-1.5 rounded-xl px-3 py-2 text-xs font-semibold transition-colors focus-ring',
+                      active
+                        ? 'bg-accent text-accent-foreground shadow-glow-sm'
+                        : 'text-muted hover:bg-surface-hover hover:text-foreground'
+                    )}
+                  >
+                    <Icon size={14} />
+                    {tab.label}
+                  </button>
+                )
+              })}
+            </nav>
 
-        {screen.kind === 'decks' && (
-          <DecksView
-            onOpenDeck={(deckId) => setScreen({ kind: 'deck', deckId })}
-            onStartStudy={(deckId) => setScreen({ kind: 'study', deckId })}
-            openCreateSignal={createDeckSignal}
-            onOpenAssistant={openAssistant}
-            onEditDeck={(deck) => setEditingDeck(deck)}
-          />
-        )}
+            {screen.kind === 'dashboard' && (
+              <LearnDashboard
+                onOpenDecks={() => setScreen({ kind: 'decks' })}
+                onOpenDeck={(deckId) => setScreen({ kind: 'deck', deckId })}
+                onStartStudy={(deckId) => setScreen({ kind: 'study', deckId })}
+                onCreateDeck={requestCreateDeck}
+                onDeleteDeck={(deckId) => setPendingDeleteDeck(deckId)}
+                onEditDeck={(deck) => setEditingDeck(deck)}
+                onOpenProgress={() => setScreen({ kind: 'progress' })}
+                onOpenAssistant={openAssistant}
+                onOpenSettings={() => setScreen({ kind: 'settings' })}
+              />
+            )}
 
-        {screen.kind === 'deck' && (
-          <DeckEditor
-            deckId={screen.deckId}
-            onBack={() => setScreen({ kind: 'decks' })}
-            onStartStudy={() => setScreen({ kind: 'study', deckId: screen.deckId })}
-            onOpenAssistant={openAssistant}
-          />
-        )}
+            {screen.kind === 'decks' && (
+              <DecksView
+                onOpenDeck={(deckId) => setScreen({ kind: 'deck', deckId })}
+                onStartStudy={(deckId) => setScreen({ kind: 'study', deckId })}
+                onOpenAssistant={openAssistant}
+                onEditDeck={(deck) => setEditingDeck(deck)}
+              />
+            )}
 
-        {screen.kind === 'study' && (
-          <StudySession
-            deckId={screen.deckId}
-            initialMode={screen.mode ?? null}
-            onBackToDeck={() => setScreen({ kind: 'deck', deckId: screen.deckId })}
-            onOpenAssistant={openAssistant}
-          />
-        )}
+            {screen.kind === 'deck' && (
+              <DeckEditor
+                deckId={screen.deckId}
+                onBack={() => setScreen({ kind: 'decks' })}
+                onStartStudy={() =>
+                  setScreen({ kind: 'study', deckId: screen.deckId })
+                }
+                onOpenAssistant={openAssistant}
+              />
+            )}
 
-        {screen.kind === 'progress' && <LearnProgress onOpenAssistant={openAssistant} />}
+            {screen.kind === 'study' && (
+              <StudySession
+                key={`${screen.deckId}:${screen.mode ?? 'picker'}`}
+                deckId={screen.deckId}
+                initialMode={screen.mode ?? null}
+                onBackToDeck={() =>
+                  setScreen({ kind: 'deck', deckId: screen.deckId })
+                }
+                onOpenAssistant={openAssistant}
+              />
+            )}
 
-        {screen.kind === 'assistant' && (
-          <LearnAssistant key={screen.key} initialPrompt={screen.prompt ?? null} />
-        )}
+            {screen.kind === 'progress' && (
+              <LearnProgress onOpenAssistant={openAssistant} />
+            )}
 
-        {screen.kind === 'settings' && <LearnSettings onOpenAppSettings={onOpenAppSettings} />}
+            {screen.kind === 'assistant' && (
+              <LearnAssistant
+                key={screen.key}
+                initialPrompt={screen.prompt ?? null}
+              />
+            )}
+
+            {screen.kind === 'settings' && (
+              <LearnSettings onOpenAppSettings={onOpenAppSettings} />
+            )}
+          </div>
+        </div>
+        {detailsOpen && <LearnDetailsPanel />}
       </div>
 
       {editingDeck && (
@@ -241,27 +330,44 @@ function LearnShell({ onOpenAppSettings }: { onOpenAppSettings: () => void }) {
         animation="zoom"
         ariaLabel="Delete deck"
       >
-        <ModalHeader onClose={() => setPendingDeleteDeck(null)} closeAriaLabel="Close delete deck">
+        <ModalHeader
+          onClose={() => setPendingDeleteDeck(null)}
+          closeAriaLabel="Close delete deck"
+        >
           <ModalTitle>Delete deck?</ModalTitle>
         </ModalHeader>
         <ModalBody>
           <p className="text-sm leading-6 text-muted">
-            <span className="font-semibold text-foreground">{pendingDeck?.title}</span> and all of its cards will
-            be permanently deleted. This cannot be undone.
+            <span className="font-semibold text-foreground">
+              {pendingDeck?.title}
+            </span>{' '}
+            and all of its cards will be permanently deleted. This cannot be
+            undone.
           </p>
         </ModalBody>
         <ModalFooter>
           <div className="flex justify-end gap-2">
-            <Button type="button" variant="secondary" size="sm" onClick={() => setPendingDeleteDeck(null)}>
+            <Button
+              type="button"
+              variant="secondary"
+              size="sm"
+              onClick={() => setPendingDeleteDeck(null)}
+            >
               Cancel
             </Button>
-            <Button type="button" variant="danger" size="sm" loading={deletingDeck} onClick={() => void handleDeleteDeck()}>
+            <Button
+              type="button"
+              variant="danger"
+              size="sm"
+              loading={deletingDeck}
+              onClick={() => void handleDeleteDeck()}
+            >
               Delete deck
             </Button>
           </div>
         </ModalFooter>
       </BaseModal>
-    </div>
+    </>
   )
 }
 
@@ -284,7 +390,12 @@ function StatChip({
   } as const
 
   return (
-    <span className={cn('inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1.5 text-xs font-semibold', tones[tone])}>
+    <span
+      className={cn(
+        'inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1.5 text-xs font-semibold',
+        tones[tone]
+      )}
+    >
       <Icon size={12} />
       {label}
       {hint && <span className="opacity-70">{hint}</span>}
@@ -320,25 +431,43 @@ function EditDeckModal({
       toast.push({ title: 'Deck updated', variant: 'success' })
       await onSaved()
     } catch (error) {
-      toast.push({ title: 'Could not update deck', description: describeLearnError(error), variant: 'error' })
+      toast.push({
+        title: 'Could not update deck',
+        description: describeLearnError(error),
+        variant: 'error',
+      })
     } finally {
       setSaving(false)
     }
   }
 
   return (
-    <BaseModal isOpen onClose={onClose} size="md" animation="zoom" ariaLabel="Edit deck">
+    <BaseModal
+      isOpen
+      onClose={onClose}
+      size="md"
+      animation="zoom"
+      ariaLabel="Edit deck"
+    >
       <ModalHeader onClose={onClose} closeAriaLabel="Close edit deck">
         <div>
           <ModalTitle>Edit deck</ModalTitle>
-          <p className="mt-1 text-sm text-muted">Update the title, description or accent colour.</p>
+          <p className="mt-1 text-sm text-muted">
+            Update the title, description or accent colour.
+          </p>
         </div>
       </ModalHeader>
       <form onSubmit={handleSave}>
         <ModalBody className="space-y-4">
           <label className="block">
-            <span className="mb-1.5 block text-[11px] font-semibold uppercase tracking-[0.08em] text-muted">Title</span>
-            <input value={title} onChange={(event) => setTitle(event.target.value)} className="glass-input h-10 w-full px-3.5 text-sm" />
+            <span className="mb-1.5 block text-[11px] font-semibold uppercase tracking-[0.08em] text-muted">
+              Title
+            </span>
+            <input
+              value={title}
+              onChange={(event) => setTitle(event.target.value)}
+              className="glass-input h-10 w-full px-3.5 text-sm"
+            />
           </label>
           <label className="block">
             <span className="mb-1.5 block text-[11px] font-semibold uppercase tracking-[0.08em] text-muted">
@@ -352,7 +481,9 @@ function EditDeckModal({
             />
           </label>
           <div>
-            <p className="mb-2 text-[11px] font-semibold uppercase tracking-[0.08em] text-muted">Color</p>
+            <p className="mb-2 text-[11px] font-semibold uppercase tracking-[0.08em] text-muted">
+              Color
+            </p>
             <div className="flex flex-wrap gap-2.5">
               {DECK_COLORS.map((option) => (
                 <button
@@ -364,7 +495,9 @@ function EditDeckModal({
                   className={cn(
                     'flex h-8 w-8 items-center justify-center rounded-full transition-transform',
                     option.dot,
-                    color === option.value ? 'scale-110 ring-2 ring-accent ring-offset-2 ring-offset-[var(--surface-solid)]' : 'hover:scale-105',
+                    color === option.value
+                      ? 'scale-110 ring-2 ring-accent ring-offset-2 ring-offset-[var(--surface-solid)]'
+                      : 'hover:scale-105'
                   )}
                 />
               ))}
@@ -373,10 +506,21 @@ function EditDeckModal({
         </ModalBody>
         <ModalFooter>
           <div className="flex justify-end gap-2">
-            <Button type="button" variant="secondary" size="sm" onClick={onClose}>
+            <Button
+              type="button"
+              variant="secondary"
+              size="sm"
+              onClick={onClose}
+            >
               Cancel
             </Button>
-            <Button type="submit" variant="primary" size="sm" loading={saving} disabled={!title.trim()}>
+            <Button
+              type="submit"
+              variant="primary"
+              size="sm"
+              loading={saving}
+              disabled={!title.trim()}
+            >
               Save deck
             </Button>
           </div>
