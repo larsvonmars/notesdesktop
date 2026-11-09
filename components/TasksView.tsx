@@ -229,6 +229,7 @@ export default function TasksView({
           startDate: addDays(today, -120),
           endDate: addDays(today, 400),
           includeCancelled: true,
+          includeRecurring: true,
         }),
         12000,
       ),

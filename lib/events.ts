@@ -72,16 +72,22 @@ export interface TimeEntry {
 // CALENDAR EVENTS
 // ============================================================================
 
-export async function getEvents(filters?: {
+export interface EventFilters {
   startDate?: Date
   endDate?: Date
   taskId?: string
   projectId?: string
   noteId?: string
   category?: string
+  /** Also return recurring events whose start_time is outside the date range. */
   includeRecurring?: boolean
   includeCancelled?: boolean
-}): Promise<CalendarEvent[]> {
+}
+
+function eventsQuery(
+  filters: EventFilters | undefined,
+  options?: { applyDateRange?: boolean; recurringOnly?: boolean },
+) {
   let query = supabase
     .from('calendar_events')
     .select('*')
@@ -91,12 +97,18 @@ export async function getEvents(filters?: {
     query = query.eq('is_cancelled', false)
   }
 
-  if (filters?.startDate) {
-    query = query.gte('start_time', filters.startDate.toISOString())
+  if (options?.recurringOnly) {
+    query = query.eq('is_recurring', true)
   }
 
-  if (filters?.endDate) {
-    query = query.lte('start_time', filters.endDate.toISOString())
+  if (options?.applyDateRange !== false) {
+    if (filters?.startDate) {
+      query = query.gte('start_time', filters.startDate.toISOString())
+    }
+
+    if (filters?.endDate) {
+      query = query.lte('start_time', filters.endDate.toISOString())
+    }
   }
 
   if (filters?.taskId) {
@@ -115,10 +127,31 @@ export async function getEvents(filters?: {
     query = query.eq('category', filters.category)
   }
 
-  const { data, error } = await query
+  return query
+}
+
+export async function getEvents(filters?: EventFilters): Promise<CalendarEvent[]> {
+  const { data, error } = await eventsQuery(filters)
 
   if (error) throw error
-  return data || []
+  const rows: CalendarEvent[] = data || []
+
+  // Recurring templates keep their original reference date, which can sit outside
+  // the requested window. Fetch them separately so schedules never disappear.
+  if (filters?.includeRecurring && (filters.startDate || filters.endDate)) {
+    const { data: recurring, error: recurringError } = await eventsQuery(
+      { ...filters, startDate: undefined, endDate: undefined },
+      { applyDateRange: false, recurringOnly: true },
+    )
+
+    if (recurringError) throw recurringError
+
+    const seen = new Set(rows.map((row) => row.id))
+    rows.push(...(recurring || []).filter((row) => !seen.has(row.id)))
+    rows.sort((a, b) => new Date(a.start_time).getTime() - new Date(b.start_time).getTime())
+  }
+
+  return rows
 }
 
 export async function getEvent(id: string): Promise<CalendarEvent | null> {
@@ -578,13 +611,13 @@ export interface TimetableEntry extends CalendarEvent {
 }
 
 /**
- * Get all timetable entries (parent events with category='timetable')
+ * Get all timetable entries: recurring parent events (is_recurring = true,
+ * i.e. every recurring calendar entry, not only category='timetable').
  */
 export async function getTimetableEntries(): Promise<TimetableEntry[]> {
   const { data, error } = await supabase
     .from('calendar_events')
     .select('*, recurrence_patterns(*)')
-    .eq('category', 'timetable')
     .eq('is_recurring', true)
     .is('parent_event_id', null)
     .eq('is_cancelled', false)

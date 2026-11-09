@@ -97,7 +97,7 @@ export default function TimetableView({
 
   const entries = useMemo<TimetableEntry[]>(() => {
     return events
-      .filter((event) => event.category === 'timetable')
+      .filter((event) => event.is_recurring && !event.parent_event_id)
       .filter((event) => showCancelled || !event.is_cancelled)
       .map((event) => ({
         event,

@@ -210,6 +210,33 @@ describe('Planner views render', () => {
     expect(html).toContain('pl-toolbar')
   })
 
+  it('lists every recurring calendar event as a timetable entry', () => {
+    const recurring = { ...event, category: 'work' }
+    const oneOff = {
+      ...event,
+      id: 'event-2',
+      title: 'One-off meeting',
+      category: 'timetable',
+      is_recurring: false,
+      recurrence_pattern_id: null,
+    }
+
+    const html = renderToStaticMarkup(
+      <ToastProvider>
+        <TimetableView
+          events={[recurring, oneOff]}
+          recurrencePatterns={[pattern]}
+          projects={[project]}
+          onCreate={noop}
+          onEdit={noop}
+          onDelete={noop}
+        />
+      </ToastProvider>,
+    )
+    expect(html).toContain('Lecture')
+    expect(html).not.toContain('One-off meeting')
+  })
+
   it('renders the overview dashboard', () => {
     const html = renderToStaticMarkup(
       <ToastProvider>

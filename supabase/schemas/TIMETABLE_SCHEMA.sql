@@ -2,7 +2,8 @@
 -- TIMETABLE FEATURE - DATABASE ADDITIONS
 -- ============================================================================
 -- The timetable feature uses the existing calendar_events and recurrence_patterns
--- tables. Timetable entries are identified by category = 'timetable'.
+-- tables. Every recurring calendar entry (is_recurring = true) is a timetable
+-- entry; category = 'timetable' is only the default label used for new blocks.
 -- No new tables are needed - only additional indexes for performance.
 -- ============================================================================
 
@@ -19,10 +20,10 @@ CREATE INDEX IF NOT EXISTS calendar_events_project_id_idx
 -- ============================================================================
 -- 
 -- 1. A timetable entry is a calendar_event with:
---    - category = 'timetable'
 --    - is_recurring = true
 --    - recurrence_pattern_id -> recurrence_patterns (frequency = 'weekly')
 --    - parent_event_id IS NULL (it's a template, not an instance)
+--    - category = 'timetable' (default for new blocks, not a filter criterion)
 --    - project_id -> projects (optional, for linking classes to course projects)
 --
 -- 2. The recurrence_pattern stores:

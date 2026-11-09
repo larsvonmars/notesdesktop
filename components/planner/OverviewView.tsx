@@ -176,7 +176,8 @@ export default function OverviewView({
     () =>
       events.filter(
         (event) =>
-          event.category === 'timetable' &&
+          event.is_recurring &&
+          !event.parent_event_id &&
           !event.is_cancelled &&
           (event.recurrence_pattern_id
             ? recurrencePatterns.some(
@@ -360,7 +361,7 @@ export default function OverviewView({
                         <span className="min-w-0 flex-1 truncate text-[12px] font-medium text-foreground">
                           {event.title}
                         </span>
-                        {event.category === 'timetable' && (
+                        {event.is_recurring && (
                           <span className="inline-flex shrink-0 items-center gap-1 rounded-full bg-[var(--surface-sunken)] px-1.5 py-0.5 text-[9px] font-semibold text-muted">
                             <Repeat size={8} />
                             Repeats

@@ -12,6 +12,8 @@ type Filter =
   | { kind: 'is'; column: string; value: any }
   | { kind: 'in'; column: string; values: any[] }
   | { kind: 'notIs'; column: string; value: any }
+  | { kind: 'gte'; column: string; value: any }
+  | { kind: 'lte'; column: string; value: any }
 
 type OrderSpec = { column: string; ascending: boolean }
 
@@ -49,6 +51,10 @@ function matches(row: Row, filter: Filter): boolean {
       return filter.values.includes(row[filter.column])
     case 'notIs':
       return (row[filter.column] ?? null) !== filter.value
+    case 'gte':
+      return row[filter.column] != null && row[filter.column] >= filter.value
+    case 'lte':
+      return row[filter.column] != null && row[filter.column] <= filter.value
     default:
       return true
   }
@@ -106,6 +112,16 @@ class MockQuery implements PromiseLike<{ data: any; error: any; count?: number }
 
   not(column: string, operator: string, value: any) {
     if (operator === 'is') this.filters.push({ kind: 'notIs', column, value })
+    return this
+  }
+
+  gte(column: string, value: any) {
+    this.filters.push({ kind: 'gte', column, value })
+    return this
+  }
+
+  lte(column: string, value: any) {
+    this.filters.push({ kind: 'lte', column, value })
     return this
   }
 
