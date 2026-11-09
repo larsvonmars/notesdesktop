@@ -976,10 +976,15 @@ function WorkspaceContent() {
     router.push('/login')
   }
 
+  // The planner uses the full width next to the rail: the notes library tree is
+  // hidden while it is open.
+  const libraryHidden = activeView === 'tasks'
+
   // Desktop content offset: rail + library (library collapses to 0).
-  const contentOffset = sidebarCollapsed
-    ? 'var(--rail-width)'
-    : 'calc(var(--rail-width) + var(--library-width))'
+  const contentOffset =
+    sidebarCollapsed || libraryHidden
+      ? 'var(--rail-width)'
+      : 'calc(var(--rail-width) + var(--library-width))'
 
   // Set CSS variable for fixed-position elements (e.g. bottom bar in NoteEditor)
   useEffect(() => {
@@ -1435,6 +1440,7 @@ function WorkspaceContent() {
         isMobile={isMobile}
         activeView={activeView}
         sidebarCollapsed={sidebarCollapsed}
+        hideLibrary={libraryHidden}
         mobileOpen={workspaceNavOpen}
         userName={homeUserName}
         userEmail={user.email}
@@ -1525,7 +1531,7 @@ function WorkspaceContent() {
             activeView === 'learn' ? () => setLearnDetailsOpen((prev) => !prev) : undefined
           }
           overflowItems={overflowItems}
-          onOpenLibrary={() => setWorkspaceNavOpen(true)}
+          onOpenLibrary={libraryHidden ? undefined : () => setWorkspaceNavOpen(true)}
         />
 
         <main className="relative min-h-0 flex-1 overflow-hidden">
@@ -1593,36 +1599,6 @@ function WorkspaceContent() {
                   setActiveView('notes')
                 }}
                 onOpenProject={openProjectDashboard}
-                projectTree={{
-                  projects,
-                  folderTree,
-                  allNotes,
-                  selectedNoteId: selectedNote?.id,
-                  selectedFolderId,
-                  selectedProjectId,
-                  onSelectNote: (note) => {
-                    void handleSelectNote(note)
-                    setActiveView('notes')
-                  },
-                  onSelectFolder: handleSelectFolder,
-                  onNewNote: (noteType, folderId, projectId) =>
-                    handleNewNote(noteType as any, folderId, projectId),
-                  onCreateFolder: handleCreateFolder,
-                  onRenameFolder: handleRenameFolder,
-                  onDeleteFolder: handleDeleteFolder,
-                  onMoveFolder: handleMoveFolder,
-                  onMoveFolderToProject: handleMoveFolderToProject,
-                  onDuplicateNote: handleDuplicateNote,
-                  onDeleteNote: handleSidebarDeleteNote,
-                  onMoveNote: handleMoveNote,
-                  onRenameProject: handleRenameProject,
-                  onDeleteProject: handleDeleteProject,
-                  onUpdateProjectColor: handleUpdateProjectColor,
-                  onCreateProject: handleCreateProject,
-                  onMoveNoteToProject: handleMoveNoteToProject,
-                  onOpenProjectDashboard: openProjectDashboard,
-                  archivedCount: archivedProjects.length,
-                }}
               />
             </div>
           )}

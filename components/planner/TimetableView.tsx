@@ -10,7 +10,6 @@ import {
   MapPin,
   Plus,
   Repeat,
-  Search,
   Trash2,
 } from 'lucide-react'
 import type { Project } from '@/lib/projects'
@@ -24,7 +23,15 @@ import {
   minutesSinceMidnight,
 } from '@/lib/planner/date-utils'
 import type { TimetableViewMode } from '@/lib/planner/types'
-import { CATEGORY_COLORS, SegmentedTabs } from './PlannerUi'
+import {
+  CATEGORY_COLORS,
+  PlannerToolbar,
+  SegmentedTabs,
+  ToolbarDivider,
+  ToolbarSearch,
+  ToolbarSelect,
+  ToolbarToggle,
+} from './PlannerUi'
 
 const DAY_NAMES = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat']
 const FULL_DAY_NAMES = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday']
@@ -147,68 +154,64 @@ export default function TimetableView({
 
   return (
     <div className="space-y-4">
-      <div className="glass-card flex flex-wrap items-center gap-2 px-3 py-2.5">
-        <SegmentedTabs
-          ariaLabel="Timetable view"
-          value={mode}
-          onChange={setMode}
-          options={[
-            { key: 'schedule', label: 'Schedule', icon: CalendarDays },
-            { key: 'grid', label: 'Grid', icon: Grid3X3 },
-            { key: 'cards', label: 'Cards', icon: List },
-            { key: 'timeline', label: 'Timeline', icon: Clock3 },
-          ]}
-        />
-
-        <div className="relative min-w-[160px] flex-1">
-          <Search size={13} className="pointer-events-none absolute left-2.5 top-1/2 -translate-y-1/2 text-muted" />
-          <input
-            value={search}
-            onChange={(event) => setSearch(event.target.value)}
-            placeholder="Search the timetable…"
-            className="glass-input h-8 w-full pl-8 pr-2 text-[12px]"
+      <PlannerToolbar label="Timetable controls">
+        <div className="min-w-0 max-w-full overflow-x-auto scroll-thin">
+          <SegmentedTabs
+            ariaLabel="Timetable view"
+            value={mode}
+            onChange={setMode}
+            options={[
+              { key: 'schedule', label: 'Schedule', icon: CalendarDays },
+              { key: 'grid', label: 'Grid', icon: Grid3X3 },
+              { key: 'cards', label: 'Cards', icon: List },
+              { key: 'timeline', label: 'Timeline', icon: Clock3 },
+            ]}
           />
         </div>
 
+        <ToolbarDivider />
+
+        <ToolbarSearch
+          value={search}
+          onChange={setSearch}
+          placeholder="Search the timetable…"
+        />
+
         {(mode === 'cards' || mode === 'grid') && (
-          <select
+          <ToolbarSelect
             value={groupBy}
-            onChange={(event) => setGroupBy(event.target.value as GroupBy)}
-            aria-label="Group timetable entries"
-            className="glass-input h-8 px-2 text-[12px]"
-          >
-            <option value="day">Group: weekday</option>
-            <option value="frequency">Group: frequency</option>
-            <option value="category">Group: project</option>
-            <option value="none">No grouping</option>
-          </select>
+            onChange={setGroupBy}
+            ariaLabel="Group timetable entries"
+            options={[
+              { value: 'day', label: 'Group: weekday' },
+              { value: 'frequency', label: 'Group: frequency' },
+              { value: 'category', label: 'Group: project' },
+              { value: 'none', label: 'No grouping' },
+            ]}
+          />
         )}
 
-        <button
-          type="button"
-          onClick={() => setShowCancelled((current) => !current)}
-          aria-pressed={showCancelled}
-          data-active={showCancelled}
-          className="pl-chip focus-ring"
-        >
-          Cancelled
-        </button>
+        <ToolbarToggle
+          label="Cancelled"
+          active={showCancelled}
+          onToggle={() => setShowCancelled((current) => !current)}
+        />
+
+        <span className="ml-auto flex shrink-0 items-center gap-3 pr-1 text-[11px] tabular-nums text-muted">
+          <span className="inline-flex items-center gap-1.5">
+            <Repeat size={11} className="text-[var(--hue-sky)]" />
+            {entries.length} {entries.length === 1 ? 'entry' : 'entries'}
+          </span>
+          <span className="inline-flex items-center gap-1.5">
+            <Clock3 size={11} className="text-accent" />
+            {Math.round(totalMinutes / 60)}h / week
+          </span>
+        </span>
 
         <Button type="button" variant="primary" size="sm" icon={Plus} onClick={() => onCreate()}>
           New entry
         </Button>
-      </div>
-
-      <div className="flex flex-wrap items-center gap-1.5">
-        <span className="inline-flex items-center gap-1.5 rounded-full border border-[var(--border)] bg-[var(--surface)] px-2.5 py-1 text-[11px] font-medium text-foreground">
-          <Repeat size={11} className="text-[var(--hue-sky)]" />
-          {entries.length} recurring {entries.length === 1 ? 'entry' : 'entries'}
-        </span>
-        <span className="inline-flex items-center gap-1.5 rounded-full border border-[var(--border)] bg-[var(--surface)] px-2.5 py-1 text-[11px] font-medium text-foreground">
-          <Clock3 size={11} className="text-accent" />
-          {Math.round(totalMinutes / 60)}h scheduled each week
-        </span>
-      </div>
+      </PlannerToolbar>
 
       {entries.length === 0 ? (
         <div className="glass-card">

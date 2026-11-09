@@ -35,6 +35,8 @@ interface WorkspaceSidebarProps {
   isMobile: boolean
   activeView: WorkspaceView
   sidebarCollapsed: boolean
+  /** Hide the notes library pane (used while the planner is open). */
+  hideLibrary?: boolean
   mobileOpen: boolean
   /**
    * Tree props minus the ones this component owns: navigation callbacks are
@@ -77,6 +79,7 @@ export default function WorkspaceSidebar({
   isMobile,
   activeView,
   sidebarCollapsed,
+  hideLibrary = false,
   mobileOpen,
   treeProps,
   onSwitchView,
@@ -153,29 +156,31 @@ export default function WorkspaceSidebar({
           badges={learnBadge !== undefined ? { learn: learnBadge } : undefined}
         />
 
-        <aside
-          aria-label="Library"
-          aria-hidden={sidebarCollapsed || undefined}
-          className={cn(
-            'glass-subtle flex h-full shrink-0 flex-col overflow-hidden border-y-0 border-l-0 transition-[width] duration-300 ease-soft',
-            sidebarCollapsed ? 'w-0 border-r-0' : 'w-[var(--library-width,300px)]'
-          )}
-        >
-          {!sidebarCollapsed ? (
-            activeView === 'learn' ? (
-              <LearnSidebar />
-            ) : (
-              <SidebarTree
-                {...sharedTreeProps}
-                dense
-                collapsed={false}
-                onToggleCollapsed={onToggleCollapsed}
-              />
-            )
-          ) : null}
-        </aside>
+        {!hideLibrary && (
+          <aside
+            aria-label="Library"
+            aria-hidden={sidebarCollapsed || undefined}
+            className={cn(
+              'glass-subtle flex h-full shrink-0 flex-col overflow-hidden border-y-0 border-l-0 transition-[width] duration-300 ease-soft',
+              sidebarCollapsed ? 'w-0 border-r-0' : 'w-[var(--library-width,300px)]'
+            )}
+          >
+            {!sidebarCollapsed ? (
+              activeView === 'learn' ? (
+                <LearnSidebar />
+              ) : (
+                <SidebarTree
+                  {...sharedTreeProps}
+                  dense
+                  collapsed={false}
+                  onToggleCollapsed={onToggleCollapsed}
+                />
+              )
+            ) : null}
+          </aside>
+        )}
 
-        {sidebarCollapsed ? (
+        {!hideLibrary && sidebarCollapsed ? (
           <button
             type="button"
             onClick={onToggleCollapsed}

@@ -2,20 +2,28 @@
 
 import { useMemo, useState, type FormEvent } from 'react'
 import {
-  Archive,
+  AlertTriangle,
   ArrowRight,
+  CalendarDays,
   Check,
-  FolderTree,
+  ChevronDown,
+  ChevronRight,
+  Circle,
+  Clock3,
+  FolderOpen,
   Layers,
   List,
+  ListTodo,
   Pencil,
   Plus,
+  Repeat,
+  Star,
   Trash2,
   X,
 } from 'lucide-react'
 import { Button } from '@/components/ui/Button'
+import { EmptyState } from '@/components/ui/EmptyState'
 import { useToast } from '@/components/ToastProvider'
-import SidebarTree, { type SidebarTreeProps } from '@/components/SidebarTree'
 import type { Project } from '@/lib/projects'
 import { createProject } from '@/lib/projects'
 import {
@@ -24,56 +32,106 @@ import {
   updateTaskList,
   type Task,
   type TaskList,
+  type TaskPriority,
 } from '@/lib/tasks'
 import { isTaskOpen } from '@/lib/task-agenda'
 import {
   COLOR_SWATCHES,
   FIELD_CLASS,
   LABEL_CLASS,
+  PRIORITY_META,
   ProgressBar,
+  STATUS_META,
   SectionCardHeader,
+  dueLabel,
 } from './PlannerUi'
 
-/**
- * The notes workspace project tree, embedded in the planner. Mirrors the notes
- * sidebar one-to-one (search, folders, notes, drag & drop, context menus) so
- * organising work feels identical in both views. The chrome slots that belong
- * to the notes shell (collapse toggle, header, footer nav) are filled in by
- * ProjectsView instead.
- */
-export type PlannerProjectTreeProps = Omit<
-  SidebarTreeProps,
-  'collapsed' | 'onToggleCollapsed' | 'dense' | 'showHeader'
->
+const PRIORITY_RANK: Record<TaskPriority, number> = {
+  urgent: 0,
+  high: 1,
+  medium: 2,
+  low: 3,
+}
+
+function dueTime(task: Task): number {
+  return task.due_date ? new Date(task.due_date).getTime() : Number.MAX_SAFE_INTEGER
+}
+
+function compareOpenTasks(a: Task, b: Task): number {
+  const dueDiff = dueTime(a) - dueTime(b)
+  if (dueDiff !== 0) return dueDiff
+  return PRIORITY_RANK[a.priority] - PRIORITY_RANK[b.priority]
+}
+
+function compareDoneTasks(a: Task, b: Task): number {
+  const aDone = a.completed_at ? new Date(a.completed_at).getTime() : 0
+  const bDone = b.completed_at ? new Date(b.completed_at).getTime() : 0
+  if (aDone !== bDone) return bDone - aDone
+  return new Date(b.updated_at).getTime() - new Date(a.updated_at).getTime()
+}
+
+function isOverdue(task: Task): boolean {
+  if (!isTaskOpen(task) || !task.due_date) return false
+  return new Date(task.due_date).getTime() < new Date().setHours(0, 0, 0, 0)
+}
 
 export interface ProjectsViewProps {
   projects: Project[]
   tasks: Task[]
   taskLists: TaskList[]
-  /** When provided, the main column renders the shared notes project tree. */
-  tree?: PlannerProjectTreeProps
   onOpenProject: (projectId: string) => void
+  /** Jump to the Tasks section filtered to a single project. */
   onShowTasks: (projectId: string) => void
+  onOpenTask: (task: Task) => void
+  onEditTask: (task: Task) => void
+  onToggleComplete: (task: Task) => void
+  onToggleStar: (task: Task) => void
+  onDeleteTask: (task: Task) => void
+  onQuickAddTask: (projectId: string, title: string) => Promise<void>
   onProjectsChanged: () => void
   onTaskListsChanged: () => void
 }
 
+interface ProjectGroup {
+  project: Project
+  open: Task[]
+  done: Task[]
+  overdue: number
+}
+
+/**
+ * Project roll-up for the planner: every project that has tasks assigned to
+ * it, with those tasks listed underneath. Projects without tasks are omitted
+ * so the section only shows work that is actually being tracked.
+ */
 export default function ProjectsView({
   projects,
   tasks,
   taskLists,
-  tree,
   onOpenProject,
   onShowTasks,
+  onOpenTask,
+  onEditTask,
+  onToggleComplete,
+  onToggleStar,
+  onDeleteTask,
+  onQuickAddTask,
   onProjectsChanged,
   onTaskListsChanged,
 }: ProjectsViewProps) {
   const toast = useToast()
+
   const [creating, setCreating] = useState(false)
   const [projectName, setProjectName] = useState('')
   const [projectDescription, setProjectDescription] = useState('')
   const [projectColor, setProjectColor] = useState(COLOR_SWATCHES[0])
   const [saving, setSaving] = useState(false)
+
+  const [collapsed, setCollapsed] = useState<Set<string>>(() => new Set())
+  const [showCompleted, setShowCompleted] = useState<Set<string>>(() => new Set())
+  const [quickTitles, setQuickTitles] = useState<Record<string, string>>({})
+  const [quickBusy, setQuickBusy] = useState<string | null>(null)
+  const [confirmDeleteTask, setConfirmDeleteTask] = useState<string | null>(null)
 
   const [listName, setListName] = useState('')
   const [editingListId, setEditingListId] = useState<string | null>(null)
@@ -81,22 +139,49 @@ export default function ProjectsView({
   const [confirmListDelete, setConfirmListDelete] = useState<string | null>(null)
   const [listBusy, setListBusy] = useState(false)
 
-  const stats = useMemo(() => {
-    const map = new Map<string, { open: number; done: number; total: number; overdue: number }>()
-    const now = new Date().setHours(0, 0, 0, 0)
+  const groups = useMemo<ProjectGroup[]>(() => {
+    const byProject = new Map<string, Task[]>()
     for (const task of tasks) {
-      const key = task.project_id ?? 'none'
-      const entry = map.get(key) ?? { open: 0, done: 0, total: 0, overdue: 0 }
-      entry.total++
-      if (task.status === 'completed') entry.done++
-      if (isTaskOpen(task)) entry.open++
-      if (isTaskOpen(task) && task.due_date && new Date(task.due_date).getTime() < now) {
-        entry.overdue++
-      }
-      map.set(key, entry)
+      if (!task.project_id || task.is_archived) continue
+      const bucket = byProject.get(task.project_id)
+      if (bucket) bucket.push(task)
+      else byProject.set(task.project_id, [task])
     }
-    return map
-  }, [tasks])
+
+    const result: ProjectGroup[] = []
+    for (const project of projects) {
+      const projectTasks = byProject.get(project.id)
+      if (!projectTasks || projectTasks.length === 0) continue
+
+      const open: Task[] = []
+      const done: Task[] = []
+      let overdue = 0
+      for (const task of projectTasks) {
+        if (isTaskOpen(task)) {
+          open.push(task)
+          if (isOverdue(task)) overdue++
+        } else {
+          done.push(task)
+        }
+      }
+      open.sort(compareOpenTasks)
+      done.sort(compareDoneTasks)
+      result.push({ project, open, done, overdue })
+    }
+    return result
+  }, [projects, tasks])
+
+  const totals = useMemo(() => {
+    let open = 0
+    let done = 0
+    let overdue = 0
+    for (const group of groups) {
+      open += group.open.length
+      done += group.done.length
+      overdue += group.overdue
+    }
+    return { open, done, overdue }
+  }, [groups])
 
   const listStats = useMemo(() => {
     const map = new Map<string, number>()
@@ -106,6 +191,13 @@ export default function ProjectsView({
     }
     return map
   }, [tasks])
+
+  const toggleInSet = (current: Set<string>, id: string) => {
+    const next = new Set(current)
+    if (next.has(id)) next.delete(id)
+    else next.add(id)
+    return next
+  }
 
   const handleCreateProject = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault()
@@ -122,13 +214,41 @@ export default function ProjectsView({
       setProjectDescription('')
       setCreating(false)
       onProjectsChanged()
-      toast.push({ title: 'Project created', description: name, variant: 'success' })
+      toast.push({
+        title: 'Project created',
+        description: `${name} appears here once a task is assigned to it.`,
+        variant: 'success',
+      })
     } catch (err) {
       console.error('Creating project failed:', err)
       toast.push({ title: 'Could not create project', variant: 'error' })
     } finally {
       setSaving(false)
     }
+  }
+
+  const handleQuickAdd = async (event: FormEvent<HTMLFormElement>, projectId: string) => {
+    event.preventDefault()
+    const title = (quickTitles[projectId] ?? '').trim()
+    if (!title || quickBusy) return
+    setQuickBusy(projectId)
+    try {
+      await onQuickAddTask(projectId, title)
+      setQuickTitles((current) => ({ ...current, [projectId]: '' }))
+    } catch {
+      // The parent surfaces the failure; keep the typed title for a retry.
+    } finally {
+      setQuickBusy(null)
+    }
+  }
+
+  const requestDeleteTask = (task: Task) => {
+    if (confirmDeleteTask !== task.id) {
+      setConfirmDeleteTask(task.id)
+      return
+    }
+    setConfirmDeleteTask(null)
+    onDeleteTask(task)
   }
 
   const handleCreateList = async (event: FormEvent<HTMLFormElement>) => {
@@ -187,15 +307,7 @@ export default function ProjectsView({
     }
   }
 
-  const startCreateProject = () => {
-    if (tree?.onCreateProject) {
-      tree.onCreateProject()
-      return
-    }
-    setCreating((current) => !current)
-  }
-
-  const createForm = creating && !tree?.onCreateProject && (
+  const createForm = (
     <form onSubmit={handleCreateProject} className="mt-3 space-y-3 rounded-xl bg-[var(--surface-sunken)] p-3">
       <div>
         <label className={LABEL_CLASS} htmlFor="project-name">
@@ -245,174 +357,238 @@ export default function ProjectsView({
     </form>
   )
 
-  const unfiled = stats.get('none')
-
   return (
-    <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_320px]">
-      <div className="space-y-4">
-        <section className="glass-card flex h-[min(72vh,760px)] flex-col overflow-hidden">
-          <div className="flex shrink-0 items-center justify-between gap-3 border-b border-[var(--border)] px-4 py-3">
-            <SectionCardHeader
-              icon={tree ? FolderTree : Layers}
-              title="Projects"
-              subtitle={
-                tree
-                  ? 'The same project tree as your notes — search, folders, notes and drag & drop included.'
-                  : 'Group tasks by the projects in your workspace.'
-              }
-            />
-            <div className="flex shrink-0 items-center gap-2">
-              <span className="rounded-full bg-[var(--surface-sunken)] px-2 py-0.5 text-[10px] font-semibold tabular-nums text-muted">
-                {projects.length}
+    <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_300px]">
+      <div className="space-y-3">
+        <section className="glass-card overflow-hidden">
+          <SectionCardHeader
+            icon={Layers}
+            title="Projects"
+            subtitle="Only projects with tasks assigned — expand one to see its tasks."
+            actions={
+              <>
+                <span className="rounded-full bg-[var(--surface-sunken)] px-2 py-0.5 text-[10px] font-semibold tabular-nums text-muted">
+                  {groups.length}
+                </span>
+                <Button
+                  type="button"
+                  variant={creating ? 'ghost' : 'primary'}
+                  size="sm"
+                  icon={creating ? X : Plus}
+                  onClick={() => setCreating((current) => !current)}
+                >
+                  {creating ? 'Cancel' : 'New project'}
+                </Button>
+              </>
+            }
+          />
+
+          <div className="pl-card-body pt-3">
+            <div className="flex flex-wrap items-center gap-1.5">
+              <span className="inline-flex items-center gap-1.5 rounded-full border border-[var(--border)] bg-[var(--surface)] px-2.5 py-1 text-[11px] font-medium text-foreground">
+                <ListTodo size={11} className="text-[var(--hue-sky)]" />
+                {totals.open} open {totals.open === 1 ? 'task' : 'tasks'}
               </span>
-              <Button
-                type="button"
-                variant={creating && !tree?.onCreateProject ? 'ghost' : 'primary'}
-                size="sm"
-                icon={creating && !tree?.onCreateProject ? X : Plus}
-                onClick={startCreateProject}
-              >
-                {creating && !tree?.onCreateProject ? 'Cancel' : 'New project'}
-              </Button>
+              <span className="inline-flex items-center gap-1.5 rounded-full border border-[var(--border)] bg-[var(--surface)] px-2.5 py-1 text-[11px] font-medium text-foreground">
+                <Check size={11} className="text-[var(--hue-mint)]" />
+                {totals.done} completed
+              </span>
+              {totals.overdue > 0 && (
+                <span className="inline-flex items-center gap-1 rounded-full bg-[var(--danger-light)] px-2.5 py-1 text-[11px] font-semibold text-danger">
+                  <AlertTriangle size={11} />
+                  {totals.overdue} overdue
+                </span>
+              )}
             </div>
+
+            {creating && createForm}
           </div>
-
-          {createForm && <div className="shrink-0 px-4 pt-3">{createForm}</div>}
-
-          {tree ? (
-            <div className="min-h-0 flex-1">
-              <SidebarTree
-                {...tree}
-                collapsed={false}
-                onToggleCollapsed={() => {}}
-                dense
-                showHeader={false}
-              />
-            </div>
-          ) : (
-            <div className="scroll-thin min-h-0 flex-1 overflow-y-auto px-4 pb-3">
-              <ul className="mt-1 divide-y divide-[var(--border)]">
-                {projects.map((project) => {
-                  const entry = stats.get(project.id) ?? { open: 0, done: 0, total: 0, overdue: 0 }
-                  const progress =
-                    entry.total > 0 ? Math.round((entry.done / entry.total) * 100) : 0
-                  return (
-                    <li key={project.id} className="py-2.5">
-                      <div className="flex items-start gap-2.5">
-                        <span
-                          className="mt-1 h-2.5 w-2.5 shrink-0 rounded-full"
-                          style={{ backgroundColor: project.color }}
-                        />
-                        <div className="min-w-0 flex-1">
-                          <div className="flex items-center justify-between gap-2">
-                            <span className="truncate text-[12px] font-semibold text-foreground">
-                              {project.name}
-                            </span>
-                            <span className="shrink-0 text-[10px] text-muted">
-                              {entry.open} open · {entry.done} done
-                              {entry.overdue > 0 ? ` · ${entry.overdue} overdue` : ''}
-                            </span>
-                          </div>
-                          {project.description && (
-                            <p className="truncate text-[10px] text-muted">{project.description}</p>
-                          )}
-                          <div className="mt-1 flex items-center gap-2">
-                            <ProgressBar value={progress} className="max-w-[220px]" />
-                            <span className="text-[9px] tabular-nums text-muted">{progress}%</span>
-                          </div>
-                        </div>
-                        <div className="flex shrink-0 items-center gap-1">
-                          <Button
-                            type="button"
-                            variant="ghost"
-                            size="sm"
-                            onClick={() => onShowTasks(project.id)}
-                          >
-                            Tasks
-                            <ArrowRight size={11} />
-                          </Button>
-                          <Button
-                            type="button"
-                            variant="ghost"
-                            size="sm"
-                            icon={Archive}
-                            aria-label={`Open ${project.name}`}
-                            onClick={() => onOpenProject(project.id)}
-                          />
-                        </div>
-                      </div>
-                    </li>
-                  )
-                })}
-                {projects.length === 0 && (
-                  <li className="py-8 text-center text-[11px] text-muted">
-                    No projects yet. Create one to group tasks.
-                  </li>
-                )}
-              </ul>
-            </div>
-          )}
         </section>
 
-        {unfiled && unfiled.total > 0 && (
-          <section className="glass-card flex items-center justify-between p-4">
-            <div>
-              <p className="text-[12px] font-semibold text-foreground">Tasks without a project</p>
-              <p className="text-[10px] text-muted">
-                {unfiled.open} open · {unfiled.done} completed
-              </p>
-            </div>
-            <Button type="button" variant="secondary" size="sm" onClick={() => onShowTasks('')}>
-              Show tasks
-            </Button>
-          </section>
+        {groups.length === 0 ? (
+          <div className="glass-card">
+            <EmptyState
+              icon={Layers}
+              title="No projects with tasks"
+              description="Assign a task to a project and the project — with all of its tasks — shows up here."
+              action={
+                <Button type="button" variant="primary" size="md" icon={Plus} onClick={() => setCreating(true)}>
+                  New project
+                </Button>
+              }
+            />
+          </div>
+        ) : (
+          groups.map((group) => {
+            const { project, open, done, overdue } = group
+            const isCollapsed = collapsed.has(project.id)
+            const isShowingDone = showCompleted.has(project.id)
+            const total = open.length + done.length
+            const progress = total > 0 ? Math.round((done.length / total) * 100) : 0
+            const quickTitle = quickTitles[project.id] ?? ''
+
+            return (
+              <section key={project.id} className="glass-card overflow-hidden">
+                <div className="border-b border-[var(--border)] px-4 py-3">
+                  <div className="flex flex-wrap items-start justify-between gap-2">
+                    <button
+                      type="button"
+                      onClick={() => setCollapsed((current) => toggleInSet(current, project.id))}
+                      aria-expanded={!isCollapsed}
+                      className="focus-ring flex min-w-0 flex-1 items-start gap-2.5 rounded-lg text-left"
+                    >
+                      <span className="mt-0.5 shrink-0 text-muted">
+                        {isCollapsed ? <ChevronRight size={15} /> : <ChevronDown size={15} />}
+                      </span>
+                      <span
+                        className="mt-1.5 h-2.5 w-2.5 shrink-0 rounded-full"
+                        style={{ backgroundColor: project.color }}
+                      />
+                      <span className="min-w-0 flex-1">
+                        <span className="flex flex-wrap items-center gap-x-2 gap-y-1">
+                          <span className="truncate text-[13px] font-semibold text-foreground">
+                            {project.name}
+                          </span>
+                          <span className="shrink-0 text-[10px] text-muted">
+                            {open.length} open · {done.length} done
+                          </span>
+                          {overdue > 0 && (
+                            <span className="inline-flex items-center gap-1 rounded-full bg-[var(--danger-light)] px-1.5 py-0.5 text-[9.5px] font-semibold text-danger">
+                              <AlertTriangle size={9} />
+                              {overdue} overdue
+                            </span>
+                          )}
+                        </span>
+                        {project.description && (
+                          <span className="mt-0.5 block truncate text-[11px] text-muted">
+                            {project.description}
+                          </span>
+                        )}
+                      </span>
+                    </button>
+
+                    <div className="flex shrink-0 items-center gap-1">
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => onShowTasks(project.id)}
+                      >
+                        Tasks
+                        <ArrowRight size={11} />
+                      </Button>
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="sm"
+                        icon={FolderOpen}
+                        aria-label={`Open ${project.name}`}
+                        onClick={() => onOpenProject(project.id)}
+                      />
+                    </div>
+                  </div>
+
+                  <div className="mt-2 flex items-center gap-2 pl-[42px]">
+                    <ProgressBar value={progress} className="max-w-[260px]" />
+                    <span className="text-[9px] tabular-nums text-muted">{progress}%</span>
+                  </div>
+                </div>
+
+                {!isCollapsed && (
+                  <div>
+                    <form
+                      onSubmit={(event) => void handleQuickAdd(event, project.id)}
+                      className="flex items-center gap-1.5 border-b border-[var(--border)] px-4 py-2"
+                    >
+                      <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-lg bg-[var(--accent-light)] text-accent">
+                        <Plus size={12} />
+                      </span>
+                      <input
+                        value={quickTitle}
+                        onChange={(event) =>
+                          setQuickTitles((current) => ({
+                            ...current,
+                            [project.id]: event.target.value,
+                          }))
+                        }
+                        placeholder={`Add a task to ${project.name}…`}
+                        aria-label={`Add a task to ${project.name}`}
+                        className="h-8 min-w-0 flex-1 bg-transparent px-1 text-[12px] text-foreground outline-none placeholder:text-muted/70"
+                      />
+                      <Button
+                        type="submit"
+                        variant="secondary"
+                        size="sm"
+                        disabled={!quickTitle.trim() || quickBusy !== null}
+                      >
+                        Add
+                      </Button>
+                    </form>
+
+                    {total === 0 ? (
+                      <p className="px-4 py-5 text-center text-[11px] text-muted">No tasks yet.</p>
+                    ) : (
+                      <ul className="divide-y divide-[var(--border)]">
+                        {open.map((task) => (
+                          <ProjectTaskRow
+                            key={task.id}
+                            task={task}
+                            confirmingDelete={confirmDeleteTask === task.id}
+                            onOpen={() => onOpenTask(task)}
+                            onEdit={() => onEditTask(task)}
+                            onToggleComplete={() => onToggleComplete(task)}
+                            onToggleStar={() => onToggleStar(task)}
+                            onDelete={() => requestDeleteTask(task)}
+                            onCancelDelete={() => setConfirmDeleteTask(null)}
+                          />
+                        ))}
+
+                        {done.length > 0 && (
+                          <li>
+                            <button
+                              type="button"
+                              onClick={() =>
+                                setShowCompleted((current) => toggleInSet(current, project.id))
+                              }
+                              aria-expanded={isShowingDone}
+                              className="focus-ring flex w-full items-center gap-1.5 px-4 py-2 text-left text-[11px] font-medium text-muted transition-colors hover:bg-[var(--surface-hover)] hover:text-foreground"
+                            >
+                              {isShowingDone ? <ChevronDown size={13} /> : <ChevronRight size={13} />}
+                              {isShowingDone ? 'Hide' : 'Show'} {done.length} completed
+                            </button>
+                          </li>
+                        )}
+
+                        {isShowingDone &&
+                          done.map((task) => (
+                            <ProjectTaskRow
+                              key={task.id}
+                              task={task}
+                              confirmingDelete={confirmDeleteTask === task.id}
+                              onOpen={() => onOpenTask(task)}
+                              onEdit={() => onEditTask(task)}
+                              onToggleComplete={() => onToggleComplete(task)}
+                              onToggleStar={() => onToggleStar(task)}
+                              onDelete={() => requestDeleteTask(task)}
+                              onCancelDelete={() => setConfirmDeleteTask(null)}
+                            />
+                          ))}
+                      </ul>
+                    )}
+                  </div>
+                )}
+              </section>
+            )
+          })
         )}
       </div>
 
       <aside className="space-y-4">
-        {projects.length > 0 && (
-          <section className="glass-card p-4">
-            <SectionCardHeader
-              icon={Layers}
-              title="Workload"
-              subtitle="Open vs. completed tasks per project."
-            />
-            <ul className="mt-3 space-y-2.5">
-              {projects.map((project) => {
-                const entry = stats.get(project.id) ?? { open: 0, done: 0, total: 0, overdue: 0 }
-                if (entry.total === 0) return null
-                const progress = Math.round((entry.done / entry.total) * 100)
-                return (
-                  <li key={project.id}>
-                    <div className="flex items-center justify-between gap-2 text-[11px]">
-                      <span className="flex min-w-0 items-center gap-1.5 text-foreground">
-                        <span
-                          className="h-2 w-2 shrink-0 rounded-full"
-                          style={{ backgroundColor: project.color }}
-                        />
-                        <span className="truncate">{project.name}</span>
-                      </span>
-                      <span className="shrink-0 tabular-nums text-muted">
-                        {entry.open} open
-                        {entry.overdue > 0 ? ` · ${entry.overdue} overdue` : ''}
-                      </span>
-                    </div>
-                    <div className="mt-1 flex items-center gap-2">
-                      <ProgressBar value={progress} className="flex-1" />
-                      <span className="text-[9px] tabular-nums text-muted">{progress}%</span>
-                    </div>
-                  </li>
-                )
-              })}
-            </ul>
-          </section>
-        )}
-
         <section className="glass-card p-4">
           <SectionCardHeader
             icon={List}
             title="Task lists"
-            subtitle="Task lists are lightweight buckets independent of projects."
+            subtitle="Lightweight buckets independent of projects."
           />
 
           <form onSubmit={handleCreateList} className="mt-3 flex items-center gap-1.5">
@@ -497,11 +673,181 @@ export default function ProjectsView({
         <section className="glass-card p-4">
           <h3 className={LABEL_CLASS}>Assignment</h3>
           <p className="text-[10px] leading-4 text-muted">
-            Open a task and pick a project or task list to file it. The filters on the Tasks tab
-            then show each bucket separately, and the calendar can show project-linked events.
+            Open a task and pick a project or task list to file it. Projects only appear in this
+            section once at least one task is assigned to them.
           </p>
         </section>
       </aside>
     </div>
+  )
+}
+
+function ProjectTaskRow({
+  task,
+  confirmingDelete,
+  onOpen,
+  onEdit,
+  onToggleComplete,
+  onToggleStar,
+  onDelete,
+  onCancelDelete,
+}: {
+  task: Task
+  confirmingDelete: boolean
+  onOpen: () => void
+  onEdit: () => void
+  onToggleComplete: () => void
+  onToggleStar: () => void
+  onDelete: () => void
+  onCancelDelete: () => void
+}) {
+  const done = !isTaskOpen(task)
+  const overdue = isOverdue(task)
+  const labels = task.labels ?? []
+
+  return (
+    <li
+      className="pl-task-row group/row px-4 py-2.5 pl-5 transition-colors hover:bg-[var(--surface-hover)]"
+      style={{
+        ['--pl-rail' as string]: done ? 'transparent' : PRIORITY_META[task.priority].color,
+      }}
+    >
+      <div className="flex items-start gap-2.5">
+        <button
+          type="button"
+          onClick={onToggleComplete}
+          aria-label={done ? `Reopen ${task.title}` : `Complete ${task.title}`}
+          className={`focus-ring mt-0.5 flex h-[19px] w-[19px] shrink-0 items-center justify-center rounded-full border transition-all ${
+            done
+              ? 'border-accent bg-accent text-accent-foreground'
+              : 'border-[var(--border-strong)] text-transparent hover:scale-110 hover:border-accent hover:bg-[var(--accent-light)] hover:text-accent'
+          }`}
+        >
+          {done ? <Check size={11} /> : <Circle size={9} />}
+        </button>
+
+        <div className="min-w-0 flex-1">
+          <div className="flex items-start gap-2">
+            <button
+              type="button"
+              onClick={onOpen}
+              className="focus-ring block min-w-0 flex-1 rounded-md text-left"
+            >
+              <span
+                className={`block text-[12.5px] font-medium leading-snug ${
+                  done ? 'text-muted line-through' : 'text-foreground'
+                }`}
+              >
+                {task.title}
+              </span>
+            </button>
+            <span
+              className={`inline-flex shrink-0 items-center gap-1 rounded-full px-1.5 py-0.5 text-[9.5px] font-semibold ${PRIORITY_META[task.priority].soft}`}
+            >
+              {PRIORITY_META[task.priority].label}
+            </span>
+          </div>
+
+          {task.description && !done && (
+            <p className="mt-0.5 truncate text-[11px] text-muted">{task.description}</p>
+          )}
+
+          <div className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 text-[10px]">
+            {task.due_date ? (
+              <span
+                className={`inline-flex items-center gap-1 rounded-md px-1.5 py-0.5 font-medium ${
+                  overdue
+                    ? 'bg-[var(--danger-light)] text-danger'
+                    : 'bg-[var(--surface-sunken)] text-muted'
+                }`}
+              >
+                {overdue ? <AlertTriangle size={10} /> : <CalendarDays size={10} />}
+                {dueLabel(task)}
+              </span>
+            ) : (
+              <span className="text-muted">No due date</span>
+            )}
+
+            {task.estimated_minutes ? (
+              <span className="inline-flex items-center gap-1 text-muted">
+                <Clock3 size={10} />
+                {task.estimated_minutes}m
+              </span>
+            ) : null}
+
+            {task.status !== 'todo' && !done && (
+              <span
+                className={`rounded-full px-1.5 py-0.5 font-semibold ${STATUS_META[task.status].className}`}
+              >
+                {STATUS_META[task.status].label}
+              </span>
+            )}
+
+            {task.is_recurring && (
+              <span className="inline-flex items-center gap-1 text-muted" title="Recurring task">
+                <Repeat size={10} />
+              </span>
+            )}
+
+            {labels.slice(0, 3).map((label) => (
+              <span key={label} className="rounded bg-[var(--surface-sunken)] px-1 py-0.5 text-muted">
+                {label}
+              </span>
+            ))}
+            {labels.length > 3 && <span className="text-muted">+{labels.length - 3}</span>}
+          </div>
+        </div>
+
+        <div className="flex shrink-0 items-center opacity-70 transition-opacity group-hover/row:opacity-100">
+          <button
+            type="button"
+            onClick={onToggleStar}
+            aria-label={task.is_starred ? `Unstar ${task.title}` : `Star ${task.title}`}
+            className={`focus-ring flex h-7 w-7 items-center justify-center rounded-lg transition-colors hover:bg-[var(--surface-active)] ${
+              task.is_starred ? 'text-amber-500 opacity-100' : 'text-muted'
+            }`}
+          >
+            <Star size={12} fill={task.is_starred ? 'currentColor' : 'none'} />
+          </button>
+          <button
+            type="button"
+            onClick={onEdit}
+            aria-label={`Edit ${task.title}`}
+            className="focus-ring flex h-7 w-7 items-center justify-center rounded-lg text-muted hover:bg-[var(--surface-active)] hover:text-foreground"
+          >
+            <Pencil size={12} />
+          </button>
+          {confirmingDelete ? (
+            <>
+              <button
+                type="button"
+                onClick={onDelete}
+                aria-label={`Confirm deleting ${task.title}`}
+                className="focus-ring flex h-7 w-7 items-center justify-center rounded-lg bg-[var(--danger-light)] text-danger"
+              >
+                <Check size={12} />
+              </button>
+              <button
+                type="button"
+                onClick={onCancelDelete}
+                aria-label="Cancel delete"
+                className="focus-ring flex h-7 w-7 items-center justify-center rounded-lg text-muted hover:bg-[var(--surface-active)] hover:text-foreground"
+              >
+                <X size={12} />
+              </button>
+            </>
+          ) : (
+            <button
+              type="button"
+              onClick={onDelete}
+              aria-label={`Delete ${task.title}`}
+              className="focus-ring flex h-7 w-7 items-center justify-center rounded-lg text-muted hover:bg-[var(--surface-active)] hover:text-danger"
+            >
+              <Trash2 size={12} />
+            </button>
+          )}
+        </div>
+      </div>
+    </li>
   )
 }

@@ -60,12 +60,13 @@ import type {
 import CalendarView from './planner/CalendarView'
 import EventFormModal from './planner/EventFormModal'
 import OverviewView from './planner/OverviewView'
+import { PlannerToolbar, ToolbarSelect } from './planner/PlannerUi'
 import PlannerSidebar, {
   PlannerSidebarDrawer,
   type PlannerSection,
 } from './planner/PlannerSidebar'
 import PlannerSettingsView from './planner/PlannerSettingsView'
-import ProjectsView, { type PlannerProjectTreeProps } from './planner/ProjectsView'
+import ProjectsView from './planner/ProjectsView'
 import SmartPlannerView from './planner/SmartPlannerView'
 import TaskDetailPanel from './planner/TaskDetailPanel'
 import TaskFormModal from './planner/TaskFormModal'
@@ -109,7 +110,7 @@ const SECTION_META: Record<PlannerSection, { title: string; description: string 
   },
   projects: {
     title: 'Projects',
-    description: 'Tasks grouped by the projects in this workspace.',
+    description: 'Projects with tasks assigned, and the tasks underneath them.',
   },
   calendar: {
     title: 'Calendar',
@@ -149,8 +150,6 @@ export interface TasksViewProps {
   initialSection?: PlannerSection
   /** Notifies the shell so breadcrumbs can mirror the active section. */
   onSectionChange?: (section: PlannerSection) => void
-  /** Notes library tree reused as the planner's Projects section. */
-  projectTree?: PlannerProjectTreeProps
 }
 
 export default function TasksView({
@@ -160,7 +159,6 @@ export default function TasksView({
   onOpenProject,
   initialSection,
   onSectionChange,
-  projectTree,
 }: TasksViewProps) {
   const toast = useToast()
 
@@ -551,6 +549,21 @@ export default function TasksView({
     [listFilter, projectFilter, toast],
   )
 
+  const handleQuickAddToProject = useCallback(
+    async (projectId: string, title: string) => {
+      try {
+        const created = await createTask(title, { projectId, status: 'todo' })
+        setTasks((current) => [created, ...current])
+        toast.push({ title: 'Task added', description: created.title, variant: 'success' })
+      } catch (error) {
+        console.error('Quick add to project failed:', error)
+        toast.push({ title: 'Could not add task', variant: 'error' })
+        throw error
+      }
+    },
+    [toast],
+  )
+
   const handleMoveTask = useCallback(
     async (task: Task, status: TaskStatus, orderedIds: string[]) => {
       const completedAt =
@@ -764,6 +777,9 @@ export default function TasksView({
     const now = new Date()
     const todayStart = getStartOfDay(now)
     const weekEnd = addDays(todayStart, 7)
+    const projectIdsWithTasks = new Set(
+      tasks.filter((task) => task.project_id && !task.is_archived).map((task) => task.project_id),
+    )
     const activePlan = plans.find((plan) => plan.status === 'active') ?? null
     const planProgress =
       activePlan && activePlan.items.length > 0
@@ -781,7 +797,7 @@ export default function TasksView({
     return {
       open: openTasks.length,
       starred: tasks.filter((task) => task.is_starred && isTaskOpen(task)).length,
-      projects: localProjects.length,
+      projects: localProjects.filter((project) => projectIdsWithTasks.has(project.id)).length,
       upcomingEvents: events.filter((event) => {
         if (event.is_cancelled) return false
         const start = new Date(event.start_time)
@@ -913,7 +929,7 @@ export default function TasksView({
 
             {section === 'tasks' && (
               <div className="space-y-3">
-                <div className="flex flex-wrap items-center gap-2">
+                <PlannerToolbar label="Task controls">
                   <div className="segmented" role="tablist" aria-label="Task view mode">
                     <button
                       type="button"
@@ -939,40 +955,35 @@ export default function TasksView({
                     </button>
                   </div>
 
-                  <select
+                  <ToolbarSelect
                     value={projectFilter}
-                    onChange={(event) => setProjectFilter(event.target.value)}
-                    aria-label="Filter tasks by project"
-                    className="glass-input h-8 px-2 text-[12px]"
-                  >
-                    <option value="all">All projects</option>
-                    <option value="none">No project</option>
-                    {localProjects.map((project) => (
-                      <option key={project.id} value={project.id}>
-                        {project.name}
-                      </option>
-                    ))}
-                  </select>
+                    onChange={setProjectFilter}
+                    ariaLabel="Filter tasks by project"
+                    options={[
+                      { value: 'all', label: 'All projects' },
+                      { value: 'none', label: 'No project' },
+                      ...localProjects.map((project) => ({
+                        value: project.id,
+                        label: project.name,
+                      })),
+                    ]}
+                  />
 
-                  <select
+                  <ToolbarSelect
                     value={listFilter}
-                    onChange={(event) => setListFilter(event.target.value)}
-                    aria-label="Filter tasks by list"
-                    className="glass-input h-8 px-2 text-[12px]"
-                  >
-                    <option value="all">All lists</option>
-                    <option value="none">No list</option>
-                    {taskLists.map((list) => (
-                      <option key={list.id} value={list.id}>
-                        {list.name}
-                      </option>
-                    ))}
-                  </select>
+                    onChange={setListFilter}
+                    ariaLabel="Filter tasks by list"
+                    options={[
+                      { value: 'all', label: 'All lists' },
+                      { value: 'none', label: 'No list' },
+                      ...taskLists.map((list) => ({ value: list.id, label: list.name })),
+                    ]}
+                  />
 
-                  <span className="ml-auto text-[11px] text-muted">
+                  <span className="ml-auto shrink-0 pr-1 text-[11px] tabular-nums text-muted">
                     {filteredTasks.length} of {tasks.length} tasks
                   </span>
-                </div>
+                </PlannerToolbar>
 
                 {taskMode === 'list' ? (
                   <TaskListView
@@ -1090,9 +1101,14 @@ export default function TasksView({
                 projects={localProjects}
                 tasks={tasks}
                 taskLists={taskLists}
-                tree={projectTree}
                 onOpenProject={onOpenProject}
                 onShowTasks={handleShowProjectTasks}
+                onOpenTask={(task) => setDetailTaskId(task.id)}
+                onEditTask={openEditTask}
+                onToggleComplete={(task) => void handleToggleComplete(task)}
+                onToggleStar={(task) => void handleToggleStar(task)}
+                onDeleteTask={(task) => void handleDeleteTask(task)}
+                onQuickAddTask={handleQuickAddToProject}
                 onProjectsChanged={() => void refreshProjects()}
                 onTaskListsChanged={() => void refreshTaskLists()}
               />

@@ -13,6 +13,7 @@ import TaskKanbanView from '@/components/planner/TaskKanbanView'
 import TaskListView from '@/components/planner/TaskListView'
 import TimetableView from '@/components/planner/TimetableView'
 import OverviewView from '@/components/planner/OverviewView'
+import ProjectsView from '@/components/planner/ProjectsView'
 import type { CalendarEvent, RecurrencePattern } from '@/lib/events'
 import type { Task } from '@/lib/tasks'
 import type { Project } from '@/lib/projects'
@@ -122,9 +123,33 @@ describe('Planner views render', () => {
     expect(html).toContain('Agenda')
     expect(html).toContain('Keyboard shortcuts')
     expect(html).toContain('Month')
+    expect(html).toContain('pl-toolbar')
   })
 
   it('renders the task list with priority and project context', () => {
+    const html = renderToStaticMarkup(
+      <ToastProvider>
+        <TaskListView
+          tasks={[{ ...task, status: 'todo' }]}
+          projects={[project]}
+          notes={[]}
+          recurrencePatterns={[]}
+          onOpenTask={noop}
+          onEditTask={noop}
+          onToggleComplete={noop}
+          onToggleStar={noop}
+          onDeleteTask={noop}
+          onQuickAdd={noop}
+          onNewTask={noop}
+        />
+      </ToastProvider>,
+    )
+    expect(html).toContain('Write introduction')
+    expect(html).toContain('Thesis')
+    expect(html).toContain('High')
+  })
+
+  it('defaults the task list to the to-do status filter', () => {
     const html = renderToStaticMarkup(
       <ToastProvider>
         <TaskListView
@@ -142,9 +167,8 @@ describe('Planner views render', () => {
         />
       </ToastProvider>,
     )
-    expect(html).toContain('Write introduction')
-    expect(html).toContain('Thesis')
-    expect(html).toContain('High')
+    expect(html).not.toContain('Write introduction')
+    expect(html).toContain('Clear filters')
   })
 
   it('renders the kanban board with all status columns', () => {
@@ -183,6 +207,7 @@ describe('Planner views render', () => {
     )
     expect(html).toContain('New entry')
     expect(html).toContain('Lecture')
+    expect(html).toContain('pl-toolbar')
   })
 
   it('renders the overview dashboard', () => {
@@ -206,5 +231,37 @@ describe('Planner views render', () => {
     expect(html).toContain('Needs attention')
     expect(html).toContain('Write introduction')
     expect(html).toContain('5h')
+  })
+
+  it('lists only projects that have tasks and shows those tasks underneath', () => {
+    const emptyProject: Project = {
+      ...project,
+      id: 'project-2',
+      name: 'Empty archive',
+    }
+
+    const html = renderToStaticMarkup(
+      <ToastProvider>
+        <ProjectsView
+          projects={[project, emptyProject]}
+          tasks={[task]}
+          taskLists={[]}
+          onOpenProject={noop}
+          onShowTasks={noop}
+          onOpenTask={noop}
+          onEditTask={noop}
+          onToggleComplete={noop}
+          onToggleStar={noop}
+          onDeleteTask={noop}
+          onQuickAddTask={async () => {}}
+          onProjectsChanged={noop}
+          onTaskListsChanged={noop}
+        />
+      </ToastProvider>,
+    )
+
+    expect(html).toContain('Thesis')
+    expect(html).toContain('Write introduction')
+    expect(html).not.toContain('Empty archive')
   })
 })

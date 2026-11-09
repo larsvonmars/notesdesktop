@@ -1,7 +1,7 @@
 'use client'
 
 import type { ReactNode } from 'react'
-import type { LucideIcon } from 'lucide-react'
+import { Search, type LucideIcon } from 'lucide-react'
 import type { Task, TaskPriority, TaskStatus } from '@/lib/tasks'
 
 export const PRIORITY_META: Record<
@@ -311,6 +311,114 @@ export function SegmentedTabs<T extends string>({
           )}
         </button>
       ))}
+    </div>
+  )
+}
+
+/** Slim horizontal bar that replaces stacked filter panels and button lists. */
+export function PlannerToolbar({
+  children,
+  label,
+  className = '',
+}: {
+  children: ReactNode
+  label?: string
+  className?: string
+}) {
+  return (
+    <div role="toolbar" aria-label={label} className={`pl-toolbar ${className}`}>
+      {children}
+    </div>
+  )
+}
+
+export function ToolbarDivider() {
+  return <span aria-hidden className="pl-toolbar-divider" />
+}
+
+export function ToolbarLabel({ children }: { children: ReactNode }) {
+  return <span className="pl-toolbar-label">{children}</span>
+}
+
+export function ToolbarSelect<T extends string>({
+  value,
+  onChange,
+  ariaLabel,
+  options,
+  className = '',
+}: {
+  value: T
+  onChange: (value: T) => void
+  ariaLabel: string
+  options: { value: T; label: string }[]
+  className?: string
+}) {
+  return (
+    <select
+      value={value}
+      onChange={(event) => onChange(event.target.value as T)}
+      aria-label={ariaLabel}
+      className={`pl-toolbar-select ${className}`}
+    >
+      {options.map((option) => (
+        <option key={option.value} value={option.value}>
+          {option.label}
+        </option>
+      ))}
+    </select>
+  )
+}
+
+export function ToolbarToggle({
+  label,
+  active,
+  onToggle,
+  icon: Icon,
+  filled = false,
+}: {
+  label: string
+  active: boolean
+  onToggle: () => void
+  icon?: LucideIcon
+  filled?: boolean
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onToggle}
+      aria-pressed={active}
+      data-active={active}
+      className="pl-chip focus-ring shrink-0"
+    >
+      {Icon && <Icon size={12} fill={filled && active ? 'currentColor' : 'none'} />}
+      {label}
+    </button>
+  )
+}
+
+export function ToolbarSearch({
+  value,
+  onChange,
+  placeholder,
+  className = '',
+}: {
+  value: string
+  onChange: (value: string) => void
+  placeholder: string
+  className?: string
+}) {
+  return (
+    <div className={`relative min-w-[150px] flex-1 ${className}`}>
+      <Search
+        size={13}
+        className="pointer-events-none absolute left-2.5 top-1/2 -translate-y-1/2 text-muted"
+      />
+      <input
+        value={value}
+        onChange={(event) => onChange(event.target.value)}
+        placeholder={placeholder}
+        className="pl-toolbar-input h-7 w-full pl-8 pr-2"
+      />
     </div>
   )
 }

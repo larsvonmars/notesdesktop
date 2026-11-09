@@ -3,7 +3,6 @@
 import { useMemo, useState, type FormEvent } from 'react'
 import {
   AlertTriangle,
-  ArrowUpDown,
   CalendarDays,
   Check,
   ChevronDown,
@@ -16,7 +15,6 @@ import {
   Pencil,
   Plus,
   Repeat,
-  Search,
   Star,
   Trash2,
 } from 'lucide-react'
@@ -28,14 +26,19 @@ import type { RecurrencePattern } from '@/lib/events'
 import { isTaskOpen } from '@/lib/task-agenda'
 import type { Task, TaskPriority, TaskStatus } from '@/lib/tasks'
 import {
+  PlannerToolbar,
   PRIORITY_META,
   ProgressBar,
   STATUS_META,
   STATUS_ORDER,
+  SegmentedTabs,
+  ToolbarDivider,
+  ToolbarSearch,
+  ToolbarSelect,
+  ToolbarToggle,
   dueLabel,
 } from './PlannerUi'
 
-const STATUS_FILTERS: (TaskStatus | 'all')[] = ['all', ...STATUS_ORDER]
 const PRIORITY_FILTERS: (TaskPriority | 'all')[] = ['all', 'urgent', 'high', 'medium', 'low']
 
 type SortKey = 'due' | 'priority' | 'updated' | 'title' | 'manual'
@@ -102,7 +105,7 @@ export default function TaskListView({
   onNewTask,
 }: TaskListViewProps) {
   const [search, setSearch] = useState('')
-  const [statusFilter, setStatusFilter] = useState<TaskStatus | 'all'>('all')
+  const [statusFilter, setStatusFilter] = useState<TaskStatus | 'all'>('todo')
   const [priorityFilter, setPriorityFilter] = useState<TaskPriority | 'all'>('all')
   const [onlyStarred, setOnlyStarred] = useState(starredOnly)
   const [sort, setSort] = useState<SortKey>('due')
@@ -187,20 +190,26 @@ export default function TaskListView({
     setQuickTitle('')
   }
 
-  const counts = useMemo(
-    () => ({
-      all: tasks.filter((task) => !task.is_archived).length,
-      open: tasks.filter(isTaskOpen).length,
-      overdue: tasks.filter(
-        (task) =>
-          isTaskOpen(task) &&
-          task.due_date &&
-          new Date(task.due_date).getTime() < new Date().setHours(0, 0, 0, 0),
-      ).length,
-      completed: tasks.filter((task) => task.status === 'completed').length,
-    }),
-    [tasks],
-  )
+  const counts = useMemo(() => {
+    const visible = tasks
+      .filter((task) => !task.is_archived)
+      .filter((task) => (onlyStarred ? task.is_starred : true))
+    const byStatus: Record<TaskStatus, number> = {
+      todo: 0,
+      in_progress: 0,
+      waiting: 0,
+      completed: 0,
+      cancelled: 0,
+    }
+    for (const task of visible) byStatus[task.status] += 1
+    return { all: visible.length, byStatus }
+  }, [tasks, onlyStarred])
+
+  const clearFilters = () => {
+    setSearch('')
+    setStatusFilter('all')
+    setPriorityFilter('all')
+  }
 
   return (
     <div className="space-y-3">
@@ -218,93 +227,83 @@ export default function TaskListView({
         </form>
       </div>
 
-      <div className="flex flex-wrap items-center gap-2">
-        <div className="relative min-w-[180px] flex-1">
-          <Search size={13} className="pointer-events-none absolute left-2.5 top-1/2 -translate-y-1/2 text-muted" />
-          <input
-            value={search}
-            onChange={(event) => setSearch(event.target.value)}
-            placeholder="Search tasks…"
-            className="glass-input h-8 w-full pl-8 pr-2 text-[12px]"
-          />
+      <PlannerToolbar label="Task filters">
+        <div className="flex w-full items-center gap-2">
+          <div className="min-w-0 overflow-x-auto scroll-thin">
+            <SegmentedTabs
+              ariaLabel="Filter tasks by status"
+              value={statusFilter}
+              onChange={setStatusFilter}
+              options={[
+                { key: 'all', label: 'All', count: counts.all },
+                ...STATUS_ORDER.map((status) => ({
+                  key: status,
+                  label: STATUS_META[status].label,
+                  count: counts.byStatus[status],
+                })),
+              ]}
+            />
+          </div>
+          <span className="ml-auto shrink-0 pr-1 text-[11px] tabular-nums text-muted">
+            {filtered.length} of {counts.all} tasks
+          </span>
         </div>
 
-        <select
-          value={statusFilter}
-          onChange={(event) => setStatusFilter(event.target.value as TaskStatus | 'all')}
-          aria-label="Filter by status"
-          className="glass-input h-8 px-2 text-[12px]"
-        >
-          {STATUS_FILTERS.map((status) => (
-            <option key={status} value={status}>
-              {status === 'all' ? `All statuses (${counts.all})` : STATUS_META[status].label}
-            </option>
-          ))}
-        </select>
+        <div className="flex w-full flex-wrap items-center gap-1.5 border-t border-[var(--border)] pt-1.5">
+          <ToolbarSearch
+            value={search}
+            onChange={setSearch}
+            placeholder="Search tasks…"
+          />
 
-        <select
-          value={priorityFilter}
-          onChange={(event) => setPriorityFilter(event.target.value as TaskPriority | 'all')}
-          aria-label="Filter by priority"
-          className="glass-input h-8 px-2 text-[12px] capitalize"
-        >
-          {PRIORITY_FILTERS.map((priority) => (
-            <option key={priority} value={priority}>
-              {priority === 'all' ? 'All priorities' : PRIORITY_META[priority].label}
-            </option>
-          ))}
-        </select>
+          <ToolbarDivider />
 
-        <select
-          value={groupBy}
-          onChange={(event) => setGroupBy(event.target.value as GroupKey)}
-          aria-label="Group tasks"
-          className="glass-input h-8 px-2 text-[12px]"
-        >
-          <option value="none">No grouping</option>
-          <option value="status">Group: status</option>
-          <option value="priority">Group: priority</option>
-          <option value="project">Group: project</option>
-        </select>
+          <ToolbarSelect
+            value={priorityFilter}
+            onChange={setPriorityFilter}
+            ariaLabel="Filter by priority"
+            options={PRIORITY_FILTERS.map((priority) => ({
+              value: priority,
+              label: priority === 'all' ? 'All priorities' : PRIORITY_META[priority].label,
+            }))}
+          />
 
-        <label className="flex items-center gap-1.5 text-[11px] text-muted">
-          <ArrowUpDown size={12} />
-          <select
+          <ToolbarSelect
+            value={groupBy}
+            onChange={setGroupBy}
+            ariaLabel="Group tasks"
+            options={[
+              { value: 'none', label: 'No grouping' },
+              { value: 'status', label: 'Group: status' },
+              { value: 'priority', label: 'Group: priority' },
+              { value: 'project', label: 'Group: project' },
+            ]}
+          />
+
+          <ToolbarSelect
             value={sort}
-            onChange={(event) => setSort(event.target.value as SortKey)}
-            aria-label="Sort tasks"
-            className="glass-input h-8 px-2 text-[12px]"
-          >
-            <option value="due">Due date</option>
-            <option value="priority">Priority</option>
-            <option value="updated">Recently updated</option>
-            <option value="title">Title</option>
-            <option value="manual">Manual order</option>
-          </select>
-        </label>
+            onChange={setSort}
+            ariaLabel="Sort tasks"
+            options={[
+              { value: 'due', label: 'Sort: due date' },
+              { value: 'priority', label: 'Sort: priority' },
+              { value: 'updated', label: 'Sort: recently updated' },
+              { value: 'title', label: 'Sort: title' },
+              { value: 'manual', label: 'Sort: manual order' },
+            ]}
+          />
 
-        {!starredOnly && (
-          <button
-            type="button"
-            onClick={() => setOnlyStarred((current) => !current)}
-            aria-pressed={onlyStarred}
-            data-active={onlyStarred}
-            className="pl-chip focus-ring"
-            style={
-              onlyStarred
-                ? { background: 'var(--warning-light)', color: 'var(--warning)' }
-                : undefined
-            }
-          >
-            <Star size={12} fill={onlyStarred ? 'currentColor' : 'none'} />
-            Starred
-          </button>
-        )}
-
-        <span className="ml-auto text-[11px] tabular-nums text-muted">
-          {filtered.length} of {counts.all} tasks
-        </span>
-      </div>
+          {!starredOnly && (
+            <ToolbarToggle
+              label="Starred"
+              active={onlyStarred}
+              onToggle={() => setOnlyStarred((current) => !current)}
+              icon={Star}
+              filled
+            />
+          )}
+        </div>
+      </PlannerToolbar>
 
       {filtered.length === 0 ? (
         <div className="glass-card">
@@ -317,12 +316,19 @@ export default function TaskListView({
               emptyDescription ??
               (tasks.length === 0
                 ? 'Add your first task to get organised.'
-                : 'Try clearing the search or filters.')
+                : 'Try a different status, or clear the search and filters.')
             }
             action={
-              <Button type="button" variant="primary" size="md" icon={Plus} onClick={onNewTask}>
-                New task
-              </Button>
+              <div className="flex flex-wrap items-center justify-center gap-2">
+                <Button type="button" variant="primary" size="md" icon={Plus} onClick={onNewTask}>
+                  New task
+                </Button>
+                {tasks.length > 0 && (
+                  <Button type="button" variant="secondary" size="md" onClick={clearFilters}>
+                    Clear filters
+                  </Button>
+                )}
+              </div>
             }
           />
         </div>

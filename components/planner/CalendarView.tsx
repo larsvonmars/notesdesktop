@@ -14,7 +14,6 @@ import {
   Filter,
   MapPin,
   Repeat,
-  Search,
   Trash2,
   X,
   Pencil,
@@ -45,7 +44,11 @@ import type { CalendarViewMode, PlannerDisplayPreferences } from '@/lib/planner/
 import {
   CATEGORY_COLORS,
   PRIORITY_META,
+  PlannerToolbar,
   SegmentedTabs,
+  ToolbarDivider,
+  ToolbarSearch,
+  ToolbarToggle,
   dueLabel,
 } from './PlannerUi'
 
@@ -550,7 +553,7 @@ export default function CalendarView({
           </div>
         )}
 
-        <div className="glass-card animate-rise-in flex flex-wrap items-center gap-2 px-3 py-2.5">
+        <PlannerToolbar label="Calendar controls" className="animate-rise-in">
           <div className="flex items-center gap-1">
             <Button type="button" variant="ghost" size="sm" icon={ChevronLeft} onClick={goPrev} aria-label="Previous" />
             <Button type="button" variant="ghost" size="sm" icon={ChevronRight} onClick={goNext} aria-label="Next" />
@@ -558,70 +561,51 @@ export default function CalendarView({
           <Button type="button" variant="secondary" size="sm" onClick={goToday}>
             Today
           </Button>
-          <h2 className="min-w-0 flex-1 truncate px-1 font-display text-base font-semibold tracking-[-0.01em] text-foreground">
+          <ToolbarDivider />
+          <h2 className="min-w-0 flex-1 truncate px-1 font-display text-sm font-semibold tracking-[-0.01em] text-foreground">
             {title}
           </h2>
 
-          <SegmentedTabs
-            ariaLabel="Calendar view"
-            value={view}
-            onChange={changeView}
-            className="order-last w-full justify-between sm:order-none sm:w-auto"
-            options={[
-              { key: 'month', label: 'Month' },
-              { key: 'week', label: 'Week' },
-              { key: 'day', label: 'Day' },
-              { key: 'agenda', label: 'Agenda' },
-            ]}
-          />
+          <div className="min-w-0 max-w-full overflow-x-auto scroll-thin">
+            <SegmentedTabs
+              ariaLabel="Calendar view"
+              value={view}
+              onChange={changeView}
+              options={[
+                { key: 'month', label: 'Month' },
+                { key: 'week', label: 'Week' },
+                { key: 'day', label: 'Day' },
+                { key: 'agenda', label: 'Agenda' },
+              ]}
+            />
+          </div>
 
-          <button
-            type="button"
-            onClick={() => setShowFilters((current) => !current)}
-            aria-expanded={showFilters}
-            aria-label="Toggle calendar filters"
-            className={`focus-ring relative flex h-8 w-8 items-center justify-center rounded-full border transition-colors ${
-              showFilters || activeFilterCount > 0
-                ? 'border-transparent bg-[var(--accent-light)] text-accent'
-                : 'border-[var(--border)] text-muted hover:text-foreground'
-            }`}
-          >
-            <Filter size={14} />
-            {activeFilterCount > 0 && (
-              <span className="absolute -right-1 -top-1 flex h-4 min-w-4 items-center justify-center rounded-full bg-accent px-1 text-[9px] font-bold text-accent-foreground">
-                {activeFilterCount}
-              </span>
-            )}
-          </button>
-        </div>
+          <ToolbarToggle
+            label="Filters"
+            active={showFilters || activeFilterCount > 0}
+            onToggle={() => setShowFilters((current) => !current)}
+            icon={Filter}
+          />
+          {activeFilterCount > 0 && (
+            <span className="shrink-0 rounded-full bg-[var(--accent-light)] px-1.5 py-0.5 text-[10px] font-bold tabular-nums text-accent">
+              {activeFilterCount}
+            </span>
+          )}
+        </PlannerToolbar>
 
         {showFilters && (
-          <div className="glass-card animate-rise-in space-y-3 p-4">
-            <div className="flex items-center justify-between">
-              <span className="text-xs font-semibold text-foreground">Filters</span>
-              <button
-                type="button"
-                onClick={resetFilters}
-                className="text-[11px] font-semibold text-accent hover:underline"
-              >
-                Reset all
-              </button>
-            </div>
-
-            <div className="relative">
-              <Search size={14} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-muted" />
-              <input
-                value={searchQuery}
-                onChange={(event) => setSearchQuery(event.target.value)}
-                placeholder="Search events, places, categories…"
-                className="glass-input h-9 w-full pl-9 pr-3 text-sm"
-              />
-            </div>
+          <PlannerToolbar label="Calendar filters" className="animate-rise-in">
+            <ToolbarSearch
+              value={searchQuery}
+              onChange={setSearchQuery}
+              placeholder="Search events, places, categories…"
+              className="min-w-[200px]"
+            />
 
             {categories.length > 0 && (
-              <div>
-                <span className="mb-1.5 block text-[11px] font-semibold text-muted">Categories</span>
-                <div className="flex flex-wrap gap-1.5">
+              <>
+                <ToolbarDivider />
+                <div className="flex min-w-0 items-center gap-1.5 overflow-x-auto scroll-thin">
                   {categories.map((category) => {
                     const active = selectedCategories.has(category)
                     const color = CATEGORY_COLORS[category] ?? 'var(--accent)'
@@ -638,7 +622,7 @@ export default function CalendarView({
                           })
                         }
                         aria-pressed={active}
-                        className="flex items-center gap-1.5 rounded-lg border px-2.5 py-1 text-[11px] font-semibold capitalize transition-colors"
+                        className="flex shrink-0 items-center gap-1.5 rounded-full border px-2.5 py-1 text-[11px] font-semibold capitalize transition-colors"
                         style={{
                           borderColor: active ? color : 'var(--border)',
                           backgroundColor: active ? `${color}18` : 'transparent',
@@ -651,16 +635,27 @@ export default function CalendarView({
                     )
                   })}
                 </div>
-              </div>
+              </>
             )}
 
-            <div className="flex flex-wrap gap-2">
+            <ToolbarDivider />
+            <div className="flex shrink-0 items-center gap-1.5">
               <FilterChip label="Tasks" active={showTasks} onToggle={() => setShowTasks((value) => !value)} icon={Check} />
               <FilterChip label="All-day" active={showAllDay} onToggle={() => setShowAllDay((value) => !value)} icon={Eye} />
               <FilterChip label="Recurring" active={showRecurring} onToggle={() => setShowRecurring((value) => !value)} icon={Repeat} />
               <FilterChip label="Cancelled" active={showCancelled} onToggle={() => setShowCancelled((value) => !value)} icon={EyeOff} />
             </div>
-          </div>
+
+            {activeFilterCount > 0 && (
+              <button
+                type="button"
+                onClick={resetFilters}
+                className="ml-auto shrink-0 pr-1 text-[11px] font-semibold text-accent hover:underline"
+              >
+                Reset
+              </button>
+            )}
+          </PlannerToolbar>
         )}
 
         <div className="animate-rise-in">

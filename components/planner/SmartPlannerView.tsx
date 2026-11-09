@@ -50,10 +50,13 @@ import {
   FIELD_CLASS,
   LABEL_CLASS,
   PRIORITY_META,
+  PlannerToolbar,
   ProgressBar,
   ProgressRing,
   SELECT_CLASS,
   SectionCardHeader,
+  ToolbarDivider,
+  ToolbarLabel,
 } from './PlannerUi'
 
 const SCOPE_OPTIONS: { value: PlanScope; label: string; hint: string }[] = [
@@ -392,7 +395,7 @@ export default function SmartPlannerView({
 
   return (
     <div className="space-y-4">
-      <div className="flex flex-wrap items-center gap-2">
+      <PlannerToolbar label="Smart planner controls">
         <div className="segmented" role="tablist" aria-label="Smart planner sections">
           <button
             type="button"
@@ -426,10 +429,10 @@ export default function SmartPlannerView({
           </button>
         </div>
 
-        <div className="ml-auto flex items-center gap-2">
-          <span className="text-[10px] font-semibold uppercase tracking-[0.08em] text-muted">
-            Mode
-          </span>
+        <ToolbarDivider />
+
+        <div className="ml-auto flex items-center gap-1.5 pr-1">
+          <ToolbarLabel>Mode</ToolbarLabel>
           <div className="segmented">
             {(['adaptive', 'standard'] as PlanningMode[]).map((mode) => (
               <button
@@ -445,7 +448,7 @@ export default function SmartPlannerView({
             ))}
           </div>
         </div>
-      </div>
+      </PlannerToolbar>
 
       {error && (
         <p className="rounded-xl border border-danger bg-[var(--danger-light)] px-3 py-2 text-[11px] text-danger">
@@ -489,26 +492,24 @@ export default function SmartPlannerView({
               />
               <div className="mt-3" />
 
-              <div className="flex flex-wrap gap-1.5">
-                {SCOPE_OPTIONS.map((option) => (
-                  <button
-                    key={option.value}
-                    type="button"
-                    onClick={() => setScope(option.value)}
-                    aria-pressed={scope === option.value}
-                    className={`rounded-xl border px-3 py-1.5 text-left transition-colors ${
-                      scope === option.value
-                        ? 'border-accent bg-[var(--accent-light)]'
-                        : 'border-[var(--border)] hover:bg-[var(--surface-hover)]'
-                    }`}
-                  >
-                    <span className="block text-[12px] font-semibold text-foreground">
+              <PlannerToolbar label="Plan scope">
+                <ToolbarLabel>Scope</ToolbarLabel>
+                <div className="flex min-w-0 items-center gap-1.5 overflow-x-auto scroll-thin">
+                  {SCOPE_OPTIONS.map((option) => (
+                    <button
+                      key={option.value}
+                      type="button"
+                      onClick={() => setScope(option.value)}
+                      aria-pressed={scope === option.value}
+                      data-active={scope === option.value}
+                      title={option.hint}
+                      className="pl-chip focus-ring shrink-0"
+                    >
                       {option.label}
-                    </span>
-                    <span className="block text-[10px] text-muted">{option.hint}</span>
-                  </button>
-                ))}
-              </div>
+                    </button>
+                  ))}
+                </div>
+              </PlannerToolbar>
 
               {scope === 'custom' && (
                 <div className="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-2">
