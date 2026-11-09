@@ -1,4 +1,7 @@
-const DEFAULT_AI_PROXY_MAX_BODY_BYTES = 1048576
+// Vision requests inline downscaled images as base64 data URLs inside the
+// message list, so the ceiling has to leave room for a few attachments while
+// still bounding what reaches the upstream API.
+const DEFAULT_AI_PROXY_MAX_BODY_BYTES = 8 * 1024 * 1024
 const DEFAULT_AI_UPSTREAM_TIMEOUT_CHAT_MS = 30000
 const DEFAULT_AI_UPSTREAM_TIMEOUT_STREAM_MS = 45000
 

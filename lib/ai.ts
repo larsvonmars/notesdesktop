@@ -259,11 +259,11 @@ function getApiKey(): string | null {
   return envKey && envKey.length > 0 ? envKey : null
 }
 
-function isTauriRuntime(): boolean {
+export function isTauriRuntime(): boolean {
   return typeof window !== 'undefined' && '__TAURI_INTERNALS__' in window
 }
 
-function getWebAIEndpoint(path: string): string {
+export function getWebAIEndpoint(path: string): string {
   const baseUrl = (process.env.NEXT_PUBLIC_AI_API_BASE_URL || '').trim()
   if (!baseUrl) {
     return path
@@ -439,7 +439,7 @@ async function withRetry<T>(
   throw lastError || new AIError('AI request failed.', 'unknown')
 }
 
-async function getWebAuthHeader(): Promise<Record<string, string>> {
+export async function getWebAuthHeader(): Promise<Record<string, string>> {
   try {
     const { supabase } = await import('./supabase')
     const {
@@ -1041,6 +1041,103 @@ async function chatWithTools(
     // Deliver synchronously (no fake word-by-word delays)
     if (onStream && finalContent) onStream(finalContent)
     return finalContent
+  }
+
+  throw new Error('Max tool iterations reached')
+}
+
+/**
+ * Chat with an arbitrary tool set (used by feature copilots such as Learn).
+ * Keeps the note assistant's tool runner untouched while sharing the same
+ * retry/rate-limit/transport pipeline.
+ */
+export interface AIToolCallNotice {
+  id: string
+  name: string
+  arguments: Record<string, unknown>
+}
+
+export interface AIToolResultNotice {
+  id: string
+  name: string
+  result: string
+}
+
+export interface AIToolChatOptions {
+  maxTokens?: number
+  maxIterations?: number
+  onToken?: (token: string) => void
+  onReasoning?: (token: string) => void
+  onToolCall?: (call: AIToolCallNotice) => void
+  onToolResult?: (result: AIToolResultNotice) => void
+}
+
+export async function chatWithCustomTools(
+  messages: AIMessage[],
+  tools: AITool[],
+  toolHandler: ToolCallHandler,
+  options: AIToolChatOptions = {},
+): Promise<string> {
+  const maxIterations = options.maxIterations ?? 8
+  const maxTokens = options.maxTokens ?? AI_MODEL_PROFILE.defaultMaxTokens
+  const conversation = [...messages]
+
+  for (let iteration = 0; iteration < maxIterations; iteration += 1) {
+    const payload = buildAIChatPayload(conversation, { maxTokens })
+    if (tools.length > 0) {
+      payload.tools = tools
+      payload.tool_choice = 'auto'
+    }
+
+    const data = await sendAIRequestPayload(payload)
+    const assistantMessage = data.choices?.[0]?.message
+    if (!assistantMessage) throw new Error('No response from AI')
+
+    if (assistantMessage.tool_calls?.length) {
+      conversation.push({
+        role: 'assistant',
+        content: assistantMessage.content || '',
+        reasoning_content: assistantMessage.reasoning_content || undefined,
+        tool_calls: assistantMessage.tool_calls,
+      })
+
+      if (assistantMessage.reasoning_content) {
+        options.onReasoning?.(assistantMessage.reasoning_content)
+      }
+
+      for (const toolCall of assistantMessage.tool_calls as AIToolCall[]) {
+        let args: Record<string, unknown> = {}
+        try {
+          args = JSON.parse(toolCall.function.arguments || '{}')
+        } catch {
+          args = {}
+        }
+
+        options.onToolCall?.({ id: toolCall.id, name: toolCall.function.name, arguments: args })
+        let result: string
+        try {
+          result = await toolHandler(toolCall.function.name, args)
+        } catch (error) {
+          result = `Tool error: ${error instanceof Error ? error.message : String(error)}`
+        }
+        options.onToolResult?.({ id: toolCall.id, name: toolCall.function.name, result })
+
+        conversation.push({
+          role: 'tool',
+          tool_call_id: toolCall.id,
+          content: result,
+        })
+      }
+
+      continue
+    }
+
+    const content = assistantMessage.content || ''
+    if (assistantMessage.reasoning_content) {
+      options.onReasoning?.(assistantMessage.reasoning_content)
+    }
+    if (options.onToken && content) options.onToken(content)
+    return content
   }
 
   throw new Error('Max tool iterations reached')

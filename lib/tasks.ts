@@ -1,4 +1,5 @@
 import { supabase } from './supabase'
+import { getNextOccurrenceDate } from './planner/date-utils'
 
 // ============================================================================
 // TYPES
@@ -162,6 +163,130 @@ export async function deleteTaskList(id: string): Promise<void> {
   if (error) throw error
 }
 
+export interface TaskRecurrenceInput {
+  frequency: 'daily' | 'weekly' | 'monthly' | 'yearly' | 'custom'
+  interval: number
+  daysOfWeek?: number[] | null
+  dayOfMonth?: number | null
+  monthOfYear?: number | null
+  endDate?: Date | string | null
+  occurrenceCount?: number | null
+}
+
+async function upsertTaskRecurrencePattern(
+  userId: string,
+  recurrence: TaskRecurrenceInput,
+  existingPatternId?: string | null,
+): Promise<string> {
+  const row = {
+    user_id: userId,
+    frequency: recurrence.frequency,
+    interval: recurrence.interval || 1,
+    days_of_week: recurrence.daysOfWeek ?? null,
+    day_of_month: recurrence.dayOfMonth ?? null,
+    month_of_year: recurrence.monthOfYear ?? null,
+    end_date: recurrence.endDate
+      ? (typeof recurrence.endDate === 'string'
+          ? recurrence.endDate
+          : recurrence.endDate.toISOString())
+      : null,
+    occurrence_count: recurrence.occurrenceCount ?? null,
+    timezone: Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC',
+  }
+
+  if (existingPatternId) {
+    const { error } = await supabase
+      .from('recurrence_patterns')
+      .update(row)
+      .eq('id', existingPatternId)
+    if (error) throw error
+    return existingPatternId
+  }
+
+  const { data, error } = await supabase
+    .from('recurrence_patterns')
+    .insert(row)
+    .select('id')
+    .single()
+  if (error) throw error
+  return data.id
+}
+
+/** Attach or clear a task's recurrence pattern. */
+export async function setTaskRecurrence(
+  taskId: string,
+  recurrence: TaskRecurrenceInput | null,
+  existingPatternId?: string | null,
+): Promise<Task> {
+  if (!recurrence) {
+    if (existingPatternId) {
+      await supabase.from('recurrence_patterns').delete().eq('id', existingPatternId)
+    }
+    return updateTask(taskId, { is_recurring: false, recurrence_pattern_id: null })
+  }
+
+  const { data: { user } } = await supabase.auth.getUser()
+  if (!user) throw new Error('Not authenticated')
+
+  const patternId = await upsertTaskRecurrencePattern(user.id, recurrence, existingPatternId)
+  return updateTask(taskId, { is_recurring: true, recurrence_pattern_id: patternId })
+}
+
+/**
+ * Complete a recurring task by advancing its due date to the next
+ * occurrence and resetting it to "todo". Returns the updated task, or the
+ * completed task when the pattern has ended.
+ */
+export async function completeRecurringTask(id: string): Promise<Task> {
+  const { data: taskRow, error: taskError } = await supabase
+    .from('tasks')
+    .select('*')
+    .eq('id', id)
+    .single()
+  if (taskError) throw taskError
+
+  const task = taskRow as Task
+  if (!task.is_recurring || !task.recurrence_pattern_id) {
+    return completeTask(id)
+  }
+
+  const { data: pattern, error: patternError } = await supabase
+    .from('recurrence_patterns')
+    .select('*')
+    .eq('id', task.recurrence_pattern_id)
+    .maybeSingle()
+  if (patternError) throw patternError
+  if (!pattern) return completeTask(id)
+
+  const reference = task.due_date ? new Date(task.due_date) : new Date()
+  const next = getNextOccurrenceDate(pattern, reference)
+
+  if (!next) {
+    // Pattern exhausted — let the final instance complete normally.
+    await supabase
+      .from('recurrence_patterns')
+      .delete()
+      .eq('id', task.recurrence_pattern_id)
+    return completeTask(id)
+  }
+
+  return updateTask(id, {
+    due_date: next.toISOString(),
+    status: 'todo',
+    completed_at: null,
+    progress: 0,
+  })
+}
+
+/** Persist per-task ordering (used by the board and list views). */
+export async function reorderTasks(ordered: { id: string; sort_order: number }[]): Promise<void> {
+  await Promise.all(
+    ordered.map(({ id, sort_order }) =>
+      supabase.from('tasks').update({ sort_order }).eq('id', id),
+    ),
+  )
+}
+
 // ============================================================================
 // TASKS
 // ============================================================================
@@ -291,6 +416,8 @@ export async function createTask(
     startDate?: Date
     estimatedMinutes?: number
     isStarred?: boolean
+    isRecurring?: boolean
+    recurrence?: TaskRecurrenceInput | null
     // Enhanced fields
     links?: TaskLink[]
     color?: string
@@ -303,6 +430,11 @@ export async function createTask(
 ): Promise<Task> {
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) throw new Error('Not authenticated')
+
+  let recurrencePatternId: string | null = null
+  if (options?.recurrence) {
+    recurrencePatternId = await upsertTaskRecurrencePattern(user.id, options.recurrence)
+  }
 
   const { data, error } = await supabase
     .from('tasks')
@@ -319,6 +451,8 @@ export async function createTask(
       start_date: options?.startDate?.toISOString() || null,
       estimated_minutes: options?.estimatedMinutes || null,
       is_starred: options?.isStarred || false,
+      is_recurring: Boolean(options?.recurrence) || Boolean(options?.isRecurring),
+      recurrence_pattern_id: recurrencePatternId,
       // Enhanced fields
       links: options?.links || [],
       color: options?.color || null,

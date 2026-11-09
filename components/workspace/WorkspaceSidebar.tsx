@@ -27,6 +27,7 @@ type InjectedTreeProps =
   | 'onOpenSettings'
   | 'onOpenWelcome'
   | 'onOpenTasks'
+  | 'onOpenLearn'
   | 'onOpenCommandPalette'
 
 interface WorkspaceSidebarProps {
@@ -49,6 +50,7 @@ interface WorkspaceSidebarProps {
   onOpenSettings: () => void
   onOpenWelcome: () => void
   onOpenTasks: () => void
+  onOpenLearn: () => void
   onOpenCommandPalette: () => void
   onSignOut: () => void
   onMobileTouchStart?: (clientX: number, clientY: number) => void
@@ -81,6 +83,7 @@ export default function WorkspaceSidebar({
   onOpenProjectDashboard,
   onOpenSettings,
   onOpenWelcome,
+  onOpenLearn,
   onOpenCommandPalette,
   onSignOut,
   onMobileTouchStart,
@@ -112,6 +115,10 @@ export default function WorkspaceSidebar({
     },
     onOpenProjectDashboard: (projectId: string) => {
       onOpenProjectDashboard(projectId)
+    },
+    onOpenLearn: () => {
+      onOpenLearn()
+      onCloseMobileNav()
     },
     onOpenCommandPalette: () => {
       onOpenCommandPalette()

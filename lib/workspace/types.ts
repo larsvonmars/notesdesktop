@@ -1,4 +1,4 @@
-export type WorkspaceView = 'welcome' | 'notes' | 'files' | 'projects' | 'tasks'
+export type WorkspaceView = 'welcome' | 'notes' | 'files' | 'projects' | 'tasks' | 'learn' | 'chat'
 
 export type ToastVariantLike = 'info' | 'success' | 'warning' | 'error'
 

@@ -7,6 +7,7 @@ import {
   FilePenLine,
   FileText,
   FolderOpen,
+  GraduationCap,
   Home,
   Keyboard,
   LayoutDashboard,
@@ -68,6 +69,7 @@ export interface CommandPaletteProps {
   onOpenHome: () => void
   onOpenTasks: () => void
   onOpenFiles: () => void
+  onOpenLearn?: () => void
   onOpenSettings: () => void
   onOpenShortcuts: () => void
 }
@@ -91,6 +93,7 @@ export default function CommandPalette({
   onOpenHome,
   onOpenTasks,
   onOpenFiles,
+  onOpenLearn,
   onOpenSettings,
   onOpenShortcuts,
 }: CommandPaletteProps) {
@@ -206,6 +209,7 @@ export default function CommandPalette({
       { key: 'nav-home', label: 'Go to Home', hint: 'Recent notes and quick actions', icon: Home, run: onOpenHome },
       { key: 'nav-tasks', label: 'Open Tasks & Agenda', hint: 'Plan tasks and upcoming events', icon: ListTodo, run: onOpenTasks },
       { key: 'nav-files', label: 'Open File Explorer', hint: 'Browse files', icon: FolderOpen, run: onOpenFiles },
+      { key: 'nav-learn', label: 'Open Learn', hint: 'Flashcards, study modes and AI tutoring', icon: GraduationCap, run: () => onOpenLearn?.() },
       { key: 'nav-settings', label: 'Open Settings', hint: 'Account, appearance, startup', icon: Settings, run: onOpenSettings },
       { key: 'nav-shortcuts', label: 'Keyboard shortcuts', hint: 'Reference for formatting and navigation', icon: Keyboard, run: onOpenShortcuts },
     ].filter((item) => matchesPaletteQuery(item.label, item.hint, query))
@@ -230,6 +234,7 @@ export default function CommandPalette({
     onOpenHome,
     onOpenTasks,
     onOpenFiles,
+    onOpenLearn,
     onOpenSettings,
     onOpenShortcuts,
   ])

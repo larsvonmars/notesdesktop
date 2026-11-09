@@ -80,12 +80,16 @@ export async function getEvents(filters?: {
   noteId?: string
   category?: string
   includeRecurring?: boolean
+  includeCancelled?: boolean
 }): Promise<CalendarEvent[]> {
   let query = supabase
     .from('calendar_events')
     .select('*')
-    .eq('is_cancelled', false)
     .order('start_time', { ascending: true })
+
+  if (!filters?.includeCancelled) {
+    query = query.eq('is_cancelled', false)
+  }
 
   if (filters?.startDate) {
     query = query.gte('start_time', filters.startDate.toISOString())
@@ -242,6 +246,27 @@ export async function createRecurrencePattern(
   return data
 }
 
+export async function getRecurrencePatterns(): Promise<RecurrencePattern[]> {
+  const { data, error } = await supabase
+    .from('recurrence_patterns')
+    .select('*')
+    .order('created_at', { ascending: true })
+
+  if (error) throw error
+  return data || []
+}
+
+export async function getRecurrencePattern(id: string): Promise<RecurrencePattern | null> {
+  const { data, error } = await supabase
+    .from('recurrence_patterns')
+    .select('*')
+    .eq('id', id)
+    .maybeSingle()
+
+  if (error) throw error
+  return data
+}
+
 export async function deleteRecurrencePattern(id: string): Promise<void> {
   const { error } = await supabase
     .from('recurrence_patterns')
@@ -249,6 +274,71 @@ export async function deleteRecurrencePattern(id: string): Promise<void> {
     .eq('id', id)
 
   if (error) throw error
+}
+
+export interface RecurrenceInput {
+  frequency: 'daily' | 'weekly' | 'monthly' | 'yearly' | 'custom'
+  interval: number
+  daysOfWeek?: number[] | null
+  dayOfMonth?: number | null
+  monthOfYear?: number | null
+  endDate?: Date | string | null
+  occurrenceCount?: number | null
+}
+
+function recurrenceRow(
+  input: RecurrenceInput,
+): Omit<RecurrencePattern, 'id' | 'user_id' | 'created_at'> {
+  return {
+    frequency: input.frequency,
+    interval: input.interval || 1,
+    days_of_week: input.daysOfWeek ?? null,
+    day_of_month: input.dayOfMonth ?? null,
+    month_of_year: input.monthOfYear ?? null,
+    end_date: input.endDate
+      ? (typeof input.endDate === 'string' ? input.endDate : input.endDate.toISOString())
+      : null,
+    occurrence_count: input.occurrenceCount ?? null,
+    timezone: Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC',
+  }
+}
+
+/**
+ * Create or replace the recurrence pattern attached to an event.
+ * Pass `null` to detach the event from its pattern.
+ */
+export async function setEventRecurrence(
+  eventId: string,
+  recurrence: RecurrenceInput | null,
+  existingPatternId?: string | null,
+): Promise<CalendarEvent> {
+  if (!recurrence) {
+    if (existingPatternId) await deleteRecurrencePattern(existingPatternId)
+    return updateEvent(eventId, { is_recurring: false, recurrence_pattern_id: null })
+  }
+
+  const row = recurrenceRow(recurrence)
+  let patternId = existingPatternId ?? null
+
+  if (patternId) {
+    const { error } = await supabase
+      .from('recurrence_patterns')
+      .update(row)
+      .eq('id', patternId)
+    if (error) throw error
+  } else {
+    const { data: { user } } = await supabase.auth.getUser()
+    if (!user) throw new Error('Not authenticated')
+    const { data, error } = await supabase
+      .from('recurrence_patterns')
+      .insert({ ...row, user_id: user.id })
+      .select('id')
+      .single()
+    if (error) throw error
+    patternId = data.id
+  }
+
+  return updateEvent(eventId, { is_recurring: true, recurrence_pattern_id: patternId })
 }
 
 // ============================================================================

@@ -16,6 +16,16 @@ import HomeDashboard from '@/components/HomeDashboard'
 import TasksView from '@/components/TasksView'
 import FileExplorerModal from '@/components/FileExplorerModal'
 import ProjectDashboard from '@/components/ProjectDashboard'
+// The chat view brings the markdown renderer + tool cards; load it on demand.
+const ChatView = dynamic(() => import('@/components/chat/ChatView'), {
+  ssr: false,
+  loading: () => null,
+})
+// Learn brings decks, study modes and the AI tutor; load it on demand.
+const LearnView = dynamic(() => import('@/components/learn/LearnView'), {
+  ssr: false,
+  loading: () => null,
+})
 import ArchivedProjectsModal from '@/components/ArchivedProjectsModal'
 import NewProjectModal from '@/components/NewProjectModal'
 import {
@@ -31,6 +41,8 @@ import {
   ChevronRight,
   FolderOpen,
   Home,
+  MessagesSquare,
+  GraduationCap,
   FileQuestion,
   Target,
   Lightbulb,
@@ -921,6 +933,8 @@ function WorkspaceContent() {
       '2': 'notes',
       '3': 'tasks',
       '4': 'files',
+      '5': 'chat',
+      '6': 'learn',
     }
 
     const handleKeyDown = (event: KeyboardEvent) => {
@@ -1027,10 +1041,16 @@ function WorkspaceContent() {
 
     if (activeView === 'welcome') return [{ id: 'home', label: 'Home', icon: Home }]
     if (activeView === 'tasks') {
-      return [home, { id: 'tasks', label: 'Tasks & agenda', icon: ListTodo }]
+      return [home, { id: 'tasks', label: 'Planner', icon: ListTodo }]
     }
     if (activeView === 'files') {
       return [home, { id: 'files', label: 'Files', icon: FolderOpen }]
+    }
+    if (activeView === 'chat') {
+      return [home, { id: 'chat', label: 'Chat', icon: MessagesSquare }]
+    }
+    if (activeView === 'learn') {
+      return [home, { id: 'learn', label: 'Learn', icon: GraduationCap }]
     }
     if (activeView === 'projects') {
       return [
@@ -1110,6 +1130,20 @@ function WorkspaceContent() {
       icon: FolderOpen,
       shortcut: formatModShortcut('4'),
       onSelect: () => switchWorkspaceView('files'),
+    },
+    {
+      id: 'chat',
+      label: 'Chat',
+      icon: MessagesSquare,
+      shortcut: formatModShortcut('5'),
+      onSelect: () => switchWorkspaceView('chat'),
+    },
+    {
+      id: 'learn',
+      label: 'Learn',
+      icon: GraduationCap,
+      shortcut: formatModShortcut('6'),
+      onSelect: () => switchWorkspaceView('learn'),
     },
     {
       id: 'archive',
@@ -1268,6 +1302,7 @@ function WorkspaceContent() {
         onOpenCommandPalette={() => setCommandPaletteOpen(true)}
         onOpenWelcome={openWelcomeView}
         onOpenTasks={openTasksView}
+        onOpenLearn={() => setActiveView('learn')}
         onSignOut={handleSignOut}
         onMobileTouchStart={beginCloseSwipe}
         onMobileTouchEnd={endCloseSwipe}
@@ -1347,6 +1382,18 @@ function WorkspaceContent() {
               <div className="glass-card flex h-full flex-col overflow-hidden">
                 <FileExplorerModal isOpen asView onClose={() => setActiveView('notes')} />
               </div>
+            </div>
+          )}
+
+          {activeView === 'chat' && (
+            <div className="h-full overflow-hidden">
+              <ChatView />
+            </div>
+          )}
+
+          {activeView === 'learn' && (
+            <div className="h-full overflow-hidden">
+              <LearnView onOpenAppSettings={() => setShowSettings(true)} />
             </div>
           )}
 
@@ -1484,6 +1531,7 @@ function WorkspaceContent() {
           onOpenHome={openWelcomeView}
           onOpenTasks={openTasksView}
           onOpenFiles={() => setActiveView('files')}
+          onOpenLearn={() => setActiveView('learn')}
           onOpenSettings={() => setShowSettings(true)}
           onOpenShortcuts={() => setShowShortcuts(true)}
         />

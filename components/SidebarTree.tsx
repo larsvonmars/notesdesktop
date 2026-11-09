@@ -21,6 +21,7 @@ import {
   FolderPlus,
   Trash2,
   Home,
+  GraduationCap,
   X,
   LayoutDashboard,
   Hash,
@@ -212,6 +213,8 @@ export interface SidebarTreeProps {
   onOpenWelcome?: () => void
   /** Open the tasks and agenda view. */
   onOpenTasks?: () => void
+  /** Open the Learn workspace (decks + study modes). */
+  onOpenLearn?: () => void
   /** Open the command palette. */
   onOpenCommandPalette?: () => void
   /** Number of archived projects (shown on the Archive entry). */
@@ -263,6 +266,7 @@ export default function SidebarTree({
   onOpenSettings,
   onOpenWelcome,
   onOpenTasks,
+  onOpenLearn,
   onOpenCommandPalette,
   archivedCount = 0,
   collapsed,
@@ -1541,10 +1545,20 @@ export default function SidebarTree({
               <button
                 onClick={onOpenTasks}
                 className={railBtn}
-                title="Tasks & agenda"
-                aria-label="Tasks and agenda"
+                title="Planner"
+                aria-label="Planner"
               >
                 <ListTodo size={16} />
+              </button>
+            )}
+            {onOpenLearn && (
+              <button
+                onClick={onOpenLearn}
+                className={railBtn}
+                title="Learn"
+                aria-label="Learn"
+              >
+                <GraduationCap size={16} />
               </button>
             )}
             {onOpenWelcome && (
@@ -1615,7 +1629,7 @@ export default function SidebarTree({
   // EXPANDED VIEW
   // ==================================================================
   const hasAnyContent = projectTree.some(pt => pt.folders.length > 0 || pt.notes.length > 0)
-  const showFooterPrimary = Boolean(onOpenFileExplorer || (showHeader && (onOpenWelcome || onOpenTasks)))
+  const showFooterPrimary = Boolean(onOpenFileExplorer || (showHeader && (onOpenWelcome || onOpenTasks || onOpenLearn)))
   const showFooterSecondary = Boolean(onOpenArchive || onOpenSettings)
   const footerRowCls = 'glass-row h-8 w-full gap-2.5 px-2 text-[13px] text-muted hover:text-foreground'
 
@@ -1903,6 +1917,12 @@ export default function SidebarTree({
               <button onClick={onOpenTasks} className={footerRowCls}>
                 <ListTodo size={15} className="shrink-0" />
                 <span className="flex-1 truncate text-left">Tasks</span>
+              </button>
+            )}
+            {showHeader && onOpenLearn && (
+              <button onClick={onOpenLearn} className={footerRowCls}>
+                <GraduationCap size={15} className="shrink-0" />
+                <span className="flex-1 truncate text-left">Learn</span>
               </button>
             )}
             {onOpenFileExplorer && (

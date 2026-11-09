@@ -27,7 +27,7 @@ const VIEW_TABS: TabItem[] = [
   { id: 'notes', label: 'Notes', icon: FileText, view: 'notes' },
 ]
 
-const MORE_VIEWS: WorkspaceView[] = ['files', 'projects']
+const MORE_VIEWS: WorkspaceView[] = ['files', 'chat', 'learn', 'projects']
 
 /**
  * Bottom glass navigation for phones. Five equal tabs (Home, Notes, Search,

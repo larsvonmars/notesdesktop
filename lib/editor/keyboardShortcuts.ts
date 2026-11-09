@@ -218,6 +218,16 @@ export const KEYBOARD_SHORTCUTS: KeyboardShortcut[] = [
     category: 'navigation'
   },
   {
+    keys: ['⌘5', 'Ctrl+5'],
+    description: 'Go to Chat',
+    category: 'navigation'
+  },
+  {
+    keys: ['⌘6', 'Ctrl+6'],
+    description: 'Go to Learn',
+    category: 'navigation'
+  },
+  {
     keys: ['⌘J', 'Ctrl+J'],
     description: 'Open the AI assistant',
     category: 'navigation'

@@ -1,4 +1,4 @@
-import { FileText, Files, FolderOpen, Home, Layers, ListTodo } from 'lucide-react'
+import { FileText, Files, FolderOpen, GraduationCap, Home, Layers, ListTodo, MessagesSquare } from 'lucide-react'
 import type { LucideIcon } from 'lucide-react'
 import type { WorkspaceView } from '@/lib/workspace/types'
 
@@ -10,7 +10,7 @@ import type { WorkspaceView } from '@/lib/workspace/types'
  */
 export interface ViewNavigationItem {
   /** Stable id used by components and tests. */
-  id: 'home' | 'notes' | 'tasks' | 'files' | 'projects'
+  id: 'home' | 'notes' | 'tasks' | 'learn' | 'files' | 'projects' | 'chat'
   /** Workspace view activated by this destination. */
   view: WorkspaceView
   label: string
@@ -44,7 +44,7 @@ export const RAIL_DESTINATIONS: readonly ViewNavigationItem[] = [
     label: 'Tasks',
     icon: ListTodo,
     shortcut: '3',
-    description: 'Tasks and agenda',
+    description: 'Tasks, calendar and smart plans',
   },
   {
     id: 'files',
@@ -53,6 +53,22 @@ export const RAIL_DESTINATIONS: readonly ViewNavigationItem[] = [
     icon: FolderOpen,
     shortcut: '4',
     description: 'Files attached to this workspace',
+  },
+  {
+    id: 'chat',
+    view: 'chat',
+    label: 'Chat',
+    icon: MessagesSquare,
+    shortcut: '5',
+    description: 'Ask the AI about your notes, projects and tasks',
+  },
+  {
+    id: 'learn',
+    view: 'learn',
+    label: 'Learn',
+    icon: GraduationCap,
+    shortcut: '6',
+    description: 'Flashcards, spaced repetition and AI tutoring',
   },
 ]
 
@@ -90,7 +106,7 @@ export function getViewLabel(view: WorkspaceView): string {
   return getViewNavigation(view)?.label ?? 'Workspace'
 }
 
-/** True when the view has a rail destination (Home/Notes/Tasks/Files). */
+/** True when the view has a rail destination (Home/Notes/Tasks/Files/Chat). */
 export function isPrimaryView(view: WorkspaceView): boolean {
   return RAIL_DESTINATIONS.some((item) => item.view === view)
 }
@@ -100,7 +116,9 @@ export const VIEW_ICONS = {
   home: Home,
   notes: FileText,
   tasks: ListTodo,
+  learn: GraduationCap,
   files: Files,
   folder: FolderOpen,
   project: Layers,
+  chat: MessagesSquare,
 } satisfies Record<string, LucideIcon>

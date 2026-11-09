@@ -95,7 +95,7 @@ Navigation model: **rail → library → note list → editor → details**.
 is the single source of truth for destinations and shortcuts.
 
 Keyboard shortcuts: `⌘/Ctrl+K` command palette, `⌘/Ctrl+N` new note,
-`⌘/Ctrl+J` AI assistant, `⌘/Ctrl+1..4` Home/Notes/Tasks/Files, `⌘/Ctrl+\` toggle
+`⌘/Ctrl+J` AI assistant, `⌘/Ctrl+1..6` Home/Notes/Tasks/Files/Chat/Learn, `⌘/Ctrl+\` toggle
 library, `⌘/Ctrl+[` and `⌘/Ctrl+]` back/forward.
 
 The **AI assistant** (`components/AIAssistant.tsx` with markdown rendering in
@@ -103,6 +103,25 @@ The **AI assistant** (`components/AIAssistant.tsx` with markdown rendering in
 transcript with collapsible reasoning, context picker, quick actions, chat
 history and structured suggestions. Open it from the note details footer, the
 top-bar overflow menu, or `⌘/Ctrl+J`; `Escape` closes it.
+
+The **Chat view** (`components/chat/` with the turn engine in `lib/chat/`) is a
+full-page assistant: conversation history backed by the shared `chat_conversations`
+/ `chat_messages` tables, streamed answers with collapsible reasoning, markdown,
+image and PDF/DOCX attachments, a tool menu, and an agent mode that delegates to
+scoped sub-agents. Tools call the app's own data layer (`lib/chat/tools.ts`), so
+every request runs with the signed-in user's Supabase session. Open it from the
+rail or `⌘/Ctrl+5`.
+
+The **Learn view** (`components/learn/` with the data layer in `lib/learn/`) is the
+workspace for everything flashcard-related, sharing the `learn_*` Supabase tables
+with the MindViz Learn app. It includes a gamified dashboard (XP, level, streak,
+daily goal, badges), deck management with single/bulk-CSV/PDF-AI card creation,
+eight study modes (flashcard, multiple choice, spaced repetition with SM-2,
+typed answer, timed test, smart three-round, AI Learn and AI Tutor), sprint-based
+sessions with XP breakdowns and badge unlocks, a progress page with a study
+heatmap and session history, study preferences, and a tool-using AI assistant
+that can create decks/cards, analyze deck quality and build decks from PDFs.
+Open it from the rail or `⌘/Ctrl+6`.
 
 The **PDF annotation workspace** (`components/PdfAnnotationEditor.tsx`) follows the
 same system: a single glass command bar (tools, colour/size popovers, undo/redo,
@@ -213,6 +232,7 @@ Important: do not bind this Worker to `/*` on your main app domain. If you do, b
 - ✅ **Keyboard shortcuts** for efficient workflow
 - ✅ **Note sorting** (by updated date, created date, or title)
 - ✅ **Delete confirmations** with safety warnings
+- ✅ **Learn workspace** - Gamified flashcards with eight study modes, SM-2 spaced repetition, AI tutoring and PDF-to-deck generation
 - ✅ **Real-time synchronization** with Supabase
 - ✅ **Offline-first notes and folders** - local IndexedDB cache, write-behind sync and conflict detection
 - ✅ **100% WebView and Tauri compatible** - Fully optimized for Windows, macOS, and Linux
@@ -227,7 +247,9 @@ Important: do not bind this Worker to `/*` on your main app domain. If you do, b
 │   ├── signup/         # Signup page
 │   ├── layout.tsx      # Root layout with AuthProvider
 │   └── page.tsx        # Home page (redirects)
+├── components/learn/    # Learn view UI (dashboard, decks, 8 study modes, progress, AI)
 ├── lib/                 # Utilities
+│   ├── learn/          # Learn data layer, gamification and AI flows
 │   ├── supabase.ts     # Supabase client
 │   └── auth-context.tsx # Auth context provider
 ├── src-tauri/          # Tauri backend
@@ -255,6 +277,7 @@ Important: do not bind this Worker to `/*` on your main app domain. If you do, b
 
 | Shortcut | Action |
 |----------|--------|
+| `⌘6` / `Ctrl+6` | Open Learn |
 | `⌘\` / `Ctrl+\` | Toggle unified panel |
 | `N` (in panel) | Create new text note |
 | `D` (in panel) | Create new drawing |

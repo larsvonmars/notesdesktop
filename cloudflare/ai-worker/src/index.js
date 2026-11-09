@@ -7,6 +7,10 @@ const DEEPSEEK_MODEL = 'deepseek-flash'
 const DEEPSEEK_THINKING = { type: 'enabled' }
 const DEEPSEEK_REASONING_EFFORT = 'high'
 const ALLOWED_ROLES = new Set(['system', 'user', 'assistant', 'tool'])
+/** A single user message may mix text with a handful of images (vision). */
+const MAX_CONTENT_PARTS = 8
+/** Base64 image payload ceiling (~9 MB decoded) per image part. */
+const MAX_IMAGE_URL_CHARS = 12000000
 
 function jsonResponse(body, status = 200, headers = {}) {
   return new Response(JSON.stringify(body), {
@@ -36,6 +40,36 @@ function isRecord(value) {
   return !!value && typeof value === 'object' && !Array.isArray(value)
 }
 
+/**
+ * Text length of a message's content. Accepts a plain string or, for vision
+ * requests, an array of text/image_url parts. Returns null when invalid.
+ */
+function getContentChars(content) {
+  if (typeof content === 'string') return content.length
+  if (!Array.isArray(content) || content.length === 0 || content.length > MAX_CONTENT_PARTS) {
+    return null
+  }
+
+  let chars = 0
+  for (const part of content) {
+    if (!isRecord(part)) return null
+    if (part.type === 'text') {
+      if (typeof part.text !== 'string') return null
+      chars += part.text.length
+      continue
+    }
+    if (part.type === 'image_url') {
+      const imageUrl = part.image_url
+      if (!isRecord(imageUrl) || typeof imageUrl.url !== 'string') return null
+      if (!/^(data:image\/(png|jpe?g|webp|gif);base64,|https:\/\/)/i.test(imageUrl.url)) return null
+      if (imageUrl.url.length > MAX_IMAGE_URL_CHARS) return null
+      continue
+    }
+    return null
+  }
+  return chars
+}
+
 function validateMessages(messages) {
   if (!Array.isArray(messages) || messages.length === 0 || messages.length > 100) {
     return false
@@ -46,8 +80,12 @@ function validateMessages(messages) {
     const role = message.role
     const content = message.content
     if (typeof role !== 'string' || !ALLOWED_ROLES.has(role)) return false
-    if (typeof content !== 'string') return false
-    return content.length <= 120000
+    // Rich (multipart) content is only accepted from the user turn; tool and
+    // assistant messages must stay plain text.
+    if (Array.isArray(content) && role !== 'user') return false
+    const chars = getContentChars(content)
+    if (chars === null) return false
+    return chars <= 120000
   })
 }
 
