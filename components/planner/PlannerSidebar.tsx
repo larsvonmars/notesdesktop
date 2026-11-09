@@ -13,6 +13,7 @@ import {
   Plus,
   Repeat,
   Settings2,
+  Sparkles,
   Star,
   Wand2,
   X,
@@ -47,6 +48,8 @@ interface NavItem {
   label: string
   icon: LucideIcon
   shortcut: string
+  /** Token-driven hue used for the icon, keeps the rail scannable. */
+  hue: string
   badge?: number | string | null
 }
 
@@ -69,14 +72,14 @@ const NAV_GROUPS: { title: string; items: PlannerSection[] }[] = [
 ]
 
 const NAV_ITEMS: Record<PlannerSection, Omit<NavItem, 'badge'>> = {
-  overview: { id: 'overview', label: 'Overview', icon: LayoutDashboard, shortcut: '1' },
-  tasks: { id: 'tasks', label: 'Tasks', icon: ListTodo, shortcut: '2' },
-  starred: { id: 'starred', label: 'Starred', icon: Star, shortcut: '3' },
-  projects: { id: 'projects', label: 'Projects', icon: Layers, shortcut: '4' },
-  calendar: { id: 'calendar', label: 'Calendar', icon: CalendarDays, shortcut: '5' },
-  timetable: { id: 'timetable', label: 'Timetable', icon: Repeat, shortcut: '6' },
-  plan: { id: 'plan', label: 'Smart plan', icon: Wand2, shortcut: '7' },
-  settings: { id: 'settings', label: 'Settings', icon: Settings2, shortcut: '8' },
+  overview: { id: 'overview', label: 'Overview', icon: LayoutDashboard, shortcut: '1', hue: 'var(--hue-lime)' },
+  tasks: { id: 'tasks', label: 'Tasks', icon: ListTodo, shortcut: '2', hue: 'var(--hue-sky)' },
+  starred: { id: 'starred', label: 'Starred', icon: Star, shortcut: '3', hue: 'var(--hue-amber)' },
+  projects: { id: 'projects', label: 'Projects', icon: Layers, shortcut: '4', hue: 'var(--hue-rose)' },
+  calendar: { id: 'calendar', label: 'Calendar', icon: CalendarDays, shortcut: '5', hue: 'var(--hue-mint)' },
+  timetable: { id: 'timetable', label: 'Timetable', icon: Repeat, shortcut: '6', hue: 'var(--hue-sky)' },
+  plan: { id: 'plan', label: 'Smart plan', icon: Wand2, shortcut: '7', hue: 'var(--hue-rose)' },
+  settings: { id: 'settings', label: 'Settings', icon: Settings2, shortcut: '8', hue: 'var(--muted)' },
 }
 
 function badgesFor(counts: PlannerSidebarCounts): Partial<Record<PlannerSection, number | string | null>> {
@@ -114,19 +117,22 @@ function NavButton({
             ? `${item.label}${badge != null ? ` (${badge})` : ''} · Alt+${item.shortcut}`
             : `${item.label} (Alt+${item.shortcut})`
         }
+        data-active={active}
         className={cn(
-          'focus-ring group relative flex w-full items-center gap-2.5 rounded-xl py-2 text-[13px] font-medium transition-colors',
-          collapsed ? 'justify-center px-0' : 'px-2.5',
-          active
-            ? 'bg-[var(--accent-light)] text-accent'
-            : 'text-muted hover:bg-[var(--surface-hover)] hover:text-foreground',
+          'pl-nav-item focus-ring group',
+          collapsed && 'justify-center px-0',
         )}
       >
-        <Icon
-          size={16}
-          strokeWidth={active ? 2.1 : 1.85}
-          className="shrink-0 transition-transform duration-200 group-hover:scale-105"
-        />
+        <span
+          aria-hidden
+          className={cn(
+            'flex h-6 w-6 shrink-0 items-center justify-center rounded-lg transition-colors',
+            active ? '' : 'bg-[var(--surface-sunken)] group-hover:bg-[var(--surface-active)]',
+          )}
+          style={active ? { background: 'var(--accent)', color: 'var(--accent-foreground)' } : { color: item.hue }}
+        >
+          <Icon size={13} strokeWidth={active ? 2.2 : 1.9} />
+        </span>
         {!collapsed && <span className="min-w-0 flex-1 truncate text-left">{item.label}</span>}
         {!collapsed && badge != null && (
           <span
@@ -139,7 +145,7 @@ function NavButton({
           </span>
         )}
         {collapsed && badge != null && (
-          <span className="absolute right-1.5 top-1.5 h-1.5 w-1.5 rounded-full bg-accent" aria-hidden />
+          <span className="absolute right-1 top-1 h-1.5 w-1.5 rounded-full bg-accent" aria-hidden />
         )}
       </button>
     </li>
@@ -160,11 +166,11 @@ function NavContent({
   const badges = badgesFor(counts)
 
   return (
-    <nav aria-label="Planner" className="flex-1 overflow-y-auto px-2 py-2 scroll-thin">
+    <nav aria-label="Planner" className="flex-1 overflow-y-auto px-2.5 py-2 scroll-thin">
       {NAV_GROUPS.map((group) => (
         <div key={group.title} className="mb-1">
           {!collapsed && (
-            <p className="px-2.5 pb-1 pt-2 text-[10px] font-semibold uppercase tracking-[0.14em] text-muted">
+            <p className="px-2 pb-1 pt-2.5 text-[10px] font-semibold uppercase tracking-[0.14em] text-muted">
               {group.title}
             </p>
           )}
@@ -209,7 +215,7 @@ function SidebarFooter({
           onClick={onNewTask}
           title="New task"
           aria-label="New task"
-          className="focus-ring flex h-9 w-full items-center justify-center rounded-xl bg-accent text-accent-foreground"
+          className="focus-ring flex h-9 w-full items-center justify-center rounded-xl bg-accent text-accent-foreground shadow-[0_10px_22px_-12px_var(--accent-glow)] transition-[filter,transform] hover:brightness-105 active:scale-95"
         >
           <Plus size={15} />
         </button>
@@ -218,7 +224,7 @@ function SidebarFooter({
           onClick={onNewEvent}
           title="New event"
           aria-label="New event"
-          className="focus-ring flex h-9 w-full items-center justify-center rounded-xl border border-[var(--border)] text-muted hover:text-foreground"
+          className="focus-ring flex h-9 w-full items-center justify-center rounded-xl border border-[var(--border)] text-muted transition-colors hover:bg-[var(--surface-hover)] hover:text-foreground"
         >
           <CalendarPlus size={15} />
         </button>
@@ -242,40 +248,51 @@ function SidebarFooter({
   }
 
   return (
-    <div className="space-y-2 border-t border-[var(--border)] p-2.5">
-      <div className="rounded-xl bg-[var(--surface-sunken)] px-2.5 py-2">
-        <p className="text-[10px] font-semibold uppercase tracking-[0.1em] text-muted">Today</p>
-        <ul className="mt-1 space-y-1 text-[11px]">
-          <li className="flex items-center justify-between gap-2">
-            <span className="text-muted">Overdue</span>
-            <span
+    <div className="space-y-2.5 border-t border-[var(--border)] p-2.5">
+      <div className="rounded-2xl border border-[var(--border)] bg-[var(--surface-sunken)] p-2.5">
+        <p className="pl-eyebrow px-0.5">Today</p>
+        <div className="mt-1.5 grid grid-cols-3 gap-1 text-center">
+          <div className="rounded-xl bg-[var(--surface)] px-1 py-1.5">
+            <p
               className={cn(
-                'font-semibold tabular-nums',
+                'text-[14px] font-bold tabular-nums leading-none',
                 counts.overdue > 0 ? 'text-danger' : 'text-foreground',
               )}
             >
               {counts.overdue}
-            </span>
-          </li>
-          <li className="flex items-center justify-between gap-2">
-            <span className="text-muted">Due today</span>
-            <span className="font-semibold tabular-nums text-foreground">{counts.dueToday}</span>
-          </li>
-          <li className="flex items-center justify-between gap-2">
-            <span className="text-muted">Free focus</span>
-            <span className="font-semibold tabular-nums text-foreground">
+            </p>
+            <p className="mt-1 text-[9px] font-semibold uppercase tracking-[0.06em] text-muted">
+              Overdue
+            </p>
+          </div>
+          <div className="rounded-xl bg-[var(--surface)] px-1 py-1.5">
+            <p className="text-[14px] font-bold tabular-nums leading-none text-foreground">
+              {counts.dueToday}
+            </p>
+            <p className="mt-1 text-[9px] font-semibold uppercase tracking-[0.06em] text-muted">
+              Due today
+            </p>
+          </div>
+          <div className="rounded-xl bg-[var(--surface)] px-1 py-1.5">
+            <p className="text-[14px] font-bold tabular-nums leading-none text-foreground">
               {counts.freeHours}h
-            </span>
-          </li>
-        </ul>
+            </p>
+            <p className="mt-1 text-[9px] font-semibold uppercase tracking-[0.06em] text-muted">
+              Free focus
+            </p>
+          </div>
+        </div>
         {counts.activePlanProgress !== null && (
           <button
             type="button"
             onClick={() => onSelect('plan')}
-            className="mt-2 w-full text-left"
+            className="focus-ring mt-2 w-full rounded-xl px-1.5 py-1 text-left transition-colors hover:bg-[var(--surface-hover)]"
           >
-            <span className="flex items-center justify-between text-[10px] text-muted">
-              Active plan
+            <span className="flex items-center justify-between text-[10px] font-medium text-muted">
+              <span className="flex items-center gap-1">
+                <Sparkles size={10} className="text-accent" />
+                Active plan
+              </span>
               <span className="tabular-nums">{counts.activePlanProgress}%</span>
             </span>
             <ProgressBar value={counts.activePlanProgress} className="mt-1" />
@@ -287,7 +304,7 @@ function SidebarFooter({
         <button
           type="button"
           onClick={onNewTask}
-          className="focus-ring flex items-center justify-center gap-1 rounded-xl bg-accent px-2 py-1.5 text-[11px] font-semibold text-accent-foreground"
+          className="focus-ring flex items-center justify-center gap-1 rounded-xl bg-accent px-2 py-2 text-[11px] font-semibold text-accent-foreground shadow-[0_10px_22px_-12px_var(--accent-glow)] transition-[filter,transform] hover:brightness-105 active:scale-[0.98]"
         >
           <Plus size={12} />
           Task
@@ -295,7 +312,7 @@ function SidebarFooter({
         <button
           type="button"
           onClick={onNewEvent}
-          className="focus-ring flex items-center justify-center gap-1 rounded-xl border border-[var(--border)] px-2 py-1.5 text-[11px] font-semibold text-foreground hover:bg-[var(--surface-hover)]"
+          className="focus-ring flex items-center justify-center gap-1 rounded-xl border border-[var(--border)] px-2 py-2 text-[11px] font-semibold text-foreground transition-colors hover:bg-[var(--surface-hover)]"
         >
           <CalendarPlus size={12} />
           Event
@@ -355,13 +372,22 @@ export default function PlannerSidebar({
     >
       <div
         className={cn(
-          'flex h-12 shrink-0 items-center border-b border-[var(--border)] px-2',
+          'flex h-14 shrink-0 items-center border-b border-[var(--border)] px-2.5',
           collapsed ? 'justify-center' : 'justify-between',
         )}
       >
         {!collapsed && (
-          <span className="px-1 font-display text-[13px] font-semibold tracking-[-0.01em] text-foreground">
-            Planner
+          <span className="flex items-center gap-2 px-1">
+            <span
+              aria-hidden
+              className="flex h-7 w-7 items-center justify-center rounded-[9px] text-accent-foreground shadow-[0_8px_18px_-8px_var(--accent-glow)]"
+              style={{ background: 'var(--accent-gradient)' }}
+            >
+              <CalendarDays size={14} strokeWidth={2} />
+            </span>
+            <span className="font-display text-[13px] font-semibold tracking-[-0.01em] text-foreground">
+              Planner
+            </span>
           </span>
         )}
         <button
@@ -450,8 +476,17 @@ export function PlannerSidebarDrawer({
         }}
         className="glass-strong animate-rise-in absolute inset-y-0 right-0 flex w-[min(85vw,300px)] flex-col overflow-hidden border-l border-[var(--border)] shadow-glass-lg outline-none"
       >
-        <div className="flex h-12 shrink-0 items-center justify-between border-b border-[var(--border)] px-3">
-          <span className="font-display text-[13px] font-semibold text-foreground">Planner</span>
+        <div className="flex h-14 shrink-0 items-center justify-between border-b border-[var(--border)] px-3">
+          <span className="flex items-center gap-2">
+            <span
+              aria-hidden
+              className="flex h-7 w-7 items-center justify-center rounded-[9px] text-accent-foreground"
+              style={{ background: 'var(--accent-gradient)' }}
+            >
+              <CalendarDays size={14} strokeWidth={2} />
+            </span>
+            <span className="font-display text-[13px] font-semibold text-foreground">Planner</span>
+          </span>
           <button
             type="button"
             onClick={onClose}

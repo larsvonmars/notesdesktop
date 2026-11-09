@@ -252,23 +252,25 @@ function KanbanColumn({
   return (
     <section
       ref={setNodeRef}
-      className={`flex w-[264px] shrink-0 flex-col rounded-2xl border bg-[var(--surface)] transition-colors ${
-        isOver ? 'border-accent bg-[var(--accent-light)]' : accent.border
+      className={`flex w-[264px] shrink-0 flex-col rounded-2xl border bg-[var(--surface)] transition-all duration-200 ${
+        isOver
+          ? 'border-accent bg-[var(--accent-light)] shadow-[0_0_0_3px_var(--accent-glow)]'
+          : accent.border
       }`}
     >
-      <header className="flex items-center gap-2 px-3 py-2.5">
+      <header className="flex items-center gap-2 border-b border-[var(--border)] px-3 py-2.5">
         <span className={`h-2 w-2 rounded-full ${accent.dot}`} />
         <h3 className={`text-[11px] font-semibold uppercase tracking-[0.08em] ${accent.text}`}>
           {STATUS_META[status].label}
         </h3>
-        <span className="rounded-full bg-[var(--surface-sunken)] px-1.5 text-[10px] font-semibold tabular-nums text-muted">
+        <span className="rounded-full bg-[var(--surface-sunken)] px-1.5 py-0.5 text-[10px] font-semibold tabular-nums text-muted">
           {tasks.length}
         </span>
         <button
           type="button"
           onClick={() => setAdding((current) => !current)}
           aria-label={`Add task to ${STATUS_META[status].label}`}
-          className="focus-ring ml-auto flex h-6 w-6 items-center justify-center rounded-lg text-muted hover:bg-[var(--surface-hover)] hover:text-foreground"
+          className="focus-ring ml-auto flex h-6 w-6 items-center justify-center rounded-lg text-muted transition-colors hover:bg-[var(--surface-hover)] hover:text-foreground"
         >
           <Plus size={13} />
         </button>
@@ -344,7 +346,7 @@ function SortableCard({
             onOpen()
           }
         }}
-        className="focus-ring cursor-grab rounded-xl border border-[var(--border)] bg-[var(--surface-solid)] p-2.5 shadow-sm transition-shadow hover:shadow-md active:cursor-grabbing"
+        className="pl-lift focus-ring cursor-grab rounded-xl border border-[var(--border)] bg-[var(--surface-solid)] p-2.5 shadow-sm active:cursor-grabbing"
       >
         <KanbanCardBody task={task} project={project} onToggleStar={onToggleStar} />
       </div>
@@ -375,7 +377,7 @@ function KanbanCardBody({
   return (
     <div className={dragging ? 'rounded-xl border border-accent bg-[var(--surface-solid)] p-2.5 shadow-xl' : ''}>
       <div className="flex items-center justify-between gap-1">
-        <span className={`inline-flex items-center gap-1 rounded border border-[var(--border)] px-1 py-0.5 text-[9px] font-bold uppercase tracking-[0.04em] ${priority.className}`}>
+        <span className={`inline-flex items-center gap-1 rounded-full px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-[0.04em] ${priority.soft}`}>
           <span className={`h-1.5 w-1.5 rounded-full ${priority.dot}`} />
           {priority.label}
         </span>
@@ -419,7 +421,13 @@ function KanbanCardBody({
       )}
 
       <div className="mt-1.5 flex items-center justify-between gap-2 text-[10px]">
-        <span className={`inline-flex items-center gap-1 ${overdue ? 'font-semibold text-danger' : 'text-muted'}`}>
+        <span
+          className={`inline-flex items-center gap-1 rounded-md px-1.5 py-0.5 ${
+            overdue
+              ? 'bg-[var(--danger-light)] font-semibold text-danger'
+              : 'bg-[var(--surface-sunken)] text-muted'
+          }`}
+        >
           {overdue ? <AlertTriangle size={10} /> : <CalendarDays size={10} />}
           {dueLabel(task)}
         </span>

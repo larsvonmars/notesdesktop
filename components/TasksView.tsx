@@ -3,9 +3,12 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import {
   AlertTriangle,
+  CalendarDays,
   CalendarPlus,
+  Clock3,
   Columns3,
   List,
+  ListTodo,
   Menu,
   Plus,
   Star,
@@ -62,7 +65,7 @@ import PlannerSidebar, {
   type PlannerSection,
 } from './planner/PlannerSidebar'
 import PlannerSettingsView from './planner/PlannerSettingsView'
-import ProjectsView from './planner/ProjectsView'
+import ProjectsView, { type PlannerProjectTreeProps } from './planner/ProjectsView'
 import SmartPlannerView from './planner/SmartPlannerView'
 import TaskDetailPanel from './planner/TaskDetailPanel'
 import TaskFormModal from './planner/TaskFormModal'
@@ -146,6 +149,8 @@ export interface TasksViewProps {
   initialSection?: PlannerSection
   /** Notifies the shell so breadcrumbs can mirror the active section. */
   onSectionChange?: (section: PlannerSection) => void
+  /** Notes library tree reused as the planner's Projects section. */
+  projectTree?: PlannerProjectTreeProps
 }
 
 export default function TasksView({
@@ -155,6 +160,7 @@ export default function TasksView({
   onOpenProject,
   initialSection,
   onSectionChange,
+  projectTree,
 }: TasksViewProps) {
   const toast = useToast()
 
@@ -730,6 +736,16 @@ export default function TasksView({
 
   const sectionMeta = SECTION_META[section]
 
+  const todayLabel = useMemo(
+    () =>
+      new Date().toLocaleDateString(undefined, {
+        weekday: 'long',
+        month: 'long',
+        day: 'numeric',
+      }),
+    [],
+  )
+
   const headerCounts = useMemo(
     () => ({
       open: openTasks.length,
@@ -787,23 +803,18 @@ export default function TasksView({
       <div className="min-h-0 flex-1 overflow-y-auto scroll-thin">
         <div className="mx-auto w-full max-w-7xl px-4 pb-24 pt-6 sm:px-6 lg:px-8 lg:pb-12">
         <header className="animate-rise-in">
-          <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-muted">
-            Planner
-          </p>
-          <div className="mt-1.5 flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
+          <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
             <div className="min-w-0">
-              <h1 className="font-display text-[28px] font-semibold tracking-[-0.02em] text-foreground sm:text-3xl">
+              <p className="flex items-center gap-2 text-[11px] font-semibold uppercase tracking-[0.16em] text-muted">
+                Planner
+                <span aria-hidden className="h-px w-6 bg-[var(--border-strong)]" />
+                <span className="normal-case tracking-normal text-foreground/70">{todayLabel}</span>
+              </p>
+              <h1 className="mt-1.5 font-display text-[28px] font-semibold tracking-[-0.02em] text-foreground sm:text-3xl">
                 {sectionMeta.title}
               </h1>
               <p className="mt-1.5 max-w-2xl text-sm leading-6 text-muted">
                 {sectionMeta.description}
-              </p>
-              <p className="mt-1 text-[11px] tabular-nums text-muted">
-                {headerCounts.open} open {headerCounts.open === 1 ? 'task' : 'tasks'}
-                {headerCounts.overdue > 0 ? ` · ${headerCounts.overdue} overdue` : ''}
-                {headerCounts.events > 0
-                  ? ` · ${headerCounts.events} ${headerCounts.events === 1 ? 'event' : 'events'}`
-                  : ''}
               </p>
             </div>
 
@@ -839,6 +850,29 @@ export default function TasksView({
                 New task
               </Button>
             </div>
+          </div>
+
+          <div className="mt-4 flex flex-wrap items-center gap-1.5">
+            <span className="inline-flex items-center gap-1.5 rounded-full border border-[var(--border)] bg-[var(--surface)] px-2.5 py-1 text-[11px] font-medium text-foreground">
+              <ListTodo size={11} className="text-[var(--hue-sky)]" />
+              {headerCounts.open} open {headerCounts.open === 1 ? 'task' : 'tasks'}
+            </span>
+            {headerCounts.overdue > 0 && (
+              <span className="inline-flex items-center gap-1 rounded-full border border-transparent bg-[var(--danger-light)] px-2.5 py-1 text-[11px] font-semibold text-danger">
+                <AlertTriangle size={11} />
+                {headerCounts.overdue} overdue
+              </span>
+            )}
+            {headerCounts.events > 0 && (
+              <span className="inline-flex items-center gap-1.5 rounded-full border border-[var(--border)] bg-[var(--surface)] px-2.5 py-1 text-[11px] font-medium text-foreground">
+                <CalendarDays size={11} className="text-[var(--hue-mint)]" />
+                {headerCounts.events} {headerCounts.events === 1 ? 'event' : 'events'}
+              </span>
+            )}
+            <span className="inline-flex items-center gap-1.5 rounded-full border border-[var(--border)] bg-[var(--surface)] px-2.5 py-1 text-[11px] font-medium text-foreground">
+              <Clock3 size={11} className="text-accent" />
+              {Math.round(availableMinutes / 60)}h free today
+            </span>
           </div>
         </header>
 
@@ -1056,6 +1090,7 @@ export default function TasksView({
                 projects={localProjects}
                 tasks={tasks}
                 taskLists={taskLists}
+                tree={projectTree}
                 onOpenProject={onOpenProject}
                 onShowTasks={handleShowProjectTasks}
                 onProjectsChanged={() => void refreshProjects()}
@@ -1171,15 +1206,23 @@ function PlannerLoadingSkeleton() {
       <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
         {[0, 1, 2, 3].map((index) => (
           <div key={index} className="glass-card p-4">
-            <div className="skeleton-shimmer h-2.5 w-20 rounded-full" />
-            <div className="skeleton-shimmer mt-2.5 h-6 w-12 rounded-lg" />
-            <div className="skeleton-shimmer mt-2 h-2 w-28 rounded-full" />
+            <div className="flex items-start justify-between">
+              <div className="space-y-2">
+                <div className="skeleton-shimmer h-2.5 w-20 rounded-full" />
+                <div className="skeleton-shimmer h-7 w-12 rounded-lg" />
+                <div className="skeleton-shimmer h-2 w-28 rounded-full" />
+              </div>
+              <div className="skeleton-shimmer h-9 w-9 rounded-xl" />
+            </div>
           </div>
         ))}
       </div>
       <div className="mt-4 grid gap-4 lg:grid-cols-[minmax(0,1fr)_320px]">
         <div className="glass-card space-y-3 p-4">
-          <div className="skeleton-shimmer h-3 w-32 rounded-full" />
+          <div className="flex items-center gap-3">
+            <div className="skeleton-shimmer h-9 w-9 rounded-xl" />
+            <div className="skeleton-shimmer h-3 w-32 rounded-full" />
+          </div>
           <div className="skeleton-shimmer h-24 w-full rounded-2xl" />
           <div className="skeleton-shimmer h-24 w-full rounded-2xl" />
         </div>

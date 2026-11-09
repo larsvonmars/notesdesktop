@@ -203,15 +203,17 @@ export default function TaskListView({
   )
 
   return (
-    <div className="space-y-4">
-      <div className="flex flex-wrap items-center gap-2">
-        <form onSubmit={handleQuickAdd} className="relative min-w-[220px] flex-1">
-          <Plus size={14} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-muted" />
+    <div className="space-y-3">
+      <div className="glass-card p-2">
+        <form onSubmit={handleQuickAdd} className="relative">
+          <span className="pointer-events-none absolute left-3 top-1/2 flex h-6 w-6 -translate-y-1/2 items-center justify-center rounded-lg bg-[var(--accent-light)] text-accent">
+            <Plus size={13} />
+          </span>
           <input
             value={quickTitle}
             onChange={(event) => setQuickTitle(event.target.value)}
             placeholder="Quick add a task and press Enter…"
-            className="glass-input h-9 w-full pl-9 pr-3 text-sm"
+            className="h-10 w-full rounded-xl border border-transparent bg-transparent pl-11 pr-3 text-sm text-foreground outline-none transition-colors placeholder:text-muted/70 focus:border-[var(--border)] focus:bg-[var(--surface-sunken)]"
           />
         </form>
       </div>
@@ -286,16 +288,22 @@ export default function TaskListView({
             type="button"
             onClick={() => setOnlyStarred((current) => !current)}
             aria-pressed={onlyStarred}
-            className={`focus-ring flex h-8 items-center gap-1.5 rounded-full border px-2.5 text-[11px] font-semibold transition-colors ${
+            data-active={onlyStarred}
+            className="pl-chip focus-ring"
+            style={
               onlyStarred
-                ? 'border-amber-500 bg-[var(--warning-light)] text-amber-600 dark:text-amber-400'
-                : 'border-[var(--border)] text-muted hover:text-foreground'
-            }`}
+                ? { background: 'var(--warning-light)', color: 'var(--warning)' }
+                : undefined
+            }
           >
             <Star size={12} fill={onlyStarred ? 'currentColor' : 'none'} />
             Starred
           </button>
         )}
+
+        <span className="ml-auto text-[11px] tabular-nums text-muted">
+          {filtered.length} of {counts.all} tasks
+        </span>
       </div>
 
       {filtered.length === 0 ? (
@@ -323,11 +331,13 @@ export default function TaskListView({
           {groups.map((group) => (
             <section key={group.key} className="glass-card overflow-hidden">
               {group.label && (
-                <div className="flex items-center justify-between border-b border-[var(--border)] px-3 py-2">
+                <div className="flex items-center justify-between border-b border-[var(--border)] bg-[var(--surface-sunken)]/50 px-3.5 py-2.5">
                   <h3 className="text-[11px] font-semibold uppercase tracking-[0.08em] text-foreground">
                     {group.label}
                   </h3>
-                  <span className="text-[10px] tabular-nums text-muted">{group.tasks.length}</span>
+                  <span className="rounded-full bg-[var(--surface)] px-1.5 py-0.5 text-[10px] font-semibold tabular-nums text-muted">
+                    {group.tasks.length}
+                  </span>
                 </div>
               )}
               <ul className="divide-y divide-[var(--border)]">
@@ -407,16 +417,19 @@ function TaskRow({
   const progress = task.progress ?? 0
 
   return (
-    <li className="px-2.5 py-2 transition-colors hover:bg-[var(--surface-hover)]">
+    <li
+      className="pl-task-row group/row px-3.5 py-2.5 pl-4 transition-colors hover:bg-[var(--surface-hover)]"
+      style={{ ['--pl-rail' as string]: completed ? 'transparent' : PRIORITY_META[task.priority].color }}
+    >
       <div className="flex items-start gap-2.5">
         <button
           type="button"
           onClick={onToggleComplete}
           aria-label={completed ? `Reopen ${task.title}` : `Complete ${task.title}`}
-          className={`focus-ring mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full border transition-colors ${
+          className={`focus-ring mt-0.5 flex h-[19px] w-[19px] shrink-0 items-center justify-center rounded-full border transition-all ${
             completed
               ? 'border-accent bg-accent text-accent-foreground'
-              : 'border-[var(--border-strong)] text-transparent hover:border-accent hover:bg-[var(--accent-light)] hover:text-accent'
+              : 'border-[var(--border-strong)] text-transparent hover:scale-110 hover:border-accent hover:bg-[var(--accent-light)] hover:text-accent'
           }`}
         >
           {completed ? <Check size={11} /> : <Circle size={9} />}
@@ -437,7 +450,9 @@ function TaskRow({
                 {task.title}
               </span>
             </button>
-            <span className={`shrink-0 text-[10px] font-semibold ${PRIORITY_META[task.priority].className}`}>
+            <span
+              className={`inline-flex shrink-0 items-center gap-1 rounded-full px-1.5 py-0.5 text-[9.5px] font-semibold ${PRIORITY_META[task.priority].soft}`}
+            >
               {PRIORITY_META[task.priority].label}
             </span>
           </div>
@@ -448,7 +463,13 @@ function TaskRow({
 
           <div className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 text-[10px]">
             {task.due_date ? (
-              <span className={`inline-flex items-center gap-1 font-medium ${overdue ? 'text-danger' : 'text-muted'}`}>
+              <span
+                className={`inline-flex items-center gap-1 rounded-md px-1.5 py-0.5 font-medium ${
+                  overdue
+                    ? 'bg-[var(--danger-light)] text-danger'
+                    : 'bg-[var(--surface-sunken)] text-muted'
+                }`}
+              >
                 {overdue ? <AlertTriangle size={10} /> : <CalendarDays size={10} />}
                 {dueLabel(task)}
               </span>
@@ -544,13 +565,13 @@ function TaskRow({
           )}
         </div>
 
-        <div className="flex shrink-0 items-center">
+        <div className="flex shrink-0 items-center opacity-60 transition-opacity group-hover/row:opacity-100">
           <button
             type="button"
             onClick={onToggleStar}
             aria-label={task.is_starred ? `Unstar ${task.title}` : `Star ${task.title}`}
             className={`focus-ring flex h-7 w-7 items-center justify-center rounded-lg transition-colors hover:bg-[var(--surface-active)] ${
-              task.is_starred ? 'text-amber-500' : 'text-muted'
+              task.is_starred ? 'text-amber-500 opacity-100' : 'text-muted'
             }`}
           >
             <Star size={13} fill={task.is_starred ? 'currentColor' : 'none'} />

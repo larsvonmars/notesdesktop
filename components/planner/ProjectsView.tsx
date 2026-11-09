@@ -5,6 +5,7 @@ import {
   Archive,
   ArrowRight,
   Check,
+  FolderTree,
   Layers,
   List,
   Pencil,
@@ -14,6 +15,7 @@ import {
 } from 'lucide-react'
 import { Button } from '@/components/ui/Button'
 import { useToast } from '@/components/ToastProvider'
+import SidebarTree, { type SidebarTreeProps } from '@/components/SidebarTree'
 import type { Project } from '@/lib/projects'
 import { createProject } from '@/lib/projects'
 import {
@@ -24,12 +26,32 @@ import {
   type TaskList,
 } from '@/lib/tasks'
 import { isTaskOpen } from '@/lib/task-agenda'
-import { COLOR_SWATCHES, FIELD_CLASS, LABEL_CLASS, ProgressBar } from './PlannerUi'
+import {
+  COLOR_SWATCHES,
+  FIELD_CLASS,
+  LABEL_CLASS,
+  ProgressBar,
+  SectionCardHeader,
+} from './PlannerUi'
+
+/**
+ * The notes workspace project tree, embedded in the planner. Mirrors the notes
+ * sidebar one-to-one (search, folders, notes, drag & drop, context menus) so
+ * organising work feels identical in both views. The chrome slots that belong
+ * to the notes shell (collapse toggle, header, footer nav) are filled in by
+ * ProjectsView instead.
+ */
+export type PlannerProjectTreeProps = Omit<
+  SidebarTreeProps,
+  'collapsed' | 'onToggleCollapsed' | 'dense' | 'showHeader'
+>
 
 export interface ProjectsViewProps {
   projects: Project[]
   tasks: Task[]
   taskLists: TaskList[]
+  /** When provided, the main column renders the shared notes project tree. */
+  tree?: PlannerProjectTreeProps
   onOpenProject: (projectId: string) => void
   onShowTasks: (projectId: string) => void
   onProjectsChanged: () => void
@@ -40,6 +62,7 @@ export default function ProjectsView({
   projects,
   tasks,
   taskLists,
+  tree,
   onOpenProject,
   onShowTasks,
   onProjectsChanged,
@@ -164,170 +187,233 @@ export default function ProjectsView({
     }
   }
 
-  return (
-    <div className="grid gap-4 2xl:grid-cols-[minmax(0,1fr)_320px]">
-      <div className="space-y-4">
-        <section className="glass-card p-4">
-          <div className="flex items-center justify-between">
-            <div>
-              <h2 className="flex items-center gap-2 font-display text-sm font-semibold text-foreground">
-                <Layers size={15} className="text-accent" />
-                Projects
-              </h2>
-              <p className="mt-0.5 text-[11px] text-muted">
-                Group tasks by the projects in your workspace.
-              </p>
-            </div>
-            <Button
+  const startCreateProject = () => {
+    if (tree?.onCreateProject) {
+      tree.onCreateProject()
+      return
+    }
+    setCreating((current) => !current)
+  }
+
+  const createForm = creating && !tree?.onCreateProject && (
+    <form onSubmit={handleCreateProject} className="mt-3 space-y-3 rounded-xl bg-[var(--surface-sunken)] p-3">
+      <div>
+        <label className={LABEL_CLASS} htmlFor="project-name">
+          Name
+        </label>
+        <input
+          id="project-name"
+          required
+          value={projectName}
+          onChange={(event) => setProjectName(event.target.value)}
+          placeholder="e.g. Thesis"
+          className={FIELD_CLASS}
+        />
+      </div>
+      <div>
+        <label className={LABEL_CLASS} htmlFor="project-description">
+          Description
+        </label>
+        <input
+          id="project-description"
+          value={projectDescription}
+          onChange={(event) => setProjectDescription(event.target.value)}
+          placeholder="Optional description"
+          className={FIELD_CLASS}
+        />
+      </div>
+      <div>
+        <span className={LABEL_CLASS}>Colour</span>
+        <div className="flex flex-wrap gap-1.5">
+          {COLOR_SWATCHES.map((color) => (
+            <button
+              key={color}
               type="button"
-              variant={creating ? 'ghost' : 'primary'}
-              size="sm"
-              icon={creating ? X : Plus}
-              onClick={() => setCreating((current) => !current)}
-            >
-              {creating ? 'Cancel' : 'New project'}
-            </Button>
+              onClick={() => setProjectColor(color)}
+              aria-label={`Colour ${color}`}
+              className={`h-6 w-6 rounded-full border-2 ${
+                projectColor === color ? 'border-foreground' : 'border-transparent'
+              }`}
+              style={{ backgroundColor: color }}
+            />
+          ))}
+        </div>
+      </div>
+      <Button type="submit" variant="primary" size="sm" loading={saving}>
+        Create project
+      </Button>
+    </form>
+  )
+
+  const unfiled = stats.get('none')
+
+  return (
+    <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_320px]">
+      <div className="space-y-4">
+        <section className="glass-card flex h-[min(72vh,760px)] flex-col overflow-hidden">
+          <div className="flex shrink-0 items-center justify-between gap-3 border-b border-[var(--border)] px-4 py-3">
+            <SectionCardHeader
+              icon={tree ? FolderTree : Layers}
+              title="Projects"
+              subtitle={
+                tree
+                  ? 'The same project tree as your notes — search, folders, notes and drag & drop included.'
+                  : 'Group tasks by the projects in your workspace.'
+              }
+            />
+            <div className="flex shrink-0 items-center gap-2">
+              <span className="rounded-full bg-[var(--surface-sunken)] px-2 py-0.5 text-[10px] font-semibold tabular-nums text-muted">
+                {projects.length}
+              </span>
+              <Button
+                type="button"
+                variant={creating && !tree?.onCreateProject ? 'ghost' : 'primary'}
+                size="sm"
+                icon={creating && !tree?.onCreateProject ? X : Plus}
+                onClick={startCreateProject}
+              >
+                {creating && !tree?.onCreateProject ? 'Cancel' : 'New project'}
+              </Button>
+            </div>
           </div>
 
-          {creating && (
-            <form onSubmit={handleCreateProject} className="mt-3 space-y-3 rounded-xl bg-[var(--surface-sunken)] p-3">
-              <div>
-                <label className={LABEL_CLASS} htmlFor="project-name">
-                  Name
-                </label>
-                <input
-                  id="project-name"
-                    required
-                  value={projectName}
-                  onChange={(event) => setProjectName(event.target.value)}
-                  placeholder="e.g. Thesis"
-                  className={FIELD_CLASS}
-                />
-              </div>
-              <div>
-                <label className={LABEL_CLASS} htmlFor="project-description">
-                  Description
-                </label>
-                <input
-                  id="project-description"
-                  value={projectDescription}
-                  onChange={(event) => setProjectDescription(event.target.value)}
-                  placeholder="Optional description"
-                  className={FIELD_CLASS}
-                />
-              </div>
-              <div>
-                <span className={LABEL_CLASS}>Colour</span>
-                <div className="flex flex-wrap gap-1.5">
-                  {COLOR_SWATCHES.map((color) => (
-                    <button
-                      key={color}
-                      type="button"
-                      onClick={() => setProjectColor(color)}
-                      aria-label={`Colour ${color}`}
-                      className={`h-6 w-6 rounded-full border-2 ${
-                        projectColor === color ? 'border-foreground' : 'border-transparent'
-                      }`}
-                      style={{ backgroundColor: color }}
-                    />
-                  ))}
-                </div>
-              </div>
-              <Button type="submit" variant="primary" size="sm" loading={saving}>
-                Create project
-              </Button>
-            </form>
-          )}
+          {createForm && <div className="shrink-0 px-4 pt-3">{createForm}</div>}
 
-          <ul className="mt-3 divide-y divide-[var(--border)]">
-            {projects.map((project) => {
-              const entry = stats.get(project.id) ?? { open: 0, done: 0, total: 0, overdue: 0 }
-              const progress =
-                entry.total > 0 ? Math.round((entry.done / entry.total) * 100) : 0
-              return (
-                <li key={project.id} className="py-2.5">
-                  <div className="flex items-start gap-2.5">
-                    <span
-                      className="mt-1 h-2.5 w-2.5 shrink-0 rounded-full"
-                      style={{ backgroundColor: project.color }}
-                    />
-                    <div className="min-w-0 flex-1">
-                      <div className="flex items-center justify-between gap-2">
-                        <span className="truncate text-[12px] font-semibold text-foreground">
-                          {project.name}
-                        </span>
-                        <span className="shrink-0 text-[10px] text-muted">
-                          {entry.open} open · {entry.done} done
-                          {entry.overdue > 0 ? ` · ${entry.overdue} overdue` : ''}
-                        </span>
+          {tree ? (
+            <div className="min-h-0 flex-1">
+              <SidebarTree
+                {...tree}
+                collapsed={false}
+                onToggleCollapsed={() => {}}
+                dense
+                showHeader={false}
+              />
+            </div>
+          ) : (
+            <div className="scroll-thin min-h-0 flex-1 overflow-y-auto px-4 pb-3">
+              <ul className="mt-1 divide-y divide-[var(--border)]">
+                {projects.map((project) => {
+                  const entry = stats.get(project.id) ?? { open: 0, done: 0, total: 0, overdue: 0 }
+                  const progress =
+                    entry.total > 0 ? Math.round((entry.done / entry.total) * 100) : 0
+                  return (
+                    <li key={project.id} className="py-2.5">
+                      <div className="flex items-start gap-2.5">
+                        <span
+                          className="mt-1 h-2.5 w-2.5 shrink-0 rounded-full"
+                          style={{ backgroundColor: project.color }}
+                        />
+                        <div className="min-w-0 flex-1">
+                          <div className="flex items-center justify-between gap-2">
+                            <span className="truncate text-[12px] font-semibold text-foreground">
+                              {project.name}
+                            </span>
+                            <span className="shrink-0 text-[10px] text-muted">
+                              {entry.open} open · {entry.done} done
+                              {entry.overdue > 0 ? ` · ${entry.overdue} overdue` : ''}
+                            </span>
+                          </div>
+                          {project.description && (
+                            <p className="truncate text-[10px] text-muted">{project.description}</p>
+                          )}
+                          <div className="mt-1 flex items-center gap-2">
+                            <ProgressBar value={progress} className="max-w-[220px]" />
+                            <span className="text-[9px] tabular-nums text-muted">{progress}%</span>
+                          </div>
+                        </div>
+                        <div className="flex shrink-0 items-center gap-1">
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => onShowTasks(project.id)}
+                          >
+                            Tasks
+                            <ArrowRight size={11} />
+                          </Button>
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            size="sm"
+                            icon={Archive}
+                            aria-label={`Open ${project.name}`}
+                            onClick={() => onOpenProject(project.id)}
+                          />
+                        </div>
                       </div>
-                      {project.description && (
-                        <p className="truncate text-[10px] text-muted">{project.description}</p>
-                      )}
-                      <div className="mt-1 flex items-center gap-2">
-                        <ProgressBar value={progress} className="max-w-[220px]" />
-                        <span className="text-[9px] tabular-nums text-muted">{progress}%</span>
-                      </div>
-                    </div>
-                    <div className="flex shrink-0 items-center gap-1">
-                      <Button
-                        type="button"
-                        variant="ghost"
-                        size="sm"
-                        onClick={() => onShowTasks(project.id)}
-                      >
-                        Tasks
-                        <ArrowRight size={11} />
-                      </Button>
-                      <Button
-                        type="button"
-                        variant="ghost"
-                        size="sm"
-                        icon={Archive}
-                        aria-label={`Open ${project.name}`}
-                        onClick={() => onOpenProject(project.id)}
-                      />
-                    </div>
-                  </div>
-                </li>
-              )
-            })}
-            {projects.length === 0 && (
-              <li className="py-8 text-center text-[11px] text-muted">
-                No projects yet. Create one to group tasks.
-              </li>
-            )}
-          </ul>
+                    </li>
+                  )
+                })}
+                {projects.length === 0 && (
+                  <li className="py-8 text-center text-[11px] text-muted">
+                    No projects yet. Create one to group tasks.
+                  </li>
+                )}
+              </ul>
+            </div>
+          )}
         </section>
 
-        {(() => {
-          const unfiled = stats.get('none')
-          if (!unfiled || unfiled.total === 0) return null
-          return (
-            <section className="glass-card flex items-center justify-between p-4">
-              <div>
-                <p className="text-[12px] font-semibold text-foreground">Tasks without a project</p>
-                <p className="text-[10px] text-muted">
-                  {unfiled.open} open · {unfiled.done} completed
-                </p>
-              </div>
-              <Button type="button" variant="secondary" size="sm" onClick={() => onShowTasks('')}>
-                Show tasks
-              </Button>
-            </section>
-          )
-        })()}
+        {unfiled && unfiled.total > 0 && (
+          <section className="glass-card flex items-center justify-between p-4">
+            <div>
+              <p className="text-[12px] font-semibold text-foreground">Tasks without a project</p>
+              <p className="text-[10px] text-muted">
+                {unfiled.open} open · {unfiled.done} completed
+              </p>
+            </div>
+            <Button type="button" variant="secondary" size="sm" onClick={() => onShowTasks('')}>
+              Show tasks
+            </Button>
+          </section>
+        )}
       </div>
 
       <aside className="space-y-4">
+        {projects.length > 0 && (
+          <section className="glass-card p-4">
+            <SectionCardHeader
+              icon={Layers}
+              title="Workload"
+              subtitle="Open vs. completed tasks per project."
+            />
+            <ul className="mt-3 space-y-2.5">
+              {projects.map((project) => {
+                const entry = stats.get(project.id) ?? { open: 0, done: 0, total: 0, overdue: 0 }
+                if (entry.total === 0) return null
+                const progress = Math.round((entry.done / entry.total) * 100)
+                return (
+                  <li key={project.id}>
+                    <div className="flex items-center justify-between gap-2 text-[11px]">
+                      <span className="flex min-w-0 items-center gap-1.5 text-foreground">
+                        <span
+                          className="h-2 w-2 shrink-0 rounded-full"
+                          style={{ backgroundColor: project.color }}
+                        />
+                        <span className="truncate">{project.name}</span>
+                      </span>
+                      <span className="shrink-0 tabular-nums text-muted">
+                        {entry.open} open
+                        {entry.overdue > 0 ? ` · ${entry.overdue} overdue` : ''}
+                      </span>
+                    </div>
+                    <div className="mt-1 flex items-center gap-2">
+                      <ProgressBar value={progress} className="flex-1" />
+                      <span className="text-[9px] tabular-nums text-muted">{progress}%</span>
+                    </div>
+                  </li>
+                )
+              })}
+            </ul>
+          </section>
+        )}
+
         <section className="glass-card p-4">
-          <h2 className="flex items-center gap-2 font-display text-sm font-semibold text-foreground">
-            <List size={14} className="text-accent" />
-            Task lists
-          </h2>
-          <p className="mt-0.5 text-[11px] text-muted">
-            Task lists are lightweight buckets independent of projects.
-          </p>
+          <SectionCardHeader
+            icon={List}
+            title="Task lists"
+            subtitle="Task lists are lightweight buckets independent of projects."
+          />
 
           <form onSubmit={handleCreateList} className="mt-3 flex items-center gap-1.5">
             <input
@@ -355,7 +441,7 @@ export default function ProjectsView({
                 />
                 {editingListId === list.id ? (
                   <input
-                        value={editingListName}
+                    value={editingListName}
                     onChange={(event) => setEditingListName(event.target.value)}
                     onBlur={() => void handleRenameList(list)}
                     onKeyDown={(event) => {

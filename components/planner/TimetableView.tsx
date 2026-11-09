@@ -147,7 +147,7 @@ export default function TimetableView({
 
   return (
     <div className="space-y-4">
-      <div className="flex flex-wrap items-center gap-2">
+      <div className="glass-card flex flex-wrap items-center gap-2 px-3 py-2.5">
         <SegmentedTabs
           ariaLabel="Timetable view"
           value={mode}
@@ -188,11 +188,8 @@ export default function TimetableView({
           type="button"
           onClick={() => setShowCancelled((current) => !current)}
           aria-pressed={showCancelled}
-          className={`focus-ring flex h-8 items-center gap-1.5 rounded-full border px-2.5 text-[11px] font-semibold transition-colors ${
-            showCancelled
-              ? 'border-accent bg-[var(--accent-light)] text-accent'
-              : 'border-[var(--border)] text-muted hover:text-foreground'
-          }`}
+          data-active={showCancelled}
+          className="pl-chip focus-ring"
         >
           Cancelled
         </button>
@@ -202,10 +199,16 @@ export default function TimetableView({
         </Button>
       </div>
 
-      <p className="text-[11px] text-muted">
-        {entries.length} recurring {entries.length === 1 ? 'entry' : 'entries'} ·{' '}
-        {Math.round(totalMinutes / 60)}h scheduled each week
-      </p>
+      <div className="flex flex-wrap items-center gap-1.5">
+        <span className="inline-flex items-center gap-1.5 rounded-full border border-[var(--border)] bg-[var(--surface)] px-2.5 py-1 text-[11px] font-medium text-foreground">
+          <Repeat size={11} className="text-[var(--hue-sky)]" />
+          {entries.length} recurring {entries.length === 1 ? 'entry' : 'entries'}
+        </span>
+        <span className="inline-flex items-center gap-1.5 rounded-full border border-[var(--border)] bg-[var(--surface)] px-2.5 py-1 text-[11px] font-medium text-foreground">
+          <Clock3 size={11} className="text-accent" />
+          {Math.round(totalMinutes / 60)}h scheduled each week
+        </span>
+      </div>
 
       {entries.length === 0 ? (
         <div className="glass-card">
@@ -253,11 +256,13 @@ export default function TimetableView({
         <div className="space-y-3">
           {groups.map((group) => (
             <section key={group.key} className="glass-card overflow-hidden">
-              <div className="flex items-center justify-between border-b border-[var(--border)] px-3 py-2">
+              <div className="flex items-center justify-between border-b border-[var(--border)] bg-[var(--surface-sunken)]/50 px-3.5 py-2.5">
                 <h3 className="text-[11px] font-semibold uppercase tracking-[0.08em] text-foreground">
                   {group.label}
                 </h3>
-                <span className="text-[10px] text-muted">{group.entries.length}</span>
+                <span className="rounded-full bg-[var(--surface)] px-1.5 py-0.5 text-[10px] font-semibold tabular-nums text-muted">
+                  {group.entries.length}
+                </span>
               </div>
               <div className={mode === 'grid' ? 'grid grid-cols-1 gap-2 p-2 sm:grid-cols-2 xl:grid-cols-3' : 'space-y-1 p-2'}>
                 {group.entries.map((entry) => {

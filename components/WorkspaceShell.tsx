@@ -1593,6 +1593,36 @@ function WorkspaceContent() {
                   setActiveView('notes')
                 }}
                 onOpenProject={openProjectDashboard}
+                projectTree={{
+                  projects,
+                  folderTree,
+                  allNotes,
+                  selectedNoteId: selectedNote?.id,
+                  selectedFolderId,
+                  selectedProjectId,
+                  onSelectNote: (note) => {
+                    void handleSelectNote(note)
+                    setActiveView('notes')
+                  },
+                  onSelectFolder: handleSelectFolder,
+                  onNewNote: (noteType, folderId, projectId) =>
+                    handleNewNote(noteType as any, folderId, projectId),
+                  onCreateFolder: handleCreateFolder,
+                  onRenameFolder: handleRenameFolder,
+                  onDeleteFolder: handleDeleteFolder,
+                  onMoveFolder: handleMoveFolder,
+                  onMoveFolderToProject: handleMoveFolderToProject,
+                  onDuplicateNote: handleDuplicateNote,
+                  onDeleteNote: handleSidebarDeleteNote,
+                  onMoveNote: handleMoveNote,
+                  onRenameProject: handleRenameProject,
+                  onDeleteProject: handleDeleteProject,
+                  onUpdateProjectColor: handleUpdateProjectColor,
+                  onCreateProject: handleCreateProject,
+                  onMoveNoteToProject: handleMoveNoteToProject,
+                  onOpenProjectDashboard: openProjectDashboard,
+                  archivedCount: archivedProjects.length,
+                }}
               />
             </div>
           )}

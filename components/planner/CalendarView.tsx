@@ -514,6 +514,9 @@ export default function CalendarView({
       <div className="min-w-0 flex-1 space-y-4">
         {todayEvents.length > 0 && (
           <div className="glass-card flex items-center gap-2 overflow-x-auto px-3 py-2 scrollbar-hide">
+            <span className="pl-icon-tile shrink-0" data-tone="accent" data-size="sm">
+              <Clock3 size={13} />
+            </span>
             <span className="shrink-0 text-[10px] font-semibold uppercase tracking-[0.1em] text-muted">
               Today
             </span>
@@ -525,7 +528,7 @@ export default function CalendarView({
                   setConfirmingDelete(false)
                   setSelectedEvent(event)
                 }}
-                className="focus-ring flex shrink-0 items-center gap-1.5 rounded-full border border-[var(--border)] px-2.5 py-1 text-[11px] font-medium text-foreground transition-colors hover:border-accent hover:text-accent"
+                className="focus-ring flex shrink-0 items-center gap-1.5 rounded-full border border-[var(--border)] bg-[var(--surface)] px-2.5 py-1 text-[11px] font-medium text-foreground transition-colors hover:border-accent hover:text-accent"
               >
                 <span
                   className="h-1.5 w-1.5 rounded-full"
@@ -547,15 +550,15 @@ export default function CalendarView({
           </div>
         )}
 
-        <div className="animate-rise-in flex flex-wrap items-center gap-2">
-          <div className="flex items-center gap-1.5">
-            <Button type="button" variant="secondary" size="sm" icon={ChevronLeft} onClick={goPrev} aria-label="Previous" />
-            <Button type="button" variant="secondary" size="sm" icon={ChevronRight} onClick={goNext} aria-label="Next" />
+        <div className="glass-card animate-rise-in flex flex-wrap items-center gap-2 px-3 py-2.5">
+          <div className="flex items-center gap-1">
+            <Button type="button" variant="ghost" size="sm" icon={ChevronLeft} onClick={goPrev} aria-label="Previous" />
+            <Button type="button" variant="ghost" size="sm" icon={ChevronRight} onClick={goNext} aria-label="Next" />
           </div>
           <Button type="button" variant="secondary" size="sm" onClick={goToday}>
             Today
           </Button>
-          <h2 className="min-w-0 flex-1 truncate font-display text-base font-semibold tracking-[-0.01em] text-foreground">
+          <h2 className="min-w-0 flex-1 truncate px-1 font-display text-base font-semibold tracking-[-0.01em] text-foreground">
             {title}
           </h2>
 
@@ -579,7 +582,7 @@ export default function CalendarView({
             aria-label="Toggle calendar filters"
             className={`focus-ring relative flex h-8 w-8 items-center justify-center rounded-full border transition-colors ${
               showFilters || activeFilterCount > 0
-                ? 'border-accent bg-[var(--accent-light)] text-accent'
+                ? 'border-transparent bg-[var(--accent-light)] text-accent'
                 : 'border-[var(--border)] text-muted hover:text-foreground'
             }`}
           >
@@ -593,7 +596,7 @@ export default function CalendarView({
         </div>
 
         {showFilters && (
-          <div className="animate-rise-in space-y-3 rounded-2xl border border-[var(--border)] bg-[var(--surface)] p-4">
+          <div className="glass-card animate-rise-in space-y-3 p-4">
             <div className="flex items-center justify-between">
               <span className="text-xs font-semibold text-foreground">Filters</span>
               <button
@@ -1496,7 +1499,7 @@ function WeekView({
                         key={event.occurrence_id}
                         type="button"
                         onClick={() => onEventClick(event)}
-                        className="absolute z-10 overflow-hidden rounded-lg border border-white/25 px-1.5 py-0.5 text-left text-white shadow-sm transition-[filter] hover:z-20 hover:brightness-105"
+                        className="pl-cal-block planner-event-block absolute z-10 overflow-hidden rounded-lg border border-white/25 px-1.5 py-0.5 text-left text-white shadow-sm transition-[filter] hover:z-20 hover:brightness-105"
                         style={{
                           top,
                           height,
@@ -1532,8 +1535,8 @@ function WeekView({
                   width: 'calc((100% - 56px) / 7)',
                 }}
               >
-                <span className="h-2 w-2 -translate-x-1/2 rounded-full bg-danger" />
-                <span className="h-0.5 flex-1 bg-danger" />
+                <span className="pl-now-dot h-2 w-2 -translate-x-1/2 rounded-full bg-danger" />
+                <span className="h-0.5 flex-1 rounded-full bg-danger" />
               </div>
             )}
           </div>
@@ -1668,8 +1671,8 @@ function DayView({
 
           {isToday && nowOffset > 0 && nowOffset < gridHeight && (
             <div className="absolute left-16 right-0 z-20 flex items-center" style={{ top: nowOffset }}>
-              <span className="h-2 w-2 -translate-x-1/2 rounded-full bg-danger" />
-              <span className="h-0.5 flex-1 bg-danger" />
+              <span className="pl-now-dot h-2 w-2 -translate-x-1/2 rounded-full bg-danger" />
+              <span className="h-0.5 flex-1 rounded-full bg-danger" />
             </div>
           )}
 
@@ -1696,7 +1699,7 @@ function DayView({
                 key={event.occurrence_id}
                 type="button"
                 onClick={() => onEventClick(event)}
-                className="absolute z-10 overflow-hidden rounded-xl border border-white/25 px-3 py-1.5 text-left text-white shadow-sm transition-[filter] hover:brightness-105"
+                className="pl-cal-block planner-event-block absolute z-10 overflow-hidden rounded-xl border border-white/25 px-3 py-1.5 text-left text-white shadow-sm transition-[filter] hover:brightness-105"
                 style={{
                   top,
                   height,

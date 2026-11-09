@@ -53,6 +53,7 @@ import {
   ProgressBar,
   ProgressRing,
   SELECT_CLASS,
+  SectionCardHeader,
 } from './PlannerUi'
 
 const SCOPE_OPTIONS: { value: PlanScope; label: string; hint: string }[] = [
@@ -452,18 +453,41 @@ export default function SmartPlannerView({
         </p>
       )}
 
+      {step !== 'history' && (
+        <ol className="pl-steps" aria-label="Plan creation steps">
+          {(
+            [
+              { key: 'configure', label: 'Configure' },
+              { key: 'estimate', label: 'Estimates' },
+              { key: 'review', label: 'Review' },
+            ] as const
+          ).map((item, index, steps) => {
+            const currentIndex = steps.findIndex((candidate) => candidate.key === step)
+            const position = currentIndex === -1 ? 0 : currentIndex
+            const state = index < position ? 'done' : index === position ? 'current' : 'todo'
+            return (
+              <li key={item.key} className="pl-step" data-state={state}>
+                <span className="pl-step-dot">
+                  {state === 'done' ? <Check size={10} /> : index + 1}
+                </span>
+                {item.label}
+                {index < steps.length - 1 && <span className="pl-step-connector" aria-hidden="true" />}
+              </li>
+            )
+          })}
+        </ol>
+      )}
+
       {step === 'configure' && (
         <div className="grid gap-4 2xl:grid-cols-[minmax(0,1fr)_300px]">
           <div className="space-y-4">
             <section className="glass-card p-4">
-              <h2 className="mb-1 flex items-center gap-2 font-display text-sm font-semibold text-foreground">
-                <Sparkles size={15} className="text-accent" />
-                What should I plan?
-              </h2>
-              <p className="mb-3 text-[11px] text-muted">
-                The planner fills your free time with the most important open tasks, avoids your
-                existing events and inserts breaks.
-              </p>
+              <SectionCardHeader
+                icon={Sparkles}
+                title="What should I plan?"
+                subtitle="The planner fills your free time with the most important open tasks, avoids your existing events and inserts breaks."
+              />
+              <div className="mt-3" />
 
               <div className="flex flex-wrap gap-1.5">
                 {SCOPE_OPTIONS.map((option) => (
@@ -600,11 +624,12 @@ export default function SmartPlannerView({
 
             {insights.length > 0 && (
               <section className="glass-card p-4">
-                <h2 className="mb-3 flex items-center gap-2 font-display text-sm font-semibold text-foreground">
-                  <Lightbulb size={15} className="text-warning" />
-                  Learned from your history
-                </h2>
-                <div className="grid gap-2 sm:grid-cols-3">
+                <SectionCardHeader
+                  icon={Lightbulb}
+                  tone="warning"
+                  title="Learned from your history"
+                />
+                <div className="mt-3 grid gap-2 sm:grid-cols-3">
                   {insights.map((insight) => (
                     <div key={insight.type} className="rounded-xl bg-[var(--surface-sunken)] p-2.5">
                       <p className="text-[10px] font-semibold uppercase tracking-[0.08em] text-muted">
@@ -689,25 +714,22 @@ export default function SmartPlannerView({
 
       {step === 'estimate' && (
         <section className="glass-card p-4">
-          <div className="flex items-start justify-between gap-3">
-            <div>
-              <h2 className="font-display text-sm font-semibold text-foreground">
-                A few tasks need an estimate
-              </h2>
-              <p className="mt-0.5 text-[11px] text-muted">
-                Set a duration or skip a task — skipped tasks are left out of this plan.
-              </p>
-            </div>
-            <Button
-              type="button"
-              variant="ghost"
-              size="sm"
-              icon={X}
-              onClick={() => setStep('configure')}
-            >
-              Cancel
-            </Button>
-          </div>
+          <SectionCardHeader
+            icon={Clock3}
+            title="A few tasks need an estimate"
+            subtitle="Set a duration or skip a task — skipped tasks are left out of this plan."
+            actions={
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                icon={X}
+                onClick={() => setStep('configure')}
+              >
+                Cancel
+              </Button>
+            }
+          />
 
           <ul className="mt-3 divide-y divide-[var(--border)]">
             {tasksNeedingEstimates.map((task) => {

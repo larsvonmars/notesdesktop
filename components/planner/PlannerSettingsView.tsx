@@ -16,7 +16,7 @@ import type {
   PlannerDisplayPreferences,
   PlanningMode,
 } from '@/lib/planner/types'
-import { FIELD_CLASS, LABEL_CLASS, SELECT_CLASS, ToggleSwitch } from './PlannerUi'
+import { FIELD_CLASS, LABEL_CLASS, SELECT_CLASS, SectionCardHeader, ToggleSwitch } from './PlannerUi'
 
 export interface PlannerSettingsViewProps {
   display: PlannerDisplayPreferences
@@ -55,13 +55,11 @@ export default function PlannerSettingsView({
   return (
     <div className="grid gap-4 lg:grid-cols-2">
       <section className="glass-card p-4">
-        <h2 className="flex items-center gap-2 font-display text-sm font-semibold text-foreground">
-          <Wand2 size={15} className="text-accent" />
-          Smart planner
-        </h2>
-        <p className="mt-0.5 text-[11px] text-muted">
-          Choose how the scheduler ranks tasks and places them in your day.
-        </p>
+        <SectionCardHeader
+          icon={Wand2}
+          title="Smart planner"
+          subtitle="Choose how the scheduler ranks tasks and places them in your day."
+        />
 
         <div className="mt-3 space-y-2">
           {(
@@ -114,10 +112,7 @@ export default function PlannerSettingsView({
       </section>
 
       <section className="glass-card p-4">
-        <h2 className="flex items-center gap-2 font-display text-sm font-semibold text-foreground">
-          <CalendarRange size={15} className="text-accent" />
-          Calendar display
-        </h2>
+        <SectionCardHeader icon={CalendarRange} title="Calendar display" />
         <div className="mt-3 space-y-3">
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
             <div>
@@ -205,13 +200,12 @@ export default function PlannerSettingsView({
       </section>
 
       <section className="glass-card p-4">
-        <h2 className="flex items-center gap-2 font-display text-sm font-semibold text-foreground">
-          <BellRing size={15} className="text-warning" />
-          Reminders
-        </h2>
-        <p className="mt-0.5 text-[11px] text-muted">
-          In-app reminders appear while Notes is open.
-        </p>
+        <SectionCardHeader
+          icon={BellRing}
+          tone="warning"
+          title="Reminders"
+          subtitle="In-app reminders appear while Notes is open."
+        />
         <div className="mt-3 space-y-3">
           <ToggleSwitch
             label="Enable reminders"
@@ -282,13 +276,11 @@ export default function PlannerSettingsView({
       </section>
 
       <section className="glass-card p-4">
-        <h2 className="flex items-center gap-2 font-display text-sm font-semibold text-foreground">
-          <Download size={15} className="text-accent" />
-          Data
-        </h2>
-        <p className="mt-0.5 text-[11px] text-muted">
-          {taskCount} tasks · {eventCount} events · {planCount} saved plans
-        </p>
+        <SectionCardHeader
+          icon={Download}
+          title="Data"
+          subtitle={`${taskCount} tasks · ${eventCount} events · ${planCount} saved plans`}
+        />
         <div className="mt-3 flex flex-wrap gap-2">
           <Button type="button" variant="secondary" size="sm" icon={Download} onClick={onExportIcs}>
             Export calendar (.ics)
@@ -303,10 +295,7 @@ export default function PlannerSettingsView({
       </section>
 
       <section className="glass-card p-4 lg:col-span-2">
-        <h2 className="flex items-center gap-2 font-display text-sm font-semibold text-foreground">
-          <Keyboard size={15} className="text-muted" />
-          Keyboard shortcuts
-        </h2>
+        <SectionCardHeader icon={Keyboard} tone="muted" title="Keyboard shortcuts" />
         <div className="mt-2 grid grid-cols-1 gap-1.5 sm:grid-cols-2 lg:grid-cols-3">
           {SHORTCUTS.map((shortcut) => (
             <div key={shortcut.keys} className="flex items-center gap-2 text-[11px] text-muted">
