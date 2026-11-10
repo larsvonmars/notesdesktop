@@ -110,6 +110,9 @@ The toolbar can hand the selected passage to the Chat assistant:
   back through `onInitialPromptConsumed` / `onInitialDraftConsumed`. The focus is
   appended to the system prompt by `buildChatSystemPrompt` and shown as an
   "About <note>" chip above the composer.
+* Leaving the editor flushes edits still inside the autosave debounce, and a chat
+  write to the focused note is adopted back into the editor — see
+  [OFFLINE_FIRST.md](./OFFLINE_FIRST.md) (*Editor vs. external writes*).
 
 ## Tests
 

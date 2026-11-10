@@ -94,7 +94,8 @@ import type {
 } from '@/components/shell/types'
 import { useNavHistory, type NavLocation } from '@/lib/navigation/nav-history'
 import type { WorkspaceView } from '@/lib/workspace/types'
-import { subscribeToConflicts } from '@/lib/offline/events'
+import { subscribeToConflicts, subscribeToDataChanges } from '@/lib/offline/events'
+import { shouldAdoptExternalNote } from '@/lib/workspace/noteRefresh'
 import { installOfflineSync } from '@/lib/offline/sync'
 
 type NoteCreationContext = {
@@ -161,6 +162,9 @@ function WorkspaceContent() {
   const [learnDetailsOpen, setLearnDetailsOpen] = useState(true)
   const suppressRealtimeRef = useRef(false)
   const isApplyingUrlRef = useRef(false)
+  // Unsaved edits in the open editor — blocks adopting external note changes.
+  const editorDirtyRef = useRef(false)
+  const [editorRevision, setEditorRevision] = useState(0)
 
   // Retry queued writes when connectivity returns and surface conflicts that
   // need a human decision.
@@ -184,6 +188,43 @@ function WorkspaceContent() {
       })
     })
   }, [toast])
+
+  // Chat (and other clients) write straight to the note rows. Adopt those
+  // changes into the open note as soon as the editor holds no unsaved edits, so
+  // a later keystroke can never save a stale body over them.
+  const handleEditorDirtyChange = useCallback((dirty: boolean) => {
+    editorDirtyRef.current = dirty
+  }, [])
+
+  useEffect(() => {
+    return subscribeToDataChanges((detail) => {
+      if (detail?.table !== 'notes' || !detail.recordId) return
+      if (selectedNoteRef.current?.id !== detail.recordId) return
+      if (editorDirtyRef.current) return
+
+      void getNote(detail.recordId)
+        .then((fresh) => {
+          if (!fresh) {
+            // Deleted elsewhere (e.g. Chat) while it was the open note — drop the
+            // ghost editor instead of letting the next save resurrect it. A dirty
+            // buffer is left alone so its save fails loudly rather than silently
+            // recreating the note.
+            if (selectedNoteRef.current?.id === detail.recordId && !editorDirtyRef.current) {
+              selectedNoteRef.current = null
+              setSelectedNote(null)
+            }
+            return
+          }
+          if (!shouldAdoptExternalNote(selectedNoteRef.current, fresh, editorDirtyRef.current)) return
+          selectedNoteRef.current = fresh
+          setSelectedNote(fresh)
+          setEditorRevision((previous) => previous + 1)
+        })
+        .catch((error) => {
+          console.error('Could not refresh the open note:', error)
+        })
+    })
+  }, [])
 
   // Server-derived workspace state (notes, folders, projects) plus realtime sync
   const {
@@ -1320,6 +1361,8 @@ function WorkspaceContent() {
           onCancel={handleCancel}
           onDelete={selectedNote ? handleDeleteNote : undefined}
           onAskAI={handleAskAIFromSelection}
+          onDirtyChange={handleEditorDirtyChange}
+          contentRevision={editorRevision}
           folders={folderTree}
           selectedFolderId={selectedFolderId}
           onSelectFolder={handleSelectFolder}

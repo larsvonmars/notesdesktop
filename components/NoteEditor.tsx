@@ -149,6 +149,13 @@ interface NoteEditorProps {
   mindmapTemplateId?: string
   /** Hand the current selection to the AI chat with a prepared action prompt. */
   onAskAI?: (actionId: SelectionAIActionId, selectionText: string) => void
+  /** Reports unsaved edits so the workspace can avoid overwriting them. */
+  onDirtyChange?: (dirty: boolean) => void
+  /**
+   * Bump to make the editor adopt the current `note` prop again. The editor is
+   * keyed on the note id, so plain prop updates are ignored by design.
+   */
+  contentRevision?: number
 }
 
 const stripHtml = (html: string) => html.replace(/<[^>]*>/g, ' ').replace(/&nbsp;/g, ' ').trim()
@@ -336,6 +343,8 @@ export default function NoteEditor({
   onOpenFileExplorer,
   onOpenProjectsView,
   onAskAI,
+  onDirtyChange,
+  contentRevision = 0,
 }: NoteEditorWithPanelProps) {
   const toast = useToast()
   const isMobile = useIsMobile()
@@ -373,6 +382,10 @@ export default function NoteEditor({
   const migratedNotesRef = useRef<Set<string>>(new Set())
   const activeFormatsFrameRef = useRef<number | null>(null)
   const noteLoadingRef = useRef(false) // Suppress hasChanges flicker during note load
+  /** Cancel/delete discard the buffer on purpose — never flush on unmount then. */
+  const skipUnmountFlushRef = useRef(false)
+  const onDirtyChangeRef = useRef(onDirtyChange)
+  onDirtyChangeRef.current = onDirtyChange
 
   /** Hydrate a metadata-only note row before handing it to the workspace. */
   const resolveFullNote = useCallback(async (candidate: LibNoteSummary): Promise<LibNote | null> => {
@@ -703,7 +716,9 @@ export default function NoteEditor({
     // key on note?.id (not the full object) so same-note saves don't cause
     // a full editor reset. The note-loading effect should only run when the
     // actual note changes or when creating a new note.
-  }, [note?.id, initialNoteType, mindmapTemplateId, scheduleHeadingsUpdate])
+    // contentRevision is bumped by the workspace when it adopts an external
+    // change to the same note (e.g. Chat wrote to it while the editor was away).
+  }, [note?.id, contentRevision, initialNoteType, mindmapTemplateId, scheduleHeadingsUpdate])
 
   useEffect(() => {
     // Skip hasChanges computation while a note is being loaded (prevents brief flicker)
@@ -784,6 +799,11 @@ export default function NoteEditor({
   const handleSaveRef = useRef<((opts?: { isAuto?: boolean }) => void) | null>(null)
   const hasChangesRef = useRef(hasChanges)
   hasChangesRef.current = hasChanges
+
+  // Tell the workspace whether it may adopt an external change to this note.
+  useEffect(() => {
+    onDirtyChangeRef.current?.(hasChanges)
+  }, [hasChanges])
 
   useEffect(() => {
     const flushSave = () => {
@@ -1963,11 +1983,25 @@ export default function NoteEditor({
   // Keep ref in sync now that handleSave is declared
   handleSaveRef.current = handleSave
 
+  // Switching views unmounts the editor while edits may still sit inside the
+  // autosave debounce window. Flush them so the AI handover (or any view
+  // change) cannot silently drop the user's last keystrokes.
+  useEffect(() => {
+    return () => {
+      if (!skipUnmountFlushRef.current && hasChangesRef.current && !isAutosavingRef.current) {
+        void handleSaveRef.current?.({ isAuto: true })
+      }
+      onDirtyChangeRef.current?.(false)
+    }
+  }, [])
+
   const handleDelete = useCallback(async () => {
     if (!note || !onDelete) return
 
     // Deletion is undoable through the "Note deleted" toast, so no blocking
     // confirmation dialog is needed here.
+    // A flush after deletion would recreate the note from the editor buffer.
+    skipUnmountFlushRef.current = true
     setIsDeleting(true)
     try {
       await onDelete(note.id)
@@ -1988,6 +2022,7 @@ export default function NoteEditor({
         return
       }
     }
+    skipUnmountFlushRef.current = true
     onCancel?.()
   }
 

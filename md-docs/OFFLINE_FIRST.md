@@ -76,6 +76,30 @@ producing false conflicts or losing edits:
    conditional removal runs in one IndexedDB transaction, so a concurrent
    revision bump cannot be deleted by mistake.
 
+## Editor vs. external writes
+
+Chat (and any other client) writes through the same `notes` data layer, which
+means the open note can change underneath the editor. `WorkspaceShell` keeps
+that consistent:
+
+1. **Dirty tracking** — `NoteEditor` reports `hasChanges` through
+   `onDirtyChange`, and the shell keeps it in `editorDirtyRef`.
+2. **Adoption** — every `emitDataChanged('notes', <id>)` for the open note
+   triggers `getNote()` and, when the editor is clean, the fresh row replaces
+   `selectedNote` (`shouldAdoptExternalNote` in `lib/workspace/noteRefresh.ts`).
+   A `contentRevision` counter makes the mounted editor reload that body, since
+   the load effect is keyed on the note **id** to avoid resets after save.
+3. **Dirty buffers win** — nothing is adopted while the editor has unsaved
+   edits; the save then fails the timestamp guard (see *Conflicts*) instead of
+   silently overwriting the newer row.
+4. **Flush on unmount** — switching views unmounts the editor while edits can
+   still be inside the 2 s autosave debounce, so the editor flushes an autosave
+   on unmount. Explicit cancel (after its confirm) and delete set a skip flag so
+   a discarded buffer is never written or resurrected.
+5. **Deleted while open** — if the row disappears and the editor is clean, the
+   shell drops the selection instead of showing a ghost note that the next save
+   would recreate.
+
 ## Conflicts
 
 Updates are sent with a timestamp guard:
