@@ -30,6 +30,7 @@ const ALLOWED_TOOL_NAMES = new Set([
   'delete_task',
   'get_task_stats',
   'list_events',
+  'list_timetable_entries',
   'create_event',
   'update_event',
   'delete_event',

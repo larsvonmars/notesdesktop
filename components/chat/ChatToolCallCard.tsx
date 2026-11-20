@@ -94,6 +94,7 @@ const TOOL_META: Record<string, ToolMeta> = {
   delete_task: { label: 'Delete task', category: 'tasks', icon: Trash2 },
   get_task_stats: { label: 'Task statistics', category: 'tasks', icon: BarChart3 },
   list_events: { label: 'List calendar events', category: 'calendar', icon: Calendar },
+  list_timetable_entries: { label: 'List recurring timetable', category: 'calendar', icon: Calendar },
   create_event: { label: 'Create calendar event', category: 'calendar', icon: Calendar },
   update_event: { label: 'Update calendar event', category: 'calendar', icon: Calendar },
   delete_event: { label: 'Delete calendar event', category: 'calendar', icon: Calendar },

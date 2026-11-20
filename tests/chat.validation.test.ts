@@ -36,6 +36,7 @@ describe('AI validation for the chat view', () => {
         'create_task',
         'complete_task',
         'get_task_stats',
+        'list_timetable_entries',
         'delegate_subtask',
       ].map(tool),
     }

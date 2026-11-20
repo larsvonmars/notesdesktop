@@ -121,6 +121,12 @@ describe('ChatPanel', () => {
             status: 'running',
           },
           {
+            id: 'timetable',
+            name: 'list_timetable_entries',
+            arguments: '{}',
+            status: 'done',
+          },
+          {
             id: 'web',
             name: 'search_web',
             arguments: '{"query":"latest report"}',
@@ -135,6 +141,7 @@ describe('ChatPanel', () => {
 
     expect(html).toContain('PDF &amp; OCR')
     expect(html).toContain('Mind maps')
+    expect(html).toContain('List recurring timetable')
     expect(html).toContain('Web')
     expect(html).toContain('In progress')
     expect(html).toContain('Complete')

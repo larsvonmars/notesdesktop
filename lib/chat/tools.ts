@@ -29,8 +29,9 @@ import {
   updateTask,
 } from '@/lib/tasks'
 import type { Task, TaskPriority, TaskStatus } from '@/lib/tasks'
-import { createEvent, deleteEvent, getEvents, updateEvent } from '@/lib/events'
-import type { CalendarEvent } from '@/lib/events'
+import { createEvent, deleteEvent, getEvents, getTimetableEntries, updateEvent } from '@/lib/events'
+import type { CalendarEvent, TimetableEntry } from '@/lib/events'
+import { describeRecurrence, formatTime } from '@/lib/planner/date-utils'
 import { stripHtmlForAI, textToHtml } from '@/lib/ai'
 import {
   createCards as createLearnCards,
@@ -223,6 +224,29 @@ function summariseEvent(event: CalendarEvent): string {
     `  starts: ${formatDate(event.start_time)}`,
     `  ends: ${formatDate(event.end_time)}${event.is_all_day ? ' (all day)' : ''}`,
     event.location ? `  location: ${event.location}` : '',
+  ]
+    .filter(Boolean)
+    .join('\n')
+}
+
+function describeTimetableRecurrence(entry: TimetableEntry): string {
+  const { recurrence_pattern: pattern } = entry
+  if (!pattern) return 'Recurring (pattern details unavailable)'
+  const recurrence = describeRecurrence(pattern)
+  if (pattern.frequency !== 'weekly' || pattern.days_of_week?.length) return recurrence
+
+  const weekday = new Date(entry.start_time).toLocaleDateString(undefined, { weekday: 'long' })
+  return `${recurrence} on ${weekday}`
+}
+
+function summariseTimetableEntry(entry: TimetableEntry): string {
+  return [
+    `- ${entry.title}  [id: ${entry.id}]`,
+    `  repeats: ${describeTimetableRecurrence(entry)}`,
+    `  time: ${formatTime(new Date(entry.start_time))}–${formatTime(new Date(entry.end_time))} (planner display; event timezone: ${entry.timezone})`,
+    entry.location ? `  location: ${entry.location}` : '',
+    entry.category ? `  category: ${entry.category}` : '',
+    entry.description ? `  notes: ${entry.description.slice(0, 200)}` : '',
   ]
     .filter(Boolean)
     .join('\n')
@@ -1910,6 +1934,55 @@ const listEventsTool: ChatToolSpec = {
   },
 }
 
+const listTimetableEntriesTool: ChatToolSpec = {
+  definition: {
+    type: 'function',
+    function: {
+      name: 'list_timetable_entries',
+      description:
+        'List recurring parent events from the planner timetable, including their repeat pattern, weekdays, times and location. Use this for questions about regular weekly routines or recurring schedule entries; use list_events for dated calendar events and upcoming occurrences.',
+      parameters: {
+        type: 'object',
+        properties: {
+          query: {
+            type: 'string',
+            description: 'Optional keyword matched against title, location, category and recurrence pattern',
+          },
+          limit: {
+            type: 'number',
+            minimum: 1,
+            maximum: 100,
+            description: 'Maximum entries to return (default 100)',
+          },
+        },
+        required: [],
+      },
+    },
+  },
+  execute: async (args) => {
+    const entries = await getTimetableEntries()
+    const query = str(args.query).toLowerCase()
+    const filtered = query
+      ? entries.filter((entry) => {
+          const haystack = [
+            entry.title,
+            entry.location ?? '',
+            entry.category ?? '',
+            describeTimetableRecurrence(entry),
+          ].join(' ').toLowerCase()
+          return haystack.includes(query)
+        })
+      : entries
+    if (filtered.length === 0) return 'No recurring timetable entries matched.'
+
+    const limit = num(args.limit, 100, 1, 100)
+    return [
+      `${filtered.length} recurring timetable entr${filtered.length === 1 ? 'y' : 'ies'} (showing ${Math.min(limit, filtered.length)}):`,
+      ...filtered.slice(0, limit).map(summariseTimetableEntry),
+    ].join('\n')
+  },
+}
+
 const createEventTool: ChatToolSpec = {
   definition: {
     type: 'function',
@@ -2300,6 +2373,7 @@ export const BASE_CHAT_TOOLS: Record<string, ChatToolSpec> = {
   delete_task: deleteTaskTool,
   get_task_stats: getTaskStatsTool,
   list_events: listEventsTool,
+  list_timetable_entries: listTimetableEntriesTool,
   create_event: createEventTool,
   update_event: updateEventTool,
   delete_event: deleteEventTool,
@@ -2336,7 +2410,14 @@ export const CHAT_TOOL_GROUPS: Record<string, string[]> = {
   ],
   tasks: ['list_tasks', 'create_task', 'complete_task', 'update_task', 'delete_task', 'get_task_stats'],
   projects: ['list_projects', 'list_folders', 'create_project', 'update_project'],
-  calendar: ['list_events', 'create_event', 'update_event', 'delete_event', 'get_current_date'],
+  calendar: [
+    'list_events',
+    'list_timetable_entries',
+    'create_event',
+    'update_event',
+    'delete_event',
+    'get_current_date',
+  ],
   learn: [
     'list_decks',
     'create_deck',

@@ -24,6 +24,7 @@ export const CHAT_TOOL_MENU: ChatToolMenuEntry[] = [
   { toolName: 'create_task', label: 'Create Task', emoji: '✅', description: 'Add a task to your planner' },
   { toolName: 'update_task', label: 'Edit Task', emoji: '📌', description: 'Change a task status, priority or due date' },
   { toolName: 'list_events', label: 'Calendar', emoji: '📅', description: 'Review upcoming calendar events' },
+  { toolName: 'list_timetable_entries', label: 'Recurring Schedule', emoji: '🔁', description: 'Review recurring events in your planner timetable' },
   { toolName: 'create_event', label: 'New Event', emoji: '🗓️', description: 'Schedule a calendar event' },
   { toolName: 'list_projects', label: 'Projects', emoji: '📁', description: 'List your projects and progress' },
   { toolName: 'get_workspace_overview', label: 'Overview', emoji: '🧭', description: 'Summarise your whole workspace' },
