@@ -372,6 +372,113 @@ async function handleStream(req, env) {
   }
 }
 
+function validateDeepSeekToolRequest(tool, input) {
+  if (!isRecord(input)) return null
+
+  if (tool === 'search') {
+    const query = typeof input.query === 'string' ? input.query.trim() : ''
+    const count = input.count === undefined ? 5 : input.count
+    const needContent = input.need_content === undefined ? false : input.need_content
+    if (!query || [...query].length > 128) return null
+    if (!Number.isInteger(count) || count < 1 || count > 50) return null
+    if (typeof needContent !== 'boolean') return null
+
+    const payload = { query, count, need_content: needContent }
+    if (typeof input.ori_question === 'string' && input.ori_question.trim()) {
+      const question = input.ori_question.trim()
+      if ([...question].length > 128) return null
+      payload.ori_question = question
+    }
+    return payload
+  }
+
+  const rawUrl = typeof input.url === 'string' ? input.url.trim() : ''
+  if (!rawUrl || rawUrl.length > 8192) return null
+  try {
+    const url = new URL(rawUrl)
+    if (!['http:', 'https:'].includes(url.protocol) || url.username || url.password) return null
+  } catch {
+    return null
+  }
+  return { url: rawUrl }
+}
+
+async function handleDeepSeekTool(req, env, tool) {
+  const cors = getCorsHeaders(env, req)
+  const userId = await getUserIdFromRequest(req, env)
+  if (!userId) {
+    return jsonResponse({ error: { message: 'Unauthorized' } }, 401, cors)
+  }
+
+  const rate = await checkRateLimit(env, `ai:${userId}`)
+  const headers = { ...rateLimitHeaders(rate), ...cors }
+  if (!rate.allowed) {
+    return jsonResponse(
+      { error: { message: 'Rate limit exceeded. Please retry later.' } },
+      429,
+      { ...headers, 'Retry-After': String(rate.retryAfterSeconds) },
+    )
+  }
+
+  const key = env.DEEPSEEK_API_KEY
+  if (!key || !key.trim()) {
+    return jsonResponse({ error: { message: 'AI API key not configured on server.' } }, 503, headers)
+  }
+
+  const rawBody = await req.text()
+  if (rawBody.length > 16384) {
+    return jsonResponse({ error: { message: 'AI tool request is too large.' } }, 413, headers)
+  }
+  let input
+  try {
+    input = JSON.parse(rawBody)
+  } catch {
+    return jsonResponse({ error: { message: 'Request body must be valid JSON.' } }, 400, headers)
+  }
+  const payload = validateDeepSeekToolRequest(tool, input)
+  if (!payload) {
+    return jsonResponse(
+      {
+        error: {
+          message:
+            tool === 'search'
+              ? 'Invalid search request. Provide a query of 1–128 characters, count from 1–50, and a boolean need_content.'
+              : 'Invalid fetch request. Provide a valid HTTP or HTTPS URL without credentials (maximum 8192 characters).',
+        },
+      },
+      400,
+      headers,
+    )
+  }
+
+  try {
+    const upstream = await fetchWithTimeout(
+      `https://api.deepseek.com/v1/tools/${tool}`,
+      {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${key}`,
+        },
+        body: JSON.stringify(payload),
+      },
+      45000,
+    )
+    return new Response(await upstream.text(), {
+      status: upstream.status,
+      headers: {
+        ...headers,
+        'Content-Type': upstream.headers.get('content-type') || 'application/json',
+      },
+    })
+  } catch (error) {
+    if (error instanceof Error && error.message === 'UPSTREAM_TIMEOUT') {
+      return jsonResponse({ error: { message: 'AI upstream timeout.' } }, 504, headers)
+    }
+    return jsonResponse({ error: { message: 'Unexpected AI tool proxy error.' } }, 500, headers)
+  }
+}
+
 export default {
   async fetch(req, env) {
     const url = new URL(req.url)
@@ -404,6 +511,14 @@ export default {
 
     if (url.pathname.endsWith('/api/ai/stream')) {
       return handleStream(req, env)
+    }
+
+    if (url.pathname.endsWith('/api/ai/search')) {
+      return handleDeepSeekTool(req, env, 'search')
+    }
+
+    if (url.pathname.endsWith('/api/ai/fetch')) {
+      return handleDeepSeekTool(req, env, 'fetch')
     }
 
     if (url.pathname.endsWith('/api/ai/key-status')) {

@@ -16,7 +16,8 @@ pub struct AIKeyStatus {
 }
 
 fn keyring_entry() -> Result<Entry, String> {
-    Entry::new(KEYRING_SERVICE, KEYRING_USERNAME).map_err(|e| format!("Failed to access keychain: {e}"))
+    Entry::new(KEYRING_SERVICE, KEYRING_USERNAME)
+        .map_err(|e| format!("Failed to access keychain: {e}"))
 }
 
 fn resolve_api_key() -> Result<String, String> {
@@ -34,7 +35,10 @@ fn resolve_api_key() -> Result<String, String> {
         }
     }
 
-    Err("AI API key not configured. Add DEEPSEEK_API_KEY or save a key in desktop settings.".to_string())
+    Err(
+        "AI API key not configured. Add DEEPSEEK_API_KEY or save a key in desktop settings."
+            .to_string(),
+    )
 }
 
 fn create_http_client() -> Result<reqwest::Client, String> {
@@ -93,7 +97,9 @@ pub fn ai_clear_api_key() -> Result<(), String> {
         Err(e) => {
             // Missing entry is not a hard error for clear operations.
             let message = e.to_string();
-            if message.to_lowercase().contains("no entry") || message.to_lowercase().contains("not found") {
+            if message.to_lowercase().contains("no entry")
+                || message.to_lowercase().contains("not found")
+            {
                 Ok(())
             } else {
                 Err(format!("Failed to clear keychain API key: {e}"))
@@ -135,11 +141,129 @@ pub async fn ai_chat_json(payload: Value) -> Result<Value, String> {
     if !status.is_success() {
         let detail = serde_json::from_str::<Value>(&raw_body)
             .ok()
-            .and_then(|v| v.get("error").and_then(|e| e.get("message")).and_then(Value::as_str).map(str::to_string))
+            .and_then(|v| {
+                v.get("error")
+                    .and_then(|e| e.get("message"))
+                    .and_then(Value::as_str)
+                    .map(str::to_string)
+            })
             .unwrap_or_else(|| raw_body.clone());
         return Err(format!("AI request failed: {} {}", status.as_u16(), detail));
     }
 
     serde_json::from_str::<Value>(&raw_body)
         .map_err(|e| format!("Failed to parse AI response JSON: {e}"))
+}
+
+async fn ai_utility_request(endpoint: &str, payload: Value) -> Result<Value, String> {
+    let key = resolve_api_key()?;
+    let client = create_http_client()?;
+    let response = client
+        .post(format!("https://api.deepseek.com/v1/tools/{endpoint}"))
+        .header("Content-Type", "application/json")
+        .bearer_auth(key)
+        .json(&payload)
+        .send()
+        .await
+        .map_err(|e| format!("DeepSeek {endpoint} request failed: {e}"))?;
+
+    let status = response.status();
+    let raw_body = response
+        .text()
+        .await
+        .map_err(|e| format!("Failed to read DeepSeek {endpoint} response: {e}"))?;
+
+    if !status.is_success() {
+        let detail = serde_json::from_str::<Value>(&raw_body)
+            .ok()
+            .and_then(|value| {
+                value
+                    .get("error")
+                    .and_then(|error| error.get("message"))
+                    .and_then(Value::as_str)
+                    .map(str::to_string)
+            })
+            .unwrap_or(raw_body);
+        return Err(format!(
+            "DeepSeek {endpoint} request failed: {} {}",
+            status.as_u16(),
+            detail
+        ));
+    }
+
+    serde_json::from_str::<Value>(&raw_body)
+        .map_err(|e| format!("Failed to parse DeepSeek {endpoint} response JSON: {e}"))
+}
+
+#[tauri::command]
+pub async fn ai_search(payload: Value) -> Result<Value, String> {
+    let query = payload
+        .get("query")
+        .and_then(Value::as_str)
+        .map(str::trim)
+        .filter(|query| !query.is_empty() && query.chars().count() <= 128)
+        .ok_or_else(|| "Search query must contain 1–128 characters.".to_string())?;
+    let count = match payload.get("count") {
+        None => 5,
+        Some(value) => value.as_u64().ok_or_else(|| {
+            "Search result count must be an integer between 1 and 50.".to_string()
+        })?,
+    };
+    if !(1..=50).contains(&count) {
+        return Err("Search result count must be between 1 and 50.".to_string());
+    }
+    let need_content = match payload.get("need_content") {
+        None => false,
+        Some(value) => value
+            .as_bool()
+            .ok_or_else(|| "need_content must be a boolean.".to_string())?,
+    };
+
+    let mut request = json!({
+        "query": query,
+        "count": count,
+        "need_content": need_content,
+    });
+    let original_question = match payload.get("ori_question") {
+        None | Some(Value::Null) => None,
+        Some(Value::String(question)) => {
+            let question = question.trim();
+            if question.is_empty() {
+                None
+            } else {
+                Some(question)
+            }
+        }
+        Some(_) => return Err("ori_question must be a string.".to_string()),
+    };
+    if let Some(question) = original_question {
+        if question.chars().count() > 128 {
+            return Err("Original search question must not exceed 128 characters.".to_string());
+        }
+        request["ori_question"] = json!(question);
+    }
+    ai_utility_request("search", request).await
+}
+
+#[tauri::command]
+pub async fn ai_fetch(payload: Value) -> Result<Value, String> {
+    let raw_url = payload
+        .get("url")
+        .and_then(Value::as_str)
+        .map(str::trim)
+        .filter(|url| !url.is_empty() && url.chars().count() <= 8192)
+        .ok_or_else(|| {
+            "Fetch URL must be a valid HTTP or HTTPS URL (maximum 8192 characters).".to_string()
+        })?;
+    let url = reqwest::Url::parse(raw_url).map_err(|_| {
+        "Fetch URL must be a valid HTTP or HTTPS URL without credentials.".to_string()
+    })?;
+    if !["http", "https"].contains(&url.scheme())
+        || !url.username().is_empty()
+        || url.password().is_some()
+        || url.host_str().is_none()
+    {
+        return Err("Fetch URL must be a valid HTTP or HTTPS URL without credentials.".to_string());
+    }
+    ai_utility_request("fetch", json!({ "url": raw_url })).await
 }

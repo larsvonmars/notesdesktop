@@ -169,7 +169,7 @@ The built application will be available in `src-tauri/target/release/bundle/`.
 The web deployment is split into:
 
 - Cloudflare Pages: static frontend (`out/` from `npm run build:pages`)
-- Cloudflare Worker: AI proxy routes (`/api/ai/chat`, `/api/ai/stream`, `/api/ai/key-status`)
+- Cloudflare Worker: AI proxy routes (`/api/ai/chat`, `/api/ai/stream`, `/api/ai/search`, `/api/ai/fetch`, `/api/ai/key-status`)
 
 ### 1) Configure Pages project
 
@@ -219,6 +219,9 @@ Important: do not bind this Worker to `/*` on your main app domain. If you do, b
 
 ## Features
 
+- ✅ **DeepSeek Vision** - image understanding plus OCR for scanned pages in PDF annotation notes
+- ✅ **DeepSeek Search & Fetch** - authenticated web research using DeepSeek's official Search and Fetch APIs
+- ✅ **AI mindmap editing** - read mindmap structure and update nodes or add branches without losing graph metadata
 - ✅ Desktop application with Tauri
 - ✅ Next.js frontend with TypeScript
 - ✅ Supabase authentication (email/password)

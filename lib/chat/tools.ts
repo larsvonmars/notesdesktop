@@ -46,6 +46,10 @@ import {
   updateDeck as updateLearnDeck,
 } from '@/lib/learn/decks'
 import { getUserStats as getLearnStats } from '@/lib/learn/stats'
+import { normalizeMindmapData } from '@/lib/mindmap/normalization'
+import type { MindmapData } from '@/lib/mindmap/types'
+import { readPdfNote } from './pdf-ocr'
+import { fetchWebPage, searchWeb } from './web-tools'
 
 export interface ChatToolDefinition {
   type: 'function'
@@ -144,7 +148,7 @@ function extractNoteText(note: Pick<Note, 'note_type' | 'content'>): string {
 
   if (note.note_type === 'drawing') return '[Drawing note — no text content]'
   if (note.note_type === 'pdf-annotation') {
-    return '[PDF annotation note — open it in the app to read the document]'
+    return '[PDF note — use read_pdf_note to extract selectable text and OCR scanned pages]'
   }
 
   try {
@@ -163,7 +167,11 @@ function extractNoteText(note: Pick<Note, 'note_type' | 'content'>): string {
         if (!node) return
         const text = typeof node.text === 'string' ? node.text : ''
         const description = typeof node.description === 'string' ? node.description : ''
-        if (text) lines.push(`${'  '.repeat(depth)}- ${text}${description ? ` — ${description}` : ''}`)
+        if (text) {
+          lines.push(
+            `${'  '.repeat(depth)}- ${text} [node id: ${node.id}]${description ? ` — ${description}` : ''}`,
+          )
+        }
         const children = Array.isArray(node.children) ? node.children : []
         for (const childId of children) {
           if (typeof childId === 'string') walk(childId, depth + 1)
@@ -286,6 +294,7 @@ async function resolveEventId(args: Record<string, unknown>): Promise<string | n
 interface MindmapBranch {
   text: string
   description?: string
+  parentId?: string
   children?: MindmapBranch[]
 }
 
@@ -309,6 +318,7 @@ function parseMindmapBranches(value: unknown, depth = 1): MindmapBranch[] {
     branches.push({
       text,
       description: str(record.description) || undefined,
+      parentId: str(record.parentId) || undefined,
       children: parseMindmapBranches(record.children, depth + 1),
     })
   }
@@ -564,6 +574,120 @@ const readNote: ChatToolSpec = {
       '',
       truncate(text || '(empty note)', 12000),
     ].join('\n')
+  },
+}
+
+const readPdfNoteTool: ChatToolSpec = {
+  definition: {
+    type: 'function',
+    function: {
+      name: 'read_pdf_note',
+      description:
+        'Read a PDF annotation note. Extracts selectable PDF text and uses DeepSeek Vision OCR for scanned pages. By default OCRs up to six scanned pages; pass page numbers to choose pages.',
+      parameters: {
+        type: 'object',
+        properties: {
+          noteId: { type: 'string', description: 'PDF note id from list_notes or search_notes' },
+          noteTitle: { type: 'string', description: 'PDF note title when its id is unknown' },
+          pages: {
+            type: 'array',
+            items: { type: 'integer', minimum: 1 },
+            description: 'Optional 1-based page numbers to OCR (maximum six).',
+          },
+        },
+        required: [],
+      },
+    },
+  },
+  execute: async (args, ctx) => {
+    const noteId = await resolveNoteId(args)
+    if (!noteId) return 'Error: PDF note not found. Use list_notes or search_notes first.'
+    const note = await getNote(noteId)
+    if (!note) return `Error: no note with id ${noteId}.`
+    if (note.note_type !== 'pdf-annotation') {
+      return `Error: "${note.title}" is a ${note.note_type} note, not a PDF annotation note.`
+    }
+
+    if (args.pages !== undefined && !Array.isArray(args.pages)) {
+      return 'Error: pages must be an array of 1-based page numbers.'
+    }
+    const rawPages = Array.isArray(args.pages) ? args.pages : []
+    if (
+      rawPages.length > 6 ||
+      rawPages.some((page) => typeof page !== 'number' || !Number.isInteger(page) || page < 1)
+    ) {
+      return 'Error: provide at most six positive integer page numbers.'
+    }
+    const requestedPages = rawPages as number[]
+    const result = await readPdfNote(note.content, requestedPages, ctx.signal)
+    return [
+      `# ${note.title || 'Untitled PDF'} (${result.totalPages} pages)`,
+      result.ocrPages.length > 0 ? `OCR completed for pages: ${result.ocrPages.join(', ')}.` : '',
+      result.extractedTextTruncated ? 'Selectable PDF text was truncated at 30,000 characters.' : '',
+      result.skippedOcrPages.length > 0
+        ? `Scanned pages not OCRed in this request: ${result.skippedOcrPages.join(', ')}. Call read_pdf_note with page numbers to read them.`
+        : '',
+      '',
+      truncate(result.text || '(No selectable text or OCR text was found.)', 10_000),
+    ]
+      .filter((line) => line !== '')
+      .join('\n')
+  },
+}
+
+const searchWebTool: ChatToolSpec = {
+  definition: {
+    type: 'function',
+    function: {
+      name: 'search_web',
+      description:
+        'Search the live web using DeepSeek Search. Use for current facts and external research. Returns source URLs and summaries; use fetch_web_page to read a result in full.',
+      parameters: {
+        type: 'object',
+        properties: {
+          query: { type: 'string', description: 'A focused web search query (1–128 characters)' },
+          count: { type: 'number', minimum: 1, maximum: 10, description: 'Number of results to return (default 5)' },
+          originalQuestion: { type: 'string', description: "The user's original question, for search relevance" },
+        },
+        required: ['query'],
+      },
+    },
+  },
+  execute: async (args) => {
+    const query = str(args.query)
+    if (!query || [...query].length > 128) return 'Error: query must contain 1–128 characters.'
+    return searchWeb(query, num(args.count, 5, 1, 10), str(args.originalQuestion) || undefined)
+  },
+}
+
+const fetchWebPageTool: ChatToolSpec = {
+  definition: {
+    type: 'function',
+    function: {
+      name: 'fetch_web_page',
+      description:
+        'Fetch and read a web page using DeepSeek Fetch. Use a URL from search_web results or one supplied by the user.',
+      parameters: {
+        type: 'object',
+        properties: {
+          url: { type: 'string', description: 'HTTP or HTTPS page URL (maximum 8192 characters)' },
+        },
+        required: ['url'],
+      },
+    },
+  },
+  execute: async (args) => {
+    const url = str(args.url)
+    if (!url || [...url].length > 8192) return 'Error: provide a valid HTTP or HTTPS URL (maximum 8192 characters).'
+    try {
+      const parsed = new URL(url)
+      if (!['http:', 'https:'].includes(parsed.protocol) || parsed.username || parsed.password) {
+        return 'Error: provide a valid HTTP or HTTPS URL without credentials.'
+      }
+    } catch {
+      return 'Error: provide a valid HTTP or HTTPS URL.'
+    }
+    return fetchWebPage(url)
   },
 }
 
@@ -1215,6 +1339,197 @@ const createMindmapNoteTool: ChatToolSpec = {
       note_type: 'mindmap',
     })
     return `Created mindmap note "${note.title}" [id: ${note.id}] with ${branches.length} branch${branches.length === 1 ? '' : 'es'}.`
+  },
+}
+
+const updateMindmapNoteTool: ChatToolSpec = {
+  definition: {
+    type: 'function',
+    function: {
+      name: 'update_mindmap_note',
+      description:
+        'Edit an existing mindmap without replacing its canvas data. Rename it, change the root or node text/descriptions by node id, and add nested branches under an existing node. Read the mindmap first.',
+      parameters: {
+        type: 'object',
+        properties: {
+          noteId: { type: 'string', description: 'Mindmap note id from list_notes or search_notes' },
+          noteTitle: { type: 'string', description: 'Mindmap title when its id is unknown' },
+          title: { type: 'string', description: 'Optional new note title' },
+          root: { type: 'string', description: 'Optional replacement text for the central/root node' },
+          nodeUpdates: {
+            type: 'array',
+            description: 'Existing nodes to edit, addressed by the node ids returned by read_note.',
+            items: {
+              type: 'object',
+              properties: {
+                nodeId: { type: 'string' },
+                text: { type: 'string' },
+                description: { type: 'string' },
+              },
+              required: ['nodeId'],
+            },
+          },
+          addBranches: {
+            type: 'array',
+            description: 'New branches to append. Each can include nested children and an optional existing parentId.',
+            items: {
+              type: 'object',
+              properties: {
+                parentId: { type: 'string', description: 'Existing parent node id; defaults to the root node' },
+                text: { type: 'string' },
+                description: { type: 'string' },
+                children: {
+                  type: 'array',
+                  items: {
+                    type: 'object',
+                    properties: {
+                      text: { type: 'string' },
+                      description: { type: 'string' },
+                    },
+                    required: ['text'],
+                  },
+                },
+              },
+              required: ['text'],
+            },
+          },
+        },
+        required: [],
+      },
+    },
+  },
+  execute: async (args) => {
+    const noteId = await resolveNoteId(args)
+    if (!noteId) return 'Error: mindmap note not found. Use list_notes or search_notes first.'
+    const note = await getNote(noteId)
+    if (!note) return `Error: no note with id ${noteId}.`
+    if (note.note_type !== 'mindmap') {
+      return `Error: "${note.title}" is a ${note.note_type} note, not a mindmap.`
+    }
+
+    let rawData: unknown
+    try {
+      rawData = JSON.parse(note.content)
+    } catch {
+      return `Error: "${note.title}" has invalid mindmap data and was not changed.`
+    }
+    if (
+      !rawData ||
+      typeof rawData !== 'object' ||
+      Array.isArray(rawData) ||
+      typeof (rawData as Record<string, unknown>).rootId !== 'string' ||
+      !(rawData as Record<string, unknown>).nodes ||
+      typeof (rawData as Record<string, unknown>).nodes !== 'object'
+    ) {
+      return `Error: "${note.title}" has invalid mindmap data and was not changed.`
+    }
+
+    const mindmap = normalizeMindmapData(rawData as MindmapData)
+    const root = mindmap.nodes[mindmap.rootId]
+    const rootText = str(args.root)
+    if (rootText) root.text = rootText.slice(0, 80)
+
+    let updatedNodes = 0
+    if (args.nodeUpdates !== undefined && !Array.isArray(args.nodeUpdates)) {
+      return 'Error: nodeUpdates must be an array.'
+    }
+    const nodeUpdates = Array.isArray(args.nodeUpdates) ? args.nodeUpdates : []
+    if (nodeUpdates.length > 100) return 'Error: update at most 100 mindmap nodes at a time.'
+    for (const value of nodeUpdates) {
+      if (!value || typeof value !== 'object') return 'Error: each node update must include a nodeId.'
+      const update = value as Record<string, unknown>
+      const nodeId = str(update.nodeId)
+      if (!nodeId || !mindmap.nodes[nodeId]) return `Error: mindmap node "${nodeId || '(missing)'}" was not found.`
+      if (
+        (update.text !== undefined && typeof update.text !== 'string') ||
+        (update.description !== undefined && typeof update.description !== 'string') ||
+        (update.text === undefined && update.description === undefined)
+      ) {
+        return `Error: node update for "${nodeId}" must contain text and/or description strings.`
+      }
+    }
+    for (const value of nodeUpdates) {
+      const update = value as Record<string, unknown>
+      const nodeId = str(update.nodeId)
+      const node = mindmap.nodes[nodeId]
+      let changed = false
+      if (typeof update.text === 'string' && update.text.trim()) {
+        node.text = update.text.trim().slice(0, 120)
+        changed = true
+      }
+      if (typeof update.description === 'string') {
+        node.description = update.description.trim().slice(0, 300)
+        changed = true
+      }
+      if (changed) updatedNodes += 1
+    }
+
+    if (args.addBranches !== undefined && !Array.isArray(args.addBranches)) {
+      return 'Error: addBranches must be an array.'
+    }
+    const rawBranches = Array.isArray(args.addBranches) ? args.addBranches : []
+    const branches = parseMindmapBranches(rawBranches)
+    if (branches.length !== rawBranches.length) {
+      return 'Error: every added branch must have a non-empty text label.'
+    }
+    for (const branch of branches) {
+      if (branch.parentId && !mindmap.nodes[branch.parentId]) {
+        return `Error: parent mindmap node "${branch.parentId}" was not found.`
+      }
+    }
+    let addedNodes = 0
+    let nextId = 0
+    const addBranch = (parentId: string, branch: MindmapBranch, depth: number) => {
+      const parent = mindmap.nodes[parentId]
+      if (!parent || depth > MAX_MINDMAP_DEPTH) return
+
+      let id = ''
+      do {
+        nextId += 1
+        id = `node-chat-${Date.now()}-${nextId}`
+      } while (mindmap.nodes[id])
+
+      const angle = -Math.PI + ((parent.children.length + 1) * Math.PI * 2) / Math.max(4, parent.children.length + 2)
+      const radius = depth === 1 ? 230 : 140
+      const node = {
+        id,
+        text: branch.text.slice(0, 120),
+        x: parent.x + Math.cos(angle) * radius,
+        y: parent.y + Math.sin(angle) * radius,
+        parentId,
+        children: [] as string[],
+        collapsed: false,
+        color: MINDMAP_COLORS[(Object.keys(mindmap.nodes).length) % MINDMAP_COLORS.length],
+        description: branch.description?.slice(0, 300) ?? '',
+        attachments: [],
+      }
+      mindmap.nodes[id] = node
+      parent.children.push(id)
+      addedNodes += 1
+      for (const child of branch.children ?? []) addBranch(id, child, depth + 1)
+    }
+
+    for (const branch of branches) {
+      const parentId = branch.parentId || mindmap.rootId
+      addBranch(parentId, branch, 1)
+    }
+
+    const title = str(args.title)
+    const changed = Boolean(rootText || updatedNodes || addedNodes || title)
+    if (!changed) return 'Nothing to update: provide a new title, root text, nodeUpdates or addBranches.'
+
+    await updateNote(noteId, {
+      ...(title ? { title } : {}),
+      content: JSON.stringify(mindmap),
+    })
+    return `Updated mindmap "${title || note.title}" [id: ${noteId}]: ${[
+      rootText ? 'root text changed' : '',
+      updatedNodes ? `${updatedNodes} node${updatedNodes === 1 ? '' : 's'} edited` : '',
+      addedNodes ? `${addedNodes} branch node${addedNodes === 1 ? '' : 's'} added` : '',
+      title ? 'renamed' : '',
+    ]
+      .filter(Boolean)
+      .join(', ')}.`
   },
 }
 
@@ -1964,11 +2279,15 @@ export const BASE_CHAT_TOOLS: Record<string, ChatToolSpec> = {
   list_notes: listNotes,
   search_notes: searchNotesTool,
   read_note: readNote,
+  read_pdf_note: readPdfNoteTool,
+  search_web: searchWebTool,
+  fetch_web_page: fetchWebPageTool,
   create_note: createNoteTool,
   append_to_note: appendToNote,
   update_note: updateNoteTool,
   delete_note: deleteNoteTool,
   create_mindmap_note: createMindmapNoteTool,
+  update_mindmap_note: updateMindmapNoteTool,
   create_data_sheet_note: createDataSheetNoteTool,
   create_bullet_journal_note: createBulletJournalNoteTool,
   create_folder: createFolderTool,
@@ -2004,11 +2323,13 @@ export const CHAT_TOOL_GROUPS: Record<string, string[]> = {
     'list_notes',
     'search_notes',
     'read_note',
+    'read_pdf_note',
     'create_note',
     'append_to_note',
     'update_note',
     'delete_note',
     'create_mindmap_note',
+    'update_mindmap_note',
     'create_data_sheet_note',
     'create_bullet_journal_note',
     'create_folder',
@@ -2030,6 +2351,7 @@ export const CHAT_TOOL_GROUPS: Record<string, string[]> = {
   ],
   workspace: ['get_workspace_overview', 'list_projects', 'list_folders', 'get_task_stats'],
   datetime: ['get_current_date'],
+  web: ['search_web', 'fetch_web_page'],
 }
 
 export const CHAT_TOOL_GROUP_NAMES = Object.keys(CHAT_TOOL_GROUPS)

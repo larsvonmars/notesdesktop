@@ -5,7 +5,11 @@ const ALLOWED_TOOL_NAMES = new Set([
   'list_notes',
   'read_note',
   'search_notes',
+  'read_pdf_note',
+  'search_web',
+  'fetch_web_page',
   'create_mindmap_note',
+  'update_mindmap_note',
   // Chat view tools (notes, tasks, calendar, projects, Learn, workspace)
   'create_note',
   'append_to_note',

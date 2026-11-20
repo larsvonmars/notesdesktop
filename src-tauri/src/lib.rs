@@ -16,6 +16,8 @@ pub fn run() {
         .plugin(tauri_plugin_fs::init())
         .invoke_handler(tauri::generate_handler![
             ai_command::ai_chat_json,
+            ai_command::ai_search,
+            ai_command::ai_fetch,
             ai_command::ai_key_status,
             ai_command::ai_set_api_key,
             ai_command::ai_clear_api_key,
