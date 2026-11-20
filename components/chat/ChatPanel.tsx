@@ -12,10 +12,10 @@ import {
   Cpu,
   FileText,
   History,
-  Loader2,
   MessageSquare,
   Plus,
   Sparkles,
+  Wrench,
   X,
 } from 'lucide-react'
 import { cn } from '@/components/shell/utils'
@@ -125,7 +125,7 @@ function MessageBubble({ message, isStreaming, isLastInGroup, showAvatar, copied
     <div className={cn('flex gap-2.5 animate-rise-in', showAvatar ? 'pt-4' : 'pt-0.5')}>
       <div className="shrink-0 pt-0.5">
         {showAvatar ? (
-          <div className="flex h-7 w-7 items-center justify-center rounded-full border border-accent/20 bg-accent-light">
+          <div className="flex h-7 w-7 items-center justify-center rounded-xl border border-accent/20 bg-accent-light">
             <Bot className="h-3.5 w-3.5 text-accent" aria-hidden="true" />
           </div>
         ) : (
@@ -136,34 +136,57 @@ function MessageBubble({ message, isStreaming, isLastInGroup, showAvatar, copied
         {message.reasoning && <ChatReasoningBlock text={message.reasoning} streaming={isStreaming} />}
 
         {toolCalls.length > 0 && (
-          <div className="mb-2 space-y-1.5">
-            {toolCalls.map((call) => (
-              <ChatToolCallCard key={call.id} call={call} />
-            ))}
-          </div>
+          <section className="mb-2.5" aria-label="Tool activity">
+            <h3 className="mb-1.5 flex items-center gap-1.5 px-0.5 text-[9px] font-semibold uppercase tracking-[0.12em] text-muted">
+              <Wrench className="h-3 w-3" aria-hidden="true" />
+              Tool activity
+            </h3>
+            <div className="space-y-1.5">
+              {toolCalls.map((call) => (
+                <ChatToolCallCard key={call.id} call={call} />
+              ))}
+            </div>
+          </section>
         )}
 
         {message.content ? (
-          <MarkdownContent content={message.content} />
+          <section
+            className="overflow-hidden rounded-2xl border border-accent/15 bg-surface/75 px-3 py-2.5 shadow-sm"
+            aria-label="Assistant response"
+          >
+            <h3 className="mb-1.5 flex items-center gap-1.5 text-[9px] font-semibold uppercase tracking-[0.12em] text-accent">
+              <Sparkles className="h-3 w-3" aria-hidden="true" />
+              Answer
+              {isStreaming && <span className="ml-auto normal-case tracking-normal text-muted">Writing…</span>}
+            </h3>
+            <MarkdownContent content={message.content} />
+          </section>
         ) : (
           isStreaming &&
           toolCalls.length === 0 && (
-            <div className="flex items-center gap-1.5 py-1" aria-label="Assistant is working">
-              {[0, 1, 2].map((index) => (
-                <span
-                  key={index}
-                  className="h-1.5 w-1.5 animate-pulse-soft rounded-full bg-accent/50"
-                  style={{ animationDelay: `${index * 0.15}s` }}
-                />
-              ))}
+            <div className="flex items-center gap-2 rounded-xl border border-accent/15 bg-accent-light/40 px-3 py-2.5" role="status">
+              <Sparkles className="h-3.5 w-3.5 shrink-0 text-accent" aria-hidden="true" />
+              <span className="text-[11px] font-medium text-muted">Preparing a response</span>
+              <span className="ml-auto flex items-center gap-1">
+                {[0, 1, 2].map((index) => (
+                  <span
+                    key={index}
+                    className="h-1.5 w-1.5 animate-pulse-soft rounded-full bg-accent/60"
+                    style={{ animationDelay: `${index * 0.15}s` }}
+                  />
+                ))}
+              </span>
             </div>
           )
         )}
 
         {message.error && (
-          <div className="mt-1 flex items-start gap-2 rounded-xl border border-danger/25 bg-danger-light px-3 py-2 text-[12px] text-danger">
-            <AlertCircle className="mt-0.5 h-3.5 w-3.5 shrink-0" aria-hidden="true" />
-            <span className="break-words">{message.error}</span>
+          <div className="mt-2 flex items-start gap-2.5 rounded-xl border border-danger/25 bg-danger-light px-3 py-2.5" role="alert">
+            <AlertCircle className="mt-0.5 h-4 w-4 shrink-0 text-danger" aria-hidden="true" />
+            <div className="min-w-0 text-[12px] text-danger">
+              <p className="font-semibold">The assistant could not complete this response</p>
+              <p className="mt-0.5 break-words opacity-85">{message.error}</p>
+            </div>
           </div>
         )}
 
@@ -228,6 +251,10 @@ export default function ChatPanel({
 
   const streaming = status === 'streaming' || status === 'submitted'
   const lastMessageId = messages[messages.length - 1]?.id
+  const lastMessage = messages[messages.length - 1]
+  const hasDisplayedTurnError = Boolean(
+    error && lastMessage?.role === 'assistant' && lastMessage.error === error
+  )
 
   const groups = useMemo(() => {
     const result: { role: 'user' | 'assistant'; messages: ChatMessage[] }[] = []
@@ -299,7 +326,13 @@ export default function ChatPanel({
                 aria-hidden="true"
               />
               <span className="shrink-0">
-                {streaming ? 'Replying…' : agentMode ? 'Agent mode' : 'Ready'}
+                {status === 'submitted'
+                  ? 'Starting…'
+                  : status === 'streaming'
+                    ? 'Working…'
+                    : agentMode
+                      ? 'Agent mode'
+                      : 'Ready'}
               </span>
               <span className="shrink-0" aria-hidden="true">
                 ·
@@ -409,20 +442,13 @@ export default function ChatPanel({
               </div>
             ))}
 
-            {status === 'error' && error && (
+            {status === 'error' && error && !hasDisplayedTurnError && (
               <div className="mt-4 flex items-start gap-2.5 rounded-xl border border-danger/25 bg-danger-light px-3 py-2.5">
                 <Bot className="mt-0.5 h-4 w-4 shrink-0 text-danger" aria-hidden="true" />
                 <div className="min-w-0 text-[12.5px] text-danger">
-                  <p className="font-medium">Something went wrong — no answer was generated.</p>
+                  <p className="font-semibold">The assistant could not complete this response</p>
                   <p className="mt-0.5 break-words text-[11.5px] opacity-80">{error}</p>
                 </div>
-              </div>
-            )}
-
-            {status === 'submitted' && (
-              <div className="flex items-center gap-2 pt-4 text-[11.5px] text-muted">
-                <Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden="true" />
-                Working…
               </div>
             )}
 

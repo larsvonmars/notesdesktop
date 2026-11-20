@@ -94,22 +94,73 @@ describe('ChatPanel', () => {
 
     const html = renderToStaticMarkup(<ChatPanel {...baseProps} messages={messages} />)
 
-    expect(html).toContain('Scanning tasks')
+    expect(html).toContain('List tasks')
+    expect(html).toContain('Tool activity')
     expect(html).toContain('<strong>two</strong>')
     expect(html).toContain('Any open tasks?')
+  })
+
+  it('gives PDF, mind map, and web tools distinct categories and statuses', () => {
+    const messages: ChatMessage[] = [
+      {
+        id: 'a1',
+        role: 'assistant',
+        content: '',
+        createdAt: new Date().toISOString(),
+        toolCalls: [
+          {
+            id: 'pdf',
+            name: 'read_pdf_note',
+            arguments: '{"title":"Research.pdf"}',
+            status: 'done',
+          },
+          {
+            id: 'map',
+            name: 'update_mindmap_note',
+            arguments: '{"title":"Roadmap"}',
+            status: 'running',
+          },
+          {
+            id: 'web',
+            name: 'search_web',
+            arguments: '{"query":"latest report"}',
+            status: 'error',
+            error: 'Search unavailable',
+          },
+        ],
+      },
+    ]
+
+    const html = renderToStaticMarkup(<ChatPanel {...baseProps} messages={messages} />)
+
+    expect(html).toContain('PDF &amp; OCR')
+    expect(html).toContain('Mind maps')
+    expect(html).toContain('Web')
+    expect(html).toContain('In progress')
+    expect(html).toContain('Complete')
+    expect(html).toContain('Failed')
+    expect(html).toContain('Search the web, Failed: latest report')
   })
 
   it('shows the error banner when a turn fails', () => {
     const messages: ChatMessage[] = [
       { id: 'u1', role: 'user', content: 'Hi', createdAt: new Date().toISOString() },
+      {
+        id: 'a1',
+        role: 'assistant',
+        content: '',
+        error: 'Upstream timeout',
+        createdAt: new Date().toISOString(),
+      },
     ]
 
     const html = renderToStaticMarkup(
       <ChatPanel {...baseProps} messages={messages} status="error" error="Upstream timeout" />
     )
 
-    expect(html).toContain('no answer was generated')
+    expect(html).toContain('The assistant could not complete this response')
     expect(html).toContain('Upstream timeout')
+    expect(html.match(/Upstream timeout/g)).toHaveLength(1)
   })
 
   it('shows the focused note above the composer', () => {
