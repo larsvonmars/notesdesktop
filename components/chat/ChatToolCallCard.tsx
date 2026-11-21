@@ -34,6 +34,46 @@ import type { LucideIcon } from 'lucide-react'
 import { cn } from '@/components/shell/utils'
 import type { ChatToolCall } from '@/lib/chat/types'
 
+export interface ChatToolTarget {
+  kind: 'note' | 'task' | 'deck'
+  id: string
+}
+
+const OPENABLE_ID_ARGS: Record<string, { kind: ChatToolTarget['kind']; keys: string[] }> = {
+  create_note: { kind: 'note', keys: ['noteId', 'note_id'] },
+  update_note: { kind: 'note', keys: ['noteId', 'note_id'] },
+  read_note: { kind: 'note', keys: ['noteId', 'note_id'] },
+  create_mindmap_note: { kind: 'note', keys: ['noteId', 'note_id'] },
+  create_data_sheet_note: { kind: 'note', keys: ['noteId', 'note_id'] },
+  create_bullet_journal_note: { kind: 'note', keys: ['noteId', 'note_id'] },
+  create_task: { kind: 'task', keys: ['taskId', 'task_id'] },
+  update_task: { kind: 'task', keys: ['taskId', 'task_id'] },
+  complete_task: { kind: 'task', keys: ['taskId', 'task_id'] },
+  create_deck: { kind: 'deck', keys: ['deckId', 'deck_id'] },
+  update_deck: { kind: 'deck', keys: ['deckId', 'deck_id'] },
+  add_cards: { kind: 'deck', keys: ['deckId', 'deck_id'] },
+}
+
+function extractOpenTarget(
+  call: ChatToolCall,
+  args: Record<string, unknown> | null
+): ChatToolTarget | null {
+  const spec = OPENABLE_ID_ARGS[call.name]
+  if (!spec || call.status !== 'done' || !call.result) return null
+  for (const key of spec.keys) {
+    const value = args?.[key]
+    if (typeof value === 'string' && value.trim()) return { kind: spec.kind, id: value.trim() }
+  }
+  const match = call.result.match(/\[id:\s*([A-Za-z0-9_-]+)\]/)
+  return match ? { kind: spec.kind, id: match[1] } : null
+}
+
+const TARGET_LABELS: Record<ChatToolTarget['kind'], string> = {
+  note: 'Open note',
+  task: 'Open task',
+  deck: 'Open deck',
+}
+
 type ToolCategory =
   | 'notes'
   | 'pdf'
@@ -147,7 +187,13 @@ function getOutputPreview(output: string): { text: string; isJson: boolean } {
 }
 
 /** A categorized, expandable presentation for a single tool invocation. */
-export default function ChatToolCallCard({ call }: { call: ChatToolCall }) {
+export default function ChatToolCallCard({
+  call,
+  onOpenTarget,
+}: {
+  call: ChatToolCall
+  onOpenTarget?: (target: ChatToolTarget) => void
+}) {
   const [expanded, setExpanded] = useState(false)
   const { values: args, malformed: malformedArguments } = useMemo(
     () => parseArguments(call.arguments),
@@ -173,6 +219,7 @@ export default function ChatToolCallCard({ call }: { call: ChatToolCall }) {
     : []
   const subAgentPrompt = typeof args?.prompt === 'string' ? args.prompt : ''
   const renderedOutput = output ? getOutputPreview(output) : null
+  const openTarget = onOpenTarget ? extractOpenTarget(call, args) : null
 
   return (
     <section
@@ -231,6 +278,19 @@ export default function ChatToolCallCard({ call }: { call: ChatToolCall }) {
           </span>
         )}
       </button>
+
+      {openTarget && (
+        <div className="flex justify-end px-3 pb-1.5">
+          <button
+            type="button"
+            onClick={() => onOpenTarget?.(openTarget)}
+            className="focus-ring inline-flex items-center gap-1 rounded-full border border-accent/25 bg-accent-light px-2 py-0.5 text-[10px] font-semibold text-accent transition-colors hover:border-accent/50"
+          >
+            <ExternalLink className="h-3 w-3" aria-hidden="true" />
+            {TARGET_LABELS[openTarget.kind]}
+          </button>
+        </div>
+      )}
 
       {meta.category === 'agents' && subAgentTools.length > 0 && (
         <div className="flex flex-wrap gap-1 px-3 pb-2 pl-[3.15rem]" aria-label="Agent tool access">

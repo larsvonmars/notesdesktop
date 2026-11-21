@@ -327,6 +327,25 @@ async function runConversation(options: RunConversationOptions): Promise<ChatTur
         entry.error = output
       } else {
         try {
+          // Destructive tools always need an explicit user decision; the model's
+          // own `confirm: true` argument is not a substitute for one.
+          if (spec.requiresConfirmation) {
+            const approved = callbacks?.requestToolConfirmation
+              ? await callbacks.requestToolConfirmation({
+                  id: call.id,
+                  name: call.name,
+                  arguments: call.arguments,
+                })
+              : false
+            if (!approved) {
+              output =
+                'The user did not approve this destructive action, so nothing was changed. Do not retry it unless they ask.'
+              entry.status = 'done'
+              entry.result = output
+              callbacks?.onToolFinish?.({ id: call.id, result: output })
+              return { call, output }
+            }
+          }
           output = summariseToolOutput(await spec.execute(args, ctx))
           entry.status = 'done'
           entry.result = output

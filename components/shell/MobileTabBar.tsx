@@ -1,8 +1,13 @@
 'use client'
 
-import { Ellipsis, FileText, GraduationCap, Home, ListTodo } from 'lucide-react'
+import { Ellipsis } from 'lucide-react'
 import type { LucideIcon } from 'lucide-react'
 import type { WorkspaceView } from '@/lib/workspace/types'
+import {
+  RAIL_DESTINATIONS,
+  getViewNavigationById,
+  type ViewNavigationItem,
+} from '@/lib/workspace/view-navigation'
 import { cn } from './utils'
 
 export interface MobileTabBarProps {
@@ -22,12 +27,21 @@ interface TabItem {
   view?: WorkspaceView
 }
 
-const VIEW_TABS: TabItem[] = [
-  { id: 'home', label: 'Home', icon: Home, view: 'welcome' },
-  { id: 'notes', label: 'Notes', icon: FileText, view: 'notes' },
-]
+/** Primary phone tabs, in display order. Labels/icons come from the shared nav metadata. */
+const PRIMARY_TAB_IDS: ViewNavigationItem['id'][] = ['home', 'notes', 'learn', 'tasks']
 
-const MORE_VIEWS: WorkspaceView[] = ['files', 'chat', 'projects']
+const VIEW_TABS: TabItem[] = PRIMARY_TAB_IDS.flatMap((id) => {
+  const item = getViewNavigationById(id)
+  return item ? [{ id: item.id, label: item.label, icon: item.icon, view: item.view }] : []
+})
+
+/** Everything else lives behind "More" (plus the project dashboard, which has no rail slot). */
+const MORE_VIEWS: WorkspaceView[] = [
+  ...RAIL_DESTINATIONS.filter((item) => !PRIMARY_TAB_IDS.includes(item.id)).map(
+    (item) => item.view
+  ),
+  'projects',
+]
 
 /**
  * Bottom glass navigation for phones. Five equal tabs (Home, Notes, Learn,
@@ -88,35 +102,6 @@ export default function MobileTabBar({
             </button>
           )
         })}
-
-        <button
-          type="button"
-          onClick={() => onNavigate('learn')}
-          className={tabClass(activeView === 'learn')}
-          aria-current={activeView === 'learn' ? 'page' : undefined}
-          aria-label="Learn"
-        >
-          <span className={iconWrapClass(activeView === 'learn')} aria-hidden="true">
-            <GraduationCap
-              className="h-[19px] w-[19px]"
-              strokeWidth={activeView === 'learn' ? 2.2 : 1.85}
-            />
-          </span>
-          <span>Learn</span>
-        </button>
-
-        <button
-          type="button"
-          onClick={() => onNavigate('tasks')}
-          className={tabClass(activeView === 'tasks')}
-          aria-current={activeView === 'tasks' ? 'page' : undefined}
-          aria-label="Planner"
-        >
-          <span className={iconWrapClass(activeView === 'tasks')} aria-hidden="true">
-            <ListTodo className="h-[19px] w-[19px]" strokeWidth={activeView === 'tasks' ? 2.2 : 1.85} />
-          </span>
-          <span>Planner</span>
-        </button>
 
         {onOpenMore ? (
           <button

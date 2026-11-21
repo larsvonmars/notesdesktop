@@ -29,6 +29,17 @@ export async function listConversations(): Promise<ChatConversationSummary[]> {
   return (data ?? []).map((row) => toSummary(row as Record<string, unknown>))
 }
 
+/** Whether a conversation row still exists (used to validate a restored cache). */
+export async function conversationExists(conversationId: string): Promise<boolean> {
+  const { data, error } = await supabase
+    .from('chat_conversations')
+    .select('id')
+    .eq('id', conversationId)
+    .maybeSingle()
+  if (error) throw error
+  return Boolean(data)
+}
+
 export async function createConversation(
   userId: string,
   title: string,

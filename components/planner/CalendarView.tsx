@@ -222,9 +222,13 @@ export interface CalendarViewProps {
   display: PlannerDisplayPreferences
   initialView?: CalendarViewMode
   onViewChange?: (view: CalendarViewMode) => void
+  /** Mirrors the visible day so the planner's "New event" uses that date. */
+  onDateChange?: (date: Date) => void
   onNewEvent: (start?: Date) => void
   onEditEvent: (event: CalendarEvent) => void
   onDeleteEvent: (event: CalendarEvent) => void
+  /** Delete only the selected date of a recurring series. */
+  onDeleteEventOccurrence?: (event: ExpandedEvent) => void
   onNewTask: (dueDate?: Date) => void
   onOpenTask: (task: Task) => void
   onExport: () => void
@@ -238,15 +242,32 @@ export default function CalendarView({
   display,
   initialView,
   onViewChange,
+  onDateChange,
   onNewEvent,
   onEditEvent,
   onDeleteEvent,
+  onDeleteEventOccurrence,
   onNewTask,
   onOpenTask,
   onExport,
 }: CalendarViewProps) {
   const [view, setView] = useState<CalendarViewMode>(initialView ?? display.defaultCalendarView)
-  const [selectedDate, setSelectedDate] = useState(() => getStartOfDay(new Date()))
+  const [selectedDate, setSelectedDate] = useState(() => {
+    // Restore the day the user was last looking at when they return to the
+    // Calendar section (leaving the planner remounts this view).
+    if (typeof window !== 'undefined') {
+      try {
+        const stored = window.localStorage.getItem('planner:calendar-date')
+        if (stored) {
+          const parsed = new Date(`${stored}T00:00:00`)
+          if (!Number.isNaN(parsed.getTime())) return getStartOfDay(parsed)
+        }
+      } catch {
+        // ignore
+      }
+    }
+    return getStartOfDay(new Date())
+  })
   const [showFilters, setShowFilters] = useState(false)
   const [selectedCategories, setSelectedCategories] = useState<Set<string>>(new Set())
   const [showCancelled, setShowCancelled] = useState(false)
@@ -275,6 +296,21 @@ export default function CalendarView({
     () => Array.from({ length: Math.max(1, endHour - startHour + 1) }, (_, index) => index + startHour),
     [startHour, endHour],
   )
+
+  useEffect(() => {
+    onDateChange?.(selectedDate)
+  }, [selectedDate, onDateChange])
+
+  useEffect(() => {
+    try {
+      const y = selectedDate.getFullYear()
+      const m = String(selectedDate.getMonth() + 1).padStart(2, '0')
+      const d = String(selectedDate.getDate()).padStart(2, '0')
+      window.localStorage.setItem('planner:calendar-date', `${y}-${m}-${d}`)
+    } catch {
+      // ignore
+    }
+  }, [selectedDate])
 
   const changeView = useCallback(
     (next: CalendarViewMode) => {
@@ -934,10 +970,23 @@ export default function CalendarView({
                 setConfirmingDelete(true)
                 return
               }
-              onDeleteEvent(selectedEvent)
+              if (selectedEvent.is_occurrence && onDeleteEventOccurrence) {
+                onDeleteEventOccurrence(selectedEvent)
+              } else {
+                onDeleteEvent(selectedEvent)
+              }
               setSelectedEvent(null)
               setConfirmingDelete(false)
             }}
+            onDeleteSeries={
+              selectedEvent.is_occurrence
+                ? () => {
+                    onDeleteEvent(selectedEvent)
+                    setSelectedEvent(null)
+                    setConfirmingDelete(false)
+                  }
+                : undefined
+            }
             onCancelDelete={() => setConfirmingDelete(false)}
             onClose={() => {
               setSelectedEvent(null)
@@ -2028,6 +2077,7 @@ function EventDetailPanel({
   confirmingDelete,
   onEdit,
   onDelete,
+  onDeleteSeries,
   onCancelDelete,
   onClose,
 }: {
@@ -2036,6 +2086,7 @@ function EventDetailPanel({
   confirmingDelete: boolean
   onEdit: () => void
   onDelete: () => void
+  onDeleteSeries?: () => void
   onCancelDelete: () => void
   onClose: () => void
 }) {
@@ -2173,10 +2224,35 @@ function EventDetailPanel({
           )}
         </div>
 
-        <div className="flex items-center justify-between gap-2 border-t border-[var(--border)] bg-[var(--surface-sunken)] px-4 py-3">
-          <Button type="button" variant="ghost" size="sm" icon={Trash2} onClick={onDelete}>
-            {confirmingDelete ? 'Confirm delete' : 'Delete'}
-          </Button>
+        {confirmingDelete && event.is_recurring && (
+          <p className="border-t border-[var(--border)] bg-[var(--danger-light)] px-4 py-2 text-[11px] font-medium text-danger">
+            {event.is_occurrence
+              ? 'This removes only this date. Use “Delete entire series” to remove every occurrence.'
+              : 'This deletes the entire recurring series, including past and future occurrences.'}
+          </p>
+        )}
+
+        <div className="flex flex-wrap items-center justify-between gap-2 border-t border-[var(--border)] bg-[var(--surface-sunken)] px-4 py-3">
+          <div className="flex flex-wrap items-center gap-2">
+            <Button type="button" variant="ghost" size="sm" icon={Trash2} onClick={onDelete}>
+              {event.is_occurrence
+                ? confirmingDelete
+                  ? 'Confirm this occurrence'
+                  : 'Delete this occurrence'
+                : confirmingDelete
+                  ? event.is_recurring
+                    ? 'Confirm delete series'
+                    : 'Confirm delete'
+                  : event.is_recurring
+                    ? 'Delete series'
+                    : 'Delete'}
+            </Button>
+            {confirmingDelete && event.is_occurrence && onDeleteSeries && (
+              <Button type="button" variant="ghost" size="sm" onClick={onDeleteSeries}>
+                Delete entire series
+              </Button>
+            )}
+          </div>
           <div className="flex items-center gap-2">
             {confirmingDelete && (
               <Button type="button" variant="ghost" size="sm" onClick={onCancelDelete}>

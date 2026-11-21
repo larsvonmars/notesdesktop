@@ -112,6 +112,13 @@ export default function ChatConversationList({
                       type="button"
                       onClick={(event) => {
                         event.stopPropagation()
+                        if (
+                          !window.confirm(
+                            `Delete "${conversation.title || 'New conversation'}"? This cannot be undone.`,
+                          )
+                        ) {
+                          return
+                        }
                         onDelete(conversation.id)
                       }}
                       className="focus-ring absolute right-1 top-1/2 hidden h-6 w-6 -translate-y-1/2 items-center justify-center rounded-full text-muted transition-colors hover:text-danger group-hover/row:flex"

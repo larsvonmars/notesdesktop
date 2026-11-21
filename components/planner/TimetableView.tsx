@@ -64,8 +64,32 @@ function entryColor(entry: TimetableEntry, project?: Project): string {
 }
 
 function entryDays(entry: TimetableEntry): number[] {
+  if (entry.pattern?.frequency === 'daily') return [0, 1, 2, 3, 4, 5, 6]
   if (entry.pattern?.days_of_week?.length) return entry.pattern.days_of_week
   return [new Date(entry.event.start_time).getDay()]
+}
+
+/**
+ * How many times the entry occurs in an average week. Timetables are week
+ * grids, so daily routines must count 7× (divided by their interval) instead of
+ * once, and monthly/yearly entries are amortised.
+ */
+function weeklyOccurrences(entry: TimetableEntry): number {
+  const pattern = entry.pattern
+  if (!pattern) return 1
+  const interval = Math.max(1, pattern.interval || 1)
+  switch (pattern.frequency) {
+    case 'daily':
+      return 7 / interval
+    case 'weekly':
+      return (pattern.days_of_week?.length || 1) / interval
+    case 'monthly':
+      return 12 / 52 / interval
+    case 'yearly':
+      return 1 / 52 / interval
+    default:
+      return 1
+  }
 }
 
 function minutesOfDay(iso: string): number {
@@ -149,7 +173,7 @@ export default function TimetableView({
   const totalMinutes = entries.reduce((sum, entry) => {
     const start = minutesOfDay(entry.event.start_time)
     const end = minutesOfDay(entry.event.end_time)
-    return sum + Math.max(0, end - start)
+    return sum + Math.max(0, end - start) * weeklyOccurrences(entry)
   }, 0)
 
   return (
@@ -204,7 +228,9 @@ export default function TimetableView({
           </span>
           <span className="inline-flex items-center gap-1.5">
             <Clock3 size={11} className="text-accent" />
-            {Math.round(totalMinutes / 60)}h / week
+            <span title="Approximate weekly time across all recurring entries">
+              {Math.round(totalMinutes / 60)}h / week
+            </span>
           </span>
         </span>
 

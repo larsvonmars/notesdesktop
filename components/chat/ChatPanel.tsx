@@ -22,9 +22,15 @@ import { cn } from '@/components/shell/utils'
 import { MarkdownContent } from '@/components/ai/AIMarkdown'
 import ChatInput from './ChatInput'
 import ChatReasoningBlock from './ChatReasoningBlock'
-import ChatToolCallCard from './ChatToolCallCard'
+import ChatToolCallCard, { type ChatToolTarget } from './ChatToolCallCard'
 import type { ChatStarterPrompt } from '@/lib/chat/prompts'
-import type { ChatAttachment, ChatFocusContext, ChatMessage, ChatStatus } from '@/lib/chat/types'
+import type {
+  ChatAttachment,
+  ChatFocusContext,
+  ChatMessage,
+  ChatStatus,
+  ToolConfirmationRequest,
+} from '@/lib/chat/types'
 
 export interface ChatPanelProps {
   title: string
@@ -53,6 +59,44 @@ export interface ChatPanelProps {
   focus?: ChatFocusContext | null
   onClearFocus?: () => void
   onOpenHistory?: () => void
+  /** Destructive tool awaiting explicit approval. */
+  pendingToolConfirmation?: ToolConfirmationRequest | null
+  onResolveToolConfirmation?: (approved: boolean) => void
+  /** Jump from a tool result card to the created/read note, task or deck. */
+  onOpenToolTarget?: (target: ChatToolTarget) => void
+}
+
+const CONFIRMATION_LABELS: Record<string, string> = {
+  delete_note: 'Delete note',
+  delete_task: 'Delete task',
+  delete_event: 'Delete event',
+  delete_card: 'Delete flashcard',
+  delete_deck: 'Delete deck and its cards',
+}
+
+function describeConfirmation(request: ToolConfirmationRequest): {
+  action: string
+  target: string | null
+} {
+  const action = CONFIRMATION_LABELS[request.name] ?? `Run ${request.name}`
+  try {
+    const args = JSON.parse(request.arguments) as Record<string, unknown>
+    const candidate =
+      args.noteTitle ??
+      args.title ??
+      args.deckTitle ??
+      args.front ??
+      args.name ??
+      args.noteId ??
+      args.taskId ??
+      args.eventId ??
+      args.cardId ??
+      args.deckId ??
+      args.id
+    return { action, target: typeof candidate === 'string' && candidate.trim() ? candidate : null }
+  } catch {
+    return { action, target: null }
+  }
 }
 
 function formatTime(iso: string): string {
@@ -68,9 +112,18 @@ interface BubbleProps {
   showAvatar: boolean
   copiedId: string | null
   onCopy: (id: string, text: string) => void
+  onOpenToolTarget?: (target: ChatToolTarget) => void
 }
 
-function MessageBubble({ message, isStreaming, isLastInGroup, showAvatar, copiedId, onCopy }: BubbleProps) {
+function MessageBubble({
+  message,
+  isStreaming,
+  isLastInGroup,
+  showAvatar,
+  copiedId,
+  onCopy,
+  onOpenToolTarget,
+}: BubbleProps) {
   const time = formatTime(message.createdAt)
   const toolCalls = message.toolCalls ?? []
   const attachments = message.attachments ?? []
@@ -143,7 +196,7 @@ function MessageBubble({ message, isStreaming, isLastInGroup, showAvatar, copied
             </h3>
             <div className="space-y-1.5">
               {toolCalls.map((call) => (
-                <ChatToolCallCard key={call.id} call={call} />
+                <ChatToolCallCard key={call.id} call={call} onOpenTarget={onOpenToolTarget} />
               ))}
             </div>
           </section>
@@ -243,6 +296,9 @@ export default function ChatPanel({
   focus = null,
   onClearFocus,
   onOpenHistory,
+  pendingToolConfirmation = null,
+  onResolveToolConfirmation,
+  onOpenToolTarget,
 }: ChatPanelProps) {
   const scrollRef = useRef<HTMLDivElement>(null)
   const endRef = useRef<HTMLDivElement>(null)
@@ -436,6 +492,7 @@ export default function ChatPanel({
                       showAvatar={messageIndex === 0}
                       copiedId={copiedId}
                       onCopy={onCopy}
+                      onOpenToolTarget={onOpenToolTarget}
                     />
                   )
                 })}
@@ -459,6 +516,39 @@ export default function ChatPanel({
 
       <div className="shrink-0 px-2.5 pb-2.5 pt-1.5">
         <div className="mx-auto w-full max-w-3xl">
+          {pendingToolConfirmation && (
+            <div
+              role="alertdialog"
+              aria-label="Confirm destructive chat action"
+              className="mb-2 rounded-xl border border-danger/30 bg-[var(--danger-light)] px-3 py-2.5"
+            >
+              <p className="text-[12px] font-semibold text-danger">
+                {describeConfirmation(pendingToolConfirmation).action}
+              </p>
+              <p className="mt-0.5 text-[11.5px] leading-5 text-foreground">
+                {describeConfirmation(pendingToolConfirmation).target
+                  ? `“${describeConfirmation(pendingToolConfirmation).target}” will be permanently deleted. This cannot be undone.`
+                  : 'This action permanently deletes data and cannot be undone.'}
+              </p>
+              <div className="mt-2 flex justify-end gap-2">
+                <button
+                  type="button"
+                  onClick={() => onResolveToolConfirmation?.(false)}
+                  className="glass-btn focus-ring h-8 px-3 text-[12px]"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  onClick={() => onResolveToolConfirmation?.(true)}
+                  className="focus-ring inline-flex h-8 items-center rounded-full bg-danger px-3 text-[12px] font-semibold text-white transition-[filter] hover:brightness-105"
+                >
+                  Delete
+                </button>
+              </div>
+            </div>
+          )}
+
           {focus?.noteTitle && (
             <div className="mb-2 flex min-w-0 items-center">
               <span className="inline-flex min-w-0 max-w-full items-center gap-1.5 rounded-full border border-accent/25 bg-accent-light py-0.5 pl-2.5 pr-1 text-[11px] text-accent">

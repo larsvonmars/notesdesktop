@@ -249,8 +249,14 @@ export async function getProfile(): Promise<Profile> {
 
   if (error) throw error
 
+  const authName = userData.user?.user_metadata?.display_name
   return {
-    username: profile?.username ?? null,
+    // Prefer the app-wide profile name so Learn and the workspace greeting show
+    // the same identity; fall back to the legacy Learn-only profile row.
+    username:
+      typeof authName === 'string' && authName.trim()
+        ? authName.trim()
+        : profile?.username ?? null,
     email: userData.user?.email ?? null,
   }
 }
@@ -260,6 +266,13 @@ export async function updateProfile(input: {
 }): Promise<void> {
   const userId = await requireUserId()
   const trimmed = input.username.trim()
+
+  // Write the app-wide profile name and mirror it into the Learn profile so
+  // both surfaces (and the workspace greeting) stay in sync.
+  const { error: authError } = await supabase.auth.updateUser({
+    data: { display_name: trimmed || null },
+  })
+  if (authError) throw authError
 
   const { error } = await supabase
     .from('learn_profiles')

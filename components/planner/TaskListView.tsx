@@ -77,6 +77,8 @@ export interface TaskListViewProps {
   notes: NoteSummary[]
   recurrencePatterns: RecurrencePattern[]
   starredOnly?: boolean
+  /** Default status filter; the Starred section shows every starred task. */
+  defaultStatusFilter?: TaskStatus | 'all'
   emptyTitle?: string
   emptyDescription?: string
   onOpenTask: (task: Task) => void
@@ -94,6 +96,7 @@ export default function TaskListView({
   notes,
   recurrencePatterns,
   starredOnly = false,
+  defaultStatusFilter = 'todo',
   emptyTitle,
   emptyDescription,
   onOpenTask,
@@ -105,7 +108,7 @@ export default function TaskListView({
   onNewTask,
 }: TaskListViewProps) {
   const [search, setSearch] = useState('')
-  const [statusFilter, setStatusFilter] = useState<TaskStatus | 'all'>('todo')
+  const [statusFilter, setStatusFilter] = useState<TaskStatus | 'all'>(defaultStatusFilter)
   const [priorityFilter, setPriorityFilter] = useState<TaskPriority | 'all'>('all')
   const [onlyStarred, setOnlyStarred] = useState(starredOnly)
   const [sort, setSort] = useState<SortKey>('due')

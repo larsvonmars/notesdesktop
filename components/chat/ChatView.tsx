@@ -8,6 +8,7 @@ import { runChatTurn } from '@/lib/chat/engine'
 import { validateForcedTool } from '@/lib/chat/tool-menu'
 import { AGENT_STARTERS, CHAT_STARTERS } from '@/lib/chat/prompts'
 import {
+  conversationExists,
   createConversation,
   deleteConversation,
   generateConversationTitle,
@@ -169,20 +170,43 @@ export default function ChatView({
   // A restored conversation must still exist; otherwise the next message would
   // silently create a new conversation while the old transcript stays on screen.
   useEffect(() => {
-    if (!restoredConversationId || conversationsLoading || conversations.length === 0) return
-    if (conversations.some((conversation) => conversation.id === restoredConversationId)) {
-      setRestoredConversationId(null)
-      return
-    }
-    setRestoredConversationId(null)
-    setCurrentConversationId(null)
-    setMessages([])
-    if (storageKey) {
-      try {
-        localStorage.removeItem(storageKey)
-      } catch {
-        // ignore
+    if (!restoredConversationId || conversationsLoading) return
+
+    let cancelled = false
+    const validate = async () => {
+      if (conversations.some((conversation) => conversation.id === restoredConversationId)) {
+        setRestoredConversationId(null)
+        return
       }
+      // The list can be empty when this was the only conversation; ask the
+      // database directly before dropping the restored transcript.
+      if (conversations.length === 0) {
+        try {
+          if (await conversationExists(restoredConversationId)) {
+            if (!cancelled) setRestoredConversationId(null)
+            return
+          }
+        } catch {
+          // Offline — keep the local transcript rather than deleting it.
+          if (!cancelled) setRestoredConversationId(null)
+          return
+        }
+      }
+      if (cancelled) return
+      setRestoredConversationId(null)
+      setCurrentConversationId(null)
+      setMessages([])
+      if (storageKey) {
+        try {
+          localStorage.removeItem(storageKey)
+        } catch {
+          // ignore
+        }
+      }
+    }
+    void validate()
+    return () => {
+      cancelled = true
     }
   }, [conversations, conversationsLoading, restoredConversationId, storageKey])
 

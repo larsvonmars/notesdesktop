@@ -122,6 +122,32 @@ describe('chat engine', () => {
     expect(String(toolMessage?.content)).toContain('iso')
   })
 
+  it('denies destructive tools without an explicit user confirmation', async () => {
+    completionMock
+      .mockResolvedValueOnce({
+        content: '',
+        reasoning: '',
+        toolCalls: [
+          {
+            id: 'call-delete',
+            name: 'delete_note',
+            arguments: JSON.stringify({ noteId: 'note-1', confirm: true }),
+          },
+        ],
+      })
+      .mockResolvedValueOnce({ content: 'Nothing was deleted.', reasoning: '', toolCalls: [] })
+
+    const result = await runChatTurn({
+      messages: [userMessage()],
+      userId: 'user-1',
+      agentMode: false,
+    })
+
+    expect(result.toolCalls).toHaveLength(1)
+    expect(result.toolCalls[0].status).toBe('done')
+    expect(result.toolCalls[0].result).toContain('did not approve')
+  })
+
   it('forces the selected tool on the first step only', async () => {
     completionMock.mockResolvedValue({ content: 'Done', reasoning: '', toolCalls: [] })
 

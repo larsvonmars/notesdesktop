@@ -236,6 +236,39 @@ export async function deleteEvent(id: string): Promise<void> {
   if (error) throw error
 }
 
+/**
+ * Skip one occurrence of a recurring event. The exception row keeps the parent
+ * series intact; expansion filters this date out.
+ */
+export async function cancelEventOccurrence(
+  parent: CalendarEvent,
+  startTime: Date,
+  endTime: Date,
+): Promise<void> {
+  const { data: { user } } = await supabase.auth.getUser()
+  if (!user) throw new Error('Not authenticated')
+
+  const { error } = await supabase.from('calendar_events').insert({
+    user_id: user.id,
+    title: parent.title,
+    description: parent.description,
+    location: parent.location,
+    start_time: startTime.toISOString(),
+    end_time: endTime.toISOString(),
+    is_all_day: parent.is_all_day,
+    timezone: parent.timezone,
+    parent_event_id: parent.id,
+    is_cancelled: true,
+    category: parent.category,
+    color: parent.color,
+    project_id: parent.project_id,
+    task_id: parent.task_id,
+    note_id: parent.note_id,
+  })
+
+  if (error) throw error
+}
+
 export async function cancelEvent(id: string): Promise<CalendarEvent> {
   return updateEvent(id, { is_cancelled: true })
 }

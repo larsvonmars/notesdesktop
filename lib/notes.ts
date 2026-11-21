@@ -1,4 +1,5 @@
 import { supabase } from './supabase'
+import { extractNoteLinkIdsFromContent } from './note-link-extraction'
 import { emitDataChanged } from './offline/events'
 import { NoteConflictError, NoteSyncError } from './offline/errors'
 import { createOfflineId, getCurrentUserId } from './offline/identity'
@@ -589,23 +590,9 @@ let noteLinkIndexCache: {
   entries: NoteLinkIndexEntry[]
 } | null = null
 
-/** Extract note-link block targets from stored HTML without caching the body. */
-function extractNoteLinkIds(html: string): string[] {
-  if (!html) return []
-
-  if (typeof DOMParser !== 'undefined') {
-    const doc = new DOMParser().parseFromString(html, 'text/html')
-    return Array.from(doc.querySelectorAll('[data-block-type="note-link"]'))
-      .map((element) => element.getAttribute('data-note-id'))
-      .filter((id): id is string => !!id)
-  }
-
-  // Non-DOM fallback (e.g. tests): note-link blocks store data-note-id.
-  const ids: string[] = []
-  const pattern = /data-note-id="([^"]+)"/g
-  let match: RegExpExecArray | null
-  while ((match = pattern.exec(html))) ids.push(match[1])
-  return ids
+/** Extract link targets from any note body (rich link blocks or mindmap nodes). */
+function extractNoteLinkIds(noteType: string | null | undefined, content: string): string[] {
+  return extractNoteLinkIdsFromContent(noteType, content)
 }
 
 async function refreshNoteLinkIndex(
@@ -615,7 +602,8 @@ async function refreshNoteLinkIndex(
   const { data, error } = await supabase
     .from('notes')
     .select(NOTE_FULL_COLUMNS)
-    .eq('note_type', 'rich-text')
+    // Rich-text link blocks and mindmap node attachments both create edges.
+    .in('note_type', ['rich-text', 'mindmap'])
     .order('updated_at', { ascending: false })
     .limit(5000)
   if (error) throw error
@@ -626,7 +614,7 @@ async function refreshNoteLinkIndex(
       title: row.title,
       folder_id: row.folder_id,
       note_type: row.note_type,
-      linkIds: extractNoteLinkIds(row.content ?? ''),
+      linkIds: extractNoteLinkIds(row.note_type, row.content ?? ''),
     }))
     // Only notes that actually link somewhere participate in backlinks.
     .filter((entry) => entry.linkIds.length > 0)

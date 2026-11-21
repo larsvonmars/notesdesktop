@@ -9,6 +9,24 @@ const MAX_FILE_SIZE_BYTES = 10 * 1024 * 1024 // 10 MB
 const MAX_IMAGE_SIZE_BYTES = 10 * 1024 * 1024 // 10 MB
 const LONG_LIVED_URL_EXPIRY_SECONDS = 60 * 60 * 24 * 30 // 30 days
 
+const FILE_STORAGE_CHANGED_EVENT = 'notesdesktop:file-storage-changed'
+
+/** Tell every mounted file explorer that the bucket changed. */
+function notifyFileStorageChanged(): void {
+  if (typeof window === 'undefined') return
+  try {
+    window.dispatchEvent(new CustomEvent(FILE_STORAGE_CHANGED_EVENT))
+  } catch {
+    // ignore
+  }
+}
+
+export function subscribeToFileStorageChanged(handler: () => void): () => void {
+  if (typeof window === 'undefined') return () => {}
+  window.addEventListener(FILE_STORAGE_CHANGED_EVENT, handler)
+  return () => window.removeEventListener(FILE_STORAGE_CHANGED_EVENT, handler)
+}
+
 interface UploadFileOptions {
   maxFileSizeBytes?: number
 }
@@ -291,6 +309,7 @@ export async function uploadFile(
     })
 
   if (error) throw error
+  notifyFileStorageChanged()
 
   return {
     path: relativePath,
@@ -425,6 +444,31 @@ export async function deleteFile(relativePath: string): Promise<void> {
     .remove([fullPath])
 
   if (error) throw error
+  notifyFileStorageChanged()
+}
+
+/**
+ * How many note attachment rows reference these files. Used before destructive
+ * file operations so the explorer can warn that notes embed the file.
+ */
+export async function countAttachmentReferences(paths: string[]): Promise<number> {
+  if (paths.length === 0) return 0
+  const { count, error } = await supabase
+    .from('note_attachments')
+    .select('id', { count: 'exact', head: true })
+    .in('storage_path', paths)
+  if (error) throw error
+  return count ?? 0
+}
+
+/** Attachment rows inside a folder (recursive by path prefix). */
+export async function countAttachmentReferencesInFolder(folderPath: string): Promise<number> {
+  const { count, error } = await supabase
+    .from('note_attachments')
+    .select('id', { count: 'exact', head: true })
+    .like('storage_path', `${folderPath}/%`)
+  if (error) throw error
+  return count ?? 0
 }
 
 /**
@@ -439,6 +483,7 @@ export async function deleteFiles(relativePaths: string[]): Promise<void> {
     .remove(fullPaths)
 
   if (error) throw error
+  notifyFileStorageChanged()
 }
 
 // ============================================================================
@@ -471,6 +516,7 @@ export async function createStorageFolder(
     })
 
   if (error) throw error
+  notifyFileStorageChanged()
   return newFolderRelativePath
 }
 
@@ -490,6 +536,7 @@ export async function deleteStorageFolder(folderPath: string): Promise<void> {
     .remove(allFiles)
 
   if (error) throw error
+  notifyFileStorageChanged()
 }
 
 /**
@@ -540,6 +587,7 @@ export async function moveFile(
     .move(oldFullPath, newFullPath)
 
   if (error) throw error
+  notifyFileStorageChanged()
 }
 
 /**

@@ -6,6 +6,7 @@ import type { Note } from '@/lib/notes'
 import { getNotes } from '@/lib/notes'
 import type { FolderNode } from '@/lib/folders'
 import { getNoteTypePresentation, getOrderedNoteTypePresentations } from '@/lib/note-types'
+import { extractNoteLinkIdsFromContent } from '@/lib/note-link-extraction'
 import BaseModal, { ModalHeader, ModalTitle } from './BaseModal'
 
 interface KnowledgeGraphModalProps {
@@ -104,15 +105,9 @@ function calculateGraphBounds(nodes: GraphNode[]): { minX: number; maxX: number;
   return { minX, maxX, minY, maxY }
 }
 
-// Extract note links from HTML content
-function extractNoteLinkIds(htmlContent: string): string[] {
-  const parser = new DOMParser()
-  const doc = parser.parseFromString(htmlContent, 'text/html')
-  const linkElements = doc.querySelectorAll('[data-block-type="note-link"]')
-  
-  return Array.from(linkElements)
-    .map(el => el.getAttribute('data-note-id'))
-    .filter((id): id is string => !!id)
+// Extract links from rich-text blocks and mindmap node attachments.
+function extractNoteLinkIds(note: { note_type: string; content: string }): string[] {
+  return extractNoteLinkIdsFromContent(note.note_type, note.content)
 }
 
 export default function KnowledgeGraphModal({
@@ -235,7 +230,7 @@ export default function KnowledgeGraphModal({
     })
 
     filteredNotes.forEach(note => {
-      const linkedIds = extractNoteLinkIds(note.content)
+      const linkedIds = extractNoteLinkIds(note)
       linkedIds.forEach(targetId => {
         if (!nodeMap.has(targetId) || targetId === note.id) return
         const key = [note.id, targetId].sort().join('|')

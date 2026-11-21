@@ -75,7 +75,10 @@ interface FormState {
   recEndDate: string
 }
 
-function emptyState(defaultDueDate?: string | null): FormState {
+function emptyState(
+  defaultDueDate?: string | null,
+  defaults?: { projectId?: string; taskListId?: string; starred?: boolean },
+): FormState {
   return {
     title: '',
     description: '',
@@ -88,10 +91,10 @@ function emptyState(defaultDueDate?: string | null): FormState {
     actualMinutes: '',
     progress: '0',
     labels: '',
-    projectId: '',
-    taskListId: '',
+    projectId: defaults?.projectId ?? '',
+    taskListId: defaults?.taskListId ?? '',
     noteId: '',
-    isStarred: false,
+    isStarred: defaults?.starred ?? false,
     color: '',
     isRecurring: false,
     frequency: 'weekly',
@@ -134,6 +137,10 @@ export interface TaskFormModalProps {
   isOpen: boolean
   task?: Task | null
   defaultDueDate?: string | null
+  /** Pre-fill context so a task created inside a filtered view stays visible. */
+  defaultProjectId?: string
+  defaultTaskListId?: string
+  defaultStarred?: boolean
   projects: Project[]
   notes: NoteSummary[]
   taskLists: TaskList[]
@@ -147,6 +154,9 @@ export default function TaskFormModal({
   isOpen,
   task,
   defaultDueDate,
+  defaultProjectId,
+  defaultTaskListId,
+  defaultStarred,
   projects,
   notes,
   taskLists,
@@ -164,7 +174,13 @@ export default function TaskFormModal({
   }, [task?.recurrence_pattern_id, recurrencePatterns])
 
   const [form, setForm] = useState<FormState>(() =>
-    task ? stateFromTask(task, existingPattern) : emptyState(defaultDueDate),
+    task
+      ? stateFromTask(task, existingPattern)
+      : emptyState(defaultDueDate, {
+          projectId: defaultProjectId,
+          taskListId: defaultTaskListId,
+          starred: defaultStarred,
+        }),
   )
   const [saving, setSaving] = useState(false)
   const [deleting, setDeleting] = useState(false)
@@ -173,12 +189,20 @@ export default function TaskFormModal({
 
   useEffect(() => {
     if (!isOpen) return
-    setForm(task ? stateFromTask(task, existingPattern) : emptyState(defaultDueDate))
+    setForm(
+      task
+        ? stateFromTask(task, existingPattern)
+        : emptyState(defaultDueDate, {
+            projectId: defaultProjectId,
+            taskListId: defaultTaskListId,
+            starred: defaultStarred,
+          }),
+    )
     setSaving(false)
     setDeleting(false)
     setConfirmingDelete(false)
     setError(null)
-  }, [isOpen, task, existingPattern, defaultDueDate])
+  }, [isOpen, task, existingPattern, defaultDueDate, defaultProjectId, defaultTaskListId, defaultStarred])
 
   const patch = <K extends keyof FormState>(key: K, value: FormState[K]) =>
     setForm((current) => ({ ...current, [key]: value }))

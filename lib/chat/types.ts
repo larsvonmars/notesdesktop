@@ -58,11 +58,23 @@ export interface ChatConversationSummary {
 }
 
 /** Callbacks emitted while a chat turn streams. */
+export interface ToolConfirmationRequest {
+  id: string
+  name: string
+  /** Raw JSON arguments, used to describe the resolved target to the user. */
+  arguments: string
+}
+
 export interface ChatTurnCallbacks {
   onReasoning?: (delta: string) => void
   onText?: (delta: string) => void
   onToolStart?: (call: { id: string; name: string; arguments: string }) => void
   onToolFinish?: (call: { id: string; result?: string; error?: string }) => void
+  /**
+   * Asked before a destructive tool runs. Resolve `true` only after the user
+   * explicitly approved the action; without a handler the tool is denied.
+   */
+  requestToolConfirmation?: (request: ToolConfirmationRequest) => Promise<boolean>
 }
 
 export interface ChatTurnResult {

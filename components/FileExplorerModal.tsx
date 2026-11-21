@@ -52,6 +52,9 @@ import {
   isPreviewablePdf,
   isPreviewableText,
   getFileIconHint,
+  countAttachmentReferences,
+  countAttachmentReferencesInFolder,
+  subscribeToFileStorageChanged,
   type StorageItem,
 } from '@/lib/file-storage'
 import { useToast } from '@/components/ToastProvider'
@@ -226,6 +229,24 @@ export default function FileExplorerModal({
   useEffect(() => {
     if (isOpen) {
       loadItems()
+    }
+  }, [isOpen, loadItems])
+
+  // Uploads/deletes can happen in the editor or another explorer instance; keep
+  // every mounted explorer in sync instead of showing deleted files.
+  useEffect(() => {
+    if (!isOpen) return
+    let timer: number | null = null
+    const unsubscribe = subscribeToFileStorageChanged(() => {
+      if (timer !== null) window.clearTimeout(timer)
+      timer = window.setTimeout(() => {
+        timer = null
+        void loadItems()
+      }, 120)
+    })
+    return () => {
+      unsubscribe()
+      if (timer !== null) window.clearTimeout(timer)
     }
   }, [isOpen, loadItems])
 
@@ -406,10 +427,24 @@ export default function FileExplorerModal({
 
   const handleDeleteItem = useCallback(
     async (item: StorageItem) => {
-      const confirmMsg =
+      let references = 0
+      try {
+        references =
+          item.kind === 'folder'
+            ? await countAttachmentReferencesInFolder(item.path)
+            : await countAttachmentReferences([item.path])
+      } catch (referenceError) {
+        console.warn('Could not check note references:', referenceError)
+      }
+
+      const baseMsg =
         item.kind === 'folder'
           ? `Delete folder "${item.name}" and all its contents?`
           : `Delete "${item.name}"?`
+      const confirmMsg =
+        references > 0
+          ? `${baseMsg}\n\nThis is embedded in ${references} note attachment${references === 1 ? '' : 's'}. Deleting it will break those notes.`
+          : baseMsg
       if (!confirm(confirmMsg)) return
 
       try {
@@ -435,17 +470,33 @@ export default function FileExplorerModal({
 
   const handleDeleteSelected = useCallback(async () => {
     if (selectedPaths.size === 0) return
-    if (!confirm(`Delete ${selectedPaths.size} selected item(s)?`)) return
+
+    const filePaths = Array.from(selectedPaths).filter((p) => {
+      const item = items.find((i) => i.path === p)
+      return item?.kind === 'file'
+    })
+    const folderPaths = Array.from(selectedPaths).filter((p) => {
+      const item = items.find((i) => i.path === p)
+      return item?.kind === 'folder'
+    })
+
+    let references = 0
+    try {
+      references = await countAttachmentReferences(filePaths)
+      for (const folder of folderPaths) {
+        references += await countAttachmentReferencesInFolder(folder)
+      }
+    } catch (referenceError) {
+      console.warn('Could not check note references:', referenceError)
+    }
+
+    const bulkMsg =
+      references > 0
+        ? `Delete ${selectedPaths.size} selected item(s)?\n\n${references} note attachment${references === 1 ? '' : 's'} reference them; deleting will break those notes.`
+        : `Delete ${selectedPaths.size} selected item(s)?`
+    if (!confirm(bulkMsg)) return
 
     try {
-      const filePaths = Array.from(selectedPaths).filter((p) => {
-        const item = items.find((i) => i.path === p)
-        return item?.kind === 'file'
-      })
-      const folderPaths = Array.from(selectedPaths).filter((p) => {
-        const item = items.find((i) => i.path === p)
-        return item?.kind === 'folder'
-      })
 
       if (filePaths.length > 0) await deleteFiles(filePaths)
       for (const fp of folderPaths) await deleteStorageFolder(fp)
@@ -479,6 +530,22 @@ export default function FileExplorerModal({
     }
 
     try {
+      let references = 0
+      try {
+        references = await countAttachmentReferences([renamingItem])
+      } catch (referenceError) {
+        console.warn('Could not check note references:', referenceError)
+      }
+      if (
+        references > 0 &&
+        !confirm(
+          `This file is embedded in ${references} note attachment${references === 1 ? '' : 's'}. Renaming it will break those notes. Continue?`,
+        )
+      ) {
+        setRenamingItem(null)
+        return
+      }
+
       await renameFile(renamingItem, newName)
       toast.push({ title: 'Renamed', description: newName })
       setRenamingItem(null)
