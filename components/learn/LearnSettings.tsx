@@ -196,6 +196,7 @@ export function LearnSettings({
           size="sm"
           icon={saved ? Check : Save}
           loading={saving}
+          disabled={!prefsInitialised || !stats}
           onClick={() => void handleSave()}
         >
           {saved ? 'Saved' : 'Save changes'}

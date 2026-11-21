@@ -4,7 +4,7 @@ import { useAuth } from '@/lib/auth-context'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { useEffect, useState, useRef, useCallback, useMemo, Suspense } from 'react'
 import dynamic from 'next/dynamic'
-import type { Note } from '@/components/NoteEditor'
+import type { Note, NoteEditorHandle } from '@/components/NoteEditor'
 // The editor pulls in all six note editors (rich text, drawing, mindmap,
 // journal, data sheet, PDF annotations) plus grammar/PDF helpers — keep that
 // graph out of the workspace first load and fetch it when a note is opened.
@@ -94,6 +94,7 @@ import type {
 } from '@/components/shell/types'
 import { useNavHistory, type NavLocation } from '@/lib/navigation/nav-history'
 import type { WorkspaceView } from '@/lib/workspace/types'
+import { RAIL_DESTINATIONS } from '@/lib/workspace/view-navigation'
 import { subscribeToConflicts, subscribeToDataChanges } from '@/lib/offline/events'
 import { shouldAdoptExternalNote } from '@/lib/workspace/noteRefresh'
 import { installOfflineSync } from '@/lib/offline/sync'
@@ -113,6 +114,7 @@ import {
   type SelectionAIActionId,
 } from '@/lib/chat/selection-actions'
 import type { ChatFocusContext } from '@/lib/chat/types'
+import type { ChatToolTarget } from '@/components/chat/ChatToolCallCard'
 
 const SettingsModal = dynamic(() => import('@/components/SettingsModal'), {
   ssr: false,
@@ -152,6 +154,7 @@ function WorkspaceContent() {
   const [selectedProjectId, setSelectedProjectId] = useState<string | null>(null)
   const [selectedNote, setSelectedNote] = useState<Note | null>(null)
   const selectedNoteRef = useRef<Note | null>(null)
+  const noteEditorRef = useRef<NoteEditorHandle | null>(null)
   const [isCreatingNew, setIsCreatingNew] = useState(false)
   const isCreatingNewSaveRef = useRef(false)
   const [newNoteType, setNewNoteType] = useState<NoteType>('rich-text')
@@ -297,6 +300,8 @@ function WorkspaceContent() {
   const [showSettings, setShowSettings] = useState(false)
   const [showShortcuts, setShowShortcuts] = useState(false)
   const [commandPaletteOpen, setCommandPaletteOpen] = useState(false)
+  /** Chat stays mounted once opened so switching views never aborts a reply. */
+  const [hasOpenedChat, setHasOpenedChat] = useState(false)
 
   // âŒ˜/Ctrl+K opens the palette â€” except inside the rich text editor, where the
   // same shortcut inserts a link.
@@ -378,6 +383,24 @@ function WorkspaceContent() {
       preserveDraftState: true,
     })
   }, [applyFolderSelection, user?.id])
+
+  /**
+   * Persist debounced editor edits before the selection moves. The editor's
+   * save path resolves the target from `selectedNoteRef`, so the flush must
+   * finish before the reference changes; otherwise the outgoing note's buffer
+   * is written into the incoming note (or a deleted one is recreated).
+   */
+  const registerNoteEditor = useCallback((handle: NoteEditorHandle | null) => {
+    noteEditorRef.current = handle
+  }, [])
+
+  const flushPendingEditorSave = useCallback(async () => {
+    try {
+      await noteEditorRef.current?.flushPendingSave()
+    } catch (error) {
+      console.error('Could not flush the open note before navigating:', error)
+    }
+  }, [])
 
   // ---- Navigation history (back / forward) -------------------------------
   // In-memory, browser-like trail over the four serialisable location fields.
@@ -513,6 +536,7 @@ function WorkspaceContent() {
   /** Restore a location from the back/forward trail. */
   const applyNavLocation = useCallback(
     async (target: NavLocation) => {
+      await flushPendingEditorSave()
       isApplyingHistoryRef.current = true
       try {
         setActiveView(target.view)
@@ -544,7 +568,7 @@ function WorkspaceContent() {
         isApplyingHistoryRef.current = false
       }
     },
-    [activateExistingNote, applyFolderSelection]
+    [activateExistingNote, applyFolderSelection, flushPendingEditorSave]
   )
 
   const goBack = useCallback(() => {
@@ -697,11 +721,24 @@ function WorkspaceContent() {
       !hasShownHomeOnStartupRef.current
     ) {
       hasShownHomeOnStartupRef.current = true
-      if (readWelcomeOnStartupPreference()) {
+      // An explicit ?note= deep link is a deliberate destination; never bounce
+      // it to Home just because "open Home on launch" is enabled.
+      const openHome = readWelcomeOnStartupPreference() && !noteParam
+      if (openHome) {
         setActiveView('welcome')
       }
+
+      // Seed the back/forward trail with where the user actually landed, so the
+      // first Back press doesn't fall back to a hardcoded Notes entry.
+      const landingView: WorkspaceView = openHome ? 'welcome' : 'notes'
+      navHistoryRef.current.reset({
+        view: landingView,
+        folderId: landingView === 'notes' ? selectedFolderIdRef.current : null,
+        projectId: landingView === 'notes' ? selectedProjectIdRef.current : null,
+        noteId: landingView === 'notes' ? selectedNoteIdRef.current ?? null : null,
+      })
     }
-  }, [user, isLoadingFolders, isLoadingNotes, isLoadingProjects, isLoadingAllNotes])
+  }, [user, isLoadingFolders, isLoadingNotes, isLoadingProjects, isLoadingAllNotes, noteParam])
 
   const closeWelcomeView = useCallback(() => {
     setActiveView('notes')
@@ -709,17 +746,29 @@ function WorkspaceContent() {
 
   const openWelcomeView = useCallback(() => {
     setActiveView('welcome')
-  }, [])
+    recordNav({ view: 'welcome', folderId: null, projectId: null, noteId: null })
+  }, [recordNav])
 
   // Lets Home's Planner shortcut deep-link straight into the task list while
   // the rail/sidebar keep landing on the planner overview.
   const [plannerStartSection, setPlannerStartSection] = useState<'overview' | 'tasks' | null>(null)
   const [plannerSection, setPlannerSection] = useState<PlannerSection>('overview')
+  /** One-shot task detail request coming from a Chat tool result. */
+  const [plannerFocusRequest, setPlannerFocusRequest] = useState<{ taskId: string } | null>(null)
 
   const openTasksView = useCallback(() => {
+    // Rail/sidebar/palette entry: no section override, so the planner restores
+    // the section the user was last in.
     setPlannerStartSection(null)
     setActiveView('tasks')
-  }, [])
+    recordNav({ view: 'tasks', folderId: null, projectId: null, noteId: null })
+  }, [recordNav])
+
+  // A deep-link start section is one-shot: leaving the planner must not make
+  // the next visit reopen the Tasks section.
+  useEffect(() => {
+    if (activeView !== 'tasks') setPlannerStartSection(null)
+  }, [activeView])
 
   /** Full-text note search for the command palette (stable identity). */
   const searchNoteContent = useCallback(
@@ -731,6 +780,8 @@ function WorkspaceContent() {
 
   const switchWorkspaceView = useCallback(
     (view: WorkspaceView) => {
+      // Ordinary navigation keeps the planner's last section (persisted by the
+      // view); only Home's explicit "Open planner" deep link passes a request.
       if (view !== 'tasks') setPlannerStartSection(null)
       setActiveView(view)
       setWorkspaceNavOpen(false)
@@ -778,6 +829,45 @@ function WorkspaceContent() {
   useEffect(() => {
     if (activeView !== 'chat') setChatFocus(null)
   }, [activeView])
+
+  useEffect(() => {
+    if (activeView === 'chat') setHasOpenedChat(true)
+  }, [activeView])
+
+  // Learn's "streak reminder" setting finally has a visible effect: once a day,
+  // late in the day, remind the user when their streak is at risk. The effect
+  // re-runs on a timer so leaving the app open still produces the reminder.
+  const [reminderTick, setReminderTick] = useState(0)
+  useEffect(() => {
+    const timer = window.setInterval(() => setReminderTick((tick) => tick + 1), 10 * 60 * 1000)
+    return () => window.clearInterval(timer)
+  }, [])
+  useEffect(() => {
+    const stats = learnStats
+    if (!stats || !stats.streakReminderEnabled || stats.dailyGoalMet || stats.streak <= 0) return
+    const now = new Date()
+    if (now.getHours() < 17) return
+    const storageKey = 'notesdesktop:learn-streak-reminder-shown'
+    const today = now.toDateString()
+    try {
+      if (window.localStorage.getItem(storageKey) === today) return
+      window.localStorage.setItem(storageKey, today)
+    } catch {
+      return
+    }
+    toast.push({
+      title: 'Keep your streak alive',
+      description: `You reviewed ${stats.dailyCardsReviewed} of ${stats.dailyGoal} cards today.`,
+      duration: 8000,
+      action: {
+        label: 'Open Learn',
+        onClick: () => {
+          setActiveView('learn')
+          setLearnScreen({ kind: 'dashboard' })
+        },
+      },
+    })
+  }, [learnStats, reminderTick, toast, setLearnScreen])
 
   const beginOpenSwipe = useCallback((clientX: number, clientY: number) => {
     if (!isMobile || workspaceNavOpen) return
@@ -856,8 +946,14 @@ function WorkspaceContent() {
     }
   }, [pendingNoteContext])
 
-  const startNewNote = (type: NoteType, context: NoteCreationContext = {}) => {
+  const startNewNote = async (type: NoteType, context: NoteCreationContext = {}) => {
+    // Persist the outgoing note before its draft context is replaced.
+    await flushPendingEditorSave()
     setPendingNoteContext(null)
+    // Creating a note is navigation: the editor only exists in the Notes view,
+    // so opening it from Home/Chat/Files/Planner must land there instead of
+    // producing an invisible draft.
+    setActiveView('notes')
     const { folderArg, projectArg } = context
     const targetFolderId = folderArg !== undefined ? folderArg : selectedFolderId
 
@@ -902,7 +998,7 @@ function WorkspaceContent() {
       return
     }
 
-    startNewNote(noteType, context)
+    void startNewNote(noteType, context)
   }
 
   const handleSelectNoteType = (type: NoteType) => {
@@ -915,14 +1011,14 @@ function WorkspaceContent() {
       return
     }
 
-    startNewNote(type, context)
+    void startNewNote(type, context)
   }
 
   const handleSelectMindmapTemplate = (templateId: string) => {
     const context = pendingMindmapTemplateContext ?? {}
     setPendingMindmapTemplateContext(null)
     setSelectedMindmapTemplateId(templateId)
-    startNewNote('mindmap', context)
+    void startNewNote('mindmap', context)
   }
 
   const handleCancelMindmapTemplatePicker = () => {
@@ -948,6 +1044,10 @@ function WorkspaceContent() {
   }, [recordNav])
 
   const handleSelectNote = async (note: NoteSummary) => {
+    if (selectedNoteRef.current?.id !== note.id) {
+      await flushPendingEditorSave()
+    }
+
     if ('content' in note && typeof (note as Note).content === 'string') {
       activateExistingNote(note as Note)
       recordNoteNavigation(note as Note)
@@ -968,7 +1068,8 @@ function WorkspaceContent() {
     }
   }
 
-  const handleSelectFolder = (folderId: string | null) => {
+  const handleSelectFolder = async (folderId: string | null) => {
+    await flushPendingEditorSave()
     if (activeView !== 'notes') setActiveView('notes')
     setWorkspaceNavOpen(false)
     applyFolderSelection(folderId)
@@ -981,12 +1082,45 @@ function WorkspaceContent() {
     })
   }
 
+  /** Discard the open buffer (the editor already confirmed this path). */
+  const handleOpenChatToolTarget = useCallback(
+    (target: ChatToolTarget) => {
+      if (target.kind === 'note') {
+        setActiveView('notes')
+        void handleSelectNote({ id: target.id } as NoteSummary)
+        return
+      }
+      if (target.kind === 'task') {
+        setPlannerStartSection('tasks')
+        setPlannerFocusRequest({ taskId: target.id })
+        setActiveView('tasks')
+        return
+      }
+      setActiveView('learn')
+      setLearnScreen({ kind: 'deck', deckId: target.id })
+    },
+    [handleSelectNote]
+  )
+
   const handleCancel = () => {
     isCreatingNewSaveRef.current = false
     selectedNoteRef.current = null
     setIsCreatingNew(false)
     setSelectedNote(null)
   }
+
+  /**
+   * Leave the editor for the note list while keeping edits. Used by the compact
+   * top bar and the mobile Notes tab, where backing out is navigation rather
+   * than an explicit discard.
+   */
+  const handleCloseEditor = useCallback(async () => {
+    await flushPendingEditorSave()
+    isCreatingNewSaveRef.current = false
+    selectedNoteRef.current = null
+    setIsCreatingNew(false)
+    setSelectedNote(null)
+  }, [flushPendingEditorSave])
 
   const getCurrentFolderName = (): string | undefined => {
     if (selectedFolderId === null) return undefined
@@ -1042,18 +1176,30 @@ function WorkspaceContent() {
   }
 
   useEffect(() => {
-    const VIEW_SHORTCUTS: Record<string, WorkspaceView> = {
-      '1': 'welcome',
-      '2': 'notes',
-      '3': 'tasks',
-      '4': 'files',
-      '5': 'chat',
-      '6': 'learn',
-    }
+    // Digits/labels are owned by the shared navigation metadata.
+    const VIEW_SHORTCUTS: Record<string, WorkspaceView> = Object.fromEntries(
+      RAIL_DESTINATIONS.filter((destination) => destination.shortcut).map(
+        (destination) => [destination.shortcut as string, destination.view],
+      ),
+    )
 
     const handleKeyDown = (event: KeyboardEvent) => {
       if (!(event.metaKey || event.ctrlKey) || event.altKey) return
       if (event.shiftKey) return
+
+      // App-level navigation must never fire while the user is typing (note
+      // title/body, search, chat composer) or while a modal owns focus.
+      const target = event.target as HTMLElement | null
+      const isEditable = Boolean(
+        target &&
+          (target.tagName === 'INPUT' ||
+            target.tagName === 'TEXTAREA' ||
+            target.tagName === 'SELECT' ||
+            target.isContentEditable ||
+            target.closest('[contenteditable="true"], [contenteditable=""]'))
+      )
+      const dialogOpen = Boolean(document.querySelector('[role="dialog"], [aria-modal="true"]'))
+      if (isEditable || dialogOpen) return
 
       const key = event.key.toLowerCase()
       const view = VIEW_SHORTCUTS[key]
@@ -1280,7 +1426,7 @@ function WorkspaceContent() {
             id: 'back-to-notes',
             label: 'Back to note list',
             icon: FileText,
-            onSelect: () => handleCancel(),
+            onSelect: () => { void handleCloseEditor() },
           } satisfies TopBarMenuItem,
         ]
       : []),
@@ -1354,6 +1500,7 @@ function WorkspaceContent() {
     if (showEditor) {
       return (
         <NoteEditor
+          registerHandle={registerNoteEditor}
           note={isCreatingNew ? null : selectedNote}
           initialNoteType={newNoteType}
           mindmapTemplateId={selectedMindmapTemplateId}
@@ -1571,7 +1718,10 @@ function WorkspaceContent() {
               <TasksView
                 notes={allNotes}
                 projects={projects}
-                initialSection={plannerStartSection ?? 'overview'}
+                archivedProjectIds={archivedProjectIds}
+                initialSection={plannerStartSection ?? undefined}
+                focusTaskId={plannerFocusRequest?.taskId ?? null}
+                onFocusTaskConsumed={() => setPlannerFocusRequest(null)}
                 onSectionChange={setPlannerSection}
                 onSelectNote={(note) => {
                   void handleSelectNote(note)
@@ -1590,8 +1740,11 @@ function WorkspaceContent() {
             </div>
           )}
 
-          {activeView === 'chat' && (
-            <div className="h-full overflow-hidden">
+          {hasOpenedChat && (
+            <div
+              className={activeView === 'chat' ? 'h-full overflow-hidden' : 'hidden'}
+              aria-hidden={activeView !== 'chat'}
+            >
               <ChatView
                 focus={chatFocus}
                 initialPrompt={chatInitialPrompt}
@@ -1704,7 +1857,7 @@ function WorkspaceContent() {
           // On a phone, tapping "Notes" while a note is open returns to the list
           // instead of leaving the user stranded inside the editor.
           if (view === 'notes' && activeView === 'notes' && showEditor) {
-            handleCancel()
+            void handleCloseEditor()
             return
           }
           switchWorkspaceView(view)
@@ -1756,7 +1909,8 @@ function WorkspaceContent() {
           onCreateNote={(type) => handleNewNote(type)}
           onOpenHome={openWelcomeView}
           onOpenTasks={openTasksView}
-          onOpenFiles={() => setActiveView('files')}
+          onOpenFiles={() => switchWorkspaceView('files')}
+          onOpenChat={() => switchWorkspaceView('chat')}
           onOpenLearn={() => setActiveView('learn')}
           learnDecks={learnDecks}
           onOpenLearnDeck={(deckId) => {

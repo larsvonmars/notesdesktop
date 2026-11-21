@@ -215,6 +215,9 @@ const BLOCK_LEVEL_ISLAND_TYPES = new Set([
 
 interface RichTextEditorProps {
   value: string
+  /** Identity of the document being edited (the note id). Changing it forces
+   * the incoming value into the DOM even while the editor holds focus. */
+  documentId?: string
   onChange: (html: string) => void
   disabled?: boolean
   placeholder?: string
@@ -251,6 +254,7 @@ const RichTextEditorImpl = forwardRef<RichTextEditorHandle, RichTextEditorProps>
       onImagePaste,
       onImageDrop,
       slashPickers,
+      documentId,
     },
     ref
   ) => {
@@ -260,6 +264,7 @@ const RichTextEditorImpl = forwardRef<RichTextEditorHandle, RichTextEditorProps>
     const debouncedCaptureRef = useRef<DebouncedCapture | null>(null)
     const lastSyncedValueRef = useRef<string>('')
     const pendingExternalValueRef = useRef<string | null>(null)
+    const documentIdRef = useRef(documentId)
     const mutationObserverRef = useRef<MutationObserver | null>(null)
     const checklistNormalizationTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
     const isProcessingCommandRef = useRef<boolean>(false)
@@ -2618,10 +2623,21 @@ const RichTextEditorImpl = forwardRef<RichTextEditorHandle, RichTextEditorProps>
         // Values the editor itself emitted are already sanitized — skip the extra pass
         const isSelfEmission = incomingValue === lastSyncedValueRef.current
         const sanitizedValue = isSelfEmission ? incomingValue : sanitize(incomingValue)
+        // A different document must win over the focus guard: following a note
+        // link (or using back/forward) keeps this editor focused, and deferring
+        // the swap would let the next keystroke save the old note body over the
+        // newly opened one. Draft → saved (undefined → id) is the *same*
+        // document, so it must not reset the editor or move the caret.
+        const promotedFromDraft =
+          documentIdRef.current === undefined && documentId !== undefined
+        // Track the promotion immediately: the branch below may defer the value
+        // while focused, and the next real note switch must still be detected.
+        if (promotedFromDraft) documentIdRef.current = documentId
+        const documentChanged = documentIdRef.current !== documentId
 
-        if (lastSyncedValueRef.current !== sanitizedValue) {
+        if (lastSyncedValueRef.current !== sanitizedValue || documentChanged) {
           const editorHasFocus = editorEl === document.activeElement || editorEl.contains(document.activeElement)
-          if (editorHasFocus) {
+          if (editorHasFocus && !documentChanged) {
             pendingExternalValueRef.current = sanitizedValue
             return
           }
@@ -2631,6 +2647,7 @@ const RichTextEditorImpl = forwardRef<RichTextEditorHandle, RichTextEditorProps>
           editorEl.innerHTML = sanitizedValue
           lastSyncedValueRef.current = sanitizedValue
           pendingExternalValueRef.current = null
+          documentIdRef.current = documentId
 
           // Collapsed headings carry their hidden children in the saved HTML.
           updateCollapsedVisibility(editorEl)
@@ -2659,10 +2676,11 @@ const RichTextEditorImpl = forwardRef<RichTextEditorHandle, RichTextEditorProps>
 
         updateCollapsedVisibility(editorEl)
         ensureEditorHasContent(editorEl)
+        if (documentIdRef.current !== documentId) documentIdRef.current = documentId
       } catch (error) {
         console.error('Error synchronizing editor value:', error)
       }
-    }, [sanitize, value, scheduleChecklistNormalization, rehydrateExistingBlocks])
+    }, [sanitize, value, documentId, scheduleChecklistNormalization, rehydrateExistingBlocks])
 
     const flushPendingExternalValue = useCallback(() => {
       const editorEl = editorRef.current

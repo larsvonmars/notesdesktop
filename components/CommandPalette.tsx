@@ -13,6 +13,7 @@ import {
   LayoutDashboard,
   ListTodo,
   Loader2,
+  MessagesSquare,
   Network,
   PenTool,
   Plus,
@@ -72,6 +73,7 @@ export interface CommandPaletteProps {
   onOpenHome: () => void
   onOpenTasks: () => void
   onOpenFiles: () => void
+  onOpenChat?: () => void
   onOpenLearn?: () => void
   /** Decks surface directly in the palette. */
   learnDecks?: Deck[]
@@ -103,6 +105,7 @@ export default function CommandPalette({
   onOpenHome,
   onOpenTasks,
   onOpenFiles,
+  onOpenChat,
   onOpenLearn,
   learnDecks,
   onOpenLearnDeck,
@@ -290,6 +293,7 @@ export default function CommandPalette({
       { key: 'nav-home', label: 'Go to Home', hint: 'Recent notes and quick actions', icon: Home, run: onOpenHome },
       { key: 'nav-tasks', label: 'Open Planner', hint: 'Tasks, calendar, timetable and smart plans', icon: ListTodo, run: onOpenTasks },
       { key: 'nav-files', label: 'Open File Explorer', hint: 'Browse files', icon: FolderOpen, run: onOpenFiles },
+      { key: 'nav-chat', label: 'Open Chat', hint: 'Ask about your notes, projects and tasks', icon: MessagesSquare, run: () => onOpenChat?.() },
       { key: 'nav-learn', label: 'Open Learn', hint: 'Flashcards and study modes', icon: GraduationCap, run: () => onOpenLearn?.() },
       { key: 'nav-settings', label: 'Open Settings', hint: 'Account, appearance, startup', icon: Settings, run: onOpenSettings },
       { key: 'nav-shortcuts', label: 'Keyboard shortcuts', hint: 'Reference for formatting and navigation', icon: Keyboard, run: onOpenShortcuts },
@@ -319,6 +323,7 @@ export default function CommandPalette({
     onOpenHome,
     onOpenTasks,
     onOpenFiles,
+    onOpenChat,
     onOpenLearn,
     learnDecks,
     learnCardMatches,

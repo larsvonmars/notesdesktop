@@ -17,8 +17,16 @@ import {
   saveMessage,
 } from '@/lib/chat/conversations'
 import ChatPanel from './ChatPanel'
+import type { ChatToolTarget } from './ChatToolCallCard'
 import ChatSidebar, { ChatSidebarDrawer } from './ChatSidebar'
-import type { ChatAttachment, ChatConversationSummary, ChatFocusContext, ChatMessage, ChatStatus } from '@/lib/chat/types'
+import type {
+  ChatAttachment,
+  ChatConversationSummary,
+  ChatFocusContext,
+  ChatMessage,
+  ChatStatus,
+  ToolConfirmationRequest,
+} from '@/lib/chat/types'
 
 const STORAGE_PREFIX = 'mindviz-notes-chat-'
 const MAX_CACHED_MESSAGES = 50
@@ -70,6 +78,8 @@ export interface ChatViewProps {
   onInitialPromptConsumed?: () => void
   onInitialDraftConsumed?: () => void
   onClearFocus?: () => void
+  /** Jump from a tool result to the note, task or deck it refers to. */
+  onOpenToolTarget?: (target: ChatToolTarget) => void
 }
 
 export default function ChatView({
@@ -79,6 +89,7 @@ export default function ChatView({
   onInitialPromptConsumed,
   onInitialDraftConsumed,
   onClearFocus,
+  onOpenToolTarget,
 }: ChatViewProps = {}) {
   const { user } = useAuth()
   const userId = user?.id ?? null
@@ -98,6 +109,12 @@ export default function ChatView({
   const [historyOpen, setHistoryOpen] = useState(false)
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false)
   const [restored, setRestored] = useState(false)
+  /** Conversation id recovered from the local cache, pending validation. */
+  const [restoredConversationId, setRestoredConversationId] = useState<string | null>(null)
+  /** A destructive tool is waiting for the user's explicit approval. */
+  const [pendingToolConfirmation, setPendingToolConfirmation] =
+    useState<ToolConfirmationRequest | null>(null)
+  const toolConfirmationResolverRef = useRef<((approved: boolean) => void) | null>(null)
 
   const abortRef = useRef<AbortController | null>(null)
   const storageKey = userId ? `${STORAGE_PREFIX}${userId}` : null
@@ -133,28 +150,85 @@ export default function ChatView({
       const raw = localStorage.getItem(storageKey)
       if (!raw) return
       const parsed = JSON.parse(raw)
-      if (Array.isArray(parsed) && parsed.length > 0) {
-        setMessages(parsed as ChatMessage[])
+      // New format keeps the conversation identity with the transcript; legacy
+      // caches were a bare message array.
+      if (Array.isArray(parsed)) {
+        if (parsed.length > 0) setMessages(parsed as ChatMessage[])
+      } else if (parsed && Array.isArray(parsed.messages)) {
+        if (parsed.messages.length > 0) setMessages(parsed.messages as ChatMessage[])
+        if (typeof parsed.conversationId === 'string' && parsed.conversationId) {
+          setCurrentConversationId(parsed.conversationId)
+          setRestoredConversationId(parsed.conversationId)
+        }
       }
     } catch {
       // Corrupted cache — start fresh.
     }
   }, [restored, storageKey])
 
+  // A restored conversation must still exist; otherwise the next message would
+  // silently create a new conversation while the old transcript stays on screen.
+  useEffect(() => {
+    if (!restoredConversationId || conversationsLoading || conversations.length === 0) return
+    if (conversations.some((conversation) => conversation.id === restoredConversationId)) {
+      setRestoredConversationId(null)
+      return
+    }
+    setRestoredConversationId(null)
+    setCurrentConversationId(null)
+    setMessages([])
+    if (storageKey) {
+      try {
+        localStorage.removeItem(storageKey)
+      } catch {
+        // ignore
+      }
+    }
+  }, [conversations, conversationsLoading, restoredConversationId, storageKey])
+
   // Persist the transcript (debounced) so partial answers survive a reload.
   useEffect(() => {
     if (!storageKey || messages.length === 0) return
     const timer = setTimeout(() => {
       try {
-        localStorage.setItem(storageKey, JSON.stringify(cacheableMessages(messages)))
+        localStorage.setItem(
+          storageKey,
+          JSON.stringify({
+            conversationId: currentConversationId,
+            messages: cacheableMessages(messages),
+          }),
+        )
       } catch {
         // Quota exceeded — the Supabase copy is the source of truth.
       }
     }, 2000)
     return () => clearTimeout(timer)
-  }, [messages, storageKey])
+  }, [messages, storageKey, currentConversationId])
 
-  useEffect(() => () => abortRef.current?.abort(), [])
+  const resolveToolConfirmation = useCallback((approved: boolean) => {
+    const resolve = toolConfirmationResolverRef.current
+    toolConfirmationResolverRef.current = null
+    setPendingToolConfirmation(null)
+    resolve?.(approved)
+  }, [])
+
+  const requestToolConfirmation = useCallback(
+    (request: ToolConfirmationRequest) =>
+      new Promise<boolean>((resolve) => {
+        toolConfirmationResolverRef.current = resolve
+        setPendingToolConfirmation(request)
+      }),
+    []
+  )
+
+  useEffect(
+    () => () => {
+      toolConfirmationResolverRef.current?.(false)
+      toolConfirmationResolverRef.current = null
+      abortRef.current?.abort()
+    },
+    []
+  )
 
   const clearLocalCache = useCallback(() => {
     if (!storageKey) return
@@ -166,6 +240,7 @@ export default function ChatView({
   }, [storageKey])
 
   const resetConversation = useCallback(() => {
+    resolveToolConfirmation(false)
     abortRef.current?.abort()
     setMessages([])
     setCurrentConversationId(null)
@@ -176,7 +251,7 @@ export default function ChatView({
     setAttachmentError(null)
     setForcedTool(null)
     clearLocalCache()
-  }, [clearLocalCache])
+  }, [clearLocalCache, resolveToolConfirmation])
 
   const handleSelectConversation = useCallback(
     async (id: string) => {
@@ -186,6 +261,7 @@ export default function ChatView({
       }
       abortRef.current?.abort()
       setHistoryOpen(false)
+      clearLocalCache()
       setCurrentConversationId(id)
       setStatus('ready')
       setError(null)
@@ -198,7 +274,7 @@ export default function ChatView({
         setError('This conversation could not be loaded.')
       }
     },
-    [currentConversationId]
+    [clearLocalCache, currentConversationId]
   )
 
   const handleDeleteConversation = useCallback(
@@ -327,6 +403,7 @@ export default function ChatView({
               ),
             }))
           },
+          requestToolConfirmation,
         },
       })
 
@@ -380,15 +457,17 @@ export default function ChatView({
     input,
     messages,
     refreshConversations,
+    requestToolConfirmation,
     status,
     userId,
   ])
 
   const handleStop = useCallback(() => {
+    resolveToolConfirmation(false)
     abortRef.current?.abort()
     abortRef.current = null
     setStatus('ready')
-  }, [])
+  }, [resolveToolConfirmation])
 
   // Handover from the editor: prefill the composer once, then tell the shell.
   const consumedDraftRef = useRef<string | null>(null)
@@ -448,6 +527,9 @@ export default function ChatView({
             focus={focus}
             onClearFocus={onClearFocus}
             onOpenHistory={() => setHistoryOpen(true)}
+            pendingToolConfirmation={pendingToolConfirmation}
+            onResolveToolConfirmation={resolveToolConfirmation}
+            onOpenToolTarget={onOpenToolTarget}
           />
         </div>
       </div>

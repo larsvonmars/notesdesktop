@@ -197,6 +197,8 @@ interface PdfAnnotationEditorProps {
   onChange: (data: PdfAnnotationData) => void
   disabled?: boolean
   noteId?: string | null
+  /** Bumped when a different note payload is hydrated (even if it reuses the same PDF). */
+  dataRevision?: number
   /** Called once after a PDF loads with the full extracted plain text (all pages). */
 }
 
@@ -287,7 +289,7 @@ async function loadPdfJs() {
 
 const PdfAnnotationEditor = forwardRef<PdfAnnotationEditorHandle, PdfAnnotationEditorProps>(
   function PdfAnnotationEditor(
-  { value, onChange, disabled, noteId },
+  { value, onChange, disabled, noteId, dataRevision },
   ref
 ) {
     const toast = useToast()
@@ -1188,8 +1190,11 @@ const PdfAnnotationEditor = forwardRef<PdfAnnotationEditorHandle, PdfAnnotationE
       return () => {
         cancelled = true
       }
+      // The note identity is part of the key: duplicating a PDF note keeps the
+      // same storage path but must load this note's page annotations, and a
+      // payload hydration must re-seed history/undo for the new document.
       // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [value?.pdfStoragePath])
+    }, [value?.pdfStoragePath, noteId, dataRevision])
 
     // ────────────────────────────────────────────────────────
     // Render PDF page to canvas

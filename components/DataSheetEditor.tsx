@@ -75,6 +75,8 @@ interface CellAddress {
 
 interface DataSheetEditorProps {
   initialData?: DataSheetData | null
+  /** Bumped when a different note payload is hydrated. */
+  dataRevision?: number
   onChange?: (data: DataSheetData) => void
   disabled?: boolean
 }
@@ -460,7 +462,7 @@ const SIZE_PRESETS = [
 ]
 
 const DataSheetEditor = forwardRef<DataSheetEditorHandle, DataSheetEditorProps>(
-  ({ initialData, onChange, disabled = false }, ref) => {
+  ({ initialData, dataRevision, onChange, disabled = false }, ref) => {
     // Show size picker when creating a brand-new sheet (no initialData)
     const [showSizePicker, setShowSizePicker] = useState(!initialData)
     const [sizeColsInput, setSizeColsInput] = useState('6')
@@ -495,6 +497,33 @@ const DataSheetEditor = forwardRef<DataSheetEditorHandle, DataSheetEditorProps>(
     const [resizeRowsInput, setResizeRowsInput] = useState('')
     const resizePopoverRef = useRef<HTMLDivElement>(null)
     const resizeColsInputRef = useRef<HTMLInputElement>(null)
+
+    // Adopt the payload of a newly opened note. The parent hydrates note content
+    // in an effect, so the first render after a switch can still carry the
+    // previous sheet; this effect replaces it before the user can edit.
+    const adoptedDataRef = useRef(data)
+    adoptedDataRef.current = data
+    useEffect(() => {
+      if (dataRevision === undefined) return
+      if (!initialData) {
+        setShowSizePicker(true)
+        setData(createEmptySheet())
+        setActiveCell(null)
+        setEditingCell(null)
+        setSelection(null)
+        setFormulaBarValue('')
+        return
+      }
+      if (initialData === adoptedDataRef.current) return
+      setShowSizePicker(false)
+      setData(initialData)
+      setActiveCell(null)
+      setEditingCell(null)
+      setSelection(null)
+      setFormulaBarValue('')
+    // Parent echoes of the editor's own emissions are skipped by reference.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [dataRevision])
 
     // Auto-focus the columns input when size picker shows
     useEffect(() => {

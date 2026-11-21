@@ -13,6 +13,7 @@ import {
 import { useAuth } from '@/lib/auth-context'
 import { getDecks } from './decks'
 import { getUserStats } from './stats'
+import { subscribeToLearnDataChanged } from './events'
 import type { Card, Deck, LearnScreen, UserStats } from './types'
 
 interface LearningContextValue {
@@ -92,6 +93,24 @@ export function LearningProvider({ children }: { children: ReactNode }) {
     void refreshStats()
     void refreshDecks()
   }, [authLoading, user, refreshStats, refreshDecks])
+
+  // Mutations can come from outside this provider (Chat tools, palette). Coalesce
+  // bursts (bulk card import emits once per call) into one refresh.
+  useEffect(() => {
+    let timer: number | null = null
+    const unsubscribe = subscribeToLearnDataChanged(() => {
+      if (timer !== null) window.clearTimeout(timer)
+      timer = window.setTimeout(() => {
+        timer = null
+        void refreshDecks()
+        void refreshStats()
+      }, 120)
+    })
+    return () => {
+      unsubscribe()
+      if (timer !== null) window.clearTimeout(timer)
+    }
+  }, [refreshDecks, refreshStats])
 
   const requestCreateDeck = useCallback(() => {
     setScreen({ kind: 'decks' })

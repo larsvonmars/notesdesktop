@@ -237,6 +237,13 @@ export async function setTaskRecurrence(
  * occurrence and resetting it to "todo". Returns the updated task, or the
  * completed task when the pattern has ended.
  */
+async function markTaskCompleted(id: string): Promise<Task> {
+  return updateTask(id, {
+    status: 'completed',
+    completed_at: new Date().toISOString(),
+  })
+}
+
 export async function completeRecurringTask(id: string): Promise<Task> {
   const { data: taskRow, error: taskError } = await supabase
     .from('tasks')
@@ -247,7 +254,7 @@ export async function completeRecurringTask(id: string): Promise<Task> {
 
   const task = taskRow as Task
   if (!task.is_recurring || !task.recurrence_pattern_id) {
-    return completeTask(id)
+    return markTaskCompleted(id)
   }
 
   const { data: pattern, error: patternError } = await supabase
@@ -256,7 +263,7 @@ export async function completeRecurringTask(id: string): Promise<Task> {
     .eq('id', task.recurrence_pattern_id)
     .maybeSingle()
   if (patternError) throw patternError
-  if (!pattern) return completeTask(id)
+  if (!pattern) return markTaskCompleted(id)
 
   const reference = task.due_date ? new Date(task.due_date) : new Date()
   const next = getNextOccurrenceDate(pattern, reference)
@@ -267,7 +274,7 @@ export async function completeRecurringTask(id: string): Promise<Task> {
       .from('recurrence_patterns')
       .delete()
       .eq('id', task.recurrence_pattern_id)
-    return completeTask(id)
+    return markTaskCompleted(id)
   }
 
   return updateTask(id, {
@@ -493,11 +500,13 @@ export async function deleteTask(id: string): Promise<void> {
   if (error) throw error
 }
 
+/**
+ * Complete a task. Recurring tasks advance to their next occurrence instead of
+ * ending the series, so every entry point (Home, Kanban, Chat, tools) shares the
+ * same semantics.
+ */
 export async function completeTask(id: string): Promise<Task> {
-  return updateTask(id, {
-    status: 'completed',
-    completed_at: new Date().toISOString(),
-  })
+  return completeRecurringTask(id)
 }
 
 export async function uncompleteTask(id: string): Promise<Task> {

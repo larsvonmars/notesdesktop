@@ -5,6 +5,7 @@ import {
   addDays,
   buildAvailabilitySlots,
   describeRecurrence,
+  expandCalendarEvents,
   expandRecurrences,
   getNextOccurrenceDate,
   getStartOfDay,
@@ -153,6 +154,33 @@ describe('expandRecurrences', () => {
     expect(slots.length).toBeGreaterThan(0)
     expect(slots.every((slot) => slot.start >= new Date(2026, 4, 4))).toBe(true)
   })
+
+  it('skips a recurring occurrence cancelled by an exception row', () => {
+    const parent = makeEvent({
+      is_recurring: true,
+      recurrence_pattern_id: 'pattern-1',
+      start_time: new Date(2026, 4, 4, 9, 0).toISOString(),
+      end_time: new Date(2026, 4, 4, 10, 0).toISOString(),
+    })
+    const cancelledOccurrence = makeEvent({
+      id: 'exception-1',
+      is_cancelled: true,
+      parent_event_id: parent.id,
+      start_time: new Date(2026, 4, 6, 9, 0).toISOString(),
+      end_time: new Date(2026, 4, 6, 10, 0).toISOString(),
+    })
+    const slots = expandCalendarEvents(
+      [parent, cancelledOccurrence],
+      [makePattern()],
+      new Date(2026, 4, 4),
+      new Date(2026, 4, 9),
+    )
+
+    expect(slots).toHaveLength(2)
+    expect(slots.some((slot) => new Date(slot.start_time).getDate() === 6)).toBe(false)
+    // Exception rows are never rendered as standalone events.
+    expect(slots.every((slot) => slot.is_occurrence)).toBe(true)
+  })
 })
 
 describe('recurrence helpers', () => {
@@ -160,6 +188,16 @@ describe('recurrence helpers', () => {
     const pattern = makePattern()
     const next = getNextOccurrenceDate(pattern, new Date(2026, 4, 4, 12, 0))
     expect(next?.getDay()).toBe(3)
+  })
+
+  it('keeps the task time of day when advancing a weekly recurrence', () => {
+    // Monday 4 May 2026 09:15, pattern Mon/Wed/Fri -> Wednesday 09:15.
+    const pattern = makePattern()
+    const next = getNextOccurrenceDate(pattern, new Date(2026, 4, 4, 9, 15, 30))
+    expect(next?.getDay()).toBe(3)
+    expect(next?.getHours()).toBe(9)
+    expect(next?.getMinutes()).toBe(15)
+    expect(next?.getSeconds()).toBe(30)
   })
 
   it('returns null when the pattern has ended', () => {
@@ -259,12 +297,12 @@ describe('generatePlan', () => {
     expect(result.scheduledItems[0].estimated_minutes).toBe(30)
   })
 
-  it('places tasks after the previous one when free time runs out', () => {
+  it('reports work that does not fit instead of scheduling outside the scope', () => {
     const result = generatePlan({
       config: {
         scope: 'custom',
         customStart: new Date(2026, 4, 4, 9, 0).toISOString(),
-        customEnd: new Date(2026, 4, 4, 10, 0).toISOString(),
+        customEnd: new Date(2026, 4, 4, 11, 0).toISOString(),
         availabilityStart: '09:00',
         availabilityEnd: '17:00',
         breakMinutes: 0,
@@ -277,10 +315,14 @@ describe('generatePlan', () => {
       recurrencePatterns: [],
     })
 
-    expect(result.scheduledItems).toHaveLength(2)
-    expect(
-      new Date(result.scheduledItems[1].scheduled_start!).getTime(),
-    ).toBeGreaterThanOrEqual(new Date(result.scheduledItems[0].scheduled_end!).getTime())
+    expect(result.scheduledItems).toHaveLength(1)
+    expect(result.unscheduledItems).toHaveLength(1)
+    expect(result.unscheduledItems[0].task_id).toBe('b')
+    expect(result.unscheduledItems[0].scheduled_start).toBeNull()
+    const start = new Date(result.scheduledItems[0].scheduled_start!)
+    const end = new Date(result.scheduledItems[0].scheduled_end!)
+    expect(start.getTime()).toBeGreaterThanOrEqual(new Date(2026, 4, 4, 9, 0).getTime())
+    expect(end.getTime()).toBeLessThanOrEqual(new Date(2026, 4, 4, 11, 0).getTime())
   })
 })
 
@@ -326,9 +368,17 @@ describe('buildIcs', () => {
     expect(ics).toContain('END:VCALENDAR')
   })
 
-  it('writes all-day events as date values', () => {
-    const ics = buildIcs([makeEvent({ is_all_day: true })])
-    expect(ics).toContain('DTSTART;VALUE=DATE:')
+  it('writes all-day events as local date values with an exclusive end', () => {
+    const ics = buildIcs([
+      makeEvent({
+        is_all_day: true,
+        start_time: new Date(2026, 4, 4, 0, 0).toISOString(),
+        end_time: new Date(2026, 4, 4, 23, 59).toISOString(),
+      }),
+    ])
+    expect(ics).toContain('DTSTART;VALUE=DATE:20260504')
+    // RFC 5545 DTEND is exclusive: the stored last day is May 4, so export May 5.
+    expect(ics).toContain('DTEND;VALUE=DATE:20260505')
     expect(ics).not.toContain('RRULE')
   })
 })

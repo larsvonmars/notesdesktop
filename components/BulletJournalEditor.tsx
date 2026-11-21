@@ -84,6 +84,8 @@ interface LocalEntry {
 interface BulletJournalEditorProps {
   noteId: string | null
   initialData?: BulletJournalData | null
+  /** Bumped when a different note payload is hydrated. */
+  dataRevision?: number
   onChange?: (data: BulletJournalData) => void
   disabled?: boolean
 }
@@ -153,7 +155,7 @@ const MONTHS = [
 // ============================================================================
 
 const BulletJournalEditor = forwardRef<BulletJournalEditorHandle, BulletJournalEditorProps>(
-  function BulletJournalEditor({ noteId, initialData, onChange, disabled = false }, ref) {
+  function BulletJournalEditor({ noteId, initialData, dataRevision, onChange, disabled = false }, ref) {
     const today = toISODate(new Date())
     const [entries, setEntries] = useState<LocalEntry[]>(() => initialData?.entries ?? [emptyEntry(today, 0)])
     const [activeDate, setActiveDate] = useState<string>(initialData?.activeDate ?? today)
@@ -167,6 +169,29 @@ const BulletJournalEditor = forwardRef<BulletJournalEditorHandle, BulletJournalE
       activeDate,
       view,
     }), [entries, activeDate, view])
+
+    // Adopt the payload of a newly opened note. The editor instance is reused
+    // across note switches, so without this it would keep (and later save) the
+    // previous journal's entries against the new note id.
+    const dataRef = useRef(buildData())
+    dataRef.current = buildData()
+    useEffect(() => {
+      if (dataRevision === undefined) return
+      if (initialData) {
+        if (initialData === dataRef.current) return
+        setEntries(initialData.entries.map((entry) => ({ ...entry, _key: entry._key || makeKey() })))
+        setActiveDate(initialData.activeDate)
+        setView(initialData.view)
+      } else {
+        const day = toISODate(new Date())
+        setEntries([emptyEntry(day, 0)])
+        setActiveDate(day)
+        setView('daily')
+      }
+    // Only a hydration signal should replace local state; parent echoes of the
+    // editor's own emissions must not reset the cursor or the scroll position.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [dataRevision])
 
     // Notify parent of changes
     useEffect(() => {

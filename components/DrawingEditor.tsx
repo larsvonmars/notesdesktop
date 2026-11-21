@@ -55,6 +55,8 @@ export interface DrawingData {
 interface DrawingEditorProps {
   value: DrawingData | null
   onChange: (data: DrawingData) => void
+  /** Bumped when a different note payload is hydrated; resets undo history. */
+  seedRevision?: number
   disabled?: boolean
 }
 
@@ -137,7 +139,7 @@ const MAX_PRESSURE_SENSITIVITY = 2
 const PRESSURE_SENSITIVITY_STEP = 0.1
 
 const DrawingEditor = forwardRef<DrawingEditorHandle, DrawingEditorProps>(
-  ({ value, onChange, disabled = false }, ref) => {
+  ({ value, onChange, seedRevision, disabled = false }, ref) => {
     const canvasRef = useRef<HTMLCanvasElement>(null)
     const backgroundCanvasRef = useRef<HTMLCanvasElement>(null)
     const isMobile = useIsMobile()
@@ -398,15 +400,20 @@ const DrawingEditor = forwardRef<DrawingEditorHandle, DrawingEditorProps>(
       drawBackground()
     }, [drawBackground])
 
-    // Sync with external value
+    // Sync with external value. A different value means a different note (or an
+    // adopted external change), so the previous document's undo stack must not
+    // survive — otherwise Undo would copy drawing A into drawing B.
+    const drawingDataRef = useRef(drawingData)
+    drawingDataRef.current = drawingData
     useEffect(() => {
-      if (value && value !== drawingData) {
-        setDrawingData(value)
-        const pageIndex = value.currentPage || 0
-        setCurrentPageIndex(pageIndex)
-        setBackgroundType(value.pages[pageIndex]?.background || 'none')
-      }
-    }, [value])
+      if (!value || value === drawingDataRef.current) return
+      setDrawingData(value)
+      setHistory([value])
+      setHistoryIndex(0)
+      const pageIndex = value.currentPage || 0
+      setCurrentPageIndex(pageIndex)
+      setBackgroundType(value.pages[pageIndex]?.background || 'none')
+    }, [value, seedRevision])
 
     const selectPenProfile = useCallback((profile: PenProfile) => {
       setPenProfile(profile)

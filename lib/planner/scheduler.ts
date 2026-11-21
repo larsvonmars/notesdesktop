@@ -178,9 +178,9 @@ export function generatePlan(input: SchedulerInput): SchedulerResult {
   }
 
   const scheduledItems: ScheduledPlanItem[] = []
+  const unscheduledItems: ScheduledPlanItem[] = []
   let order = 0
   let totalScheduledMinutes = 0
-  let overflowCursor: Date | null = null
   const usesScoredPlacement = strategy.name !== 'standard'
 
   const pushItem = (task: Task, start: Date, minutes: number, hasEstimate: boolean) => {
@@ -196,7 +196,6 @@ export function generatePlan(input: SchedulerInput): SchedulerResult {
       estimated_minutes: hasEstimate ? minutes : null,
     })
     totalScheduledMinutes += minutes
-    overflowCursor = end
     scoringContext.scheduled_so_far.push({
       task,
       slot_start: start,
@@ -251,8 +250,18 @@ export function generatePlan(input: SchedulerInput): SchedulerResult {
     }
 
     if (!placed) {
-      const base = overflowCursor ?? scope.start
-      pushItem(task, addMinutes(base, config.breakMinutes), minutes, hasEstimate)
+      // Never invent a slot outside the requested scope/availability: report the
+      // task as unscheduled so the review screen and the saved plan stay honest.
+      unscheduledItems.push({
+        task_id: task.id,
+        task_title: task.title,
+        task_priority: task.priority,
+        scheduled_start: null,
+        scheduled_end: null,
+        sort_order: order++,
+        status: 'pending',
+        estimated_minutes: hasEstimate ? minutes : null,
+      })
     }
   }
 
@@ -273,7 +282,7 @@ export function generatePlan(input: SchedulerInput): SchedulerResult {
     scopeStart: scope.start.toISOString(),
     scopeEnd: scope.end.toISOString(),
     scheduledItems,
-    unscheduledItems: [],
+    unscheduledItems,
     totalFreeMinutes,
     totalScheduledMinutes,
     remainingSlots: freeSlots,

@@ -39,8 +39,9 @@ import { createNote, getNote, type NoteSummary, type NoteType } from '@/lib/note
 import { getLastOpenedNote } from '@/lib/note-activity'
 import type { Folder } from '@/lib/folders'
 import type { Project } from '@/lib/projects'
-import { completeTask, getTasks, uncompleteTask, type Task } from '@/lib/tasks'
-import { getEvents, type CalendarEvent } from '@/lib/events'
+import { completeTask, getTasks, updateTask, type Task } from '@/lib/tasks'
+import { getEvents, getRecurrencePatterns, type CalendarEvent } from '@/lib/events'
+import { expandCalendarEvents } from '@/lib/planner/date-utils'
 import {
   getNoteTypePresentation,
   getOrderedNoteTypePresentations,
@@ -463,8 +464,15 @@ export default function HomeDashboard({
 
     void Promise.allSettled([
       getTasks({ includeArchived: false, includeCompleted: false }),
-      getEvents({ startDate: start, endDate: end }),
-    ]).then(([taskResult, eventResult]) => {
+      getEvents({
+        startDate: start,
+        endDate: end,
+        includeRecurring: true,
+        // Cancelled exception rows let expansion skip single occurrences.
+        includeCancelled: true,
+      }),
+      getRecurrencePatterns(),
+    ]).then(([taskResult, eventResult, patternResult]) => {
       if (cancelled) return
 
       let unavailable = false
@@ -477,7 +485,19 @@ export default function HomeDashboard({
       }
 
       if (eventResult.status === 'fulfilled') {
-        setEvents(eventResult.value)
+        // Recurring templates only store their original date; expand them so a
+        // weekly class created months ago still appears in Today/Next events.
+        const patterns = patternResult.status === 'fulfilled' ? patternResult.value : []
+        const expanded = expandCalendarEvents(eventResult.value, patterns, start, end)
+        // `includeRecurring` also returns templates outside the window; drop any
+        // occurrence (or unresolved template) that is not actually in range.
+        setEvents(
+          expanded.filter((event) => {
+            if (event.is_cancelled) return false
+            const time = new Date(event.start_time).getTime()
+            return time >= start.getTime() && time <= end.getTime()
+          }),
+        )
       } else {
         console.warn('Home: calendar events could not be loaded', eventResult.reason)
         unavailable = true
@@ -551,7 +571,13 @@ export default function HomeDashboard({
         action: {
           label: 'Undo',
           onClick: () => {
-            void uncompleteTask(task.id)
+            void updateTask(task.id, {
+              status: 'todo',
+              completed_at: null,
+              // Recurring completion advanced the due date; undo puts the
+              // occurrence (and its original time) back.
+              due_date: task.due_date,
+            })
               .then(() => {
                 setTasks((previous) =>
                   previous.some((candidate) => candidate.id === task.id)

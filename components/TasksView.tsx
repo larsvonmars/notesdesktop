@@ -35,6 +35,7 @@ import {
   type TaskStatus,
 } from '@/lib/tasks'
 import {
+  cancelEventOccurrence,
   deleteEvent,
   getEvents,
   getRecurrencePatterns,
@@ -77,6 +78,7 @@ import TimetableView from './planner/TimetableView'
 type TaskMode = 'list' | 'board'
 
 const SIDEBAR_STORAGE_KEY = 'planner:sidebar-collapsed'
+const SECTION_STORAGE_KEY = 'planner:section'
 
 /** Bound network calls so the planner never sits on a skeleton indefinitely. */
 function withTimeout<T>(promise: Promise<T>, ms: number): Promise<T> {
@@ -144,10 +146,15 @@ const SECTION_SHORTCUTS: Record<string, PlannerSection> = {
 export interface TasksViewProps {
   notes: NoteSummary[]
   projects: Project[]
+  /** Tasks belonging to archived projects stay hidden with the rest of that project. */
+  archivedProjectIds?: Set<string>
   onSelectNote: (note: NoteSummary) => void
   onOpenProject: (projectId: string) => void
   /** Optional deep-link target (e.g. from the command palette). */
   initialSection?: PlannerSection
+  /** Open the task detail panel for this task (e.g. from a Chat tool result). */
+  focusTaskId?: string | null
+  onFocusTaskConsumed?: () => void
   /** Notifies the shell so breadcrumbs can mirror the active section. */
   onSectionChange?: (section: PlannerSection) => void
 }
@@ -155,15 +162,41 @@ export interface TasksViewProps {
 export default function TasksView({
   notes,
   projects,
+  archivedProjectIds,
   onSelectNote,
   onOpenProject,
   initialSection,
+  focusTaskId,
+  onFocusTaskConsumed,
   onSectionChange,
 }: TasksViewProps) {
   const toast = useToast()
 
-  const [section, setSection] = useState<PlannerSection>(initialSection ?? 'overview')
+  const [section, setSection] = useState<PlannerSection>(() => {
+    if (initialSection) return initialSection
+    if (typeof window === 'undefined') return 'overview'
+    try {
+      const stored = window.localStorage.getItem(SECTION_STORAGE_KEY)
+      if (
+        stored === 'overview' ||
+        stored === 'tasks' ||
+        stored === 'starred' ||
+        stored === 'projects' ||
+        stored === 'calendar' ||
+        stored === 'timetable' ||
+        stored === 'plan' ||
+        stored === 'settings'
+      ) {
+        return stored
+      }
+    } catch {
+      // ignore
+    }
+    return 'overview'
+  })
   const [taskMode, setTaskMode] = useState<TaskMode>('list')
+  /** Day currently shown by the Calendar section (drives header creation). */
+  const [calendarFocusDate, setCalendarFocusDate] = useState<Date | null>(null)
 
   const [tasks, setTasks] = useState<Task[]>([])
   const [events, setEvents] = useState<CalendarEvent[]>([])
@@ -238,7 +271,13 @@ export default function TasksView({
     ])
 
     if (taskResult.status === 'fulfilled') {
-      setTasks(taskResult.value)
+      const visibleTasks =
+        archivedProjectIds && archivedProjectIds.size > 0
+          ? taskResult.value.filter(
+              (task) => !task.project_id || !archivedProjectIds.has(task.project_id),
+            )
+          : taskResult.value
+      setTasks(visibleTasks)
     } else {
       console.error('Tasks could not be loaded:', taskResult.reason)
       setLoadError('Tasks could not be loaded. Check your connection and try again.')
@@ -262,7 +301,7 @@ export default function TasksView({
     }
 
     setIsLoading(false)
-  }, [])
+  }, [archivedProjectIds])
 
   // Plans load independently so a slow planner-table round-trip never blocks
   // the task and calendar data from rendering.
@@ -284,12 +323,35 @@ export default function TasksView({
 
   useEffect(() => {
     onSectionChange?.(section)
+    try {
+      window.localStorage.setItem(SECTION_STORAGE_KEY, section)
+    } catch {
+      // ignore
+    }
   }, [section, onSectionChange])
+
+  // Home's "Open planner" is a one-shot deep link to the task list; ordinary
+  // rail/palette visits keep whatever section the user was last in.
+  useEffect(() => {
+    if (initialSection) setSection(initialSection)
+  }, [initialSection])
+
+  // A Chat tool result can deep-link to one task's detail panel.
+  useEffect(() => {
+    if (!focusTaskId) return
+    setSection('tasks')
+    setDetailTaskId(focusTaskId)
+    onFocusTaskConsumed?.()
+  }, [focusTaskId, onFocusTaskConsumed])
 
   useEffect(() => {
     const handler = (event: KeyboardEvent) => {
       if (!event.altKey || event.ctrlKey || event.metaKey || event.shiftKey) return
-      const target = SECTION_SHORTCUTS[event.key]
+      // macOS Option+digit reports punctuation (`¡ ™ £ …`) via event.key, so
+      // fall back to the physical digit key — the same workaround the editor
+      // uses for international layouts.
+      const digitFromCode = event.code.match(/^Digit([1-8])$/)?.[1]
+      const target = SECTION_SHORTCUTS[event.key] ?? (digitFromCode ? SECTION_SHORTCUTS[digitFromCode] : undefined)
       if (!target) return
       const element = event.target as HTMLElement | null
       if (
@@ -376,12 +438,20 @@ export default function TasksView({
       }
 
       if (notifications.upcomingEventAlerts) {
-        for (const event of events) {
+        // Expand recurrences into the reminder window; iterating the raw rows
+        // only sees a recurring series' original date, so weekly events never
+        // produced a "starting soon" reminder.
+        const windowEnd = new Date(
+          now.getTime() + notifications.eventReminderMinutes * 60_000,
+        )
+        for (const event of expandCalendarEvents(events, recurrencePatterns, now, windowEnd)) {
           if (event.is_cancelled) continue
           const start = new Date(event.start_time)
           const minutesUntil = (start.getTime() - now.getTime()) / 60_000
           if (minutesUntil < 0 || minutesUntil > notifications.eventReminderMinutes) continue
-          const key = `event:${event.id}:${start.toISOString()}`
+          const sourceId =
+            (event as CalendarEvent & { source_event_id?: string }).source_event_id ?? event.id
+          const key = `event:${sourceId}:${start.toISOString()}`
           if (notifiedRef.current.has(key)) continue
           upcoming.push(event)
         }
@@ -410,11 +480,24 @@ export default function TasksView({
       window.clearTimeout(startTimer)
       window.clearInterval(interval)
     }
-  }, [notifications, tasks, events, toast])
+  }, [notifications, tasks, events, recurrencePatterns, toast])
 
   // ── Derived data ───────────────────────────────────────────────────
 
   const openTasks = useMemo(() => tasks.filter(isTaskOpen), [tasks])
+
+  /**
+   * Dated events for the next seven days, with recurring series expanded. The
+   * raw rows only carry each series' original date, which made the header and
+   * sidebar counts understate (or entirely miss) regular events.
+   */
+  const upcomingExpandedEvents = useMemo(() => {
+    const start = getStartOfDay(new Date())
+    const end = addDays(start, 7)
+    return expandCalendarEvents(events, recurrencePatterns, start, end).filter(
+      (event) => !event.is_cancelled,
+    )
+  }, [events, recurrencePatterns])
 
   const filteredTasks = useMemo(
     () =>
@@ -539,6 +622,8 @@ export default function TasksView({
           projectId:
             projectFilter !== 'all' && projectFilter !== 'none' ? projectFilter : undefined,
           taskListId: listFilter !== 'all' && listFilter !== 'none' ? listFilter : undefined,
+          // Tasks added from the Starred section must actually appear there.
+          isStarred: section === 'starred',
         })
         setTasks((current) => [created, ...current])
         toast.push({ title: 'Task added', description: created.title, variant: 'success' })
@@ -547,7 +632,7 @@ export default function TasksView({
         toast.push({ title: 'Could not add task', variant: 'error' })
       }
     },
-    [listFilter, projectFilter, toast],
+    [listFilter, projectFilter, section, toast],
   )
 
   const handleQuickAddToProject = useCallback(
@@ -570,8 +655,22 @@ export default function TasksView({
       const completedAt =
         status === 'completed' ? task.completed_at ?? new Date().toISOString() : null
       try {
+        // Dropping a recurring task on "Completed" means "check off this
+        // occurrence", exactly like the list checkbox — it must advance the
+        // series rather than silently ending it.
+        if (status === 'completed' && task.is_recurring) {
+          const updated = await completeRecurringTask(task.id)
+          mergeTask(updated)
+          void recordCompletion(task).catch(() => undefined)
+          await reorderTasks(
+            orderedIds.filter((id) => id !== task.id).map((id, index) => ({ id, sort_order: index })),
+          )
+          return
+        }
+
         const updated = await updateTask(task.id, { status, completed_at: completedAt })
         mergeTask(updated)
+        if (status === 'completed') void recordCompletion(updated).catch(() => undefined)
         await reorderTasks(orderedIds.map((id, index) => ({ id, sort_order: index })))
         setTasks((current) =>
           current.map((candidate) => {
@@ -707,6 +806,42 @@ export default function TasksView({
     [handleEventDeleted, resolveSourceEvent, toast],
   )
 
+  const handleDeleteEventOccurrence = useCallback(
+    async (event: CalendarEvent) => {
+      const source = resolveSourceEvent(event)
+      const start = new Date(event.start_time)
+      const end = new Date(event.end_time)
+      try {
+        await cancelEventOccurrence(source, start, end)
+        // Index the new exception immediately so the calendar drops this date
+        // without waiting for a full reload.
+        const exceptionId = `cancelled-${source.id}-${start.toISOString()}`
+        setEvents((current) => [
+          ...current,
+          {
+            ...source,
+            id: exceptionId,
+            parent_event_id: source.id,
+            is_recurring: false,
+            recurrence_pattern_id: null,
+            is_cancelled: true,
+            start_time: start.toISOString(),
+            end_time: end.toISOString(),
+          },
+        ])
+        toast.push({
+          title: 'Occurrence deleted',
+          description: source.title,
+          variant: 'success',
+        })
+      } catch (error) {
+        console.error('Deleting occurrence failed:', error)
+        toast.push({ title: 'Could not delete occurrence', variant: 'error' })
+      }
+    },
+    [resolveSourceEvent, toast],
+  )
+
   const handleTaskSaved = useCallback(
     (task: Task, isNew: boolean) => {
       setTasks((current) =>
@@ -726,6 +861,19 @@ export default function TasksView({
       return next
     })
   }, [])
+
+  const refreshTasks = useCallback(async () => {
+    try {
+      const next = await getTasks({ includeArchived: false, includeCompleted: true })
+      setTasks(
+        archivedProjectIds && archivedProjectIds.size > 0
+          ? next.filter((task) => !task.project_id || !archivedProjectIds.has(task.project_id))
+          : next,
+      )
+    } catch (error) {
+      console.warn('Could not refresh tasks:', error)
+    }
+  }, [archivedProjectIds])
 
   const handleUpdateNotifications = useCallback((update: Partial<NotificationSettings>) => {
     setNotifications((current) => {
@@ -763,13 +911,13 @@ export default function TasksView({
   const headerCounts = useMemo(
     () => ({
       open: openTasks.length,
-      events: events.filter((event) => !event.is_cancelled).length,
+      events: upcomingExpandedEvents.length,
       overdue: openTasks.filter(
         (task) =>
           task.due_date && new Date(task.due_date).getTime() < getStartOfDay(new Date()).getTime(),
       ).length,
     }),
-    [openTasks, events],
+    [openTasks, upcomingExpandedEvents],
   )
 
   const starredTasks = useMemo(() => tasks.filter((task) => task.is_starred), [tasks])
@@ -777,7 +925,6 @@ export default function TasksView({
   const sidebarCounts = useMemo(() => {
     const now = new Date()
     const todayStart = getStartOfDay(now)
-    const weekEnd = addDays(todayStart, 7)
     const projectIdsWithTasks = new Set(
       tasks.filter((task) => task.project_id && !task.is_archived).map((task) => task.project_id),
     )
@@ -799,11 +946,7 @@ export default function TasksView({
       open: openTasks.length,
       starred: tasks.filter((task) => task.is_starred && isTaskOpen(task)).length,
       projects: localProjects.filter((project) => projectIdsWithTasks.has(project.id)).length,
-      upcomingEvents: events.filter((event) => {
-        if (event.is_cancelled) return false
-        const start = new Date(event.start_time)
-        return start >= todayStart && start <= weekEnd
-      }).length,
+      upcomingEvents: upcomingExpandedEvents.length,
       overdue: openTasks.filter(
         (task) => task.due_date && new Date(task.due_date).getTime() < todayStart.getTime(),
       ).length,
@@ -813,7 +956,7 @@ export default function TasksView({
       freeHours: Math.round(availableMinutes / 60),
       activePlanProgress: planProgress,
     }
-  }, [openTasks, tasks, localProjects, events, plans, availableMinutes])
+  }, [openTasks, tasks, localProjects, upcomingExpandedEvents, plans, availableMinutes])
 
   return (
     <div className="planner-shell flex h-full min-h-0">
@@ -852,7 +995,9 @@ export default function TasksView({
                 size="md"
                 icon={CalendarPlus}
                 className="h-11 sm:h-9"
-                onClick={() => openNewEvent()}
+                onClick={() =>
+                  openNewEvent(section === 'calendar' ? calendarFocusDate ?? undefined : undefined)
+                }
               >
                 New event
               </Button>
@@ -862,7 +1007,9 @@ export default function TasksView({
                 size="md"
                 icon={Plus}
                 className="h-11 sm:h-9"
-                onClick={() => openNewTask()}
+                onClick={() =>
+                  openNewTask(section === 'calendar' ? calendarFocusDate ?? undefined : undefined)
+                }
               >
                 New task
               </Button>
@@ -1044,6 +1191,7 @@ export default function TasksView({
                   notes={notes}
                   recurrencePatterns={recurrencePatterns}
                   starredOnly
+                  defaultStatusFilter="all"
                   emptyTitle="No starred tasks"
                   emptyDescription="Star a task to keep it within easy reach."
                   onOpenTask={(task) => setDetailTaskId(task.id)}
@@ -1065,9 +1213,11 @@ export default function TasksView({
                 projects={localProjects}
                 display={display}
                 onViewChange={(view) => handleUpdateDisplay({ defaultCalendarView: view })}
+                onDateChange={setCalendarFocusDate}
                 onNewEvent={openNewEvent}
                 onEditEvent={openEditEvent}
                 onDeleteEvent={(event) => void handleDeleteEvent(event)}
+                onDeleteEventOccurrence={(event) => void handleDeleteEventOccurrence(event)}
                 onNewTask={(dueDate) => openNewTask(dueDate)}
                 onOpenTask={(task) => setDetailTaskId(task.id)}
                 onExport={handleExportIcs}
@@ -1094,6 +1244,7 @@ export default function TasksView({
                 onPlanningModeChange={(mode) => handleUpdateDisplay({ planningMode: mode })}
                 onOpenTask={(task) => setDetailTaskId(task.id)}
                 onPlansChanged={() => void loadPlans()}
+                onTasksChanged={() => void refreshTasks()}
               />
             )}
 
@@ -1159,6 +1310,13 @@ export default function TasksView({
         isOpen={taskModalOpen}
         task={editingTask}
         defaultDueDate={taskDefaultDue}
+        defaultProjectId={
+          projectFilter !== 'all' && projectFilter !== 'none' ? projectFilter : undefined
+        }
+        defaultTaskListId={
+          listFilter !== 'all' && listFilter !== 'none' ? listFilter : undefined
+        }
+        defaultStarred={section === 'starred'}
         projects={localProjects}
         notes={notes}
         taskLists={taskLists}

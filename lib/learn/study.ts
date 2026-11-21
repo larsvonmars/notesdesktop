@@ -11,6 +11,7 @@ import {
   type XPBreakdown,
 } from './gamification'
 import type { BadgeId, StudyMode } from './types'
+import { notifyLearnDataChanged } from './events'
 
 export interface CompleteSessionInput {
   deckId: string
@@ -176,6 +177,8 @@ export async function completeSession(
     if (code !== '23505') throw badgesResult.error
   }
 
+  notifyLearnDataChanged()
+
   return {
     xpEarned,
     newBadges,
@@ -238,9 +241,13 @@ export async function rateCard(
       due_date: due.toISOString().slice(0, 10),
       correct_count: quality >= 2 ? correctCount + 1 : correctCount,
       incorrect_count: quality >= 2 ? incorrectCount : incorrectCount + 1,
+      // Mastery is driven by the spaced-repetition interval so reviewing cards
+      // actually moves the mastery bars in Learn, Home and the rail badge.
+      mastered: newInterval >= 21,
     })
     .eq('id', cardId)
     .eq('user_id', userId)
 
   if (error) throw error
+  notifyLearnDataChanged()
 }

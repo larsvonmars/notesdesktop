@@ -1,6 +1,7 @@
 import { supabase } from '@/lib/supabase'
 import { mapCard, requireUserId } from './db'
 import type { Card } from './types'
+import { notifyLearnDataChanged } from './events'
 
 /** Strip PostgREST filter delimiters so user input cannot break the `or` filter. */
 function sanitizeSearchTerm(query: string): string {
@@ -39,6 +40,7 @@ export async function createCard(input: {
     .single()
 
   if (error) throw error
+  notifyLearnDataChanged()
   return mapCard(data)
 }
 
@@ -63,6 +65,7 @@ export async function createCards(
     .select()
 
   if (error) throw error
+  notifyLearnDataChanged()
   return (data ?? []).map(mapCard)
 }
 
@@ -99,11 +102,13 @@ export async function updateCard(
     .update(payload)
     .eq('id', id)
   if (error) throw error
+  notifyLearnDataChanged()
 }
 
 export async function deleteCard(id: string): Promise<void> {
   const { error } = await supabase.from('learn_cards').delete().eq('id', id)
   if (error) throw error
+  notifyLearnDataChanged()
 }
 
 export async function searchCards(

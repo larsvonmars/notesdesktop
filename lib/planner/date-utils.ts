@@ -314,6 +314,19 @@ export function expandCalendarEvents(
   const patternById = new Map(patterns.map((pattern) => [pattern.id, pattern]))
   const result: ExpandedEvent[] = []
 
+  // Cancelled children are exception rows, not standalone events. Index their
+  // local calendar day so the matching parent occurrence can be skipped.
+  const cancelledOccurrenceKeys = new Set<string>()
+  for (const event of events) {
+    if (!event.parent_event_id || !event.is_cancelled) continue
+    const start = new Date(event.start_time)
+    cancelledOccurrenceKeys.add(
+      `${event.parent_event_id}|${start.getFullYear()}-${start.getMonth() + 1}-${start.getDate()}`,
+    )
+  }
+  const occurrenceKey = (parentId: string, start: Date) =>
+    `${parentId}|${start.getFullYear()}-${start.getMonth() + 1}-${start.getDate()}`
+
   const pushOriginal = (event: CalendarEvent) => {
     result.push({
       ...event,
@@ -324,6 +337,8 @@ export function expandCalendarEvents(
   }
 
   for (const event of events) {
+    // Exception rows are consumed by the parent expansion below.
+    if (event.parent_event_id) continue
     if (!event.is_recurring || !event.recurrence_pattern_id) {
       pushOriginal(event)
       continue
@@ -342,6 +357,7 @@ export function expandCalendarEvents(
     }
 
     for (const slot of occurrences) {
+      if (cancelledOccurrenceKeys.has(occurrenceKey(event.id, slot.start))) continue
       const key = `${event.id}__${slot.start.getFullYear()}-${slot.start.getMonth() + 1}-${slot.start.getDate()}`
       result.push({
         ...event,
@@ -376,17 +392,29 @@ export function getNextOccurrenceDate(pattern: RecurrencePattern, after: Date): 
         const sorted = [...pattern.days_of_week].sort((a, b) => a - b)
         const afterDay = after.getDay()
         const afterDate = getStartOfDay(after)
+        // Keep the task's time of day: a 09:00 Monday task must move to the next
+        // Monday at 09:00, not to midnight.
+        const keepTime = (day: Date) => {
+          const candidate = new Date(day)
+          candidate.setHours(
+            after.getHours(),
+            after.getMinutes(),
+            after.getSeconds(),
+            after.getMilliseconds(),
+          )
+          return candidate
+        }
 
         for (const dow of sorted) {
           if (dow > afterDay) {
-            const candidate = addDays(afterDate, dow - afterDay)
+            const candidate = keepTime(addDays(afterDate, dow - afterDay))
             if (!patternEnd || candidate <= patternEnd) return candidate
           }
         }
 
         const nextWeekSunday = addDays(afterDate, 7 * interval - afterDay)
         for (const dow of sorted) {
-          const candidate = addDays(nextWeekSunday, dow)
+          const candidate = keepTime(addDays(nextWeekSunday, dow))
           if (!patternEnd || candidate <= patternEnd) return candidate
         }
         return null

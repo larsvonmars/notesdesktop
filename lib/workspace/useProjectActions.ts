@@ -95,9 +95,19 @@ export function useProjectActions({
     try {
       await deleteProject(projectId)
       setProjects(prev => prev.filter(p => p.id !== projectId))
-      // If we were viewing the deleted project, reset selection
-      if (selectedProjectId === projectId) {
-        setSelectedProjectId(null)
+      // If the deleted project (or one of its folders/notes) was open, leave the
+      // project dashboard — otherwise the content area renders nothing because
+      // the view still requires a selected project.
+      const folderInProject = selectedFolderId
+        ? folders.find((folder) => folder.id === selectedFolderId)?.project_id === projectId
+        : false
+      if (
+        selectedProjectId === projectId ||
+        selectedNote?.project_id === projectId ||
+        folderInProject
+      ) {
+        applyFolderSelection(null)
+        if (activeView === 'projects') setActiveView('notes')
       }
       // Reload folders and notes since they may have been orphaned
       loadFolders()

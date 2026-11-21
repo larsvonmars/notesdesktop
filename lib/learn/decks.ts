@@ -2,6 +2,7 @@ import { supabase } from '@/lib/supabase'
 import type { LearnDeckWithCountsRow } from '@/lib/database.types'
 import { mapDeckSummary, requireUserId } from './db'
 import type { Deck } from './types'
+import { notifyLearnDataChanged } from './events'
 
 /** Decks with card/mastery counts and last-studied timestamps. */
 export async function getDecks(): Promise<Deck[]> {
@@ -88,6 +89,8 @@ export async function createDeck(input: {
 
   if (error) throw error
 
+  notifyLearnDataChanged()
+
   return {
     id: data.id,
     title: data.title,
@@ -108,9 +111,11 @@ export async function updateDeck(
     .eq('id', id)
 
   if (error) throw error
+  notifyLearnDataChanged()
 }
 
 export async function deleteDeck(id: string): Promise<void> {
   const { error } = await supabase.from('learn_decks').delete().eq('id', id)
   if (error) throw error
+  notifyLearnDataChanged()
 }

@@ -1,6 +1,15 @@
 'use client'
 
-import { useState, useEffect, useCallback, useMemo, useRef, useDeferredValue } from 'react'
+import {
+  forwardRef,
+  useImperativeHandle,
+  useState,
+  useEffect,
+  useCallback,
+  useMemo,
+  useRef,
+  useDeferredValue,
+} from 'react'
 import dynamic from 'next/dynamic'
 import DOMPurify from 'dompurify'
 import {
@@ -36,6 +45,7 @@ import MindmapEditor, {
   type MindmapData
 } from './MindmapEditor'
 import { getMindmapTemplate } from '../lib/mindmap-templates'
+import { extractNoteLinkIdsFromContent } from '../lib/note-link-extraction'
 import BulletJournalEditor, {
   type BulletJournalEditorHandle,
   type BulletJournalData
@@ -152,6 +162,12 @@ interface NoteEditorProps {
   /** Reports unsaved edits so the workspace can avoid overwriting them. */
   onDirtyChange?: (dirty: boolean) => void
   /**
+   * Receives the imperative editor API. Used instead of a ref because this
+   * component is loaded through `next/dynamic`, whose wrapper does not forward
+   * refs in React 18.
+   */
+  registerHandle?: (handle: NoteEditorHandle | null) => void
+  /**
    * Bump to make the editor adopt the current `note` prop again. The editor is
    * keyed on the note id, so plain prop updates are ignored by design.
    */
@@ -249,17 +265,6 @@ const readImageFileAsDataUrl = (file: File): Promise<string> => {
   })
 }
 
-const extractNoteLinkIdsFromHtml = (htmlContent: string): string[] => {
-  if (!htmlContent) return []
-
-  const parser = new DOMParser()
-  const doc = parser.parseFromString(htmlContent, 'text/html')
-  const linkElements = doc.querySelectorAll('[data-block-type="note-link"]')
-
-  return Array.from(linkElements)
-    .map(el => el.getAttribute('data-note-id'))
-    .filter((id): id is string => !!id)
-}
 
 const sanitizePathSegment = (value: string, fallback: string): string => {
   const transliterated = value
@@ -316,8 +321,13 @@ interface NoteEditorWithPanelProps extends NoteEditorProps {
   onOpenProjectsView?: () => void
 }
 
-export default function NoteEditor({ 
-  note, 
+export interface NoteEditorHandle {
+  /** Persist any debounced edits immediately (used before switching notes). */
+  flushPendingSave: () => Promise<void>
+}
+
+const NoteEditor = forwardRef<NoteEditorHandle, NoteEditorWithPanelProps>(function NoteEditor({
+  note,
   onSave, 
   onCancel, 
   onDelete,
@@ -344,8 +354,9 @@ export default function NoteEditor({
   onOpenProjectsView,
   onAskAI,
   onDirtyChange,
+  registerHandle,
   contentRevision = 0,
-}: NoteEditorWithPanelProps) {
+}, ref) {
   const toast = useToast()
   const isMobile = useIsMobile()
   const [title, setTitle] = useState('')
@@ -356,6 +367,15 @@ export default function NoteEditor({
   const [dataSheetData, setDataSheetData] = useState<DataSheetData | null>(null)
   const [pdfAnnotationData, setPdfAnnotationData] = useState<PdfAnnotationData | null>(null)
   const [dataSheetKey, setDataSheetKey] = useState(0)
+  /**
+   * Bumped whenever the payload for the current note is hydrated. Non-rich
+   * editors adopt their `initialData` on this signal, so a note switch can never
+   * leave the previous note's sheet/journal/PDF state (or its undo stack) in
+   * place for the first edit.
+   */
+  const [editorSeedRevision, setEditorSeedRevision] = useState(0)
+  /** Note id whose payload is currently in the data states above. */
+  const [hydratedNoteId, setHydratedNoteId] = useState<string | null>(note?.id ?? null)
   const [noteType, setNoteType] = useState<NoteType>('rich-text')
   const [isSaving, setIsSaving] = useState(false)
   const [isAutosaving, setIsAutosaving] = useState(false)
@@ -711,8 +731,18 @@ export default function NoteEditor({
       setLastSaveTime(null)
     }
     setActiveFormats(new Set())
-    // Allow the hasChanges effect to run normally after state has settled
-    requestAnimationFrame(() => { noteLoadingRef.current = false })
+    // Signal non-rich editors that the payload for this note is ready.
+    setHydratedNoteId(note?.id ?? null)
+    setEditorSeedRevision((previous) => previous + 1)
+    // Allow the hasChanges effect to run normally after state has settled.
+    // The frame also ends the "first emission is the baseline" window: editors
+    // that adopt without emitting (external note switch) must not swallow the
+    // user's first real edit as a baseline.
+    requestAnimationFrame(() => {
+      noteLoadingRef.current = false
+      mindmapBaselinePendingRef.current = false
+      bulletJournalBaselinePendingRef.current = false
+    })
     // key on note?.id (not the full object) so same-note saves don't cause
     // a full editor reset. The note-loading effect should only run when the
     // actual note changes or when creating a new note.
@@ -796,7 +826,7 @@ export default function NoteEditor({
   }, [])
 
   // Flush pending saves on window close or app hide to prevent data loss
-  const handleSaveRef = useRef<((opts?: { isAuto?: boolean }) => void) | null>(null)
+  const handleSaveRef = useRef<((opts?: { isAuto?: boolean }) => Promise<void>) | null>(null)
   const hasChangesRef = useRef(hasChanges)
   hasChangesRef.current = hasChanges
 
@@ -808,7 +838,7 @@ export default function NoteEditor({
   useEffect(() => {
     const flushSave = () => {
       if (hasChangesRef.current && !isAutosavingRef.current && handleSaveRef.current) {
-        handleSaveRef.current({ isAuto: true })
+        void handleSaveRef.current({ isAuto: true })
       }
     }
 
@@ -1924,7 +1954,7 @@ export default function NoteEditor({
                 handleSaveRef.current &&
                 prevNoteIdRef.current === queuedNoteId
               ) {
-                handleSaveRef.current({ isAuto: true })
+                void handleSaveRef.current({ isAuto: true })
               }
             }, 0)
           }
@@ -1933,7 +1963,7 @@ export default function NoteEditor({
         setIsSaving(false)
       }
     }
-  }, [drawingData, mindmapData, onSave, title, noteType, hasChanges, isSaving, isDeleting, toast, migrateLegacyImagesInHtml, note?.id, reconcileOrphanedImageAttachments])
+  }, [drawingData, mindmapData, bulletJournalData, dataSheetData, pdfAnnotationData, onSave, title, noteType, hasChanges, isSaving, isDeleting, toast, migrateLegacyImagesInHtml, note?.id, reconcileOrphanedImageAttachments])
 
   // Autosave: debounce saves after a short period of inactivity.
   useEffect(() => {
@@ -1978,10 +2008,53 @@ export default function NoteEditor({
         autosaveTimeoutRef.current = null
       }
     }
-  }, [title, content, drawingData, mindmapData, noteType, hasChanges, isSaving, isDeleting, handleSave])
+  }, [title, content, drawingData, mindmapData, bulletJournalData, dataSheetData, pdfAnnotationData, noteType, hasChanges, isSaving, isDeleting, handleSave])
 
   // Keep ref in sync now that handleSave is declared
   handleSaveRef.current = handleSave
+
+  /**
+   * Lets the workspace persist debounced edits *before* it points the editor at
+   * another note. Waiting matters because `onSave` resolves the target note from
+   * the workspace selection: flushing after the switch would write the old
+   * buffer into the newly selected note (or recreate a deleted one).
+   */
+  const flushPendingSave = useCallback(async () => {
+    if (autosaveTimeoutRef.current !== null) {
+      window.clearTimeout(autosaveTimeoutRef.current)
+      autosaveTimeoutRef.current = null
+    }
+
+    // Let an in-flight autosave settle first; its queued follow-up would
+    // otherwise be discarded by the note-id guard once the switch happens.
+    if (isAutosavingRef.current) {
+      const startedAt = Date.now()
+      await new Promise<void>((resolve) => {
+        const timer = window.setInterval(() => {
+          if (!isAutosavingRef.current || Date.now() - startedAt > 3000) {
+            window.clearInterval(timer)
+            resolve()
+          }
+        }, 15)
+      })
+      if (autosaveTimeoutRef.current !== null) {
+        window.clearTimeout(autosaveTimeoutRef.current)
+        autosaveTimeoutRef.current = null
+      }
+      autosaveQueuedRef.current = false
+    }
+
+    if (!hasChangesRef.current) return
+    await handleSaveRef.current?.({ isAuto: true })
+  }, [])
+
+  useImperativeHandle(ref, () => ({ flushPendingSave }), [flushPendingSave])
+
+  // `next/dynamic` drops refs, so expose the same API through a stable callback.
+  useEffect(() => {
+    registerHandle?.({ flushPendingSave })
+    return () => registerHandle?.(null)
+  }, [flushPendingSave, registerHandle])
 
   // Switching views unmounts the editor while edits may still sit inside the
   // autosave debounce window. Flush them so the AI handover (or any view
@@ -2140,7 +2213,7 @@ export default function NoteEditor({
   // the editor opens, and keep it out of the main workspace payload.
   const [backlinkIndex, setBacklinkIndex] = useState<NoteLinkIndexEntry[] | null>(null)
   useEffect(() => {
-    if (!note?.id || noteType !== 'rich-text') {
+    if (!note?.id || (noteType !== 'rich-text' && noteType !== 'mindmap')) {
       setBacklinkIndex([])
       return
     }
@@ -2205,9 +2278,9 @@ export default function NoteEditor({
   const outgoingLinkIds = useMemo(() => {
     if (!note?.id) return new Set<string>()
 
-    const sourceHtml = noteType === 'rich-text' ? deferredContent : (note.content || '')
-    return new Set(extractNoteLinkIdsFromHtml(sourceHtml).filter((id) => id !== note.id))
-  }, [note?.id, noteType, note?.content, deferredContent])
+    const source = noteType === 'mindmap' ? JSON.stringify(mindmapData ?? {}) : deferredContent
+    return new Set(extractNoteLinkIdsFromContent(noteType, source).filter((id) => id !== note.id))
+  }, [note?.id, noteType, note?.content, deferredContent, mindmapData])
 
   const outgoingLinks = useMemo(() => {
     return notesForConnections
@@ -2645,6 +2718,14 @@ export default function NoteEditor({
   }, [title, note?.title, noteType, getStructuredExportContent, downloadTextFile, toast])
 
   const handleImportDocx = useCallback(() => {
+    if (noteType !== 'rich-text') {
+      toast.push({
+        title: 'DOCX import needs a text note',
+        description: 'Open or create a rich-text note to import a document.',
+        variant: 'warning',
+      })
+      return
+    }
     const input = document.createElement('input')
     input.type = 'file'
     input.accept = '.docx'
@@ -2699,7 +2780,15 @@ export default function NoteEditor({
         const nextHtml = current.trim() === '' || current === '<p></p>'
           ? cleanHtml
           : current + '<hr>' + cleanHtml
-        editorRef.current?.setHTML(nextHtml)
+        if (!editorRef.current) {
+          toast.push({
+            title: 'DOCX could not be imported',
+            description: 'The text editor is not ready yet. Try again in a moment.',
+            variant: 'error',
+          })
+          return
+        }
+        editorRef.current.setHTML(nextHtml)
         
         if (editorRef.current) {
              editorRef.current.focus()
@@ -3139,10 +3228,10 @@ export default function NoteEditor({
           onOpenSettings={openSettings}
           onExportMarkdown={handleExportMarkdown}
           onExportPdf={handleExportPdf}
-          onExportDocx={handleExportDocx}
+          onExportDocx={noteType === 'rich-text' ? handleExportDocx : undefined}
           onExportHtml={handleExportHtml}
           onExportPlainText={handleExportPlainText}
-          onImportDocx={handleImportDocx}
+          onImportDocx={noteType === 'rich-text' ? handleImportDocx : undefined}
           onOpenConnections={openConnections}
           backlinks={connectionData.backlinks}
           connectionsCount={connectionData.connectionsCount}
@@ -3287,6 +3376,7 @@ export default function NoteEditor({
                     ref={drawingEditorRef}
                     value={drawingData}
                     onChange={setDrawingData}
+                    seedRevision={editorSeedRevision}
                     disabled={isSaving || isDeleting}
                   />
                 </ErrorBoundary>
@@ -3309,6 +3399,7 @@ export default function NoteEditor({
                     ref={bulletJournalRef}
                     noteId={note?.id ?? null}
                     initialData={bulletJournalData}
+                    dataRevision={editorSeedRevision}
                     onChange={handleBulletJournalDataChange}
                     disabled={isSaving || isDeleting}
                   />
@@ -3319,6 +3410,7 @@ export default function NoteEditor({
                     key={note?.id ?? `new-${dataSheetKey}`}
                     ref={dataSheetRef}
                     initialData={dataSheetData}
+                    dataRevision={editorSeedRevision}
                     onChange={setDataSheetData}
                     disabled={isSaving || isDeleting}
                   />
@@ -3327,10 +3419,11 @@ export default function NoteEditor({
                 <ErrorBoundary label="PDF Annotation" inline>
                   <PdfAnnotationEditor
                     ref={pdfAnnotationRef}
-                    value={pdfAnnotationData}
+                    value={hydratedNoteId === (note?.id ?? null) ? pdfAnnotationData : null}
                     onChange={setPdfAnnotationData}
                     disabled={isSaving || isDeleting}
                     noteId={note?.id ?? null}
+                    dataRevision={editorSeedRevision}
                   />
                 </ErrorBoundary>
               ) : (
@@ -3338,6 +3431,7 @@ export default function NoteEditor({
                 <div className="mx-auto h-full w-full max-w-[72ch]">
                 <RichTextEditor
                     ref={editorRef}
+                    documentId={note?.id}
                     value={note?.content ?? ''}
                     onChange={handleContentChange}
                     disabled={isSaving || isDeleting}
@@ -3564,4 +3658,6 @@ export default function NoteEditor({
 
     </>
   )
-}
+})
+
+export default NoteEditor

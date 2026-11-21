@@ -18,8 +18,16 @@ function toUtcStamp(date: Date): string {
   )
 }
 
+/** RFC 5545 DATE value — calendar dates are local, not UTC instants. */
 function toDateStamp(date: Date): string {
-  return `${date.getUTCFullYear()}${pad(date.getUTCMonth() + 1)}${pad(date.getUTCDate())}`
+  return `${date.getFullYear()}${pad(date.getMonth() + 1)}${pad(date.getDate())}`
+}
+
+/** The day after `date`, keeping the local calendar day semantics. */
+function nextLocalDay(date: Date): Date {
+  const next = new Date(date.getFullYear(), date.getMonth(), date.getDate())
+  next.setDate(next.getDate() + 1)
+  return next
 }
 
 function escapeText(value: string): string {
@@ -92,8 +100,10 @@ export function buildIcs(
     lines.push(`DTSTAMP:${toUtcStamp(new Date())}`)
 
     if (event.is_all_day) {
+      // DTEND is exclusive in RFC 5545, while the app stores the last included
+      // day (23:59) — export the following day so imports keep the same date.
       lines.push(`DTSTART;VALUE=DATE:${toDateStamp(start)}`)
-      lines.push(`DTEND;VALUE=DATE:${toDateStamp(end)}`)
+      lines.push(`DTEND;VALUE=DATE:${toDateStamp(nextLocalDay(end))}`)
     } else {
       lines.push(`DTSTART:${toUtcStamp(start)}`)
       lines.push(`DTEND:${toUtcStamp(end)}`)

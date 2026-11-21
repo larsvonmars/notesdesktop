@@ -87,6 +87,9 @@ export default function WorkspaceSidebar({
   onCloseMobileNav,
   onEnsureNotesView,
   onOpenProjectDashboard,
+  onOpenFileExplorer,
+  onOpenArchive,
+  onOpenTasks,
   onOpenSettings,
   onOpenWelcome,
   onOpenLearn,
@@ -127,6 +130,26 @@ export default function WorkspaceSidebar({
       onOpenLearn()
       onCloseMobileNav()
     },
+    onOpenFileExplorer: () => {
+      onOpenFileExplorer()
+      onCloseMobileNav()
+    },
+    onOpenArchive: () => {
+      onOpenArchive()
+      onCloseMobileNav()
+    },
+    onOpenTasks: () => {
+      onOpenTasks()
+      onCloseMobileNav()
+    },
+    onOpenWelcome: () => {
+      onOpenWelcome()
+      onCloseMobileNav()
+    },
+    onOpenSettings: () => {
+      onOpenSettings()
+      onCloseMobileNav()
+    },
     onOpenCommandPalette: () => {
       onOpenCommandPalette()
       onCloseMobileNav()
@@ -156,29 +179,38 @@ export default function WorkspaceSidebar({
           badges={learnBadge !== undefined ? { learn: learnBadge } : undefined}
         />
 
-        {!hideLibrary && (
-          <aside
-            aria-label="Library"
-            aria-hidden={sidebarCollapsed || undefined}
-            className={cn(
-              'glass-subtle flex h-full shrink-0 flex-col overflow-hidden border-y-0 border-l-0 transition-[width] duration-300 ease-soft',
-              sidebarCollapsed ? 'w-0 border-r-0' : 'w-[var(--library-width,300px)]'
-            )}
-          >
-            {!sidebarCollapsed ? (
-              activeView === 'learn' ? (
-                <LearnSidebar />
-              ) : (
-                <SidebarTree
-                  {...sharedTreeProps}
-                  dense
-                  collapsed={false}
-                  onToggleCollapsed={onToggleCollapsed}
-                />
-              )
-            ) : null}
-          </aside>
-        )}
+        <aside
+          aria-label="Library"
+          aria-hidden={sidebarCollapsed || hideLibrary || undefined}
+          className={cn(
+            'glass-subtle h-full shrink-0 flex-col overflow-hidden border-y-0 border-l-0 transition-[width] duration-300 ease-soft',
+            hideLibrary
+              ? 'hidden'
+              : sidebarCollapsed
+                ? 'flex w-0 border-r-0'
+                : 'flex w-[var(--library-width,300px)]'
+          )}
+        >
+            {/*
+              Keep the library tree mounted while collapsed or while Learn is
+              open: unmounting it discarded expanded folders, filters and search
+              state, so returning to Notes always showed a collapsed tree.
+            */}
+            <div
+              className={cn(
+                'h-full',
+                sidebarCollapsed || activeView === 'learn' ? 'hidden' : 'block'
+              )}
+            >
+              <SidebarTree
+                {...sharedTreeProps}
+                dense
+                collapsed={false}
+                onToggleCollapsed={onToggleCollapsed}
+              />
+            </div>
+            {!sidebarCollapsed && activeView === 'learn' ? <LearnSidebar /> : null}
+        </aside>
 
         {!hideLibrary && sidebarCollapsed ? (
           <button

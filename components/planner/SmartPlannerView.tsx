@@ -21,7 +21,7 @@ import {
 } from 'lucide-react'
 import { Button } from '@/components/ui/Button'
 import { useToast } from '@/components/ToastProvider'
-import type { Task } from '@/lib/tasks'
+import { completeTask, uncompleteTask, type Task } from '@/lib/tasks'
 import type { CalendarEvent, RecurrencePattern } from '@/lib/events'
 import { freeMinutesForDay, generatePlan, type SchedulerResult } from '@/lib/planner/scheduler'
 import { estimateTaskDuration, getStrategy } from '@/lib/planner/scoring'
@@ -90,6 +90,8 @@ export interface SmartPlannerViewProps {
   onPlanningModeChange: (mode: PlanningMode) => void
   onOpenTask: (task: Task) => void
   onPlansChanged?: () => void
+  /** Lets the host refresh its task list after a plan block completes a task. */
+  onTasksChanged?: () => void
 }
 
 export default function SmartPlannerView({
@@ -100,6 +102,7 @@ export default function SmartPlannerView({
   onPlanningModeChange,
   onOpenTask,
   onPlansChanged,
+  onTasksChanged,
 }: SmartPlannerViewProps) {
   const toast = useToast()
   const [step, setStep] = useState<Step>('configure')
@@ -255,7 +258,9 @@ export default function SmartPlannerView({
         status: 'active',
       })
 
-      const allItems = [...result.scheduledItems, ...result.unscheduledItems]
+      // Only timed blocks belong to the saved plan; tasks that did not fit stay
+      // open in the planner instead of being placed outside the chosen scope.
+      const allItems = result.scheduledItems
       if (allItems.length > 0) {
         await createPlanItems(
           plan.id,
@@ -276,7 +281,12 @@ export default function SmartPlannerView({
       onPlansChanged?.()
       setResult(null)
       setStep('history')
-      toast.push({ title: 'Plan created', description: `${allItems.length} blocks scheduled`, variant: 'success' })
+      const skipped = result.unscheduledItems.length
+      toast.push({
+        title: 'Plan created',
+        description: `${allItems.length} blocks scheduled${skipped > 0 ? ` · ${skipped} task${skipped === 1 ? '' : 's'} did not fit` : ''}`,
+        variant: 'success',
+      })
     } catch (err) {
       console.error('Saving plan failed:', err)
       setError(err instanceof Error ? err.message : 'Could not save the plan.')
@@ -289,11 +299,22 @@ export default function SmartPlannerView({
     const next = item.status === 'completed' ? 'pending' : 'completed'
     try {
       await updatePlanItem(item.id, { status: next })
-      if (next === 'completed') {
-        const task = tasks.find((candidate) => candidate.id === item.task_id)
-        if (task) await recordCompletion(task, item.id, item.estimated_minutes)
-        await loadAdaptiveData()
+      const task = tasks.find((candidate) => candidate.id === item.task_id)
+      if (task) {
+        // Keep the plan and the task list in sync: checking a block off completes
+        // the linked task, reopening it reopens the task. Recurring tasks advance
+        // their series through completeTask.
+        if (next === 'completed') {
+          await completeTask(task.id)
+          // The actual duration is unknown here; recording the estimate as the
+          // actual would teach the estimator that it is always perfect.
+          await recordCompletion(task, item.id)
+        } else {
+          await uncompleteTask(task.id)
+        }
+        onTasksChanged?.()
       }
+      if (next === 'completed') await loadAdaptiveData()
       await loadPlans()
     } catch (err) {
       console.error('Updating plan item failed:', err)
@@ -820,6 +841,9 @@ export default function SmartPlannerView({
                   {result.scheduledItems.length} blocks ·{' '}
                   {Math.round(result.totalScheduledMinutes / 60)}h scheduled of{' '}
                   {Math.round(result.totalFreeMinutes / 60)}h free
+                  {result.unscheduledItems.length > 0
+                    ? ` · ${result.unscheduledItems.length} couldn't fit`
+                    : ''}
                 </p>
               </div>
               <div className="flex items-center gap-2">
@@ -877,6 +901,29 @@ export default function SmartPlannerView({
                   </li>
                 ))}
               </ol>
+            )}
+
+            {result.unscheduledItems.length > 0 && (
+              <div className="border-t border-[var(--border)] bg-[var(--surface-sunken)] px-4 py-3">
+                <h3 className="text-[11px] font-semibold uppercase tracking-[0.08em] text-warning">
+                  Couldn’t fit in this range
+                </h3>
+                <p className="mt-1 text-[11px] text-muted">
+                  These tasks stay open in the planner. Widen the scope or free up time to
+                  schedule them.
+                </p>
+                <ul className="mt-2 space-y-1">
+                  {result.unscheduledItems.map((item) => (
+                    <li key={`unscheduled-${item.task_id}`} className="flex items-center gap-2 text-[12px] text-foreground">
+                      <span className={`h-2 w-2 shrink-0 rounded-full ${PRIORITY_META[item.task_priority].dot}`} />
+                      <span className="min-w-0 flex-1 truncate">{item.task_title}</span>
+                      <span className="shrink-0 text-[10px] text-muted">
+                        {item.estimated_minutes ? `${item.estimated_minutes} min` : 'No estimate'}
+                      </span>
+                    </li>
+                  ))}
+                </ul>
+              </div>
             )}
           </section>
 

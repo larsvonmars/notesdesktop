@@ -193,6 +193,9 @@ export default function ProjectDashboard({
 }: ProjectDashboardProps) {
   // ── State ───────────────────────────────────────────────────────────────
   const [tasks, setTasks] = useState<Task[]>([])
+  // Stable clock for deadline badges; refreshed once a minute so "days left"
+  // does not read Date.now() during render.
+  const [now, setNow] = useState(() => Date.now())
   const [isLoadingTasks, setIsLoadingTasks] = useState(true)
   // Note bodies for word counts are loaded only while this dashboard is open,
   // not during normal workspace startup.
@@ -204,6 +207,11 @@ export default function ProjectDashboard({
   const [editingDescription, setEditingDescription] = useState(false)
   const [descriptionDraft, setDescriptionDraft] = useState(project.description ?? '')
   const descriptionRef = useRef<HTMLTextAreaElement>(null)
+
+  useEffect(() => {
+    const timer = window.setInterval(() => setNow(Date.now()), 60_000)
+    return () => window.clearInterval(timer)
+  }, [])
   const linkLabelRef = useRef<HTMLInputElement>(null)
 
   // ── Derived data ────────────────────────────────────────────────────────
@@ -691,7 +699,7 @@ export default function ProjectDashboard({
                         <div className="space-y-1">
                           {upcomingTasks.map(task => {
                             const due = new Date(task.due_date!)
-                            const daysLeft = Math.ceil((due.getTime() - Date.now()) / 86400000)
+                            const daysLeft = Math.ceil((due.getTime() - now) / 86400000)
                             const isOverdue = daysLeft < 0
                             const isUrgent = daysLeft >= 0 && daysLeft <= 2
                             return (

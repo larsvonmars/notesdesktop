@@ -19,7 +19,7 @@ import {
 } from '@/lib/notes'
 import type { Note, NoteSummary, NoteType } from '@/lib/notes'
 import { createFolder, getFolders } from '@/lib/folders'
-import { createProject, getProjects, updateProject } from '@/lib/projects'
+import { createProject, getProjects, moveNoteToProject, updateProject } from '@/lib/projects'
 import {
   completeTask,
   createTask,
@@ -29,9 +29,18 @@ import {
   updateTask,
 } from '@/lib/tasks'
 import type { Task, TaskPriority, TaskStatus } from '@/lib/tasks'
-import { createEvent, deleteEvent, getEvents, getTimetableEntries, updateEvent } from '@/lib/events'
-import type { CalendarEvent, TimetableEntry } from '@/lib/events'
-import { describeRecurrence, formatTime } from '@/lib/planner/date-utils'
+import {
+  createEvent,
+  deleteEvent,
+  getEvent,
+  getEvents,
+  getRecurrencePatterns,
+  getTimetableEntries,
+  setEventRecurrence,
+  updateEvent,
+} from '@/lib/events'
+import type { CalendarEvent, RecurrenceInput, TimetableEntry } from '@/lib/events'
+import { describeRecurrence, expandCalendarEvents, formatTime } from '@/lib/planner/date-utils'
 import { stripHtmlForAI, textToHtml } from '@/lib/ai'
 import {
   createCards as createLearnCards,
@@ -68,6 +77,8 @@ export interface ChatToolContext {
 
 export interface ChatToolSpec {
   definition: ChatToolDefinition
+  /** The engine asks the UI for explicit approval before executing this tool. */
+  requiresConfirmation?: boolean
   execute: (args: Record<string, unknown>, ctx: ChatToolContext) => Promise<string>
 }
 
@@ -219,10 +230,15 @@ function extractNoteText(note: Pick<Note, 'note_type' | 'content'>): string {
 }
 
 function summariseEvent(event: CalendarEvent): string {
+  // Recurring occurrences carry a synthetic id; expose the parent id so
+  // update_event/delete_event can act on the series (or its source event).
+  const sourceId = (event as CalendarEvent & { source_event_id?: string }).source_event_id
+  const id = sourceId ?? event.id
   return [
-    `- ${event.title}  [id: ${event.id}]`,
+    `- ${event.title}  [id: ${id}]`,
     `  starts: ${formatDate(event.start_time)}`,
     `  ends: ${formatDate(event.end_time)}${event.is_all_day ? ' (all day)' : ''}`,
+    sourceId ? '  recurring occurrence' : '',
     event.location ? `  location: ${event.location}` : '',
   ]
     .filter(Boolean)
@@ -1018,7 +1034,9 @@ const completeTaskTool: ChatToolSpec = {
     }
 
     const task = await completeTask(taskId)
-    return `Completed "${task.title}".`
+    if (task.status === 'completed') return `Completed "${task.title}".`
+    // Recurring tasks advance to their next occurrence instead of completing.
+    return `Checked off this occurrence of "${task.title}". Next due ${formatDate(task.due_date)}.`
   },
 }
 
@@ -1241,8 +1259,20 @@ const updateNoteTool: ChatToolSpec = {
     if (folderName && !folderId) return `Error: no folder named "${args.folder}".`
     if (projectName && !projectId) return `Error: no project named "${args.project}".`
 
-    if (folderName || projectName) {
-      await moveNote(noteId, folderId, undefined, projectName ? projectId : undefined)
+    if (folderName && folderId) {
+      // A folder already carries its project. Refuse a contradictory request
+      // instead of creating a note whose folder and project disagree.
+      if (projectId) {
+        const folder = (await getFolders()).find((candidate) => candidate.id === folderId)
+        if ((folder?.project_id ?? null) !== projectId) {
+          return `Error: folder "${folderName}" does not belong to project "${projectName}". Move the note into the folder or the project, not both.`
+        }
+      }
+      await moveNote(noteId, folderId)
+    } else if (projectId) {
+      // Keep the note's current folder: the UI's "move to project" only changes
+      // the project, and passing folder=null here used to eject it to the root.
+      await moveNoteToProject(noteId, projectId)
     }
 
     const title = str(args.title)
@@ -1267,6 +1297,7 @@ const updateNoteTool: ChatToolSpec = {
 }
 
 const deleteNoteTool: ChatToolSpec = {
+  requiresConfirmation: true,
   definition: {
     type: 'function',
     function: {
@@ -1861,6 +1892,7 @@ const updateTaskTool: ChatToolSpec = {
 }
 
 const deleteTaskTool: ChatToolSpec = {
+  requiresConfirmation: true,
   definition: {
     type: 'function',
     function: {
@@ -1922,10 +1954,27 @@ const listEventsTool: ChatToolSpec = {
 
     const limit = num(args.limit, 30, 1, 100)
     const query = str(args.query).toLowerCase()
-    const events = await getEvents({ startDate: from, endDate: to })
+    // Include recurring templates and expand their occurrences, otherwise a
+    // weekly series created months ago is invisible in the requested window.
+    const [events, patterns] = await Promise.all([
+      getEvents({
+        startDate: from,
+        endDate: to,
+        includeRecurring: true,
+        includeCancelled: true,
+      }),
+      getRecurrencePatterns().catch(() => []),
+    ])
+    const expanded = expandCalendarEvents(events, patterns, from, to).filter((event) => {
+      if (event.is_cancelled) return false
+      // `includeRecurring` returns templates outside the window; keep only
+      // occurrences that actually fall inside the requested range.
+      const time = new Date(event.start_time).getTime()
+      return time >= from.getTime() && time <= to.getTime()
+    })
     const filtered = query
-      ? events.filter((event) => event.title.toLowerCase().includes(query))
-      : events
+      ? expanded.filter((event) => event.title.toLowerCase().includes(query))
+      : expanded
     if (filtered.length === 0) return 'No events matched.'
     return [
       `${filtered.length} event${filtered.length === 1 ? '' : 's'} (showing ${Math.min(limit, filtered.length)}):`,
@@ -1983,6 +2032,27 @@ const listTimetableEntriesTool: ChatToolSpec = {
   },
 }
 
+function recurrenceFromArgs(args: Record<string, unknown>): RecurrenceInput | null {
+  const frequency = str(args.frequency)
+  if (!frequency) return null
+  if (!['daily', 'weekly', 'monthly', 'yearly'].includes(frequency)) return null
+  const daysOfWeek = Array.isArray(args.daysOfWeek)
+    ? (args.daysOfWeek as unknown[])
+        .map((value) => Number(value))
+        .filter((value) => Number.isInteger(value) && value >= 0 && value <= 6)
+    : null
+  return {
+    frequency: frequency as RecurrenceInput['frequency'],
+    interval: num(args.interval, 1, 1, 99),
+    daysOfWeek: daysOfWeek && daysOfWeek.length > 0 ? daysOfWeek : null,
+    dayOfMonth:
+      args.dayOfMonth === undefined ? null : num(args.dayOfMonth, 1, 1, 31),
+    monthOfYear:
+      args.monthOfYear === undefined ? null : num(args.monthOfYear, 1, 1, 12),
+    endDate: str(args.recurrenceEnd) || null,
+  }
+}
+
 const createEventTool: ChatToolSpec = {
   definition: {
     type: 'function',
@@ -2002,6 +2072,20 @@ const createEventTool: ChatToolSpec = {
           project: { type: 'string', description: 'Optional project name to link' },
           noteId: { type: 'string', description: 'Optional note id to link' },
           noteTitle: { type: 'string', description: 'Optional note title to link when the id is unknown' },
+          frequency: {
+            type: 'string',
+            enum: ['daily', 'weekly', 'monthly', 'yearly'],
+            description: 'Optional repeat frequency. Omit for a one-off event.',
+          },
+          interval: { type: 'number', minimum: 1, maximum: 99, description: 'Repeat every N periods (default 1)' },
+          daysOfWeek: {
+            type: 'array',
+            items: { type: 'number', minimum: 0, maximum: 6 },
+            description: 'For weekly repeats: weekdays (0 = Sunday … 6 = Saturday)',
+          },
+          dayOfMonth: { type: 'number', minimum: 1, maximum: 31, description: 'For monthly/yearly repeats' },
+          monthOfYear: { type: 'number', minimum: 1, maximum: 12, description: 'For yearly repeats' },
+          recurrenceEnd: { type: 'string', description: 'Optional last date of the series' },
         },
         required: ['title', 'start'],
       },
@@ -2028,7 +2112,7 @@ const createEventTool: ChatToolSpec = {
       return 'Error: the linked note could not be found.'
     }
 
-    const event = await createEvent(title, start, end, {
+    let event = await createEvent(title, start, end, {
       description: str(args.description) || undefined,
       location: str(args.location) || undefined,
       isAllDay: allDay,
@@ -2036,7 +2120,9 @@ const createEventTool: ChatToolSpec = {
       projectId: projectId ?? undefined,
       noteId: noteId ?? undefined,
     })
-    return `Created event "${event.title}" [id: ${event.id}] from ${formatDate(event.start_time)} to ${formatDate(event.end_time)}.`
+    const recurrence = recurrenceFromArgs(args)
+    if (recurrence) event = await setEventRecurrence(event.id, recurrence)
+    return `Created event "${event.title}" [id: ${event.id}] from ${formatDate(event.start_time)} to ${formatDate(event.end_time)}${recurrence ? ` repeating ${recurrence.frequency}` : ''}.`
   },
 }
 
@@ -2057,6 +2143,20 @@ const updateEventTool: ChatToolSpec = {
           description: { type: 'string', description: 'New description' },
           location: { type: 'string', description: 'New location' },
           allDay: { type: 'boolean', description: 'Whether the event lasts all day' },
+          frequency: {
+            type: 'string',
+            enum: ['daily', 'weekly', 'monthly', 'yearly', 'none'],
+            description: 'Set the repeat frequency, or "none" to stop repeating',
+          },
+          interval: { type: 'number', minimum: 1, maximum: 99 },
+          daysOfWeek: {
+            type: 'array',
+            items: { type: 'number', minimum: 0, maximum: 6 },
+            description: 'For weekly repeats: weekdays (0 = Sunday … 6 = Saturday)',
+          },
+          dayOfMonth: { type: 'number', minimum: 1, maximum: 31 },
+          monthOfYear: { type: 'number', minimum: 1, maximum: 12 },
+          recurrenceEnd: { type: 'string' },
         },
         required: [],
       },
@@ -2090,6 +2190,7 @@ const updateEventTool: ChatToolSpec = {
 }
 
 const deleteEventTool: ChatToolSpec = {
+  requiresConfirmation: true,
   definition: {
     type: 'function',
     function: {
@@ -2201,6 +2302,7 @@ const updateLearnCardTool: ChatToolSpec = {
 }
 
 const deleteLearnCardTool: ChatToolSpec = {
+  requiresConfirmation: true,
   definition: {
     type: 'function',
     function: {
@@ -2272,6 +2374,7 @@ const updateLearnDeckTool: ChatToolSpec = {
 }
 
 const deleteLearnDeckTool: ChatToolSpec = {
+  requiresConfirmation: true,
   definition: {
     type: 'function',
     function: {
