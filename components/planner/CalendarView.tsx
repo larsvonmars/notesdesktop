@@ -214,6 +214,24 @@ function layoutTimedEvents(
   return layouts
 }
 
+interface CalendarFilterPreferences {
+  showCancelled?: boolean
+  showAllDay?: boolean
+  showRecurring?: boolean
+  showTasks?: boolean
+  search?: string
+}
+
+function readCalendarFilters(): CalendarFilterPreferences {
+  if (typeof window === 'undefined') return {}
+  try {
+    const raw = window.localStorage.getItem('planner:calendar-filters')
+    return raw ? (JSON.parse(raw) as CalendarFilterPreferences) : {}
+  } catch {
+    return {}
+  }
+}
+
 export interface CalendarViewProps {
   events: CalendarEvent[]
   recurrencePatterns: RecurrencePattern[]
@@ -224,6 +242,9 @@ export interface CalendarViewProps {
   onViewChange?: (view: CalendarViewMode) => void
   /** Mirrors the visible day so the planner's "New event" uses that date. */
   onDateChange?: (date: Date) => void
+  /** One-shot request to open an event's detail panel. */
+  focusEventId?: string | null
+  onFocusEventConsumed?: () => void
   onNewEvent: (start?: Date) => void
   onEditEvent: (event: CalendarEvent) => void
   onDeleteEvent: (event: CalendarEvent) => void
@@ -243,6 +264,8 @@ export default function CalendarView({
   initialView,
   onViewChange,
   onDateChange,
+  focusEventId,
+  onFocusEventConsumed,
   onNewEvent,
   onEditEvent,
   onDeleteEvent,
@@ -270,11 +293,22 @@ export default function CalendarView({
   })
   const [showFilters, setShowFilters] = useState(false)
   const [selectedCategories, setSelectedCategories] = useState<Set<string>>(new Set())
-  const [showCancelled, setShowCancelled] = useState(false)
-  const [showAllDay, setShowAllDay] = useState(true)
-  const [showRecurring, setShowRecurring] = useState(true)
-  const [showTasks, setShowTasks] = useState(true)
-  const [searchQuery, setSearchQuery] = useState('')
+  const [showCancelled, setShowCancelled] = useState(() => readCalendarFilters().showCancelled ?? false)
+  const [showAllDay, setShowAllDay] = useState(() => readCalendarFilters().showAllDay ?? true)
+  const [showRecurring, setShowRecurring] = useState(() => readCalendarFilters().showRecurring ?? true)
+  const [showTasks, setShowTasks] = useState(() => readCalendarFilters().showTasks ?? true)
+  const [searchQuery, setSearchQuery] = useState(() => readCalendarFilters().search ?? '')
+
+  useEffect(() => {
+    try {
+      window.localStorage.setItem(
+        'planner:calendar-filters',
+        JSON.stringify({ showCancelled, showAllDay, showRecurring, showTasks, search: searchQuery }),
+      )
+    } catch {
+      // ignore
+    }
+  }, [showCancelled, showAllDay, showRecurring, showTasks, searchQuery])
 
   const [dayPopover, setDayPopover] = useState<{ date: Date; x: number; y: number } | null>(null)
   const [morePopover, setMorePopover] = useState<{
@@ -432,6 +466,28 @@ export default function CalendarView({
       ),
     [events, recurrencePatterns, expansionRange],
   )
+
+  useEffect(() => {
+    if (!focusEventId) return
+    const match = expandedEvents.find(
+      (event) => event.source_event_id === focusEventId || event.id === focusEventId,
+    )
+    if (match) {
+      setSelectedDate(getStartOfDay(new Date(match.start_time)))
+      setSelectedEvent(match)
+      onFocusEventConsumed?.()
+      return
+    }
+    // The event may live outside the currently expanded range (e.g. Chat created
+    // it next month). Jump there first, keep the request alive and match on the
+    // next expansion instead of silently doing nothing.
+    const raw = events.find((event) => event.id === focusEventId)
+    if (raw) {
+      setSelectedDate(getStartOfDay(new Date(raw.start_time)))
+      return
+    }
+    onFocusEventConsumed?.()
+  }, [focusEventId, expandedEvents, events, onFocusEventConsumed])
 
   const categories = useMemo(() => {
     const set = new Set<string>()
@@ -2260,7 +2316,7 @@ function EventDetailPanel({
               </Button>
             )}
             <Button type="button" variant="primary" size="sm" icon={Pencil} onClick={onEdit}>
-              Edit
+              {event.is_occurrence ? 'Edit series' : 'Edit'}
             </Button>
           </div>
         </div>

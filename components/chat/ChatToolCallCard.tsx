@@ -35,7 +35,7 @@ import { cn } from '@/components/shell/utils'
 import type { ChatToolCall } from '@/lib/chat/types'
 
 export interface ChatToolTarget {
-  kind: 'note' | 'task' | 'deck'
+  kind: 'note' | 'task' | 'deck' | 'event'
   id: string
 }
 
@@ -52,6 +52,8 @@ const OPENABLE_ID_ARGS: Record<string, { kind: ChatToolTarget['kind']; keys: str
   create_deck: { kind: 'deck', keys: ['deckId', 'deck_id'] },
   update_deck: { kind: 'deck', keys: ['deckId', 'deck_id'] },
   add_cards: { kind: 'deck', keys: ['deckId', 'deck_id'] },
+  create_event: { kind: 'event', keys: ['eventId', 'event_id'] },
+  update_event: { kind: 'event', keys: ['eventId', 'event_id'] },
 }
 
 function extractOpenTarget(
@@ -72,6 +74,7 @@ const TARGET_LABELS: Record<ChatToolTarget['kind'], string> = {
   note: 'Open note',
   task: 'Open task',
   deck: 'Open deck',
+  event: 'Open in calendar',
 }
 
 type ToolCategory =

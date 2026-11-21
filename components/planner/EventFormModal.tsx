@@ -406,6 +406,12 @@ export default function EventFormModal({
       <form onSubmit={handleSubmit} className="flex min-h-0 flex-1 flex-col">
         <ModalBody>
           <div className="space-y-4">
+            {editing && event?.is_recurring && (
+              <div className="rounded-xl border border-[var(--warning,#f59e0b)]/30 bg-[var(--warning-light,#fef3c7)] px-3 py-2 text-[11.5px] leading-5 text-foreground">
+                This event repeats. Changes apply to the <strong>entire series</strong>. To
+                skip a single date, use “Delete this occurrence” in the event panel.
+              </div>
+            )}
             <div>
               <label className={LABEL_CLASS} htmlFor="event-title">
                 Title

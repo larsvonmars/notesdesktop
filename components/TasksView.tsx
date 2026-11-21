@@ -43,6 +43,7 @@ import {
   type RecurrencePattern,
 } from '@/lib/events'
 import { addDays, expandCalendarEvents, getStartOfDay, isSameDay } from '@/lib/planner/date-utils'
+import { subscribeToPlannerDataChanged } from '@/lib/planner/events'
 import { buildIcs, downloadIcs } from '@/lib/planner/ics'
 import {
   DEFAULT_DISPLAY_PREFERENCES,
@@ -155,6 +156,9 @@ export interface TasksViewProps {
   /** Open the task detail panel for this task (e.g. from a Chat tool result). */
   focusTaskId?: string | null
   onFocusTaskConsumed?: () => void
+  /** Open a calendar event's detail panel (e.g. from a Chat tool result). */
+  focusEventId?: string | null
+  onFocusEventConsumed?: () => void
   /** Notifies the shell so breadcrumbs can mirror the active section. */
   onSectionChange?: (section: PlannerSection) => void
 }
@@ -168,6 +172,8 @@ export default function TasksView({
   initialSection,
   focusTaskId,
   onFocusTaskConsumed,
+  focusEventId,
+  onFocusEventConsumed,
   onSectionChange,
 }: TasksViewProps) {
   const toast = useToast()
@@ -197,6 +203,7 @@ export default function TasksView({
   const [taskMode, setTaskMode] = useState<TaskMode>('list')
   /** Day currently shown by the Calendar section (drives header creation). */
   const [calendarFocusDate, setCalendarFocusDate] = useState<Date | null>(null)
+  const [calendarFocusEventId, setCalendarFocusEventId] = useState<string | null>(null)
 
   const [tasks, setTasks] = useState<Task[]>([])
   const [events, setEvents] = useState<CalendarEvent[]>([])
@@ -249,10 +256,23 @@ export default function TasksView({
     setNotifications(loadNotificationSettings())
   }, [])
 
-  const loadData = useCallback(async () => {
-    setIsLoading(true)
-    setLoadError(null)
-    setEventsError(false)
+  const loadData = useCallback(async (options?: { silent?: boolean }) => {
+    const silent = options?.silent ?? false
+    if (!silent) {
+      setIsLoading(true)
+      setLoadError(null)
+      setEventsError(false)
+    }
+
+    // Fail fast with an actionable message instead of a 12 s skeleton when the
+    // device is known to be offline.
+    if (!silent && typeof navigator !== 'undefined' && navigator.onLine === false) {
+      setIsLoading(false)
+      setLoadError(
+        'You are offline. Tasks and calendar need a connection; notes remain available offline.',
+      )
+      return
+    }
 
     const today = getStartOfDay(new Date())
     const [taskResult, eventResult, patternResult, listResult] = await Promise.allSettled([
@@ -280,14 +300,16 @@ export default function TasksView({
       setTasks(visibleTasks)
     } else {
       console.error('Tasks could not be loaded:', taskResult.reason)
-      setLoadError('Tasks could not be loaded. Check your connection and try again.')
+      if (!silent) {
+        setLoadError('Tasks could not be loaded. Check your connection and try again.')
+      }
     }
 
     if (eventResult.status === 'fulfilled') {
       setEvents(eventResult.value)
     } else {
       console.warn('Events could not be loaded:', eventResult.reason)
-      setEventsError(true)
+      if (!silent) setEventsError(true)
     }
 
     if (patternResult.status === 'fulfilled') {
@@ -300,7 +322,7 @@ export default function TasksView({
       setTaskLists(listResult.value)
     }
 
-    setIsLoading(false)
+    if (!silent) setIsLoading(false)
   }, [archivedProjectIds])
 
   // Plans load independently so a slow planner-table round-trip never blocks
@@ -317,9 +339,37 @@ export default function TasksView({
     void loadData()
   }, [loadData])
 
+  // Recover automatically when the connection returns after an offline visit.
+  useEffect(() => {
+    const handleOnline = () => {
+      void loadData({ silent: true })
+      void loadPlans()
+    }
+    window.addEventListener('online', handleOnline)
+    return () => window.removeEventListener('online', handleOnline)
+  }, [loadData, loadPlans])
+
   useEffect(() => {
     void loadPlans()
   }, [loadPlans])
+
+  // Chat tools keep running while the user navigates to the planner (ChatView
+  // stays mounted). Refresh silently instead of showing stale task/event data.
+  useEffect(() => {
+    let timer: number | null = null
+    const unsubscribe = subscribeToPlannerDataChanged(() => {
+      if (timer !== null) window.clearTimeout(timer)
+      timer = window.setTimeout(() => {
+        timer = null
+        void loadData({ silent: true })
+        void loadPlans()
+      }, 150)
+    })
+    return () => {
+      unsubscribe()
+      if (timer !== null) window.clearTimeout(timer)
+    }
+  }, [loadData, loadPlans])
 
   useEffect(() => {
     onSectionChange?.(section)
@@ -343,6 +393,13 @@ export default function TasksView({
     setDetailTaskId(focusTaskId)
     onFocusTaskConsumed?.()
   }, [focusTaskId, onFocusTaskConsumed])
+
+  useEffect(() => {
+    if (!focusEventId) return
+    setSection('calendar')
+    setCalendarFocusEventId(focusEventId)
+    onFocusEventConsumed?.()
+  }, [focusEventId, onFocusEventConsumed])
 
   useEffect(() => {
     const handler = (event: KeyboardEvent) => {
@@ -1214,6 +1271,8 @@ export default function TasksView({
                 display={display}
                 onViewChange={(view) => handleUpdateDisplay({ defaultCalendarView: view })}
                 onDateChange={setCalendarFocusDate}
+                focusEventId={calendarFocusEventId}
+                onFocusEventConsumed={() => setCalendarFocusEventId(null)}
                 onNewEvent={openNewEvent}
                 onEditEvent={openEditEvent}
                 onDeleteEvent={(event) => void handleDeleteEvent(event)}

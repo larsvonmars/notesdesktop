@@ -58,6 +58,7 @@ import {
 import { getUserStats as getLearnStats } from '@/lib/learn/stats'
 import { normalizeMindmapData } from '@/lib/mindmap/normalization'
 import type { MindmapData } from '@/lib/mindmap/types'
+import { notifyPlannerDataChanged } from '@/lib/planner/events'
 import { readPdfNote } from './pdf-ocr'
 import { fetchWebPage, searchWeb } from './web-tools'
 
@@ -79,6 +80,11 @@ export interface ChatToolSpec {
   definition: ChatToolDefinition
   /** The engine asks the UI for explicit approval before executing this tool. */
   requiresConfirmation?: boolean
+  /** Resolve the actual target so the confirmation names the right item. */
+  preview?: (
+    args: Record<string, unknown>,
+    ctx: ChatToolContext,
+  ) => Promise<string | null>
   execute: (args: Record<string, unknown>, ctx: ChatToolContext) => Promise<string>
 }
 
@@ -314,6 +320,17 @@ async function resolveDeckId(args: Record<string, unknown>): Promise<string | nu
   const exact = decks.find((deck) => deck.title.toLowerCase() === title)
   if (exact) return exact.id
   return decks.find((deck) => deck.title.toLowerCase().includes(title))?.id ?? null
+}
+
+async function resolveCardId(args: Record<string, unknown>): Promise<string | null> {
+  const explicit = str(args.cardId ?? args.card_id)
+  if (explicit) return explicit
+  const deckId = await resolveDeckId(args)
+  const front = str(args.front).toLowerCase()
+  if (!deckId || !front) return null
+  const cards = await getCardsByDeck(deckId)
+  const exact = cards.find((card) => card.front.toLowerCase() === front)
+  return exact?.id ?? cards.find((card) => card.front.toLowerCase().includes(front))?.id ?? null
 }
 
 async function resolveEventId(args: Record<string, unknown>): Promise<string | null> {
@@ -1002,6 +1019,7 @@ const createTaskTool: ChatToolSpec = {
       noteId: noteId ?? undefined,
     })
 
+    notifyPlannerDataChanged()
     return `Created task "${task.title}" [id: ${task.id}]${dueDate ? ` due ${formatDate(dueDate.toISOString())}` : ''}.`
   },
 }
@@ -1034,6 +1052,7 @@ const completeTaskTool: ChatToolSpec = {
     }
 
     const task = await completeTask(taskId)
+    notifyPlannerDataChanged()
     if (task.status === 'completed') return `Completed "${task.title}".`
     // Recurring tasks advance to their next occurrence instead of completing.
     return `Checked off this occurrence of "${task.title}". Next due ${formatDate(task.due_date)}.`
@@ -1298,6 +1317,14 @@ const updateNoteTool: ChatToolSpec = {
 
 const deleteNoteTool: ChatToolSpec = {
   requiresConfirmation: true,
+  preview: async (args) => {
+    const noteId = await resolveNoteId(args)
+    if (!noteId) return null
+    const note = await getNote(noteId).catch(() => null)
+    return note
+      ? `Delete the note “${note.title || 'Untitled'}” (id: ${noteId})? This cannot be undone.`
+      : null
+  },
   definition: {
     type: 'function',
     function: {
@@ -1887,12 +1914,20 @@ const updateTaskTool: ChatToolSpec = {
 
     if (Object.keys(updates).length === 0) return 'Nothing to update: provide at least one field.'
     const task = await updateTask(taskId, updates)
+    notifyPlannerDataChanged()
     return `Updated task "${task.title}" [id: ${task.id}].`
   },
 }
 
 const deleteTaskTool: ChatToolSpec = {
   requiresConfirmation: true,
+  preview: async (args) => {
+    const taskId = await resolveTaskId(args)
+    if (!taskId) return null
+    const tasks = await getTasks({ includeCompleted: true })
+    const task = tasks.find((candidate) => candidate.id === taskId)
+    return `Delete the task “${task?.title ?? taskId}” (id: ${taskId})? This cannot be undone.`
+  },
   definition: {
     type: 'function',
     function: {
@@ -1922,6 +1957,7 @@ const deleteTaskTool: ChatToolSpec = {
     const tasks = await getTasks({ includeCompleted: true })
     const task = tasks.find((candidate) => candidate.id === taskId)
     await deleteTask(taskId)
+    notifyPlannerDataChanged()
     return `Deleted task "${task?.title || taskId}".`
   },
 }
@@ -2122,6 +2158,7 @@ const createEventTool: ChatToolSpec = {
     })
     const recurrence = recurrenceFromArgs(args)
     if (recurrence) event = await setEventRecurrence(event.id, recurrence)
+    notifyPlannerDataChanged()
     return `Created event "${event.title}" [id: ${event.id}] from ${formatDate(event.start_time)} to ${formatDate(event.end_time)}${recurrence ? ` repeating ${recurrence.frequency}` : ''}.`
   },
 }
@@ -2184,13 +2221,43 @@ const updateEventTool: ChatToolSpec = {
     }
     if (Object.keys(updates).length === 0) return 'Nothing to update: provide at least one field.'
 
-    const event = await updateEvent(eventId, updates)
-    return `Updated event "${event.title}" [id: ${event.id}].`
+    let event = await updateEvent(eventId, updates)
+
+    const frequency = str(args.frequency)
+    if (frequency) {
+      const existing = await getEvent(eventId)
+      if (frequency === 'none') {
+        event = await setEventRecurrence(
+          eventId,
+          null,
+          existing?.recurrence_pattern_id ?? null,
+        )
+      } else {
+        const recurrence = recurrenceFromArgs(args)
+        if (!recurrence) return 'Error: unsupported recurrence frequency.'
+        event = await setEventRecurrence(
+          eventId,
+          recurrence,
+          existing?.recurrence_pattern_id ?? null,
+        )
+      }
+    }
+
+    notifyPlannerDataChanged()
+    return `Updated event "${event.title}" [id: ${event.id}]${frequency ? ` (repeat: ${frequency})` : ''}.`
   },
 }
 
 const deleteEventTool: ChatToolSpec = {
   requiresConfirmation: true,
+  preview: async (args) => {
+    const eventId = await resolveEventId(args)
+    if (!eventId) return null
+    const event = await getEvent(eventId).catch(() => null)
+    return event
+      ? `Delete the event “${event.title}” on ${formatDate(event.start_time)} (id: ${eventId})? This cannot be undone.`
+      : null
+  },
   definition: {
     type: 'function',
     function: {
@@ -2218,6 +2285,7 @@ const deleteEventTool: ChatToolSpec = {
     const eventId = await resolveEventId(args)
     if (!eventId) return 'Error: event not found.'
     await deleteEvent(eventId)
+    notifyPlannerDataChanged()
     return `Deleted event [id: ${eventId}].`
   },
 }
@@ -2303,6 +2371,11 @@ const updateLearnCardTool: ChatToolSpec = {
 
 const deleteLearnCardTool: ChatToolSpec = {
   requiresConfirmation: true,
+  preview: async (args) => {
+    const cardId = await resolveCardId(args)
+    if (!cardId) return null
+    return `Delete flashcard ${cardId}? This cannot be undone.`
+  },
   definition: {
     type: 'function',
     function: {
@@ -2375,6 +2448,15 @@ const updateLearnDeckTool: ChatToolSpec = {
 
 const deleteLearnDeckTool: ChatToolSpec = {
   requiresConfirmation: true,
+  preview: async (args) => {
+    const deckId = await resolveDeckId(args)
+    if (!deckId) return null
+    const decks = await getLearnDecks()
+    const deck = decks.find((candidate) => candidate.id === deckId)
+    return deck
+      ? `Delete the Learn deck “${deck.title}” and all ${deck.cardCount} card${deck.cardCount === 1 ? '' : 's'} (id: ${deckId})? This cannot be undone.`
+      : null
+  },
   definition: {
     type: 'function',
     function: {

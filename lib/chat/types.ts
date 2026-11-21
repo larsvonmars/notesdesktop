@@ -61,8 +61,10 @@ export interface ChatConversationSummary {
 export interface ToolConfirmationRequest {
   id: string
   name: string
-  /** Raw JSON arguments, used to describe the resolved target to the user. */
+  /** Raw JSON arguments as the model supplied them. */
   arguments: string
+  /** Resolved, human-readable target (e.g. the actual note title and id). */
+  description?: string
 }
 
 export interface ChatTurnCallbacks {

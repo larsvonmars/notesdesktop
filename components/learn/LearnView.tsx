@@ -1,6 +1,6 @@
 'use client'
 
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import {
   BookOpen,
   Flame,
@@ -88,6 +88,20 @@ function LearnShell({
   )
   const [editingDeck, setEditingDeck] = useState<Deck | null>(null)
   const [deletingDeck, setDeletingDeck] = useState(false)
+
+  // A deck can disappear while it is open (deleted from Chat or another
+  // device). Fall back to the deck list instead of showing "Deck not found".
+  useEffect(() => {
+    if (isLoadingDecks) return
+    if (screen.kind !== 'deck' && screen.kind !== 'study') return
+    if (decks.some((deck) => deck.id === screen.deckId)) return
+    setScreen({ kind: 'decks' })
+    toast.push({
+      title: 'Deck unavailable',
+      description: 'That deck was deleted or is no longer available.',
+      variant: 'warning',
+    })
+  }, [decks, isLoadingDecks, screen, setScreen, toast])
 
   const activeTab =
     screen.kind === 'deck' || screen.kind === 'study' ? 'decks' : screen.kind

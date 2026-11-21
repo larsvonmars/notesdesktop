@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import type { FormEvent, KeyboardEvent, ReactNode } from 'react'
 import {
   AlertTriangle,
@@ -42,6 +42,7 @@ import type { Project } from '@/lib/projects'
 import { completeTask, getTasks, updateTask, type Task } from '@/lib/tasks'
 import { getEvents, getRecurrencePatterns, type CalendarEvent } from '@/lib/events'
 import { expandCalendarEvents } from '@/lib/planner/date-utils'
+import { subscribeToPlannerDataChanged } from '@/lib/planner/events'
 import {
   getNoteTypePresentation,
   getOrderedNoteTypePresentations,
@@ -118,6 +119,8 @@ export interface HomeDashboardProps {
   onOpenSearch: () => void
   onOpenTasks: () => void
   onOpenUnfiled: () => void
+  /** Tasks in archived projects are hidden from Home just like notes/folders. */
+  archivedProjectIds?: Set<string>
   /** Jump to the Learn dashboard. */
   onOpenLearn: () => void
   onOpenLearnDeck: (deckId: string) => void
@@ -290,6 +293,7 @@ export default function HomeDashboard({
   onOpenSearch,
   onOpenTasks,
   onOpenUnfiled,
+  archivedProjectIds,
   onOpenLearn,
   onOpenLearnDeck,
   onStartLearnStudy,
@@ -457,12 +461,10 @@ export default function HomeDashboard({
     }
   }, [continueNoteId, continueNoteType])
 
-  useEffect(() => {
-    let cancelled = false
+  const loadAgenda = useCallback(async () => {
     const start = startOfDay(new Date())
     const end = new Date(start.getTime() + 8 * DAY_MS)
-
-    void Promise.allSettled([
+    const [taskResult, eventResult, patternResult] = await Promise.allSettled([
       getTasks({ includeArchived: false, includeCompleted: false }),
       getEvents({
         startDate: start,
@@ -472,45 +474,86 @@ export default function HomeDashboard({
         includeCancelled: true,
       }),
       getRecurrencePatterns(),
-    ]).then(([taskResult, eventResult, patternResult]) => {
-      if (cancelled) return
+    ])
 
-      let unavailable = false
+    let unavailable = false
+    let nextTasks: Task[] = []
+    if (taskResult.status === 'fulfilled') {
+      nextTasks =
+        archivedProjectIds && archivedProjectIds.size > 0
+          ? taskResult.value.filter(
+              (task) => !task.project_id || !archivedProjectIds.has(task.project_id),
+            )
+          : taskResult.value
+    } else {
+      console.warn('Home: tasks could not be loaded', taskResult.reason)
+      unavailable = true
+    }
 
-      if (taskResult.status === 'fulfilled') {
-        setTasks(taskResult.value)
-      } else {
-        console.warn('Home: tasks could not be loaded', taskResult.reason)
-        unavailable = true
-      }
+    let nextEvents: CalendarEvent[] = []
+    if (eventResult.status === 'fulfilled') {
+      // Recurring templates only store their original date; expand them so a
+      // weekly class created months ago still appears in Today/Next events.
+      const patterns = patternResult.status === 'fulfilled' ? patternResult.value : []
+      const expanded = expandCalendarEvents(eventResult.value, patterns, start, end)
+      nextEvents = expanded.filter((event) => {
+        if (event.is_cancelled) return false
+        const time = new Date(event.start_time).getTime()
+        return time >= start.getTime() && time <= end.getTime()
+      })
+    } else {
+      console.warn('Home: calendar events could not be loaded', eventResult.reason)
+      unavailable = true
+    }
 
-      if (eventResult.status === 'fulfilled') {
-        // Recurring templates only store their original date; expand them so a
-        // weekly class created months ago still appears in Today/Next events.
-        const patterns = patternResult.status === 'fulfilled' ? patternResult.value : []
-        const expanded = expandCalendarEvents(eventResult.value, patterns, start, end)
-        // `includeRecurring` also returns templates outside the window; drop any
-        // occurrence (or unresolved template) that is not actually in range.
-        setEvents(
-          expanded.filter((event) => {
-            if (event.is_cancelled) return false
-            const time = new Date(event.start_time).getTime()
-            return time >= start.getTime() && time <= end.getTime()
-          }),
-        )
-      } else {
-        console.warn('Home: calendar events could not be loaded', eventResult.reason)
-        unavailable = true
-      }
+    return { tasks: nextTasks, events: nextEvents, unavailable }
+  }, [archivedProjectIds])
 
-      setAgendaUnavailable(unavailable)
+  const applyAgenda = useCallback(
+    (agenda: { tasks: Task[]; events: CalendarEvent[]; unavailable: boolean }) => {
+      setTasks(agenda.tasks)
+      setEvents(agenda.events)
+      setAgendaUnavailable(agenda.unavailable)
       setIsLoadingAgenda(false)
-    })
+    },
+    [],
+  )
 
+  useEffect(() => {
+    let cancelled = false
+    const refresh = () => {
+      void loadAgenda().then((agenda) => {
+        if (!cancelled) applyAgenda(agenda)
+      })
+    }
+    refresh()
+    window.addEventListener('online', refresh)
     return () => {
       cancelled = true
+      window.removeEventListener('online', refresh)
     }
-  }, [])
+  }, [loadAgenda, applyAgenda])
+
+  // Chat tools keep running while the user navigates back to Home (ChatView
+  // stays mounted), so refresh the agenda silently when planner data changes.
+  useEffect(() => {
+    let cancelled = false
+    let timer: number | null = null
+    const unsubscribe = subscribeToPlannerDataChanged(() => {
+      if (timer !== null) window.clearTimeout(timer)
+      timer = window.setTimeout(() => {
+        timer = null
+        void loadAgenda().then((agenda) => {
+          if (!cancelled) applyAgenda(agenda)
+        })
+      }, 150)
+    })
+    return () => {
+      cancelled = true
+      unsubscribe()
+      if (timer !== null) window.clearTimeout(timer)
+    }
+  }, [loadAgenda, applyAgenda])
 
   const handleCapture = async () => {
     const text = captureText.trim()
@@ -560,12 +603,20 @@ export default function HomeDashboard({
   }
 
   const handleCompleteTask = async (task: Task) => {
-    setTasks((previous) => previous.filter((candidate) => candidate.id !== task.id))
+    // A recurring task is rescheduled, not removed: keep it until the updated
+    // occurrence comes back and then replace it in place.
+    if (!task.is_recurring) {
+      setTasks((previous) => previous.filter((candidate) => candidate.id !== task.id))
+    }
 
     try {
-      await completeTask(task.id)
+      const updated = await completeTask(task.id)
+      setTasks((previous) => {
+        const without = previous.filter((candidate) => candidate.id !== updated.id)
+        return updated.status === 'completed' ? without : [...without, updated]
+      })
       toast.push({
-        title: 'Task completed',
+        title: task.is_recurring && updated.status !== 'completed' ? 'Occurrence completed' : 'Task completed',
         description: task.title,
         variant: 'success',
         action: {
@@ -579,11 +630,10 @@ export default function HomeDashboard({
               due_date: task.due_date,
             })
               .then(() => {
-                setTasks((previous) =>
-                  previous.some((candidate) => candidate.id === task.id)
-                    ? previous
-                    : [...previous, task],
-                )
+                setTasks((previous) => [
+                  ...previous.filter((candidate) => candidate.id !== task.id),
+                  task,
+                ])
               })
               .catch(() => {
                 toast.push({

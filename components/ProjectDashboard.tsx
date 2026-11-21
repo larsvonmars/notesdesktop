@@ -34,6 +34,7 @@ import {
   updateProjectQuickLinks,
 } from '@/lib/projects'
 import { getTasks, type Task } from '@/lib/tasks'
+import { subscribeToPlannerDataChanged } from '@/lib/planner/events'
 import {
   getNoteTypePresentation,
   type NoteTypeIconKey,
@@ -294,6 +295,11 @@ export default function ProjectDashboard({
     () => tasks.filter(t => t.status === 'completed').length,
     [tasks]
   )
+  /** Cancelled tasks are excluded from completion percentages. */
+  const completionBase = useMemo(
+    () => tasks.filter(t => t.status !== 'cancelled').length,
+    [tasks]
+  )
 
   const taskStatusCounts = useMemo(() => {
     const counts: Record<string, number> = {}
@@ -336,6 +342,28 @@ export default function ProjectDashboard({
         if (!cancelled) setIsLoadingTasks(false)
       })
     return () => { cancelled = true }
+  }, [project.id])
+
+  // Chat tools can change tasks while this dashboard is open.
+  useEffect(() => {
+    let cancelled = false
+    let timer: number | null = null
+    const unsubscribe = subscribeToPlannerDataChanged(() => {
+      if (timer !== null) window.clearTimeout(timer)
+      timer = window.setTimeout(() => {
+        timer = null
+        void getTasks({ projectId: project.id, includeCompleted: true })
+          .then((data) => {
+            if (!cancelled) setTasks(data)
+          })
+          .catch(() => undefined)
+      }, 150)
+    })
+    return () => {
+      cancelled = true
+      unsubscribe()
+      if (timer !== null) window.clearTimeout(timer)
+    }
   }, [project.id])
 
   // ── Sync quick links from prop ──────────────────────────────────────────
@@ -396,7 +424,7 @@ export default function ProjectDashboard({
     return <Icon size={size} style={{ color: typeInk(pres) }} />
   }
 
-  const completionPct = tasks.length > 0 ? Math.round((completedTaskCount / tasks.length) * 100) : 0
+  const completionPct = completionBase > 0 ? Math.round((completedTaskCount / completionBase) * 100) : 0
 
   // ── Layout ──────────────────────────────────────────────────────────────
   return (
@@ -634,7 +662,7 @@ export default function ProjectDashboard({
                           {completionPct}%
                         </div>
                         <div className="text-xs text-muted">
-                          {completedTaskCount} of {tasks.length} completed
+                          {completedTaskCount} of {completionBase} completed
                         </div>
                         <div className="mt-2 flex flex-wrap gap-1.5">
                           {Object.entries(taskStatusCounts).map(([status, count]) => (

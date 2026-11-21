@@ -80,6 +80,7 @@ import { dataSheetTableBlock, type DataSheetTablePayload } from '../lib/editor/d
 import { buildDataSheetTablePayload } from '../lib/editor/dataSheetSnapshot'
 import type { SlashInlineOption, SlashInlinePickers } from '../lib/editor/slashCommands'
 import { getFolders } from '../lib/folders'
+import { getTasks, type Task } from '../lib/tasks'
 import { pdfAnnotationEmbedBlock, type PdfAnnotationEmbedPayload } from '../lib/editor/pdfAnnotationEmbedBlock'
 import {
   fileBlock,
@@ -319,6 +320,8 @@ interface NoteEditorWithPanelProps extends NoteEditorProps {
   onSignOut?: () => void
   onOpenFileExplorer?: () => void
   onOpenProjectsView?: () => void
+  /** Open a task linked to this note in the planner. */
+  onOpenTask?: (taskId: string) => void
 }
 
 export interface NoteEditorHandle {
@@ -352,6 +355,7 @@ const NoteEditor = forwardRef<NoteEditorHandle, NoteEditorWithPanelProps>(functi
   onSignOut,
   onOpenFileExplorer,
   onOpenProjectsView,
+  onOpenTask,
   onAskAI,
   onDirtyChange,
   registerHandle,
@@ -376,6 +380,8 @@ const NoteEditor = forwardRef<NoteEditorHandle, NoteEditorWithPanelProps>(functi
   const [editorSeedRevision, setEditorSeedRevision] = useState(0)
   /** Note id whose payload is currently in the data states above. */
   const [hydratedNoteId, setHydratedNoteId] = useState<string | null>(note?.id ?? null)
+  /** Planner tasks explicitly linked to the open note (shown in the details panel). */
+  const [linkedTasks, setLinkedTasks] = useState<Task[]>([])
   const [noteType, setNoteType] = useState<NoteType>('rich-text')
   const [isSaving, setIsSaving] = useState(false)
   const [isAutosaving, setIsAutosaving] = useState(false)
@@ -749,6 +755,24 @@ const NoteEditor = forwardRef<NoteEditorHandle, NoteEditorWithPanelProps>(functi
     // contentRevision is bumped by the workspace when it adopts an external
     // change to the same note (e.g. Chat wrote to it while the editor was away).
   }, [note?.id, contentRevision, initialNoteType, mindmapTemplateId, scheduleHeadingsUpdate])
+
+  useEffect(() => {
+    if (!note?.id) {
+      setLinkedTasks([])
+      return
+    }
+    let cancelled = false
+    void getTasks({ noteId: note.id, includeCompleted: true, includeArchived: false })
+      .then((tasks) => {
+        if (!cancelled) setLinkedTasks(tasks)
+      })
+      .catch(() => {
+        if (!cancelled) setLinkedTasks([])
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [note?.id])
 
   useEffect(() => {
     // Skip hasChanges computation while a note is being loaded (prevents brief flicker)

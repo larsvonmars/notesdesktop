@@ -1,6 +1,6 @@
 'use client'
 
-import { useMemo, useState, type FormEvent } from 'react'
+import { useEffect, useMemo, useState, type FormEvent } from 'react'
 import {
   AlertTriangle,
   CalendarDays,
@@ -43,6 +43,28 @@ const PRIORITY_FILTERS: (TaskPriority | 'all')[] = ['all', 'urgent', 'high', 'me
 
 type SortKey = 'due' | 'priority' | 'updated' | 'title' | 'manual'
 type GroupKey = 'none' | 'status' | 'priority' | 'project'
+
+const TASK_LIST_FILTERS_KEY = 'planner:task-list-filters'
+
+interface StoredTaskListFilters {
+  statusFilter?: TaskStatus | 'all'
+  priorityFilter?: TaskPriority | 'all'
+  sort?: SortKey
+  groupBy?: GroupKey
+  search?: string
+}
+
+function readTaskListFilters(): StoredTaskListFilters {
+  if (typeof window === 'undefined') return {}
+  try {
+    const raw = window.localStorage.getItem(TASK_LIST_FILTERS_KEY)
+    if (!raw) return {}
+    const parsed = JSON.parse(raw) as StoredTaskListFilters
+    return parsed && typeof parsed === 'object' ? parsed : {}
+  } catch {
+    return {}
+  }
+}
 
 const PRIORITY_RANK: Record<TaskPriority, number> = {
   urgent: 0,
@@ -107,15 +129,34 @@ export default function TaskListView({
   onQuickAdd,
   onNewTask,
 }: TaskListViewProps) {
-  const [search, setSearch] = useState('')
-  const [statusFilter, setStatusFilter] = useState<TaskStatus | 'all'>(defaultStatusFilter)
-  const [priorityFilter, setPriorityFilter] = useState<TaskPriority | 'all'>('all')
+  const storedFilters = useMemo(() => readTaskListFilters(), [])
+  const [search, setSearch] = useState(starredOnly ? '' : storedFilters.search ?? '')
+  // The Starred section owns its default; everywhere else restore the user's
+  // last list filter when returning to the Tasks section.
+  const [statusFilter, setStatusFilter] = useState<TaskStatus | 'all'>(
+    starredOnly ? defaultStatusFilter : storedFilters.statusFilter ?? defaultStatusFilter,
+  )
+  const [priorityFilter, setPriorityFilter] = useState<TaskPriority | 'all'>(
+    storedFilters.priorityFilter ?? 'all',
+  )
   const [onlyStarred, setOnlyStarred] = useState(starredOnly)
-  const [sort, setSort] = useState<SortKey>('due')
-  const [groupBy, setGroupBy] = useState<GroupKey>('none')
+  const [sort, setSort] = useState<SortKey>(storedFilters.sort ?? 'due')
+  const [groupBy, setGroupBy] = useState<GroupKey>(storedFilters.groupBy ?? 'none')
   const [quickTitle, setQuickTitle] = useState('')
   const [expandedId, setExpandedId] = useState<string | null>(null)
   const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null)
+
+  useEffect(() => {
+    if (starredOnly) return
+    try {
+      window.localStorage.setItem(
+        TASK_LIST_FILTERS_KEY,
+        JSON.stringify({ statusFilter, priorityFilter, sort, groupBy, search }),
+      )
+    } catch {
+      // ignore
+    }
+  }, [starredOnly, statusFilter, priorityFilter, sort, groupBy, search])
 
   const projectById = useMemo(
     () => new Map(projects.map((project) => [project.id, project])),

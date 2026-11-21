@@ -6,6 +6,7 @@ import { subscribeToSyncState } from '@/lib/offline/events'
 import { getConflictedMutations } from '@/lib/offline/queue'
 import { flushOutbox, getSyncState, resolveConflict } from '@/lib/offline/sync'
 import type { QueuedMutation, SyncState } from '@/lib/offline/types'
+import { useIsMobile } from '@/lib/useIsMobile'
 
 function conflictLabel(entry: QueuedMutation): string {
   const title = (entry.local?.title ?? entry.local?.name ?? entry.remote?.title ?? entry.remote?.name) as
@@ -15,6 +16,7 @@ function conflictLabel(entry: QueuedMutation): string {
 }
 
 export default function OfflineStatusIndicator() {
+  const isMobile = useIsMobile()
   const [state, setState] = useState<SyncState | null>(null)
   const [isSyncing, setIsSyncing] = useState(false)
   const [showDetails, setShowDetails] = useState(false)
@@ -101,7 +103,10 @@ export default function OfflineStatusIndicator() {
         : CloudUpload
 
   return (
-    <div className="fixed bottom-4 right-4 z-[90] max-w-sm text-xs">
+    <div
+      className="fixed right-3 z-[90] max-w-sm text-xs"
+      style={{ bottom: isMobile ? 'calc(var(--mobile-bar-height, 60px) + var(--sab, 0px) + 1rem)' : '1rem' }}
+    >
       <div
         className="glass-strong flex items-center gap-1 rounded-full py-1 pl-1.5 pr-1"
         aria-live="polite"
@@ -194,8 +199,13 @@ export default function OfflineStatusIndicator() {
             </div>
           )}
 
+          <p className="mt-2 text-[10px] leading-relaxed text-muted">
+            Offline editing covers notes and folders. Tasks, calendar, Learn and Chat
+            need a connection.
+          </p>
+
           {state.lastSyncedAt && (
-            <p className="mt-2 text-[10px] text-muted">
+            <p className="mt-1 text-[10px] text-muted">
               Last synced {new Date(state.lastSyncedAt).toLocaleTimeString()}
             </p>
           )}

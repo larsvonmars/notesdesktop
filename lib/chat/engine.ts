@@ -330,11 +330,15 @@ async function runConversation(options: RunConversationOptions): Promise<ChatTur
           // Destructive tools always need an explicit user decision; the model's
           // own `confirm: true` argument is not a substitute for one.
           if (spec.requiresConfirmation) {
+            const preview = spec.preview
+              ? await spec.preview(args, ctx).catch(() => null)
+              : null
             const approved = callbacks?.requestToolConfirmation
               ? await callbacks.requestToolConfirmation({
                   id: call.id,
                   name: call.name,
                   arguments: call.arguments,
+                  description: preview ?? undefined,
                 })
               : false
             if (!approved) {

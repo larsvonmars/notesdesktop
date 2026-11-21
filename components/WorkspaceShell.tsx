@@ -106,7 +106,11 @@ type NoteCreationContext = {
 import { useToast } from '@/components/ToastProvider'
 import { getNote, searchNotes } from '@/lib/notes'
 import { recordNoteOpened } from '@/lib/note-activity'
-import { readWelcomeOnStartupPreference } from '@/lib/workspace/preferences'
+import {
+  readNoteListPreferences,
+  readWelcomeOnStartupPreference,
+  saveNoteListPreferences,
+} from '@/lib/workspace/preferences'
 import { formatModShortcut } from '@/lib/platform'
 import {
   buildSelectionDraft,
@@ -152,6 +156,8 @@ function WorkspaceContent() {
   const isCompact = useIsCompact()
   const [selectedFolderId, setSelectedFolderId] = useState<string | null>(null)
   const [selectedProjectId, setSelectedProjectId] = useState<string | null>(null)
+  /** Home's "unfiled" shortcut shows notes with neither folder nor project. */
+  const [unfiledOnly, setUnfiledOnly] = useState(false)
   const [selectedNote, setSelectedNote] = useState<Note | null>(null)
   const selectedNoteRef = useRef<Note | null>(null)
   const noteEditorRef = useRef<NoteEditorHandle | null>(null)
@@ -268,8 +274,16 @@ function WorkspaceContent() {
   )
   // Note list pane (desktop) + its presentation preferences
   const [noteListOpen, setNoteListOpen] = useState(true)
-  const [noteSort, setNoteSort] = useState<NoteListSort>('updated')
-  const [noteDensity, setNoteDensity] = useState<NoteListDensity>('comfortable')
+  const [noteSort, setNoteSort] = useState<NoteListSort>(
+    () => readNoteListPreferences().sort,
+  )
+  const [noteDensity, setNoteDensity] = useState<NoteListDensity>(
+    () => readNoteListPreferences().density,
+  )
+
+  useEffect(() => {
+    saveNoteListPreferences({ sort: noteSort, density: noteDensity })
+  }, [noteSort, noteDensity])
 
   // Collapse the library automatically when the viewport cannot comfortably
   // hold rail + library + note list + editor side by side.
@@ -537,6 +551,8 @@ function WorkspaceContent() {
   const applyNavLocation = useCallback(
     async (target: NavLocation) => {
       await flushPendingEditorSave()
+      // History does not encode the transient unfiled filter.
+      setUnfiledOnly(false)
       isApplyingHistoryRef.current = true
       try {
         setActiveView(target.view)
@@ -590,6 +606,7 @@ function WorkspaceContent() {
   /** Open a project dashboard (records a navigation entry). */
   const openProjectDashboard = useCallback(
     (projectId: string) => {
+      setUnfiledOnly(false)
       setSelectedProjectId(projectId)
       setActiveView('projects')
       setWorkspaceNavOpen(false)
@@ -744,6 +761,15 @@ function WorkspaceContent() {
     setActiveView('notes')
   }, [])
 
+  const handleOpenUnfiled = useCallback(() => {
+    setUnfiledOnly(true)
+    setActiveView('notes')
+    setSelectedFolderId(null)
+    setSelectedProjectId(null)
+    setWorkspaceNavOpen(false)
+    recordNav({ view: 'notes', folderId: null, projectId: null, noteId: null })
+  }, [recordNav])
+
   const openWelcomeView = useCallback(() => {
     setActiveView('welcome')
     recordNav({ view: 'welcome', folderId: null, projectId: null, noteId: null })
@@ -753,8 +779,11 @@ function WorkspaceContent() {
   // the rail/sidebar keep landing on the planner overview.
   const [plannerStartSection, setPlannerStartSection] = useState<'overview' | 'tasks' | null>(null)
   const [plannerSection, setPlannerSection] = useState<PlannerSection>('overview')
-  /** One-shot task detail request coming from a Chat tool result. */
+  /** One-shot planner focus request coming from a Chat tool result. */
   const [plannerFocusRequest, setPlannerFocusRequest] = useState<{ taskId: string } | null>(null)
+  const [plannerFocusEventRequest, setPlannerFocusEventRequest] = useState<{
+    eventId: string
+  } | null>(null)
 
   const openTasksView = useCallback(() => {
     // Rail/sidebar/palette entry: no section override, so the planner restores
@@ -772,8 +801,14 @@ function WorkspaceContent() {
 
   /** Full-text note search for the command palette (stable identity). */
   const searchNoteContent = useCallback(
-    (query: string) => searchNotes(query, { limit: 20 }),
-    []
+    async (query: string) => {
+      const results = await searchNotes(query, { limit: 20 })
+      // Archived-project content is hidden everywhere else in the workspace.
+      return results.filter(
+        (note) => !note.project_id || !archivedProjectIds.has(note.project_id),
+      )
+    },
+    [archivedProjectIds]
   )
 
   const searchLearnCardContent = useCallback((query: string) => searchLearnCards(query), [])
@@ -1047,6 +1082,7 @@ function WorkspaceContent() {
     if (selectedNoteRef.current?.id !== note.id) {
       await flushPendingEditorSave()
     }
+    if (note.folder_id || note.project_id) setUnfiledOnly(false)
 
     if ('content' in note && typeof (note as Note).content === 'string') {
       activateExistingNote(note as Note)
@@ -1070,6 +1106,7 @@ function WorkspaceContent() {
 
   const handleSelectFolder = async (folderId: string | null) => {
     await flushPendingEditorSave()
+    setUnfiledOnly(false)
     if (activeView !== 'notes') setActiveView('notes')
     setWorkspaceNavOpen(false)
     applyFolderSelection(folderId)
@@ -1083,6 +1120,12 @@ function WorkspaceContent() {
   }
 
   /** Discard the open buffer (the editor already confirmed this path). */
+  const openPlannerTask = useCallback((taskId: string) => {
+    setPlannerStartSection('tasks')
+    setPlannerFocusRequest({ taskId })
+    setActiveView('tasks')
+  }, [])
+
   const handleOpenChatToolTarget = useCallback(
     (target: ChatToolTarget) => {
       if (target.kind === 'note') {
@@ -1091,15 +1134,18 @@ function WorkspaceContent() {
         return
       }
       if (target.kind === 'task') {
-        setPlannerStartSection('tasks')
-        setPlannerFocusRequest({ taskId: target.id })
+        openPlannerTask(target.id)
+        return
+      }
+      if (target.kind === 'event') {
+        setPlannerFocusEventRequest({ eventId: target.id })
         setActiveView('tasks')
         return
       }
       setActiveView('learn')
       setLearnScreen({ kind: 'deck', deckId: target.id })
     },
-    [handleSelectNote]
+    [handleSelectNote, openPlannerTask]
   )
 
   const handleCancel = () => {
@@ -1243,12 +1289,18 @@ function WorkspaceContent() {
   )
   const listNotes = useMemo(
     () =>
-      selectedFolderId
-        ? filterOutArchivedContent(notes)
-        : currentProject
-          ? filterOutArchivedContent(allNotes.filter((note) => note.project_id === currentProject.id))
-          : filterOutArchivedContent(allNotes),
-    [selectedFolderId, currentProject, notes, allNotes, filterOutArchivedContent]
+      unfiledOnly
+        ? filterOutArchivedContent(
+            allNotes.filter((note) => !note.folder_id && !note.project_id),
+          )
+        : selectedFolderId
+          ? filterOutArchivedContent(notes)
+          : currentProject
+            ? filterOutArchivedContent(
+                allNotes.filter((note) => note.project_id === currentProject.id),
+              )
+            : filterOutArchivedContent(allNotes),
+    [unfiledOnly, selectedFolderId, currentProject, notes, allNotes, filterOutArchivedContent]
   )
   const recentNotes = useMemo(
     () =>
@@ -1290,8 +1342,12 @@ function WorkspaceContent() {
   )
   const learnBadge = learnPendingCards > 0 ? (learnPendingCards > 99 ? '99+' : learnPendingCards) : undefined
 
-  const listTitle = currentFolder?.name ?? currentProject?.name ?? 'All notes'
-  const listSubtitle = currentFolder
+  const listTitle = unfiledOnly
+    ? 'Unfiled'
+    : currentFolder?.name ?? currentProject?.name ?? 'All notes'
+  const listSubtitle = unfiledOnly
+    ? `${listNotes.length} note${listNotes.length === 1 ? '' : 's'} without a folder or project`
+    : currentFolder
     ? currentProject
       ? `${currentProject.name} Â· ${listNotes.length} note${listNotes.length === 1 ? '' : 's'}`
       : `${listNotes.length} note${listNotes.length === 1 ? '' : 's'}`
@@ -1380,6 +1436,9 @@ function WorkspaceContent() {
         color: currentProject.color,
         onClick: () => openProjectDashboard(currentProject.id),
       })
+    }
+    if (unfiledOnly) {
+      crumbs.push({ id: 'unfiled', label: 'Unfiled', icon: FileText })
     }
     if (currentFolder) {
       crumbs.push({
@@ -1535,6 +1594,7 @@ function WorkspaceContent() {
             }
           }}
           onOpenProjectsView={() => setActiveView('projects')}
+          onOpenTask={openPlannerTask}
         />
       )
     }
@@ -1673,6 +1733,7 @@ function WorkspaceContent() {
                 notes={allNotes}
                 folders={folders}
                 projects={projects}
+                archivedProjectIds={archivedProjectIds}
                 isLoading={isLoadingNotes || isLoadingProjects || isLoadingAllNotes}
                 onSelectNote={(note) => {
                   void handleSelectNote(note)
@@ -1705,10 +1766,7 @@ function WorkspaceContent() {
                   setActiveView('learn')
                   setLearnScreen({ kind: 'study', deckId })
                 }}
-                onOpenUnfiled={() => {
-                  handleSelectFolder(null)
-                  setActiveView('notes')
-                }}
+                onOpenUnfiled={handleOpenUnfiled}
               />
             </div>
           )}
@@ -1722,6 +1780,8 @@ function WorkspaceContent() {
                 initialSection={plannerStartSection ?? undefined}
                 focusTaskId={plannerFocusRequest?.taskId ?? null}
                 onFocusTaskConsumed={() => setPlannerFocusRequest(null)}
+                focusEventId={plannerFocusEventRequest?.eventId ?? null}
+                onFocusEventConsumed={() => setPlannerFocusEventRequest(null)}
                 onSectionChange={setPlannerSection}
                 onSelectNote={(note) => {
                   void handleSelectNote(note)

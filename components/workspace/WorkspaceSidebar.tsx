@@ -227,8 +227,6 @@ export default function WorkspaceSidebar({
     )
   }
 
-  if (!mobileOpen) return null
-
   const swipeHandlers = {
     onTouchStart: (event: TouchEvent) => {
       if (event.touches.length !== 1) return
@@ -243,7 +241,10 @@ export default function WorkspaceSidebar({
   }
 
   return (
-    <>
+    <div
+      className={cn('fixed inset-0 z-[80]', mobileOpen ? undefined : 'hidden')}
+      aria-hidden={mobileOpen ? undefined : true}
+    >
       <button
         type="button"
         tabIndex={-1}
@@ -281,18 +282,18 @@ export default function WorkspaceSidebar({
 
         <div className="glass-divider shrink-0" aria-hidden="true" />
 
-        {/* Library tree (SidebarTree owns the local filter field) */}
+        {/* Library tree (SidebarTree owns the local filter field). Keep it
+            mounted while Learn is open so expansion/filter state survives. */}
         <div className="min-h-0 flex-1 overflow-hidden">
-          {activeView === 'learn' ? (
-            <LearnSidebar onNavigate={onCloseMobileNav} />
-          ) : (
+          <div className={cn('h-full', activeView === 'learn' ? 'hidden' : 'block')}>
             <SidebarTree
               {...sharedTreeProps}
               collapsed={false}
               onToggleCollapsed={onCloseMobileNav}
               showHeader={false}
             />
-          )}
+          </div>
+          {activeView === 'learn' ? <LearnSidebar onNavigate={onCloseMobileNav} /> : null}
         </div>
 
         {/* Footer: identity, appearance, settings, sign out */}
@@ -350,6 +351,6 @@ export default function WorkspaceSidebar({
           </button>
         </div>
       </aside>
-    </>
+    </div>
   )
 }

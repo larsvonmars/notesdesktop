@@ -1,6 +1,6 @@
 'use client'
 
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import {
   CalendarDays,
   Clock3,
@@ -39,6 +39,26 @@ const SCHEDULE_HOURS = Array.from({ length: 17 }, (_, index) => index + 6)
 const DAY_ORDER = [1, 2, 3, 4, 5, 6, 0]
 
 type GroupBy = 'day' | 'frequency' | 'category' | 'none'
+
+const TIMETABLE_VIEW_KEY = 'planner:timetable-view'
+
+interface TimetablePreferences {
+  mode?: TimetableViewMode
+  groupBy?: GroupBy
+  search?: string
+}
+
+function readTimetablePreferences(): TimetablePreferences {
+  if (typeof window === 'undefined') return {}
+  try {
+    const raw = window.localStorage.getItem(TIMETABLE_VIEW_KEY)
+    if (!raw) return {}
+    const parsed = JSON.parse(raw) as TimetablePreferences
+    return parsed && typeof parsed === 'object' ? parsed : {}
+  } catch {
+    return {}
+  }
+}
 
 export interface TimetableEntry {
   event: CalendarEvent
@@ -104,11 +124,23 @@ export default function TimetableView({
   onEdit,
   onDelete,
 }: TimetableViewProps) {
-  const [mode, setMode] = useState<TimetableViewMode>('schedule')
-  const [groupBy, setGroupBy] = useState<GroupBy>('day')
-  const [search, setSearch] = useState('')
+  const storedPreferences = useMemo(() => readTimetablePreferences(), [])
+  const [mode, setMode] = useState<TimetableViewMode>(storedPreferences.mode ?? 'schedule')
+  const [groupBy, setGroupBy] = useState<GroupBy>(storedPreferences.groupBy ?? 'day')
+  const [search, setSearch] = useState(() => storedPreferences.search ?? '')
   const [showCancelled, setShowCancelled] = useState(false)
   const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null)
+
+  useEffect(() => {
+    try {
+      window.localStorage.setItem(
+        TIMETABLE_VIEW_KEY,
+        JSON.stringify({ mode, groupBy, search }),
+      )
+    } catch {
+      // ignore
+    }
+  }, [mode, groupBy, search])
 
   const projectById = useMemo(
     () => new Map(projects.map((project) => [project.id, project])),

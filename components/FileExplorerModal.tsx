@@ -39,8 +39,10 @@ import ModalCloseButton from './ModalCloseButton'
 import BaseModal, { ModalHeader, ModalTitle } from './BaseModal'
 import {
   listItems,
+  uploadFile,
   uploadFiles,
   deleteFile,
+  downloadFile,
   deleteFiles,
   deleteStorageFolder,
   createStorageFolder,
@@ -54,6 +56,7 @@ import {
   getFileIconHint,
   countAttachmentReferences,
   countAttachmentReferencesInFolder,
+  listFolderFilePaths,
   subscribeToFileStorageChanged,
   type StorageItem,
 } from '@/lib/file-storage'
@@ -425,6 +428,30 @@ export default function FileExplorerModal({
   // DELETE
   // ============================================================================
 
+  const restoreFileSnapshot = useCallback(
+    async (archived: { blob: Blob; name: string; type: string; path: string }) => {
+      try {
+        const parts = archived.path.split('/')
+        const fileName = parts.pop() ?? archived.name
+        const folderPath = parts.join('/')
+        await uploadFile(
+          new window.File([archived.blob], fileName, { type: archived.type }),
+          folderPath,
+        )
+        toast.push({ title: 'File restored', description: archived.name, variant: 'success' })
+        loadItems()
+      } catch (restoreError: any) {
+        console.error('Restoring file failed:', restoreError)
+        toast.push({
+          title: 'Could not restore file',
+          description: restoreError?.message,
+          variant: 'error',
+        })
+      }
+    },
+    [loadItems, toast],
+  )
+
   const handleDeleteItem = useCallback(
     async (item: StorageItem) => {
       let references = 0
@@ -447,13 +474,75 @@ export default function FileExplorerModal({
           : baseMsg
       if (!confirm(confirmMsg)) return
 
+      // Snapshot single files, and small folders (bounded) before deletion so
+      // the toast can offer Undo.
+      const snapshots: Array<{ blob: Blob; name: string; type: string; path: string }> = []
+      if (item.kind === 'file') {
+        try {
+          snapshots.push({
+            blob: await downloadFile(item.path),
+            name: item.name,
+            type: item.type || 'application/octet-stream',
+            path: item.path,
+          })
+        } catch (snapshotError) {
+          console.warn('Could not snapshot file for undo:', snapshotError)
+        }
+      } else {
+        try {
+          const paths = await listFolderFilePaths(item.path)
+          let bytes = 0
+          for (const relativePath of paths) {
+            if (snapshots.length >= 20 || bytes > 50 * 1024 * 1024) break
+            try {
+              const blob = await downloadFile(relativePath)
+              const name = relativePath.split('/').pop() || relativePath
+              snapshots.push({
+                blob,
+                name,
+                type: blob.type || 'application/octet-stream',
+                path: relativePath,
+              })
+              bytes += blob.size
+            } catch (snapshotError) {
+              console.warn('Could not snapshot folder file for undo:', snapshotError)
+            }
+          }
+        } catch (snapshotError) {
+          console.warn('Could not list folder for undo:', snapshotError)
+        }
+      }
+
       try {
         if (item.kind === 'folder') {
           await deleteStorageFolder(item.path)
         } else {
           await deleteFile(item.path)
         }
-        toast.push({ title: 'Deleted', description: item.name })
+        toast.push({
+          title: 'Deleted',
+          description: item.name,
+          action:
+            snapshots.length > 0 || item.kind === 'folder'
+              ? {
+                  label: 'Undo',
+                  onClick: () => {
+                    void (async () => {
+                      for (const archived of snapshots) {
+                        await restoreFileSnapshot(archived)
+                      }
+                      if (snapshots.length === 0) {
+                        toast.push({
+                          title: 'Nothing to restore',
+                          description: 'The folder was empty or too large to snapshot.',
+                        })
+                      }
+                      loadItems()
+                    })()
+                  },
+                }
+              : undefined,
+        })
         setSelectedPaths((prev) => {
           const next = new Set(prev)
           next.delete(item.path)
@@ -465,7 +554,7 @@ export default function FileExplorerModal({
         toast.push({ title: 'Delete failed', description: err.message })
       }
     },
-    [loadItems, toast]
+    [loadItems, restoreFileSnapshot, toast]
   )
 
   const handleDeleteSelected = useCallback(async () => {
@@ -490,25 +579,67 @@ export default function FileExplorerModal({
       console.warn('Could not check note references:', referenceError)
     }
 
+    const folderWarning =
+      folderPaths.length > 0
+        ? `\n\n${folderPaths.length} folder${folderPaths.length === 1 ? '' : 's'} will be removed recursively; folder contents cannot be undone.`
+        : ''
     const bulkMsg =
       references > 0
-        ? `Delete ${selectedPaths.size} selected item(s)?\n\n${references} note attachment${references === 1 ? '' : 's'} reference them; deleting will break those notes.`
-        : `Delete ${selectedPaths.size} selected item(s)?`
+        ? `Delete ${selectedPaths.size} selected item(s)?\n\n${references} note attachment${references === 1 ? '' : 's'} reference them; deleting will break those notes.${folderWarning}`
+        : `Delete ${selectedPaths.size} selected item(s)?${folderWarning}`
     if (!confirm(bulkMsg)) return
+
+    // Snapshot selected files (bounded) so the delete can be undone.
+    const snapshots: Array<{ blob: Blob; name: string; type: string; path: string }> = []
+    let snapshotBytes = 0
+    for (const path of filePaths) {
+      if (snapshots.length >= 20 || snapshotBytes > 50 * 1024 * 1024) break
+      const item = items.find((candidate) => candidate.path === path)
+      if (!item) continue
+      try {
+        const blob = await downloadFile(path)
+        snapshots.push({
+          blob,
+          name: item.name,
+          type: item.type || 'application/octet-stream',
+          path,
+        })
+        snapshotBytes += blob.size
+      } catch (snapshotError) {
+        console.warn('Could not snapshot file for undo:', snapshotError)
+      }
+    }
 
     try {
 
       if (filePaths.length > 0) await deleteFiles(filePaths)
       for (const fp of folderPaths) await deleteStorageFolder(fp)
 
-      toast.push({ title: 'Deleted', description: `${selectedPaths.size} item(s) removed` })
+      toast.push({
+        title: 'Deleted',
+        description: `${selectedPaths.size} item(s) removed`,
+        action:
+          snapshots.length > 0
+            ? {
+                label: 'Undo',
+                onClick: () => {
+                  void (async () => {
+                    for (const archived of snapshots) {
+                      await restoreFileSnapshot(archived)
+                    }
+                    loadItems()
+                  })()
+                },
+              }
+            : undefined,
+      })
       setSelectedPaths(new Set())
       loadItems()
     } catch (err: any) {
       console.error('Bulk delete failed:', err)
       toast.push({ title: 'Delete failed', description: err.message })
     }
-  }, [selectedPaths, items, loadItems, toast])
+  }, [selectedPaths, items, loadItems, restoreFileSnapshot, toast])
 
   // ============================================================================
   // RENAME

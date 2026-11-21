@@ -302,6 +302,9 @@ export default function ChatPanel({
 }: ChatPanelProps) {
   const scrollRef = useRef<HTMLDivElement>(null)
   const endRef = useRef<HTMLDivElement>(null)
+  const confirmationDetails = pendingToolConfirmation
+    ? describeConfirmation(pendingToolConfirmation)
+    : null
   const nearBottomRef = useRef(true)
   const [showScrollButton, setShowScrollButton] = useState(false)
 
@@ -523,12 +526,13 @@ export default function ChatPanel({
               className="mb-2 rounded-xl border border-danger/30 bg-[var(--danger-light)] px-3 py-2.5"
             >
               <p className="text-[12px] font-semibold text-danger">
-                {describeConfirmation(pendingToolConfirmation).action}
+                {confirmationDetails?.action}
               </p>
               <p className="mt-0.5 text-[11.5px] leading-5 text-foreground">
-                {describeConfirmation(pendingToolConfirmation).target
-                  ? `“${describeConfirmation(pendingToolConfirmation).target}” will be permanently deleted. This cannot be undone.`
-                  : 'This action permanently deletes data and cannot be undone.'}
+                {pendingToolConfirmation.description ??
+                  (confirmationDetails?.target
+                    ? `“${confirmationDetails.target}” will be permanently deleted. This cannot be undone.`
+                    : 'This action permanently deletes data and cannot be undone.')}
               </p>
               <div className="mt-2 flex justify-end gap-2">
                 <button

@@ -94,6 +94,17 @@ export function LearningProvider({ children }: { children: ReactNode }) {
     void refreshDecks()
   }, [authLoading, user, refreshStats, refreshDecks])
 
+  // Refresh Learn data when connectivity returns; the first load may have run
+  // while offline and left the dashboard empty.
+  useEffect(() => {
+    const handleOnline = () => {
+      void refreshStats()
+      void refreshDecks()
+    }
+    window.addEventListener('online', handleOnline)
+    return () => window.removeEventListener('online', handleOnline)
+  }, [refreshStats, refreshDecks])
+
   // Mutations can come from outside this provider (Chat tools, palette). Coalesce
   // bursts (bulk card import emits once per call) into one refresh.
   useEffect(() => {

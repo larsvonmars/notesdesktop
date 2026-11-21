@@ -64,3 +64,41 @@ export function subscribeToWelcomeOnStartupPreference(
   window.addEventListener(WELCOME_ON_STARTUP_CHANGE_EVENT, listener)
   return () => window.removeEventListener(WELCOME_ON_STARTUP_CHANGE_EVENT, listener)
 }
+
+/**
+ * Note list presentation (sort + density). Persisted device-locally so the
+ * library looks the same after a reload or app restart.
+ */
+export const NOTE_LIST_PREFERENCES_KEY = 'notesdesktop:note-list-preferences'
+
+export interface NoteListPreferences {
+  sort: 'updated' | 'created' | 'title'
+  density: 'comfortable' | 'compact'
+}
+
+export function readNoteListPreferences(): NoteListPreferences {
+  const fallback: NoteListPreferences = { sort: 'updated', density: 'comfortable' }
+  if (typeof window === 'undefined') return fallback
+  try {
+    const raw = window.localStorage.getItem(NOTE_LIST_PREFERENCES_KEY)
+    if (!raw) return fallback
+    const parsed = JSON.parse(raw) as Partial<NoteListPreferences>
+    const sort =
+      parsed.sort === 'created' || parsed.sort === 'title' || parsed.sort === 'updated'
+        ? parsed.sort
+        : fallback.sort
+    const density = parsed.density === 'compact' ? 'compact' : fallback.density
+    return { sort, density }
+  } catch {
+    return fallback
+  }
+}
+
+export function saveNoteListPreferences(preferences: NoteListPreferences): void {
+  if (typeof window === 'undefined') return
+  try {
+    window.localStorage.setItem(NOTE_LIST_PREFERENCES_KEY, JSON.stringify(preferences))
+  } catch {
+    // ignore
+  }
+}

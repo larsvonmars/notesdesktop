@@ -539,6 +539,15 @@ export async function deleteStorageFolder(folderPath: string): Promise<void> {
   notifyFileStorageChanged()
 }
 
+/** Relative paths of every file inside a storage folder (for backups/undo). */
+export async function listFolderFilePaths(folderPath: string): Promise<string[]> {
+  const userId = await getUserId()
+  const fullPath = buildFullPath(userId, folderPath)
+  const files = await listAllFilesRecursive(fullPath)
+  const prefix = `${userId}/`
+  return files.map((file) => (file.startsWith(prefix) ? file.slice(prefix.length) : file))
+}
+
 /**
  * List all files in a path recursively (returns full storage paths).
  */

@@ -1,5 +1,23 @@
 import { supabase } from './supabase'
 
+const PROJECTS_CHANGED_EVENT = 'notesdesktop:projects-changed'
+
+/** Notify the workspace even when Supabase realtime is unavailable. */
+function notifyProjectsChanged(): void {
+  if (typeof window === 'undefined') return
+  try {
+    window.dispatchEvent(new CustomEvent(PROJECTS_CHANGED_EVENT))
+  } catch {
+    // ignore
+  }
+}
+
+export function subscribeToProjectsChanged(handler: () => void): () => void {
+  if (typeof window === 'undefined') return () => {}
+  window.addEventListener(PROJECTS_CHANGED_EVENT, handler)
+  return () => window.removeEventListener(PROJECTS_CHANGED_EVENT, handler)
+}
+
 export interface QuickLink {
   id: string
   label: string
@@ -125,6 +143,7 @@ export async function createProject(input: CreateProjectInput): Promise<Project>
     .single()
 
   if (error) throw error
+  notifyProjectsChanged()
   return data
 }
 
@@ -151,6 +170,7 @@ export async function updateProject(
     .single()
 
   if (error) throw error
+  notifyProjectsChanged()
   return data
 }
 
@@ -170,6 +190,7 @@ export async function archiveProject(id: string): Promise<Project> {
     .single()
 
   if (error) throw error
+  notifyProjectsChanged()
   return data
 }
 
@@ -188,6 +209,7 @@ export async function restoreProject(id: string): Promise<Project> {
     .single()
 
   if (error) throw error
+  notifyProjectsChanged()
   return data
 }
 
@@ -203,6 +225,7 @@ export async function deleteProject(id: string): Promise<void> {
     .eq('id', id)
 
   if (error) throw error
+  notifyProjectsChanged()
 }
 
 /**

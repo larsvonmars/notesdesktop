@@ -27,6 +27,7 @@ import {
   ExternalLink,
   Globe,
   FileOutput,
+  ListTodo,
   type LucideIcon,
 } from 'lucide-react'
 import type { NoteType } from '@/lib/notes'
@@ -73,6 +74,15 @@ export interface NoteDetailsSidebarProps {
   onExportHtml?: () => void
   onExportPlainText?: () => void
   onImportDocx?: () => void
+
+  // Linked planner tasks
+  linkedTasks?: Array<{
+    id: string
+    title: string
+    status: string
+    due_date?: string | null
+  }>
+  onOpenTask?: (taskId: string) => void
 
   // Connections
   onOpenConnections?: () => void
@@ -151,6 +161,8 @@ function NoteDetailsSidebar({
   onExportPlainText,
   onImportDocx,
   onOpenConnections,
+  linkedTasks = [],
+  onOpenTask,
   backlinks = [],
   connectionsCount = 0,
   onSelectBacklink,
@@ -788,7 +800,59 @@ function NoteDetailsSidebar({
               </div>
             )}
 
-            {/* Share Section */}
+            {/* Linked tasks — the note side of the task ↔ note link */}
+        {linkedTasks.length > 0 && onOpenTask && (
+          <div className="border-t border-border px-4 py-3.5">
+            <div className={`${META} mb-1.5 flex items-center gap-1.5`}>
+              <ListTodo size={12} className="text-muted" />
+              <span>Linked tasks</span>
+              <span className="ml-auto text-[10px] tabular-nums text-muted">{linkedTasks.length}</span>
+            </div>
+            <div className="space-y-0.5">
+              {linkedTasks.slice(0, 8).map((task) => (
+                <button
+                  key={task.id}
+                  type="button"
+                  onClick={() => onOpenTask(task.id)}
+                  className="focus-ring w-full rounded-lg px-2 py-1 text-left text-[11px] text-foreground transition-colors hover:bg-surface-hover"
+                  title={task.title}
+                >
+                  <span className="flex items-center gap-1.5">
+                    <span
+                      className={`h-1.5 w-1.5 shrink-0 rounded-full ${
+                        task.status === 'completed'
+                          ? 'bg-success'
+                          : task.status === 'cancelled'
+                            ? 'bg-muted'
+                            : 'bg-accent'
+                      }`}
+                      aria-hidden
+                    />
+                    <span
+                      className={`truncate ${
+                        task.status === 'completed' ? 'text-muted line-through' : ''
+                      }`}
+                    >
+                      {task.title}
+                    </span>
+                  </span>
+                  {task.due_date && (
+                    <span className="mt-0.5 block truncate pl-3 text-[10px] text-muted">
+                      Due {new Date(task.due_date).toLocaleDateString()}
+                    </span>
+                  )}
+                </button>
+              ))}
+              {linkedTasks.length > 8 && (
+                <div className="px-2 pt-1 text-[10px] text-muted">
+                  +{linkedTasks.length - 8} more tasks
+                </div>
+              )}
+            </div>
+          </div>
+        )}
+
+        {/* Share Section */}
             {(onPublish || shareUrl || shareHint) && (
               <div>
                 <div className={`${META} mb-2 block`}>Share</div>

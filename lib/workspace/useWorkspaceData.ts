@@ -17,6 +17,7 @@ import {
   type FolderNode,
 } from '@/lib/folders'
 import { subscribeToDataChanges } from '@/lib/offline/events'
+import { subscribeToProjectsChanged } from '@/lib/projects'
 import { hasPendingMutation } from '@/lib/offline/queue'
 import {
   getArchivedProjects,
@@ -282,6 +283,25 @@ export function useWorkspaceData({
       if (timer) clearTimeout(timer)
     }
   }, [userId, selectedFolderId, loadNotesInFolder, loadAllNotes, loadFolders])
+
+  // Chat tools and other surfaces can mutate projects directly. Refresh even
+  // when Supabase realtime is unavailable or delayed.
+  useEffect(() => {
+    if (!userId) return
+    let timer: ReturnType<typeof setTimeout> | null = null
+    const unsubscribe = subscribeToProjectsChanged(() => {
+      if (timer) clearTimeout(timer)
+      timer = setTimeout(() => {
+        timer = null
+        void loadProjects()
+        void loadArchivedProjects()
+      }, 120)
+    })
+    return () => {
+      unsubscribe()
+      if (timer) clearTimeout(timer)
+    }
+  }, [userId, loadProjects, loadArchivedProjects])
 
   // Subscribe to real-time project changes
   useEffect(() => {

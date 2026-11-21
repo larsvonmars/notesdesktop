@@ -157,6 +157,9 @@ export default function ProjectsView({
       const done: Task[] = []
       let overdue = 0
       for (const task of projectTasks) {
+        // Cancelled work is neither outstanding nor completed; counting it as
+        // "done" made project progress disagree with the project dashboard.
+        if (task.status === 'cancelled') continue
         if (isTaskOpen(task)) {
           open.push(task)
           if (isOverdue(task)) overdue++
